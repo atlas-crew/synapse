@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-horizon: 14 165 233;
+  }
+
+  body {
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full hover:bg-gray-600;
+  }
+}
+
+@layer components {
+  /* Card styles */
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-lg shadow-lg;
+  }
+
+  .card-header {
+    @apply px-4 py-3 border-b border-gray-800;
+  }
+
+  .card-body {
+    @apply p-4;
+  }
+
+  /* Button styles */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-950 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-horizon-600 text-white hover:bg-horizon-700 focus:ring-horizon-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-gray-300 hover:bg-gray-800 focus:ring-gray-700;
+  }
+
+  /* Severity badges */
+  .severity-low {
+    @apply bg-green-500/20 text-green-400 border border-green-500/30;
+  }
+
+  .severity-medium {
+    @apply bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+  }
+
+  .severity-high {
+    @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+  }
+
+  .severity-critical {
+    @apply bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+
+  /* Status indicators */
+  .status-connected {
+    @apply bg-green-500;
+  }
+
+  .status-disconnected {
+    @apply bg-gray-500;
+  }
+
+  .status-reconnecting {
+    @apply bg-yellow-500 animate-pulse;
+  }
+
+  /* Stat cards */
+  .stat-card {
+    @apply card p-4;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-white;
+  }
+
+  .stat-label {
+    @apply text-sm text-gray-400 mt-1;
+  }
+
+  /* Data table */
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table th {
+    @apply text-left text-gray-400 font-medium px-4 py-3 border-b border-gray-800;
+  }
+
+  .data-table td {
+    @apply px-4 py-3 border-b border-gray-800/50;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-gray-800/50;
+  }
+}
+
+@layer utilities {
+  /* Glow effects */
+  .glow-horizon {
+    box-shadow: 0 0 20px rgba(14, 165, 233, 0.3);
+  }
+
+  .glow-threat-critical {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-horizon-400 to-horizon-600;
+  }
+
+  /* Animation delays */
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+}

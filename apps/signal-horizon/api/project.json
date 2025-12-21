@@ -1,0 +1,81 @@
+{
+  "name": "signal-horizon-api",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/signal-horizon/api/src",
+  "projectType": "application",
+  "tags": ["scope:signal-horizon", "type:api"],
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsx watch src/index.ts",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsup src/index.ts --format esm --dts",
+        "cwd": "apps/signal-horizon/api"
+      },
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node dist/index.js",
+        "cwd": "apps/signal-horizon/api"
+      },
+      "dependsOn": ["build"]
+    },
+    "db:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma generate",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma migrate dev",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:migrate:prod": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma migrate deploy",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:studio": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prisma studio",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "db:seed": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsx prisma/seed.ts",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint src --ext .ts",
+        "cwd": "apps/signal-horizon/api"
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit",
+        "cwd": "apps/signal-horizon/api"
+      }
+    }
+  }
+}

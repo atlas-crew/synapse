@@ -1,0 +1,457 @@
+// Signal Horizon Hub - Multi-tenant database schema
+// Fleet intelligence for collective defense across Synapse sensors
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Multi-Tenant Core
+// =============================================================================
+
+model Tenant {
+  id                String   @id @default(cuid())
+  name              String
+  tier              TenantTier @default(STANDARD)
+  sharingPreference SharingPreference @default(CONTRIBUTE_AND_RECEIVE)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  apiKeys           ApiKey[]
+  sensors           Sensor[]
+  signals           Signal[]
+  threats           Threat[]
+  blocklistEntries  BlocklistEntry[]
+  campaigns         Campaign[]
+  warRooms          WarRoom[]
+  warRoomActivities WarRoomActivity[]
+
+  @@map("tenants")
+}
+
+enum TenantTier {
+  FREE        // Basic protection, receive-only
+  STANDARD    // Full bidirectional sharing
+  ENTERPRISE  // Priority push, advanced analytics
+  PLATINUM    // Custom retention, dedicated support
+}
+
+enum SharingPreference {
+  CONTRIBUTE_AND_RECEIVE  // Full participation
+  RECEIVE_ONLY            // Consume fleet intel, don't share
+  CONTRIBUTE_ONLY         // Share but don't receive (rare)
+  ISOLATED                // No fleet participation
+}
+
+// =============================================================================
+// Authentication
+// =============================================================================
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  tenantId    String
+  keyHash     String   @unique  // SHA-256 of the actual key
+  name        String
+  scopes      String[] // e.g., ["signal:write", "blocklist:read"]
+  rateLimit   Int      @default(1000) // requests per minute
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  isRevoked   Boolean  @default(false)
+
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+// =============================================================================
+// Sensors
+// =============================================================================
+
+model Sensor {
+  id              String       @id @default(cuid())
+  tenantId        String
+  name            String
+  version         String
+  connectionState ConnectionState @default(DISCONNECTED)
+  lastHeartbeat   DateTime?
+  lastSignalAt    DateTime?
+  signalsReported Int          @default(0)
+  blocksApplied   Int          @default(0)
+  ipAddress       String?
+  metadata        Json?        // Additional sensor info
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  signals         Signal[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([connectionState])
+  @@map("sensors")
+}
+
+enum ConnectionState {
+  CONNECTED
+  DISCONNECTED
+  RECONNECTING
+}
+
+// =============================================================================
+// Threat Signals
+// =============================================================================
+
+model Signal {
+  id              String      @id @default(cuid())
+  tenantId        String
+  sensorId        String
+  signalType      SignalType
+  sourceIp        String?
+  fingerprint     String?     // Original fingerprint (tenant-specific)
+  anonFingerprint String?     // SHA-256 for cross-tenant sharing
+  severity        Severity
+  confidence      Float       // 0.0 - 1.0
+  eventCount      Int         @default(1)
+  metadata        Json?       // Signal-specific data
+  createdAt       DateTime    @default(now())
+
+  // Relations
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor          Sensor      @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  threatLinks     ThreatSignal[]
+
+  @@index([tenantId])
+  @@index([sensorId])
+  @@index([signalType])
+  @@index([anonFingerprint])
+  @@index([createdAt])
+  // Compound indexes for efficient query patterns
+  @@index([createdAt, sensorId])           // Range queries by sensor
+  @@index([signalType, createdAt])         // Correlation queries by type
+  @@index([tenantId, createdAt])           // Tenant-scoped time ranges
+  @@index([anonFingerprint, createdAt])    // Cross-tenant fingerprint analysis
+  @@map("signals")
+}
+
+enum SignalType {
+  IP_THREAT           // Malicious IP activity
+  FINGERPRINT_THREAT  // Browser/TLS fingerprint threat
+  CAMPAIGN_INDICATOR  // Campaign correlation signal
+  CREDENTIAL_STUFFING // Credential stuffing attempt
+  RATE_ANOMALY        // Unusual request patterns
+  BOT_SIGNATURE       // Automated bot detection
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// =============================================================================
+// Aggregated Threats
+// =============================================================================
+
+model Threat {
+  id              String      @id @default(cuid())
+  tenantId        String?     // Null for fleet-wide threats
+  threatType      ThreatType
+  indicator       String      // IP, fingerprint hash, etc.
+  anonIndicator   String?     // Anonymized for cross-tenant
+  riskScore       Float       // 0.0 - 100.0
+  fleetRiskScore  Float?      // Aggregated across fleet
+  firstSeenAt     DateTime
+  lastSeenAt      DateTime
+  hitCount        Int         @default(1)
+  tenantsAffected Int         @default(1)
+  isFleetThreat   Boolean     @default(false) // 2+ tenants = fleet threat
+  ttl             DateTime?   // When to expire
+  metadata        Json?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  tenant          Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  signalLinks     ThreatSignal[]
+  blocklistEntries BlocklistEntry[]
+  campaignLinks   CampaignThreat[]
+
+  @@unique([threatType, indicator])
+  @@index([tenantId])
+  @@index([threatType])
+  @@index([isFleetThreat])
+  @@index([riskScore])
+  @@index([lastSeenAt])
+  // Compound indexes for threat queries
+  @@index([isFleetThreat, lastSeenAt])     // Fleet threats by recency
+  @@index([threatType, lastSeenAt])        // Threat type analysis
+  @@index([riskScore, lastSeenAt])         // High-risk threats dashboard
+  @@map("threats")
+}
+
+enum ThreatType {
+  IP
+  FINGERPRINT
+  ASN
+  USER_AGENT
+  TLS_FINGERPRINT
+  CREDENTIAL_PATTERN
+}
+
+// Junction table for Signal-Threat relationship
+model ThreatSignal {
+  id        String   @id @default(cuid())
+  threatId  String
+  signalId  String
+  createdAt DateTime @default(now())
+
+  threat    Threat   @relation(fields: [threatId], references: [id], onDelete: Cascade)
+  signal    Signal   @relation(fields: [signalId], references: [id], onDelete: Cascade)
+
+  @@unique([threatId, signalId])
+  @@map("threat_signals")
+}
+
+// =============================================================================
+// Blocklist
+// =============================================================================
+
+model BlocklistEntry {
+  id              String         @id @default(cuid())
+  tenantId        String?        // Null for fleet-wide blocks
+  threatId        String?
+  blockType       BlockType
+  indicator       String
+  source          BlockSource
+  reason          String?
+  expiresAt       DateTime?
+  propagatedAt    DateTime?      // When pushed to sensors
+  propagationStatus PropagationStatus @default(PENDING)
+  sensorsNotified Int            @default(0)
+  createdAt       DateTime       @default(now())
+
+  // Relations
+  tenant          Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  threat          Threat?        @relation(fields: [threatId], references: [id], onDelete: SetNull)
+
+  @@unique([blockType, indicator, tenantId])
+  @@index([tenantId])
+  @@index([blockType])
+  @@index([propagationStatus])
+  @@index([expiresAt])
+  @@map("blocklist_entries")
+}
+
+enum BlockType {
+  IP
+  IP_RANGE
+  FINGERPRINT
+  ASN
+  USER_AGENT
+}
+
+enum BlockSource {
+  AUTOMATIC      // System-detected threat
+  MANUAL         // SOC operator action
+  FLEET_INTEL    // Cross-tenant correlation
+  EXTERNAL_FEED  // Third-party threat feed
+  WAR_ROOM       // War room quick action
+}
+
+enum PropagationStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  PARTIAL  // Some sensors failed
+}
+
+// =============================================================================
+// Campaigns
+// =============================================================================
+
+model Campaign {
+  id              String         @id @default(cuid())
+  tenantId        String?        // Null for cross-tenant campaigns
+  name            String
+  description     String?
+  status          CampaignStatus @default(ACTIVE)
+  severity        Severity
+  isCrossTenant   Boolean        @default(false)
+  tenantsAffected Int            @default(1)
+  confidence      Float          // 0.0 - 1.0
+  correlationSignals Json?       // Array of correlation evidence
+  firstSeenAt     DateTime
+  lastActivityAt  DateTime
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  metadata        Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  tenant          Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  threatLinks     CampaignThreat[]
+  warRoomLinks    WarRoomCampaign[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([isCrossTenant])
+  @@index([lastActivityAt])
+  // Compound indexes for dashboard queries
+  @@index([status, lastActivityAt])        // Active campaigns by recency
+  @@index([isCrossTenant, status])         // Fleet campaigns filter
+  @@index([tenantId, status, lastActivityAt]) // Tenant dashboard
+  @@map("campaigns")
+}
+
+enum CampaignStatus {
+  ACTIVE
+  MONITORING
+  RESOLVED
+  FALSE_POSITIVE
+}
+
+// Junction table for Campaign-Threat relationship
+model CampaignThreat {
+  id         String   @id @default(cuid())
+  campaignId String
+  threatId   String
+  role       String?  // e.g., "primary_actor", "infrastructure"
+  createdAt  DateTime @default(now())
+
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  threat     Threat   @relation(fields: [threatId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, threatId])
+  @@map("campaign_threats")
+}
+
+// =============================================================================
+// War Room
+// =============================================================================
+
+model WarRoom {
+  id          String        @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  status      WarRoomStatus @default(ACTIVE)
+  priority    Priority      @default(MEDIUM)
+  leaderId    String?       // User ID of incident lead
+  createdAt   DateTime      @default(now())
+  closedAt    DateTime?
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  activities  WarRoomActivity[]
+  campaignLinks WarRoomCampaign[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("war_rooms")
+}
+
+enum WarRoomStatus {
+  ACTIVE
+  PAUSED
+  CLOSED
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model WarRoomActivity {
+  id          String           @id @default(cuid())
+  warRoomId   String
+  tenantId    String
+  actorType   ActivityActorType
+  actorId     String?          // User ID or "horizon-bot"
+  actorName   String
+  actionType  ActivityActionType
+  description String
+  metadata    Json?            // Action-specific data
+  createdAt   DateTime         @default(now())
+
+  // Relations
+  warRoom     WarRoom          @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([warRoomId])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("war_room_activities")
+}
+
+enum ActivityActorType {
+  USER
+  HORIZON_BOT
+  SYSTEM
+}
+
+enum ActivityActionType {
+  MESSAGE
+  BLOCK_CREATED
+  BLOCK_REMOVED
+  CAMPAIGN_LINKED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  MEMBER_JOINED
+  MEMBER_LEFT
+  ALERT_TRIGGERED
+}
+
+// Junction table for WarRoom-Campaign relationship
+model WarRoomCampaign {
+  id         String   @id @default(cuid())
+  warRoomId  String
+  campaignId String
+  linkedAt   DateTime @default(now())
+  linkedBy   String?  // User ID
+
+  warRoom    WarRoom  @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([warRoomId, campaignId])
+  @@map("war_room_campaigns")
+}
+
+// =============================================================================
+// Audit & Analytics
+// =============================================================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String?
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
