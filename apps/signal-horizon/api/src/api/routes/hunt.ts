@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { HuntService, HuntQuery } from '../../services/hunt/index.js';
+import { rateLimiters } from '../../middleware/index.js';
 
 // =============================================================================
 // Validation Schemas
@@ -81,7 +82,7 @@ export function createHuntRoutes(
    * POST /api/v1/hunt/query
    * Query signal timeline with automatic routing
    */
-  router.post('/query', async (req: Request, res: Response) => {
+  router.post('/query', rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
       const parsed = HuntQuerySchema.safeParse(req.body);
 
@@ -126,7 +127,7 @@ export function createHuntRoutes(
    * GET /api/v1/hunt/timeline/:campaignId
    * Get campaign event timeline
    */
-  router.get('/timeline/:campaignId', async (req: Request, res: Response) => {
+  router.get('/timeline/:campaignId', rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
       const { campaignId } = req.params;
       const parsed = TimeRangeSchema.safeParse(req.query);
@@ -171,7 +172,7 @@ export function createHuntRoutes(
    * GET /api/v1/hunt/stats/hourly
    * Get hourly aggregated statistics
    */
-  router.get('/stats/hourly', async (req: Request, res: Response) => {
+  router.get('/stats/hourly', rateLimiters.aggregations, async (req: Request, res: Response) => {
     try {
       const parsed = HourlyStatsSchema.safeParse(req.query);
 
@@ -214,7 +215,7 @@ export function createHuntRoutes(
    * POST /api/v1/hunt/ip-activity
    * Get IP activity across tenants
    */
-  router.post('/ip-activity', async (req: Request, res: Response) => {
+  router.post('/ip-activity', rateLimiters.aggregations, async (req: Request, res: Response) => {
     try {
       const parsed = IpActivitySchema.safeParse(req.body);
 
@@ -254,7 +255,7 @@ export function createHuntRoutes(
    * GET /api/v1/hunt/saved-queries
    * List saved queries
    */
-  router.get('/saved-queries', async (req: Request, res: Response) => {
+  router.get('/saved-queries', rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const createdBy = req.query.createdBy as string | undefined;
       const queries = await huntService.getSavedQueries(createdBy);
@@ -279,7 +280,7 @@ export function createHuntRoutes(
    * POST /api/v1/hunt/saved-queries
    * Create a saved query
    */
-  router.post('/saved-queries', async (req: Request, res: Response) => {
+  router.post('/saved-queries', rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const parsed = SavedQuerySchema.safeParse(req.body);
 
@@ -342,7 +343,7 @@ export function createHuntRoutes(
    * POST /api/v1/hunt/saved-queries/:id/run
    * Execute a saved query
    */
-  router.post('/saved-queries/:id/run', async (req: Request, res: Response) => {
+  router.post('/saved-queries/:id/run', rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const result = await huntService.runSavedQuery(id);

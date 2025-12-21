@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS signal_events (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
-ORDER BY (tenant_id, signal_type, timestamp)
+-- ORDER BY optimized for time-range queries within tenant
+-- tenant_id first (multi-tenant isolation)
+-- timestamp second (time-range filtering is most common)
+-- signal_type third (secondary filter)
+ORDER BY (tenant_id, timestamp, signal_type)
 TTL timestamp + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 

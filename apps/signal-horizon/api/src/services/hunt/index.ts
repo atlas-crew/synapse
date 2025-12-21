@@ -368,7 +368,7 @@ export class HuntService {
         uniq(tenant_id) AS tenants_hit,
         min(timestamp) AS first_seen,
         max(timestamp) AS last_seen,
-        groupArray(DISTINCT signal_type) AS signal_types
+        groupUniqArray(signal_type) AS signal_types
       FROM signal_events
       WHERE source_ip = toIPv4('${this.escapeString(sourceIp)}')
         AND timestamp >= now() - INTERVAL ${days} DAY
@@ -583,9 +583,19 @@ export class HuntService {
     };
   }
 
+  /**
+   * Escape string for ClickHouse SQL injection prevention.
+   * CRITICAL: Backslash must be escaped FIRST, then quotes.
+   * Otherwise: "test'" → "test\'" → "test\\'" (broken)
+   * Correct:  "test'" → "test'" → "test\'" (safe)
+   */
   private escapeString(str: string): string {
-    // Basic SQL injection prevention for ClickHouse
-    return str.replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+    return str
+      .replace(/\\/g, '\\\\')   // Backslash FIRST
+      .replace(/'/g, "\\'")     // Then single quotes
+      .replace(/\n/g, '\\n')    // Newlines
+      .replace(/\r/g, '\\r')    // Carriage returns
+      .replace(/\0/g, '');      // Null bytes (remove completely)
   }
 }
 

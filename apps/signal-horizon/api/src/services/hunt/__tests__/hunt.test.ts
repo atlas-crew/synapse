@@ -661,9 +661,11 @@ describe('HuntService', () => {
 
       const queryCall = vi.mocked(mockClickHouse.query).mock.calls[0][0];
       // The single quote should be escaped to neutralize injection
-      // The escapeString function converts ' to \' (backslash-quote)
-      // In the query, it should appear as tenant\\'  (escaped backslash + escaped quote)
-      expect(queryCall).toContain("tenant\\\\'");
+      // Input: tenant'; DROP... → Output: tenant\'; DROP...
+      // The backslash-quote (\') breaks the SQL injection attempt
+      expect(queryCall).toContain("tenant\\'");
+      // Verify the injection payload is neutralized (inside escaped string)
+      expect(queryCall).not.toMatch(/tenant_id\s*=\s*'tenant';/);
     });
   });
 });

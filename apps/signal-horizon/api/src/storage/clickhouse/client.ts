@@ -18,6 +18,10 @@ export interface ClickHouseConfig {
   password: string;
   compression: boolean;
   maxOpenConnections: number;
+  /** Query timeout in seconds (default: 30) */
+  queryTimeoutSec?: number;
+  /** Maximum rows to return from a single query (default: 100000) */
+  maxRowsLimit?: number;
 }
 
 // =============================================================================
@@ -92,10 +96,14 @@ export class ClickHouseService {
   private client: ClickHouseClient | null = null;
   private logger: Logger;
   private enabled: boolean;
+  private queryTimeoutSec: number;
+  private maxRowsLimit: number;
 
   constructor(config: ClickHouseConfig, logger: Logger, enabled = true) {
     this.logger = logger.child({ service: 'clickhouse' });
     this.enabled = enabled;
+    this.queryTimeoutSec = config.queryTimeoutSec ?? 30;
+    this.maxRowsLimit = config.maxRowsLimit ?? 100000;
 
     if (enabled) {
       this.client = createClient({
@@ -108,15 +116,25 @@ export class ClickHouseService {
           response: config.compression,
         },
         max_open_connections: config.maxOpenConnections,
-        request_timeout: 30000,
+        request_timeout: (this.queryTimeoutSec + 5) * 1000, // HTTP timeout > query timeout
         clickhouse_settings: {
           // Async inserts for high throughput
           async_insert: 1,
           wait_for_async_insert: 0,
+          // Query execution limits (prevents runaway queries)
+          max_execution_time: this.queryTimeoutSec,
+          max_result_rows: String(this.maxRowsLimit), // UInt64 requires string
+          result_overflow_mode: 'throw',
         },
       });
       this.logger.info(
-        { host: config.host, port: config.port, database: config.database },
+        {
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          queryTimeoutSec: this.queryTimeoutSec,
+          maxRowsLimit: this.maxRowsLimit,
+        },
         'ClickHouse client created'
       );
     } else {
@@ -237,6 +255,7 @@ export class ClickHouseService {
 
   /**
    * Execute a raw query (for Hunt service)
+   * For large result sets, consider using queryStream() instead.
    */
   async query<T>(sql: string): Promise<T[]> {
     if (!this.enabled || !this.client) {
@@ -262,6 +281,62 @@ export class ClickHouseService {
   async queryOne<T>(sql: string): Promise<T | null> {
     const rows = await this.query<T>(sql);
     return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Execute a query with streaming for large result sets.
+   * Processes rows in batches to avoid OOM for huge result sets.
+   *
+   * @param sql - The SQL query to execute
+   * @param batchSize - Number of rows to process at once (default: 1000)
+   * @param onBatch - Callback invoked for each batch of rows
+   * @returns Total number of rows processed
+   */
+  async queryStream<T>(
+    sql: string,
+    batchSize: number,
+    onBatch: (rows: T[]) => Promise<void>
+  ): Promise<number> {
+    if (!this.enabled || !this.client) {
+      throw new Error('ClickHouse is not enabled');
+    }
+
+    try {
+      const resultSet = await this.client.query({
+        query: sql,
+        format: 'JSONEachRow',
+      });
+
+      let batch: T[] = [];
+      let totalRows = 0;
+
+      // Stream rows and process in batches
+      for await (const rows of resultSet.stream()) {
+        // Parse each row from the stream
+        for (const row of rows) {
+          const parsed = row.json<T>();
+          batch.push(parsed);
+
+          if (batch.length >= batchSize) {
+            await onBatch(batch);
+            totalRows += batch.length;
+            batch = [];
+          }
+        }
+      }
+
+      // Process remaining rows
+      if (batch.length > 0) {
+        await onBatch(batch);
+        totalRows += batch.length;
+      }
+
+      this.logger.debug({ totalRows, sql: sql.substring(0, 100) }, 'Stream query completed');
+      return totalRows;
+    } catch (error) {
+      this.logger.error({ error, sql: sql.substring(0, 100) }, 'Stream query failed');
+      throw error;
+    }
   }
 
   /**
