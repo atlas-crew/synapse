@@ -14,9 +14,17 @@ import { createWarRoomRoutes } from './warroom.js';
 import { createIntelRoutes } from './intel.js';
 import { createHuntRoutes } from './hunt.js';
 import type { HuntService } from '../../services/hunt/index.js';
+import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
+import type { ConfigManager } from '../../services/fleet/config-manager.js';
+import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
+import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
+  fleetAggregator?: FleetAggregator;
+  configManager?: ConfigManager;
+  fleetCommander?: FleetCommander;
+  ruleDistributor?: RuleDistributor;
 }
 
 export function createApiRouter(
@@ -41,6 +49,13 @@ export function createApiRouter(
   if (options.huntService) {
     router.use('/hunt', createHuntRoutes(prisma, logger, options.huntService));
     logger.info('Hunt routes mounted at /api/v1/hunt');
+  }
+
+  // Mount fleet management routes if fleet services are provided
+  if (options.fleetAggregator || options.configManager || options.fleetCommander || options.ruleDistributor) {
+    logger.info('Fleet services available - fleet routes can be mounted in Phase 4');
+    // TODO: Phase 4 - Create and mount fleet routes
+    // router.use('/fleet', createFleetRoutes(prisma, logger, options));
   }
 
   return router;

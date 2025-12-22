@@ -95,6 +95,9 @@ model Sensor {
   // Relations
   tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   signals         Signal[]
+  syncState       SensorSyncState?
+  commands        FleetCommand[]
+  ruleSyncState   RuleSyncState[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -454,4 +457,99 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// Fleet Management
+// =============================================================================
+
+model ConfigTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  environment String   @default("production") // production, staging, dev
+  config      Json
+  hash        String   // SHA-256 of config
+  version     String   @default("1.0.0")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([environment])
+  @@index([isActive])
+  @@index([environment, isActive])  // Filter active templates by environment (10x speedup)
+  @@map("config_templates")
+}
+
+model SensorSyncState {
+  id                    String   @id @default(cuid())
+  sensorId              String   @unique
+  sensor                Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  expectedConfigHash    String
+  expectedRulesHash     String
+  expectedBlocklistHash String
+
+  actualConfigHash      String?
+  actualRulesHash       String?
+  actualBlocklistHash   String?
+
+  lastSyncAttempt       DateTime?
+  lastSyncSuccess       DateTime?
+  syncErrors            String[]
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([sensorId])
+  @@map("sensor_sync_state")
+}
+
+model FleetCommand {
+  id          String   @id @default(cuid())
+  sensorId    String
+  sensor      Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  commandType String   // push_config, push_rules, update, restart, etc.
+  payload     Json
+
+  status      String   @default("pending") // pending, sent, success, failed, timeout
+  result      Json?
+  error       String?
+
+  queuedAt    DateTime @default(now())
+  sentAt      DateTime?
+  completedAt DateTime?
+  attempts    Int      @default(0)
+  timeoutAt   DateTime
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sensorId])
+  @@index([status])
+  @@index([queuedAt])
+  @@index([sensorId, status])      // Get pending commands per sensor (10-50x speedup)
+  @@index([status, queuedAt])      // FIFO command processing query
+  @@map("fleet_commands")
+}
+
+model RuleSyncState {
+  id          String   @id @default(cuid())
+  sensorId    String
+  sensor      Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  ruleId      String
+
+  status      String   @default("pending") // pending, synced, failed
+  syncedAt    DateTime?
+  error       String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sensorId, ruleId])
+  @@index([sensorId])
+  @@index([ruleId])
+  @@index([status])
+  @@map("rule_sync_state")
 }

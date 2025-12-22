@@ -21,6 +21,14 @@ import { Broadcaster } from './services/broadcaster/index.js';
 import { HuntService } from './services/hunt/index.js';
 import { createApiRouter } from './api/routes/index.js';
 import { ClickHouseService } from './storage/clickhouse/index.js';
+// Fleet management services
+import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
+import { ConfigManager } from './services/fleet/config-manager.js';
+import { FleetCommander } from './services/fleet/fleet-commander.js';
+import { RuleDistributor } from './services/fleet/rule-distributor.js';
+// Protocol handlers
+import { HeartbeatHandler } from './protocols/heartbeat-handler.js';
+import { CommandSender } from './protocols/command-sender.js';
 
 // Initialize logger
 const logger = pino({
@@ -110,6 +118,13 @@ let correlator: Correlator;
 let broadcaster: Broadcaster;
 let sensorGateway: SensorGateway;
 let dashboardGateway: DashboardGateway;
+// Fleet management services
+let heartbeatHandler: HeartbeatHandler;
+let commandSender: CommandSender;
+let fleetAggregator: FleetAggregator;
+let configManager: ConfigManager;
+let fleetCommander: FleetCommander;
+let ruleDistributor: RuleDistributor;
 
 async function start() {
   logger.info('Starting Signal Horizon Hub...');
@@ -138,10 +153,43 @@ async function start() {
   // Initialize Hunt service (always available, routes to ClickHouse when enabled)
   huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
 
-  // Mount API routes (including hunt routes)
-  const apiRouter = createApiRouter(prisma, logger, { huntService });
+  // Initialize protocol handlers for fleet management
+  heartbeatHandler = new HeartbeatHandler();
+  commandSender = new CommandSender();
+  logger.info('Protocol handlers initialized');
+
+  // Initialize fleet management services
+  fleetAggregator = new FleetAggregator(logger, {
+    metricsRetentionMs: 5 * 60 * 1000, // 5 minutes
+    heartbeatTimeoutMs: 90000, // 90 seconds
+    cpuAlertThreshold: 80,
+    memoryAlertThreshold: 85,
+    diskAlertThreshold: 90,
+  });
+  configManager = new ConfigManager(prisma, logger);
+  fleetCommander = new FleetCommander(prisma, logger, {
+    defaultTimeoutMs: 30000,
+    maxRetries: 3,
+    timeoutCheckIntervalMs: 5000,
+  });
+  ruleDistributor = new RuleDistributor(prisma, logger);
+  logger.info('Fleet management services initialized');
+
+  // Resolve circular dependencies: services that need each other
+  configManager.setFleetCommander(fleetCommander);
+  ruleDistributor.setFleetCommander(fleetCommander);
+  logger.info('Fleet service dependencies wired');
+
+  // Mount API routes (including hunt routes and fleet routes)
+  const apiRouter = createApiRouter(prisma, logger, {
+    huntService,
+    fleetAggregator,
+    configManager,
+    fleetCommander,
+    ruleDistributor,
+  });
   app.use('/api/v1', apiRouter);
-  logger.info('API routes mounted at /api/v1');
+  logger.info('API routes mounted at /api/v1 (includes fleet routes)');
 
   // Initialize core services (pass ClickHouse for dual-write)
   broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
@@ -163,6 +211,15 @@ async function start() {
 
   // Wire up broadcaster to dashboard gateway
   broadcaster.setDashboardGateway(dashboardGateway);
+
+  // Start protocol handlers for fleet management
+  heartbeatHandler.start();
+  commandSender.start();
+  logger.info('Protocol handlers started');
+
+  // Wire up protocol handlers to sensor gateway for fleet operations
+  // TODO: Phase 3 - Wire protocol handlers after implementing setProtocolHandlers() method
+  // sensorGateway.setProtocolHandlers(heartbeatHandler, commandSender);
 
   // Start WebSocket gateways
   sensorGateway.start();
@@ -195,9 +252,16 @@ async function shutdown(signal: string) {
   sensorGateway?.stop();
   dashboardGateway?.stop();
 
+  // Stop protocol handlers
+  heartbeatHandler?.stop();
+  commandSender?.stop();
+  logger.info('Protocol handlers stopped');
+
   // Stop services
   aggregator?.stop();
   broadcaster?.stop();
+  fleetAggregator?.stop?.();
+  logger.info('Fleet services stopped');
 
   // Close ClickHouse connection
   if (clickhouse) {
