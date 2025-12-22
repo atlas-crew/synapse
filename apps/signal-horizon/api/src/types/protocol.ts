@@ -12,7 +12,9 @@ export type SensorMessageType =
   | 'signal'
   | 'signal-batch'
   | 'pong'
-  | 'blocklist-sync';
+  | 'blocklist-sync'
+  | 'heartbeat'
+  | 'command-ack';
 
 export interface SensorAuthMessage {
   type: 'auth';
@@ -42,12 +44,39 @@ export interface SensorBlocklistSyncMessage {
   type: 'blocklist-sync';
 }
 
+export interface SensorHeartbeatMessage {
+  type: 'heartbeat';
+  payload: {
+    timestamp: number;
+    status: 'healthy' | 'degraded' | 'unhealthy';
+    cpu: number;
+    memory: number;
+    disk: number;
+    requestsLastMinute: number;
+    avgLatencyMs: number;
+    configHash: string;
+    rulesHash: string;
+  };
+}
+
+export interface SensorCommandAckMessage {
+  type: 'command-ack';
+  payload: {
+    commandId: string;
+    success: boolean;
+    message?: string;
+    result?: Record<string, unknown>;
+  };
+}
+
 export type SensorMessage =
   | SensorAuthMessage
   | SensorSignalMessage
   | SensorSignalBatchMessage
   | SensorPongMessage
-  | SensorBlocklistSyncMessage;
+  | SensorBlocklistSyncMessage
+  | SensorHeartbeatMessage
+  | SensorCommandAckMessage;
 
 // =============================================================================
 // Hub to Sensor Messages (Outbound)

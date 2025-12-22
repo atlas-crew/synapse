@@ -218,8 +218,7 @@ async function start() {
   logger.info('Protocol handlers started');
 
   // Wire up protocol handlers to sensor gateway for fleet operations
-  // TODO: Phase 3 - Wire protocol handlers after implementing setProtocolHandlers() method
-  // sensorGateway.setProtocolHandlers(heartbeatHandler, commandSender);
+  sensorGateway.setProtocolHandlers(heartbeatHandler, commandSender);
 
   // Start WebSocket gateways
   sensorGateway.start();

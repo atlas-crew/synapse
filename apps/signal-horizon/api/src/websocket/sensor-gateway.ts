@@ -9,9 +9,13 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import type { Aggregator } from '../services/aggregator/index.js';
+import type { HeartbeatHandler } from '../protocols/heartbeat-handler.js';
+import type { CommandSender } from '../protocols/command-sender.js';
 import type {
   ThreatSignal,
   BlocklistEntry,
+  SensorHeartbeatMessage,
+  SensorCommandAckMessage,
 } from '../types/protocol.js';
 import {
   validateSensorMessage,
@@ -96,6 +100,8 @@ export class SensorGateway {
   private config: SensorGatewayConfig;
   private sequenceId = 0;
   private rateLimiter: RateLimiter;
+  private heartbeatHandler: HeartbeatHandler | null = null;
+  private commandSender: CommandSender | null = null;
 
   constructor(
     httpServer: HTTPServer,
@@ -119,6 +125,19 @@ export class SensorGateway {
       server: httpServer,
       path: config.path,
     });
+  }
+
+  /**
+   * Wire protocol handlers for fleet management operations
+   * Called after protocol handler services are initialized
+   */
+  setProtocolHandlers(
+    heartbeatHandler: HeartbeatHandler,
+    commandSender: CommandSender
+  ): void {
+    this.heartbeatHandler = heartbeatHandler;
+    this.commandSender = commandSender;
+    this.logger.info('Protocol handlers wired to sensor gateway');
   }
 
   start(): void {
@@ -281,6 +300,22 @@ export class SensorGateway {
         if (!conn.sensorId) return;
         await this.handleBlocklistSync(conn);
         break;
+
+      case 'heartbeat':
+        if (!conn.sensorId) {
+          this.send(conn, { type: 'error', error: 'Not authenticated' });
+          return;
+        }
+        await this.handleHeartbeat(conn, message.payload as SensorHeartbeatMessage['payload']);
+        break;
+
+      case 'command-ack':
+        if (!conn.sensorId) {
+          this.send(conn, { type: 'error', error: 'Not authenticated' });
+          return;
+        }
+        await this.handleCommandAck(conn, message.payload as SensorCommandAckMessage['payload']);
+        break;
     }
   }
 
@@ -414,6 +449,93 @@ export class SensorGateway {
       entries: entries as BlocklistEntry[],
       sequenceId: this.nextSequenceId(),
     });
+  }
+
+  private async handleHeartbeat(
+    conn: SensorConnection,
+    payload: SensorHeartbeatMessage['payload']
+  ): Promise<void> {
+    try {
+      // Update connection heartbeat timestamp
+      conn.lastHeartbeat = Date.now();
+
+      // Route heartbeat to HeartbeatHandler if wired
+      if (this.heartbeatHandler) {
+        await this.heartbeatHandler.handleHeartbeat(
+          conn.sensorId,
+          conn.tenantId,
+          payload
+        );
+      }
+
+      // Update sensor's last heartbeat in database
+      await this.prisma.sensor.update({
+        where: { id: conn.sensorId },
+        data: {
+          lastHeartbeat: new Date(),
+          metadata: {
+            cpu: payload.cpu,
+            memory: payload.memory,
+            disk: payload.disk,
+            requestsLastMinute: payload.requestsLastMinute,
+            avgLatencyMs: payload.avgLatencyMs,
+            status: payload.status,
+          },
+        },
+      });
+
+      this.logger.debug(
+        { sensorId: conn.sensorId, cpu: payload.cpu, memory: payload.memory },
+        'Sensor heartbeat received'
+      );
+    } catch (error) {
+      this.logger.error(
+        { error, sensorId: conn.sensorId },
+        'Failed to handle heartbeat'
+      );
+    }
+  }
+
+  private async handleCommandAck(
+    conn: SensorConnection,
+    payload: SensorCommandAckMessage['payload']
+  ): Promise<void> {
+    try {
+      const { commandId, success, message: resultMessage, result } = payload;
+
+      // Route command acknowledgment to CommandSender if wired
+      if (this.commandSender) {
+        await this.commandSender.handleCommandAck(
+          commandId,
+          conn.sensorId,
+          success,
+          resultMessage,
+          result
+        );
+      }
+
+      // Update command status in database
+      await this.prisma.fleetCommand.update({
+        where: { id: commandId },
+        data: {
+          status: success ? 'success' : 'failed',
+          completedAt: new Date(),
+          error: success ? undefined : resultMessage,
+          result: success ? result : undefined,
+          attempts: { increment: 1 },
+        },
+      });
+
+      this.logger.info(
+        { commandId, sensorId: conn.sensorId, success },
+        'Command acknowledgment received'
+      );
+    } catch (error) {
+      this.logger.error(
+        { error, commandId: payload.commandId },
+        'Failed to handle command acknowledgment'
+      );
+    }
   }
 
   private async updateSensorStatus(
