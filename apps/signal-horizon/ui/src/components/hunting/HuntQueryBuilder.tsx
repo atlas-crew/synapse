@@ -22,6 +22,7 @@ const SIGNAL_TYPES = [
   { value: 'CREDENTIAL_STUFFING', label: 'Credential Stuffing' },
   { value: 'RATE_ANOMALY', label: 'Rate Anomaly' },
   { value: 'BOT_SIGNATURE', label: 'Bot Signature' },
+  { value: 'IMPOSSIBLE_TRAVEL', label: 'Impossible Travel' },
 ];
 
 const SEVERITIES = [

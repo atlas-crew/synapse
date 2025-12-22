@@ -206,7 +206,8 @@ export type SignalType =
   | 'CAMPAIGN_INDICATOR'
   | 'CREDENTIAL_STUFFING'
   | 'RATE_ANOMALY'
-  | 'BOT_SIGNATURE';
+  | 'BOT_SIGNATURE'
+  | 'IMPOSSIBLE_TRAVEL';
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 

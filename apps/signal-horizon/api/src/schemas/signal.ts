@@ -16,6 +16,7 @@ export const SignalTypeSchema = z.enum([
   'CREDENTIAL_STUFFING',
   'RATE_ANOMALY',
   'BOT_SIGNATURE',
+  'IMPOSSIBLE_TRAVEL',
 ]);
 
 export const SeveritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);

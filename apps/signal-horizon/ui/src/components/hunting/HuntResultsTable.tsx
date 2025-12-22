@@ -59,6 +59,7 @@ function getSignalTypeLabel(type: string): string {
     CREDENTIAL_STUFFING: 'Cred Stuffing',
     RATE_ANOMALY: 'Rate Anomaly',
     BOT_SIGNATURE: 'Bot',
+    IMPOSSIBLE_TRAVEL: 'Impossible Travel',
   };
   return labels[type] || type;
 }

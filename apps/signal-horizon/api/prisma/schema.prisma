@@ -154,6 +154,7 @@ enum SignalType {
   CREDENTIAL_STUFFING // Credential stuffing attempt
   RATE_ANOMALY        // Unusual request patterns
   BOT_SIGNATURE       // Automated bot detection
+  IMPOSSIBLE_TRAVEL   // Login from geographically impossible locations
 }
 
 enum Severity {
