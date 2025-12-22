@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
@@ -36,24 +37,49 @@ export function FleetHealthPage() {
     refetchInterval: 10000,
   });
 
-  // Compute aggregate resource usage
-  const onlineSensors = sensors.filter((s) => s.status !== 'offline');
-  const avgCpu = onlineSensors.length > 0
-    ? onlineSensors.reduce((sum, s) => sum + s.cpu, 0) / onlineSensors.length
-    : 0;
-  const avgMemory = onlineSensors.length > 0
-    ? onlineSensors.reduce((sum, s) => sum + s.memory, 0) / onlineSensors.length
-    : 0;
-
-  // Find sensors with issues
-  const criticalSensors = sensors.filter((s) => s.status === 'offline' || s.cpu > 90 || s.memory > 90);
-  const warningSensors = sensors.filter(
-    (s) => s.status === 'warning' || (s.cpu > 75 && s.cpu <= 90) || (s.memory > 75 && s.memory <= 90)
+  // Memoize online sensors
+  const onlineSensors = useMemo(
+    () => sensors.filter((s) => s.status !== 'offline'),
+    [sensors]
   );
 
-  const healthScore = metrics
-    ? Math.round(((metrics.onlineCount / Math.max(metrics.totalSensors, 1)) * 100))
-    : 0;
+  // Memoize average CPU calculation
+  const avgCpu = useMemo(
+    () => onlineSensors.length > 0
+      ? onlineSensors.reduce((sum, s) => sum + s.cpu, 0) / onlineSensors.length
+      : 0,
+    [onlineSensors]
+  );
+
+  // Memoize average memory calculation
+  const avgMemory = useMemo(
+    () => onlineSensors.length > 0
+      ? onlineSensors.reduce((sum, s) => sum + s.memory, 0) / onlineSensors.length
+      : 0,
+    [onlineSensors]
+  );
+
+  // Memoize critical sensors
+  const criticalSensors = useMemo(
+    () => sensors.filter((s) => s.status === 'offline' || s.cpu > 90 || s.memory > 90),
+    [sensors]
+  );
+
+  // Memoize warning sensors
+  const warningSensors = useMemo(
+    () => sensors.filter(
+      (s) => s.status === 'warning' || (s.cpu > 75 && s.cpu <= 90) || (s.memory > 75 && s.memory <= 90)
+    ),
+    [sensors]
+  );
+
+  // Memoize health score
+  const healthScore = useMemo(
+    () => metrics
+      ? Math.round(((metrics.onlineCount / Math.max(metrics.totalSensors, 1)) * 100))
+      : 0,
+    [metrics]
+  );
 
   return (
     <div className="space-y-6">
