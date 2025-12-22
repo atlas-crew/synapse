@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface ResourceBarProps {
   label: string;
   value: number;
@@ -19,7 +21,7 @@ const sizeClasses = {
   lg: 'h-4',
 };
 
-export function ResourceBar({
+export const ResourceBar = memo(function ResourceBar({
   label,
   value,
   max = 100,
@@ -46,7 +48,7 @@ export function ResourceBar({
       </div>
     </div>
   );
-}
+});
 
 interface ResourceBarGroupProps {
   cpu: number;
@@ -56,7 +58,7 @@ interface ResourceBarGroupProps {
   className?: string;
 }
 
-export function ResourceBarGroup({
+export const ResourceBarGroup = memo(function ResourceBarGroup({
   cpu,
   memory,
   disk,
@@ -70,4 +72,4 @@ export function ResourceBarGroup({
       <ResourceBar label="Disk" value={disk} size={size} />
     </div>
   );
-}
+});

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { SensorStatus } from '../../types/fleet';
 
 interface SensorStatusBadgeProps {
@@ -11,7 +12,10 @@ const statusConfig = {
   offline: { label: 'Offline', icon: '○', color: 'text-gray-600 bg-gray-50 border-gray-200' },
 };
 
-export function SensorStatusBadge({ status, className = '' }: SensorStatusBadgeProps) {
+export const SensorStatusBadge = memo(function SensorStatusBadge({
+  status,
+  className = '',
+}: SensorStatusBadgeProps) {
   const config = statusConfig[status];
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border ${config.color} ${className}`}>
@@ -19,4 +23,4 @@ export function SensorStatusBadge({ status, className = '' }: SensorStatusBadgeP
       <span>{config.label}</span>
     </span>
   );
-}
+});

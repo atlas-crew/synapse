@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 
 interface MetricCardProps {
   label: string;
@@ -8,7 +8,13 @@ interface MetricCardProps {
   className?: string;
 }
 
-export function MetricCard({ label, value, trend, icon, className = '' }: MetricCardProps) {
+export const MetricCard = memo(function MetricCard({
+  label,
+  value,
+  trend,
+  icon,
+  className = '',
+}: MetricCardProps) {
   const trendColor = trend
     ? trend.value > 0 ? 'text-green-600' : trend.value < 0 ? 'text-red-600' : 'text-gray-600'
     : '';
@@ -29,4 +35,4 @@ export function MetricCard({ label, value, trend, icon, className = '' }: Metric
       </div>
     </div>
   );
-}
+});
