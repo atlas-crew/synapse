@@ -29,7 +29,7 @@ import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
 import { fleetRoutes } from './routes/fleet.routes';
-import { apexRoutes } from './routes/apex.routes';
+import { beamRoutes } from './routes/beam.routes';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useHorizonStore } from './stores/horizonStore';
 
@@ -58,12 +58,12 @@ const fleetNavItems = [
   { path: '/fleet/rules', icon: Shield, label: 'Rule Distribution' },
 ];
 
-const apexNavItems = [
-  { path: '/apex', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/apex/analytics', icon: BarChart3, label: 'Analytics' },
-  { path: '/apex/catalog', icon: Package, label: 'API Catalog' },
-  { path: '/apex/rules', icon: Shield, label: 'Rules' },
-  { path: '/apex/threats', icon: Target, label: 'Threats' },
+const beamNavItems = [
+  { path: '/beam', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/beam/analytics', icon: BarChart3, label: 'Analytics' },
+  { path: '/beam/catalog', icon: Package, label: 'API Catalog' },
+  { path: '/beam/rules', icon: Shield, label: 'Rules' },
+  { path: '/beam/threats', icon: Target, label: 'Threats' },
 ];
 
 const settingsItems = [
@@ -224,9 +224,9 @@ function App() {
             </div>
 
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Apex Console</p>
+              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Beam Console</p>
               <div className="space-y-1">
-                {apexNavItems.map((item) => (
+                {beamNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
@@ -304,7 +304,7 @@ function App() {
                 {fleetRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}
-                {apexRoutes.map((route) => (
+                {beamRoutes.map((route) => (
                   <Route key={route.path} path={route.path} element={route.element} />
                 ))}
               </Routes>

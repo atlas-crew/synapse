@@ -32,10 +32,10 @@ model Tenant {
   warRooms          WarRoom[]
   warRoomActivities WarRoomActivity[]
 
-  // Apex relations
-  apexEndpoints      Endpoint[] @relation("TenantEndpoints")
-  apexRules          CustomerRule[] @relation("TenantRules")
-  apexBlockDecisions BlockDecision[] @relation("TenantBlockDecisions")
+  // Beam relations
+  beamEndpoints      Endpoint[] @relation("TenantEndpoints")
+  beamRules          CustomerRule[] @relation("TenantRules")
+  beamBlockDecisions BlockDecision[] @relation("TenantBlockDecisions")
 
   @@map("tenants")
 }
@@ -106,10 +106,10 @@ model Sensor {
   commands        FleetCommand[]
   ruleSyncState   RuleSyncState[]
 
-  // Apex relations
-  apexEndpoints       Endpoint[] @relation("SensorEndpoints")
-  apexRuleDeployments RuleDeployment[] @relation("SensorRuleDeployments")
-  apexBlockDecisions  BlockDecision[] @relation("SensorBlockDecisions")
+  // Beam relations
+  beamEndpoints       Endpoint[] @relation("SensorEndpoints")
+  beamRuleDeployments RuleDeployment[] @relation("SensorRuleDeployments")
+  beamBlockDecisions  BlockDecision[] @relation("SensorBlockDecisions")
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -614,7 +614,7 @@ model Endpoint {
   @@index([tenantId])
   @@index([lastSeenAt])
   @@index([service])
-  @@map("apex_endpoints")
+  @@map("beam_endpoints")
 }
 
 model EndpointSchemaChange {
@@ -637,7 +637,7 @@ model EndpointSchemaChange {
 
   @@index([tenantId, detectedAt])
   @@index([endpointId])
-  @@map("apex_schema_changes")
+  @@map("beam_schema_changes")
 }
 
 model CustomerRule {
@@ -678,7 +678,7 @@ model CustomerRule {
 
   @@index([tenantId, status])
   @@index([tenantId, enabled])
-  @@map("apex_rules")
+  @@map("beam_rules")
 }
 
 model RuleDeployment {
@@ -701,7 +701,7 @@ model RuleDeployment {
   @@unique([ruleId, sensorId])
   @@index([ruleId, status])
   @@index([sensorId])
-  @@map("apex_rule_deployments")
+  @@map("beam_rule_deployments")
 }
 
 model RuleEndpointBinding {
@@ -718,7 +718,7 @@ model RuleEndpointBinding {
   endpoint    Endpoint     @relation(fields: [endpointId], references: [id], onDelete: Cascade)
 
   @@unique([ruleId, endpointId])
-  @@map("apex_rule_endpoint_bindings")
+  @@map("beam_rule_endpoint_bindings")
 }
 
 model BlockDecision {
@@ -752,5 +752,5 @@ model BlockDecision {
   @@index([tenantId, decidedAt])
   @@index([entityId])
   @@index([sourceIp])
-  @@map("apex_block_decisions")
+  @@map("beam_block_decisions")
 }
