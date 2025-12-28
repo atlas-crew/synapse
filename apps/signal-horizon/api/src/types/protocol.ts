@@ -78,6 +78,20 @@ export type SensorMessage =
   | SensorHeartbeatMessage
   | SensorCommandAckMessage;
 
+// Type alias for heartbeat payload (used by HeartbeatHandler)
+export type SensorHeartbeat = SensorHeartbeatMessage['payload'];
+
+// Type alias for command ack payload (used by CommandSender)
+export type SensorCommandAck = SensorCommandAckMessage['payload'];
+
+// Type alias for fleet commands (used by test utilities)
+export interface FleetCommand {
+  commandId: string;
+  type: 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics';
+  payload: Record<string, unknown>;
+  timestamp: string;
+}
+
 // =============================================================================
 // Hub to Sensor Messages (Outbound)
 // =============================================================================

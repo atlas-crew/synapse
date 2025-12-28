@@ -3,7 +3,7 @@
  * Send commands to sensors and track their execution status
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { EventEmitter } from 'node:events';
 import type { SensorCommand, CommandStatus, Command } from './types.js';
@@ -73,7 +73,7 @@ export class FleetCommander extends EventEmitter {
       data: {
         sensorId,
         commandType: command.type,
-        payload: command.payload as Record<string, unknown>,
+        payload: command.payload as Prisma.InputJsonValue,
         status: 'pending',
         timeoutAt,
         attempts: 0,
@@ -229,7 +229,7 @@ export class FleetCommander extends EventEmitter {
       where: { id: commandId },
       data: {
         status: 'success',
-        result: result as Record<string, unknown> | undefined,
+        result: result as Prisma.InputJsonValue | undefined,
         completedAt: new Date(),
       },
     });

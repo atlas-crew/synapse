@@ -3,7 +3,7 @@
  * Manage configuration templates and sync state across the fleet
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import type {
   ConfigTemplate,
@@ -47,7 +47,7 @@ export class ConfigManager {
         name: template.name,
         description: template.description,
         environment: template.environment,
-        config: template.config as Record<string, unknown>,
+        config: template.config as Prisma.InputJsonValue,
         hash: template.hash,
         version: template.version,
         isActive: template.isActive,
@@ -98,7 +98,7 @@ export class ConfigManager {
         name: updates.name,
         description: updates.description,
         environment: updates.environment,
-        config: updates.config as Record<string, unknown> | undefined,
+        config: updates.config as Prisma.InputJsonValue | undefined,
         hash: updates.hash,
         version: updates.version,
         isActive: updates.isActive,

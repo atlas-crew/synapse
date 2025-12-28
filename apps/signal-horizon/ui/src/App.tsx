@@ -6,6 +6,7 @@ import {
   Users,
   Search,
   BarChart3,
+  Shield,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useHorizonStore } from './stores/horizonStore';
+import { apexRoutes } from './routes/apex.routes';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -27,6 +29,7 @@ const navItems = [
   { path: '/warroom', icon: Users, label: 'War Room' },
   { path: '/hunting', icon: Search, label: 'Hunting' },
   { path: '/intel', icon: BarChart3, label: 'Intel' },
+  { path: '/apex', icon: Shield, label: 'Apex Protection' },
 ];
 
 function App() {
@@ -118,6 +121,9 @@ function App() {
               <Route path="/warroom/:id" element={<WarRoomPage />} />
               <Route path="/hunting" element={<HuntingPage />} />
               <Route path="/intel" element={<IntelPage />} />
+              {apexRoutes.map((route, index) => (
+                <Route key={index} path={route.path} element={route.element} />
+              ))}
             </Routes>
           </Suspense>
         </ErrorBoundary>

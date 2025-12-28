@@ -10,7 +10,6 @@ import type {
   SensorRuleStatus,
   Rule,
   DeploymentResult,
-  RolloutStrategy,
   RolloutConfig,
 } from './types.js';
 import type { FleetCommander } from './fleet-commander.js';
@@ -55,9 +54,10 @@ export class RuleDistributor {
       const pendingRules = sensor.ruleSyncState.filter((r) => r.status === 'pending').length;
       const failedRules = sensor.ruleSyncState.filter((r) => r.status === 'failed').length;
 
-      const lastSync = sensor.ruleSyncState
+      const lastSyncDate = sensor.ruleSyncState
         .filter((r) => r.syncedAt !== null)
         .sort((a, b) => (b.syncedAt?.getTime() ?? 0) - (a.syncedAt?.getTime() ?? 0))[0]?.syncedAt;
+      const lastSync = lastSyncDate ?? undefined;
 
       const errors = sensor.ruleSyncState.filter((r) => r.error !== null).map((r) => r.error!);
 
@@ -108,6 +108,34 @@ export class RuleDistributor {
     return this.pushRulesWithStrategy(sensorIds, rules, {
       strategy: 'immediate',
     });
+  }
+
+  /**
+   * Distribute rules by ID to sensors with optional rollout strategy
+   * Fetches rule definitions from database and delegates to pushRulesWithStrategy
+   */
+  async distributeRules(
+    ruleIds: string[],
+    sensorIds: string[],
+    options: { strategy: RolloutConfig['strategy']; canaryPercentage?: number }
+  ): Promise<DeploymentResult> {
+    // For now, create minimal rule objects with just the IDs
+    // In a full implementation, rules would be fetched from a rules table
+    const rules: Rule[] = ruleIds.map((id, index) => ({
+      id,
+      name: `Rule ${id}`,
+      enabled: true,
+      conditions: {},
+      actions: {},
+      priority: index,
+    }));
+
+    const config: RolloutConfig = {
+      strategy: options.strategy,
+      canaryPercentages: options.canaryPercentage ? [options.canaryPercentage, 50, 100] : undefined,
+    };
+
+    return this.pushRulesWithStrategy(sensorIds, rules, config);
   }
 
   /**

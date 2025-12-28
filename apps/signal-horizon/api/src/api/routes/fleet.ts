@@ -31,7 +31,7 @@ const ListSensorsQuerySchema = z.object({
 const CreateConfigTemplateBodySchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
-  environment: z.string().min(1).default('production'),
+  environment: z.enum(['production', 'staging', 'dev']).default('production'),
   config: z.record(z.unknown()),
 });
 
@@ -263,7 +263,7 @@ export function createFleetRoutes(
   router.get(
     '/config/templates',
     requireScope('config:read'),
-    async (req, res) => {
+    async (_req, res) => {
       try {
         if (!configManager) {
           res
@@ -305,11 +305,17 @@ export function createFleetRoutes(
           typeof CreateConfigTemplateBodySchema
         >;
 
+        // Generate config hash
+        const hash = await configManager.computeConfigHash(config);
+
         const template = await configManager.createTemplate({
           name,
           description,
           environment,
           config,
+          hash,
+          version: '1.0.0',
+          isActive: true,
         });
 
         res.status(201).json(template);
@@ -450,7 +456,6 @@ export function createFleetRoutes(
         const { templateId, sensorIds } = req.body as z.infer<
           typeof PushConfigBodySchema
         >;
-        const auth = req.auth!;
 
         const template = await configManager.getTemplate(templateId);
         if (!template) {
@@ -461,9 +466,12 @@ export function createFleetRoutes(
         // Send push_config command to each sensor
         const commands = await Promise.all(
           sensorIds.map((sensorId) =>
-            fleetCommander!.sendCommand(sensorId, 'push_config', {
-              templateId,
-              config: template.config,
+            fleetCommander!.sendCommand(sensorId, {
+              type: 'push_config',
+              payload: {
+                templateId,
+                config: template.config,
+              },
             })
           )
         );
@@ -551,7 +559,10 @@ export function createFleetRoutes(
 
         const commands = await Promise.all(
           sensorIds.map((sensorId) =>
-            fleetCommander!.sendCommand(sensorId, commandType, payload)
+            fleetCommander!.sendCommand(sensorId, {
+              type: commandType as 'push_config' | 'push_rules' | 'update' | 'restart' | 'sync_blocklist',
+              payload,
+            })
           )
         );
 
@@ -801,10 +812,7 @@ export function createFleetRoutes(
         }
 
         // Retry distribution (implementation deferred to ruleDistributor)
-        const result = await ruleDistributor.retryFailedRules(
-          sensorId,
-          failedRules.map((r: { ruleId: string; }) => r.ruleId)
-        );
+        const result = await ruleDistributor.retryFailedRules(sensorId);
 
         res.json({
           message: 'Rule retry initiated',

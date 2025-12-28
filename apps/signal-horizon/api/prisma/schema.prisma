@@ -32,6 +32,11 @@ model Tenant {
   warRooms          WarRoom[]
   warRoomActivities WarRoomActivity[]
 
+  // Apex relations
+  apexEndpoints      Endpoint[] @relation("TenantEndpoints")
+  apexRules          CustomerRule[] @relation("TenantRules")
+  apexBlockDecisions BlockDecision[] @relation("TenantBlockDecisions")
+
   @@map("tenants")
 }
 
@@ -98,6 +103,11 @@ model Sensor {
   syncState       SensorSyncState?
   commands        FleetCommand[]
   ruleSyncState   RuleSyncState[]
+
+  // Apex relations
+  apexEndpoints       Endpoint[] @relation("SensorEndpoints")
+  apexRuleDeployments RuleDeployment[] @relation("SensorRuleDeployments")
+  apexBlockDecisions  BlockDecision[] @relation("SensorBlockDecisions")
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -553,4 +563,189 @@ model RuleSyncState {
   @@index([ruleId])
   @@index([status])
   @@map("rule_sync_state")
+}
+
+// ============================================
+// APEX MODELS - Customer Protection Console
+// ============================================
+
+model Endpoint {
+  id              String   @id @default(cuid())
+  tenantId        String
+  sensorId        String
+
+  method          String
+  path            String
+  pathTemplate    String
+  service         String   @default("default")
+
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @updatedAt
+  requestCount    Int      @default(1)
+
+  hasSchema       Boolean  @default(false)
+  schemaVersion   String?
+  schemaHash      String?
+  requestSchema   Json?
+  responseSchema  Json?
+
+  avgLatencyMs    Float?
+  p95LatencyMs    Float?
+  p99LatencyMs    Float?
+  errorRate       Float?
+
+  riskLevel       String   @default("low")
+  authRequired    Boolean  @default(false)
+  sensitiveData   Boolean  @default(false)
+
+  metadata        Json?
+
+  tenant          Tenant   @relation("TenantEndpoints", fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor          Sensor   @relation("SensorEndpoints", fields: [sensorId], references: [id], onDelete: Cascade)
+  schemaChanges   EndpointSchemaChange[]
+  ruleBindings    RuleEndpointBinding[]
+
+  @@unique([tenantId, sensorId, method, pathTemplate])
+  @@index([tenantId])
+  @@index([lastSeenAt])
+  @@index([service])
+  @@map("apex_endpoints")
+}
+
+model EndpointSchemaChange {
+  id              String   @id @default(cuid())
+  endpointId      String
+  tenantId        String
+
+  changeType      String
+  field           String
+  oldValue        String?
+  newValue        String?
+  riskLevel       String   @default("low")
+
+  previousHash    String?
+  currentHash     String?
+
+  detectedAt      DateTime @default(now())
+
+  endpoint        Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, detectedAt])
+  @@index([endpointId])
+  @@map("apex_schema_changes")
+}
+
+model CustomerRule {
+  id              String   @id @default(cuid())
+  tenantId        String
+
+  name            String
+  description     String?
+  category        String   @default("custom")
+  severity        String   @default("medium")
+  action          String   @default("block")
+
+  patterns        Json
+  exclusions      Json?
+  sensitivity     Int      @default(50)
+
+  enabled         Boolean  @default(true)
+
+  status          String   @default("draft")
+  rolloutStrategy String   @default("immediate")
+  rolloutConfig   Json?
+
+  totalSensors    Int      @default(0)
+  deployedSensors Int      @default(0)
+  failedSensors   Int      @default(0)
+
+  triggers24h     Int      @default(0)
+  lastTriggered   DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deployedAt      DateTime?
+  createdBy       String?
+
+  tenant          Tenant   @relation("TenantRules", fields: [tenantId], references: [id], onDelete: Cascade)
+  deployments     RuleDeployment[]
+  endpointBindings RuleEndpointBinding[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, enabled])
+  @@map("apex_rules")
+}
+
+model RuleDeployment {
+  id          String   @id @default(cuid())
+  ruleId      String
+  sensorId    String
+  tenantId    String
+
+  status      String   @default("pending")
+  error       String?
+  attempts    Int      @default(0)
+
+  queuedAt    DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  rule        CustomerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  sensor      Sensor       @relation("SensorRuleDeployments", fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, sensorId])
+  @@index([ruleId, status])
+  @@index([sensorId])
+  @@map("apex_rule_deployments")
+}
+
+model RuleEndpointBinding {
+  id          String   @id @default(cuid())
+  ruleId      String
+  endpointId  String
+  tenantId    String
+
+  bindingType String   @default("include")
+
+  createdAt   DateTime @default(now())
+
+  rule        CustomerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  endpoint    Endpoint     @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, endpointId])
+  @@map("apex_rule_endpoint_bindings")
+}
+
+model BlockDecision {
+  id            String   @id @default(cuid())
+  tenantId      String
+  sensorId      String
+
+  blockId       String   @unique
+  entityId      String
+  sourceIp      String
+
+  mode          String
+  ruleId        String?
+  ruleName      String?
+  reason        String
+  riskScore     Int
+
+  requestMethod String
+  requestPath   String
+  requestHeaders Json?
+
+  entityState   Json
+  matchedRules  Json
+
+  decidedAt     DateTime
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant   @relation("TenantBlockDecisions", fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor        Sensor   @relation("SensorBlockDecisions", fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, decidedAt])
+  @@index([entityId])
+  @@index([sourceIp])
+  @@map("apex_block_decisions")
 }
