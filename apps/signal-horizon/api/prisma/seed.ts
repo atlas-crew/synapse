@@ -49,7 +49,7 @@ async function main() {
 
   console.log(`Created ${tenants.length} tenants`);
 
-  // Create API keys for each tenant
+  // Create API keys for each tenant (sensor keys)
   const apiKeys = [
     { tenant: 'tenant-acme', key: 'sk-acme-dev-12345', name: 'Acme Development' },
     { tenant: 'tenant-globex', key: 'sk-globex-dev-67890', name: 'Globex Development' },
@@ -68,6 +68,18 @@ async function main() {
     });
     console.log(`Created API key for ${tenant}: ${key}`);
   }
+
+  // Create development dashboard key (fleet admin - can see all tenants)
+  await prisma.apiKey.create({
+    data: {
+      tenantId: 'tenant-acme', // Associated with Acme but has fleet:admin
+      keyHash: await hashApiKey('dev-dashboard-key'),
+      name: 'Development Dashboard',
+      scopes: ['dashboard:read', 'dashboard:write', 'fleet:admin', 'fleet:read'],
+      rateLimit: 1000,
+    },
+  });
+  console.log('Created dev dashboard key: dev-dashboard-key');
 
   // Create sensors
   const sensors = await Promise.all([
@@ -283,9 +295,12 @@ async function main() {
 
   console.log('Seed completed successfully!');
   console.log('\nAPI Keys for testing:');
-  console.log('  Acme:    sk-acme-dev-12345');
-  console.log('  Globex:  sk-globex-dev-67890');
-  console.log('  Initech: sk-initech-dev-54321');
+  console.log('  Sensor Keys:');
+  console.log('    Acme:    sk-acme-dev-12345');
+  console.log('    Globex:  sk-globex-dev-67890');
+  console.log('    Initech: sk-initech-dev-54321');
+  console.log('  Dashboard Key (fleet admin):');
+  console.log('    dev-dashboard-key');
 }
 
 main()

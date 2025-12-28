@@ -95,21 +95,21 @@ export default function HuntingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Threat Hunting</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-3xl font-light text-ink-primary">Threat Hunting</h1>
+          <p className="text-ink-secondary mt-1">
             Search and analyze threats across the fleet
           </p>
         </div>
 
         {/* Status Badge */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-lg">
-          <Database className="w-4 h-4 text-gray-500" />
-          <span className="text-sm text-gray-400">
+        <div className="flex items-center gap-2 px-3 py-2 border border-border-subtle bg-surface-card">
+          <Database className="w-4 h-4 text-ink-muted" />
+          <span className="text-sm text-ink-secondary">
             {status?.historical ? 'Historical queries enabled' : 'Real-time only'}
           </span>
           <span
             className={`w-2 h-2 rounded-full ${
-              status?.historical ? 'bg-green-500' : 'bg-yellow-500'
+              status?.historical ? 'bg-ac-green' : 'bg-ac-orange'
             }`}
           />
         </div>
@@ -117,12 +117,12 @@ export default function HuntingPage() {
 
       {/* Error Banner */}
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-400" />
-          <span className="text-red-400">{error}</span>
+        <div className="flex items-center gap-3 p-4 bg-ac-red/10 border border-ac-red/30">
+          <AlertCircle className="w-5 h-5 text-ac-red" />
+          <span className="text-ac-red">{error}</span>
           <button
             onClick={clearError}
-            className="ml-auto text-sm text-red-400 hover:text-red-300"
+            className="ml-auto text-sm text-ac-red hover:text-ac-red/80"
           >
             Dismiss
           </button>
@@ -137,21 +137,16 @@ export default function HuntingPage() {
         historicalEnabled={status?.historical ?? false}
       />
 
-      <div className="grid grid-cols-4 gap-6">
-        {/* Results */}
-        <div className="col-span-3">
-          <HuntResultsTable result={result} isLoading={isLoading} />
-        </div>
+      <HuntResultsTable result={result} isLoading={isLoading} />
 
-        {/* Saved Queries */}
-        <div>
-          <SavedQueries
-            queries={savedQueries}
-            onRun={handleRunSavedQuery}
-            onDelete={handleDeleteSavedQuery}
-            isLoading={isLoading}
-          />
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SavedQueries
+          queries={savedQueries}
+          onRun={handleRunSavedQuery}
+          onDelete={handleDeleteSavedQuery}
+          isLoading={isLoading}
+        />
+        <QueryExamples />
       </div>
 
       {/* Save Query Modal */}
@@ -188,12 +183,12 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md">
-        <h2 className="text-lg font-semibold text-white mb-4">Save Query</h2>
+    <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
+      <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-md">
+        <h2 className="text-lg font-medium text-ink-primary mb-4">Save Query</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
               Name *
             </label>
             <input
@@ -202,11 +197,11 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
               onChange={(e) => setName(e.target.value)}
               placeholder="My saved query"
               autoFocus
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-horizon-500"
+              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
               Description
             </label>
             <textarea
@@ -214,26 +209,60 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description..."
               rows={2}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-horizon-500 resize-none"
+              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue resize-none"
             />
           </div>
           <div className="flex gap-3 justify-end">
             <button
               type="button"
               onClick={onCancel}
-              className="btn-ghost"
+              className="btn-outline h-10 px-4 text-sm"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim()}
-              className="btn-primary"
+              className="btn-primary h-10 px-4 text-sm"
             >
               Save Query
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function QueryExamples() {
+  const examples = [
+    'ip:185.228.*',
+    'fingerprint:"curl" AND blocked:true',
+    'customer:Healthcare-A',
+    'campaign:#4421',
+    'asn:12345',
+    'severity:critical',
+    'endpoint:/api/auth/* AND action:blocked',
+  ];
+
+  return (
+    <div className="card">
+      <div className="card-header flex items-center justify-between">
+        <h2 className="font-medium text-ink-primary">Query Examples</h2>
+        <span className="text-xs text-ink-muted">20 links</span>
+      </div>
+      <div className="card-body space-y-2">
+        {examples.map((example) => (
+          <div
+            key={example}
+            className="flex items-center justify-between px-3 py-2 border border-border-subtle bg-surface-inset text-sm text-ink-secondary"
+          >
+            <span className="font-mono">{example}</span>
+            <button className="text-link text-xs font-semibold tracking-[0.14em] uppercase">
+              Run →
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -39,7 +39,7 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
   }, [sensors, sortField, sortDirection]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <span className="text-gray-400">⇅</span>;
+    if (sortField !== field) return <span className="text-ink-muted">⇅</span>;
     return <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>;
   };
 
@@ -56,13 +56,13 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+      <table className="min-w-full divide-y divide-border-subtle">
+        <thead className="bg-surface-subtle">
           <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest cursor-pointer hover:bg-surface-card"
                 onClick={() => handleSort(col.key)}
               >
                 <div className="flex items-center gap-2">
@@ -72,27 +72,27 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
             ))}
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-surface-base divide-y divide-border-subtle">
           {sortedSensors.map((sensor) => (
             <tr
               key={sensor.id}
-              className="hover:bg-gray-50 cursor-pointer transition-colors"
+              className="hover:bg-surface-subtle cursor-pointer transition-colors"
               onClick={() => onSensorClick?.(sensor)}
             >
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{sensor.name}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-ink-primary">{sensor.name}</td>
               <td className="px-6 py-4 whitespace-nowrap"><SensorStatusBadge status={sensor.status} /></td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sensor.cpu.toFixed(1)}%</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sensor.memory.toFixed(1)}%</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sensor.rps.toLocaleString()}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sensor.latencyMs.toFixed(0)}ms</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sensor.version}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sensor.region}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.cpu.toFixed(1)}%</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.memory.toFixed(1)}%</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.rps.toLocaleString()}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.latencyMs.toFixed(0)}ms</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">{sensor.version}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">{sensor.region}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {sortedSensors.length === 0 && (
-        <div className="text-center py-12 text-gray-500">No sensors found</div>
+        <div className="text-center py-12 text-ink-muted">No sensors found</div>
       )}
     </div>
   );

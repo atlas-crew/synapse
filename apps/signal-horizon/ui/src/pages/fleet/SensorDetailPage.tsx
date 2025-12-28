@@ -59,7 +59,7 @@ export function SensorDetailPage() {
   if (isLoading || !sensor) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">Loading sensor details...</div>
+        <div className="text-ink-muted">Loading sensor details...</div>
       </div>
     );
   }
@@ -71,29 +71,29 @@ export function SensorDetailPage() {
         <div>
           <button
             onClick={() => navigate('/fleet')}
-            className="mb-2 text-sm text-[#0057B7] hover:text-[#001E62] flex items-center gap-1"
+            className="mb-2 text-sm text-link hover:text-link-hover flex items-center gap-1"
           >
             ← Back to Fleet
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">{sensor.name}</h1>
+          <h1 className="text-3xl font-light text-ink-primary">{sensor.name}</h1>
           <div className="mt-2 flex items-center gap-4">
             <SensorStatusBadge status={sensor.status} />
-            <span className="text-sm text-gray-600">ID: {sensor.id}</span>
-            <span className="text-sm text-gray-600">v{sensor.version}</span>
+            <span className="text-sm text-ink-secondary">ID: {sensor.id}</span>
+            <span className="text-sm text-ink-secondary">v{sensor.version}</span>
           </div>
         </div>
         <div className="flex gap-3">
           <button
             onClick={() => restartMutation.mutate()}
             disabled={restartMutation.isPending}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#0057B7] hover:bg-[#001E62] disabled:opacity-50"
+            className="btn-primary h-12 px-6 text-sm"
           >
             {restartMutation.isPending ? 'Restarting...' : 'Restart'}
           </button>
           <button
             onClick={() => pushConfigMutation.mutate()}
             disabled={pushConfigMutation.isPending}
-            className="px-4 py-2 text-sm font-medium text-[#0057B7] border border-[#0057B7] hover:bg-[#0057B7] hover:text-white disabled:opacity-50"
+            className="btn-outline h-12 px-6 text-sm"
           >
             {pushConfigMutation.isPending ? 'Pushing...' : 'Push Config'}
           </button>
@@ -101,7 +101,7 @@ export function SensorDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-border-subtle">
         <nav className="-mb-px flex gap-8">
           {(['overview', 'performance', 'configuration'] as const).map((tab) => (
             <button
@@ -109,8 +109,8 @@ export function SensorDetailPage() {
               onClick={() => setActiveTab(tab)}
               className={`py-4 px-1 border-b-2 font-medium text-sm capitalize ${
                 activeTab === tab
-                  ? 'border-[#0057B7] text-[#0057B7]'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-ac-blue text-ac-blue'
+                  : 'border-transparent text-ink-muted hover:text-ink-primary hover:border-border-subtle'
               }`}
             >
               {tab}
@@ -128,30 +128,30 @@ export function SensorDetailPage() {
             <MetricCard label="Requests/sec" value={sensor.rps.toLocaleString()} />
             <MetricCard label="Latency" value={`${sensor.latencyMs.toFixed(0)}ms`} />
           </div>
-          <div className="bg-white border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Sensor Information</h3>
+          <div className="card p-6">
+            <h3 className="text-lg font-medium text-ink-primary mb-4">Sensor Information</h3>
             <dl className="space-y-3">
               <div className="flex justify-between">
-                <dt className="text-sm font-medium text-gray-500">Region</dt>
-                <dd className="text-sm text-gray-900">{sensor.region}</dd>
+                <dt className="text-sm font-medium text-ink-muted">Region</dt>
+                <dd className="text-sm text-ink-primary">{sensor.region}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-sm font-medium text-gray-500">Uptime</dt>
-                <dd className="text-sm text-gray-900">
+                <dt className="text-sm font-medium text-ink-muted">Uptime</dt>
+                <dd className="text-sm text-ink-primary">
                   {Math.floor(sensor.uptime / 86400)}d {Math.floor((sensor.uptime % 86400) / 3600)}h
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-sm font-medium text-gray-500">Last Seen</dt>
-                <dd className="text-sm text-gray-900">{new Date(sensor.lastSeen).toLocaleString()}</dd>
+                <dt className="text-sm font-medium text-ink-muted">Last Seen</dt>
+                <dd className="text-sm text-ink-primary">{new Date(sensor.lastSeen).toLocaleString()}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-sm font-medium text-gray-500">Config Version</dt>
-                <dd className="text-sm text-gray-900">{sensor.configVersion}</dd>
+                <dt className="text-sm font-medium text-ink-muted">Config Version</dt>
+                <dd className="text-sm text-ink-primary">{sensor.configVersion}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-sm font-medium text-gray-500">Errors</dt>
-                <dd className="text-sm text-gray-900">{sensor.errors}</dd>
+                <dt className="text-sm font-medium text-ink-muted">Errors</dt>
+                <dd className="text-sm text-ink-primary">{sensor.errors}</dd>
               </div>
             </dl>
           </div>
@@ -159,14 +159,14 @@ export function SensorDetailPage() {
       )}
 
       {activeTab === 'performance' && (
-        <div className="bg-white border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance (Last Hour)</h3>
+        <div className="card p-6">
+          <h3 className="text-lg font-medium text-ink-primary mb-4">Performance (Last Hour)</h3>
           {performance.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No performance data available</div>
+            <div className="text-center py-12 text-ink-muted">No performance data available</div>
           ) : (
             <div className="h-64 flex items-end justify-between gap-2">
               {performance.slice(-20).map((metric, idx) => (
-                <div key={idx} className="flex-1 bg-[#0057B7]" style={{ height: `${metric.cpu}%` }} />
+                <div key={idx} className="flex-1 bg-ac-blue" style={{ height: `${metric.cpu}%` }} />
               ))}
             </div>
           )}
@@ -174,9 +174,9 @@ export function SensorDetailPage() {
       )}
 
       {activeTab === 'configuration' && (
-        <div className="bg-white border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuration</h3>
-          <pre className="bg-gray-50 p-4 font-mono text-sm text-gray-800">
+        <div className="card p-6">
+          <h3 className="text-lg font-medium text-ink-primary mb-4">Configuration</h3>
+          <pre className="bg-surface-subtle border border-border-subtle p-4 font-mono text-sm text-ink-secondary">
 {JSON.stringify({
   version: sensor.configVersion,
   sensor_id: sensor.id,

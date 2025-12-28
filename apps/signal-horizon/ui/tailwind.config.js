@@ -5,25 +5,156 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Signal Horizon brand colors
-        horizon: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-          950: '#082f49',
+        // Atlas Crew brand palette + theme tokens
+        ac: {
+          blue: 'var(--ac-blue)',
+          navy: 'var(--ac-navy)',
+          white: 'var(--ac-white)',
+          sky: 'var(--ac-sky-blue)',
+          magenta: 'var(--ac-magenta)',
+          black: 'var(--ac-black)',
+          purple: 'var(--ac-purple)',
+          orange: 'var(--ac-orange)',
+          cloud: 'var(--ac-cloud-blue)',
+          green: 'var(--ac-green)',
+          red: 'var(--ac-red)',
+          'blue-light': 'var(--ac-blue-light)',
+          'blue-dark': 'var(--ac-blue-dark)',
+          'blue-darker': 'var(--ac-blue-darker)',
+          'sky-light': 'var(--ac-sky-light)',
+          'sky-dark': 'var(--ac-sky-dark)',
         },
-        threat: {
-          low: '#22c55e',      // green-500
-          medium: '#eab308',   // yellow-500
-          high: '#f97316',     // orange-500
-          critical: '#ef4444', // red-500
+        // CtrlX design system colors
+        navy: {
+          50: '#f0f4f8',
+          100: '#d9e2ec',
+          200: '#bcccdc',
+          300: '#9fb3c8',
+          400: '#829ab1',
+          500: '#627d98',
+          600: '#486581',
+          700: '#334e68',
+          800: '#243b53',
+          900: '#1e3a5f',
+          950: '#102a43',
+        },
+        ctrlx: {
+          primary: '#1e3a5f',
+          success: '#22c55e',
+          warning: '#f59e0b',
+          danger: '#ef4444',
+          info: '#3b82f6',
+        },
+        risk: {
+          low: '#22c55e',
+          medium: '#f59e0b',
+          high: '#f97316',
+          critical: '#ef4444',
+        },
+        method: {
+          get: '#22c55e',
+          post: '#3b82f6',
+          put: '#f59e0b',
+          patch: '#8b5cf6',
+          delete: '#ef4444',
+        },
+        surface: {
+          base: 'var(--surface-base)',
+          subtle: 'var(--surface-subtle)',
+          card: 'var(--surface-card)',
+          inset: 'var(--surface-inset)',
+          overlay: 'var(--surface-overlay)',
+          hero: 'var(--surface-hero)',
+        },
+        ink: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+          inverse: 'var(--text-inverse)',
+        },
+        border: {
+          subtle: 'var(--border-subtle)',
+          strong: 'var(--border-strong)',
+          inset: 'var(--border-inset)',
+        },
+        link: {
+          DEFAULT: 'var(--link)',
+          hover: 'var(--link-hover)',
+        },
+        focus: {
+          DEFAULT: 'var(--focus-ring)',
+        },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          hover: 'var(--accent-hover)',
+        },
+        success: 'var(--ac-green)',
+        warning: 'var(--ac-orange)',
+        danger: 'var(--ac-red)',
+        info: 'var(--ac-sky-blue)',
+        // Legacy class support mapped to Atlas Crew tokens
+        horizon: {
+          50: 'var(--ac-gray-light)',
+          100: 'var(--ac-sky-light)',
+          200: 'var(--ac-blue-light)',
+          300: 'var(--ac-sky-blue)',
+          400: 'var(--ac-blue)',
+          500: 'var(--ac-blue)',
+          600: 'var(--ac-blue-dark)',
+          700: 'var(--ac-hover-light)',
+          800: 'var(--ac-blue-darker)',
+          900: 'var(--ac-navy)',
+          950: 'var(--ac-black)',
+        },
+        gray: {
+          50: 'var(--surface-base)',
+          100: 'var(--surface-subtle)',
+          200: 'var(--surface-card)',
+          300: 'var(--border-subtle)',
+          400: 'var(--text-muted)',
+          500: 'var(--text-secondary)',
+          600: 'var(--text-primary)',
+          700: 'var(--surface-inset)',
+          800: 'var(--surface-subtle)',
+          900: 'var(--surface-card)',
+          950: 'var(--surface-base)',
+        },
+        blue: {
+          50: 'var(--ac-gray-light)',
+          100: 'var(--ac-sky-light)',
+          200: 'var(--ac-blue-light)',
+          300: 'var(--ac-sky-blue)',
+          400: 'var(--ac-blue)',
+          500: 'var(--ac-blue)',
+          600: 'var(--ac-blue-dark)',
+          700: 'var(--ac-hover-light)',
+          800: 'var(--ac-blue-darker)',
+          900: 'var(--ac-navy)',
+        },
+        green: {
+          400: 'var(--ac-green)',
+          500: 'var(--ac-green)',
+          600: 'var(--ac-green)',
+        },
+        red: {
+          400: 'var(--ac-red)',
+          500: 'var(--ac-red)',
+          600: 'var(--ac-red)',
+        },
+        yellow: {
+          400: 'var(--ac-orange)',
+          500: 'var(--ac-orange)',
+          600: 'var(--ac-orange)',
+        },
+        orange: {
+          400: 'var(--ac-orange)',
+          500: 'var(--ac-orange)',
+          600: 'var(--ac-orange)',
+        },
+        purple: {
+          400: 'var(--ac-purple)',
+          500: 'var(--ac-purple)',
+          600: 'var(--ac-purple)',
         },
       },
       animation: {
@@ -31,8 +162,12 @@ export default {
         'ping-slow': 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Rubik', 'Calibri', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+      },
+      boxShadow: {
+        card: '0 2px 8px var(--shadow-color)',
+        'card-strong': '0 6px 16px var(--shadow-color-strong)',
       },
     },
   },

@@ -16,22 +16,22 @@ export const MetricCard = memo(function MetricCard({
   className = '',
 }: MetricCardProps) {
   const trendColor = trend
-    ? trend.value > 0 ? 'text-green-600' : trend.value < 0 ? 'text-red-600' : 'text-gray-600'
+    ? trend.value > 0 ? 'text-ac-green' : trend.value < 0 ? 'text-ac-red' : 'text-ink-muted'
     : '';
 
   return (
-    <div className={`bg-white border border-gray-200 p-6 ${className}`}>
+    <div className={`card p-6 ${className}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+          <p className="text-sm font-medium text-ink-secondary">{label}</p>
+          <p className="mt-2 text-3xl font-light text-ink-primary">{value}</p>
           {trend && (
             <p className={`mt-2 text-sm font-medium ${trendColor}`}>
               {trend.value > 0 ? '↑' : trend.value < 0 ? '↓' : '→'} {Math.abs(trend.value)}% {trend.label}
             </p>
           )}
         </div>
-        {icon && <div className="text-[#0057B7]">{icon}</div>}
+        {icon && <div className="text-ac-blue">{icon}</div>}
       </div>
     </div>
   );

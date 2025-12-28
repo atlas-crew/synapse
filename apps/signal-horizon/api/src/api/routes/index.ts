@@ -14,6 +14,7 @@ import { createWarRoomRoutes } from './warroom.js';
 import { createIntelRoutes } from './intel.js';
 import { createHuntRoutes } from './hunt.js';
 import { createFleetRoutes } from './fleet.js';
+import { createApexRoutes } from './apex.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
@@ -57,6 +58,10 @@ export function createApiRouter(
     router.use('/fleet', createFleetRoutes(prisma, logger, options));
     logger.info('Fleet routes mounted at /api/v1/fleet');
   }
+
+  // Mount Apex analytics routes (always available)
+  router.use('/apex', createApexRoutes(logger));
+  logger.info('Apex routes mounted at /api/v1/apex');
 
   return router;
 }

@@ -64,26 +64,26 @@ export class ErrorBoundary extends Component<Props, State> {
         <div
           role="alert"
           aria-live="assertive"
-          className="flex flex-col items-center justify-center min-h-[400px] p-6"
+          className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-surface-base text-ink-primary"
         >
-          <div className="p-4 rounded-full bg-red-500/10 mb-4">
-            <AlertTriangle className="w-8 h-8 text-red-400" aria-hidden="true" />
+          <div className="p-4 border border-ac-red/40 bg-ac-red/10 mb-4">
+            <AlertTriangle className="w-8 h-8 text-ac-red" aria-hidden="true" />
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">
+          <h2 className="text-xl font-light text-ink-primary mb-2">
             Something went wrong
           </h2>
-          <p className="text-gray-400 text-center max-w-md mb-4">
+          <p className="text-ink-secondary text-center max-w-md mb-4">
             An error occurred while rendering this component. Try refreshing or contact support if the problem persists.
           </p>
           {import.meta.env.DEV && this.state.error && (
-            <pre className="text-xs text-red-400 bg-gray-900 p-4 rounded-lg max-w-lg overflow-auto mb-4">
+            <pre className="text-xs text-ac-red bg-surface-subtle p-4 border border-ac-red/30 max-w-lg overflow-auto mb-4">
               {this.state.error.message}
               {this.state.errorInfo?.componentStack}
             </pre>
           )}
           <button
             onClick={this.handleRetry}
-            className="flex items-center gap-2 px-4 py-2 bg-horizon-600 hover:bg-horizon-500 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-horizon-400 focus:ring-offset-2 focus:ring-offset-gray-900"
+            className="btn-primary"
             aria-label="Retry loading this component"
           >
             <RefreshCw className="w-4 h-4" aria-hidden="true" />

@@ -15,7 +15,7 @@ export function Skeleton({
   return (
     <div
       className={clsx(
-        'animate-pulse rounded-md bg-gray-800',
+        'animate-pulse bg-surface-inset border border-border-subtle',
         className
       )}
       aria-hidden="true"
@@ -31,7 +31,7 @@ export function CardSkeleton() {
   return (
     <div className="card p-4" aria-busy="true" aria-label="Loading card">
       <div className="flex items-center gap-3">
-        <Skeleton className="w-10 h-10 rounded-lg" />
+        <Skeleton className="w-10 h-10" />
         <div className="flex-1 space-y-2">
           <Skeleton className="h-6 w-20" />
           <Skeleton className="h-4 w-16" />
@@ -109,7 +109,7 @@ export function CampaignListSkeleton() {
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
-            className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg"
+            className="flex items-center justify-between p-3 bg-surface-inset"
           >
             <div className="flex items-center gap-3">
               <Skeleton className="w-2 h-2 rounded-full" />
@@ -119,8 +119,8 @@ export function CampaignListSkeleton() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Skeleton className="h-5 w-16 rounded" />
-              <Skeleton className="h-5 w-12 rounded" />
+              <Skeleton className="h-5 w-16" />
+              <Skeleton className="h-5 w-12" />
             </div>
           </div>
         ))}
@@ -137,11 +137,11 @@ export function AlertFeedSkeleton() {
     <div className="card" aria-busy="true" aria-label="Loading alerts">
       <div className="card-header flex items-center justify-between">
         <Skeleton className="h-5 w-28" />
-        <Skeleton className="h-4 w-4 rounded" />
+        <Skeleton className="h-4 w-4" />
       </div>
       <div className="card-body max-h-80 overflow-y-auto space-y-2">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="p-2 rounded border-l-2 border-gray-700">
+          <div key={i} className="p-2 border-l-2 border-border-subtle bg-surface-inset">
             <Skeleton className="h-4 w-full mb-1" />
             <Skeleton className="h-3 w-3/4 mb-1" />
             <Skeleton className="h-3 w-16" />
@@ -176,12 +176,12 @@ export function LoadingSpinner({
     >
       <div
         className={clsx(
-          'rounded-full border-gray-700 border-t-horizon-500 animate-spin',
+          'rounded-full border-border-subtle border-t-accent animate-spin',
           sizeClasses[size]
         )}
         aria-hidden="true"
       />
-      <span className="text-gray-400 text-sm">{message}</span>
+      <span className="text-ink-secondary text-sm">{message}</span>
       <span className="sr-only">{message}</span>
     </div>
   );
@@ -207,11 +207,11 @@ export function EmptyState({
       aria-label={title}
       className="flex flex-col items-center justify-center py-12 text-center"
     >
-      <div className="p-4 rounded-full bg-gray-800 mb-4">
-        <Icon className="w-8 h-8 text-gray-500" aria-hidden="true" />
+      <div className="p-4 bg-surface-subtle border border-border-subtle mb-4">
+        <Icon className="w-8 h-8 text-ink-muted" aria-hidden="true" />
       </div>
-      <h3 className="text-lg font-medium text-white mb-1">{title}</h3>
-      <p className="text-gray-400 max-w-sm">{description}</p>
+      <h3 className="text-lg font-medium text-ink-primary mb-1">{title}</h3>
+      <p className="text-ink-secondary max-w-sm">{description}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -236,18 +236,18 @@ export function ConnectionBanner({
       className={clsx(
         'flex items-center justify-center gap-2 py-2 px-4 text-sm',
         isReconnecting
-          ? 'bg-yellow-500/20 text-yellow-400'
-          : 'bg-red-500/20 text-red-400'
+          ? 'bg-ac-orange/15 text-ac-orange'
+          : 'bg-ac-red/15 text-ac-red'
       )}
     >
       {isReconnecting ? (
         <>
-          <div className="w-3 h-3 rounded-full border-2 border-yellow-400 border-t-transparent animate-spin" />
+          <div className="w-3 h-3 rounded-full border-2 border-ac-orange border-t-transparent animate-spin" />
           <span>Reconnecting to server...</span>
         </>
       ) : (
         <>
-          <span className="w-2 h-2 rounded-full bg-red-400" />
+          <span className="w-2 h-2 rounded-full bg-ac-red" />
           <span>Connection lost. Data may be stale.</span>
         </>
       )}

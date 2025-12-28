@@ -19,7 +19,7 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const CampaignSchema = z.object({
   id: z.string(),
   name: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   status: z.enum(['ACTIVE', 'MONITORING', 'RESOLVED', 'FALSE_POSITIVE']),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   isCrossTenant: z.boolean(),
@@ -27,20 +27,20 @@ const CampaignSchema = z.object({
   confidence: z.number(),
   firstSeenAt: z.string(),
   lastActivityAt: z.string(),
-});
+}).passthrough(); // Allow extra fields from database
 
 const ThreatSchema = z.object({
   id: z.string(),
   threatType: z.string(),
   indicator: z.string(),
   riskScore: z.number(),
-  fleetRiskScore: z.number().optional(),
+  fleetRiskScore: z.number().nullable().optional(),
   hitCount: z.number(),
   tenantsAffected: z.number(),
   isFleetThreat: z.boolean(),
   firstSeenAt: z.string(),
   lastSeenAt: z.string(),
-});
+}).passthrough(); // Allow extra fields from database
 
 const SnapshotDataSchema = z.object({
   activeCampaigns: z.array(CampaignSchema),

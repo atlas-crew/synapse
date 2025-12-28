@@ -60,9 +60,9 @@ const mockActivities: Activity[] = [
 ];
 
 const quickActions = [
-  { icon: Ban, label: 'Block IP', color: 'text-red-400' },
-  { icon: Shield, label: 'Block Fingerprint', color: 'text-orange-400' },
-  { icon: AlertTriangle, label: 'Block ASN', color: 'text-yellow-400' },
+  { icon: Ban, label: 'Block IP', color: 'text-ac-red' },
+  { icon: Shield, label: 'Block Fingerprint', color: 'text-ac-orange' },
+  { icon: AlertTriangle, label: 'Block ASN', color: 'text-ac-orange' },
 ];
 
 export default function WarRoomPage() {
@@ -72,14 +72,14 @@ export default function WarRoomPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-800">
+      <div className="p-4 border-b border-ac-red/40 bg-ac-red text-ac-white">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <Users className="w-5 h-5 text-horizon-400" />
+            <h1 className="text-xl font-light text-ac-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-ac-white" />
               {id ? `War Room: ${id}` : 'Dark Phoenix Response'}
             </h1>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-ac-white/80 mt-1">
               Incident response for Operation Dark Phoenix campaign
             </p>
           </div>
@@ -88,13 +88,13 @@ export default function WarRoomPage() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-900 flex items-center justify-center text-xs font-medium"
+                  className="w-8 h-8 rounded-full bg-ac-white/15 border-2 border-ac-white/30 flex items-center justify-center text-xs font-medium"
                 >
                   U{i}
                 </div>
               ))}
             </div>
-            <span className="text-sm text-gray-400">3 participants</span>
+            <span className="text-sm text-ac-white/80">3 participants</span>
           </div>
         </div>
       </div>
@@ -102,6 +102,11 @@ export default function WarRoomPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Activity Feed */}
         <div className="flex-1 flex flex-col">
+          <div className="grid grid-cols-3 gap-4 p-4 border-b border-border-subtle">
+            <MetricTile label="Attacks/Min" value="847" tone="bg-ac-red" />
+            <MetricTile label="Block Rate" value="94%" tone="bg-ac-green" />
+            <MetricTile label="New IPs (5min)" value="3" tone="bg-ac-orange" />
+          </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {mockActivities.map((activity) => (
               <ActivityItem key={activity.id} activity={activity} />
@@ -109,16 +114,16 @@ export default function WarRoomPage() {
           </div>
 
           {/* Message Input */}
-          <div className="p-4 border-t border-gray-800">
+          <div className="p-4 border-t border-border-subtle">
             <div className="flex gap-2">
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Type a message..."
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-horizon-500"
+                className="flex-1 bg-surface-inset border border-border-subtle px-4 py-2 text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue"
               />
-              <button className="btn-primary">
+              <button className="btn-primary h-10 px-4">
                 <Send className="w-4 h-4" />
               </button>
             </div>
@@ -126,20 +131,20 @@ export default function WarRoomPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="w-80 border-l border-gray-800 p-4 space-y-6">
+        <div className="w-80 border-l border-border-subtle p-4 space-y-6 bg-surface-subtle">
           {/* Quick Actions */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-400 mb-3">
+            <h3 className="text-sm font-semibold text-ink-muted mb-3">
               Quick Actions
             </h3>
             <div className="space-y-2">
               {quickActions.map((action) => (
                 <button
                   key={action.label}
-                  className="w-full flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 border border-border-subtle bg-surface-base hover:bg-surface-card text-sm transition-colors"
                 >
                   <action.icon className={clsx('w-4 h-4', action.color)} />
-                  <span className="text-gray-300">{action.label}</span>
+                  <span className="text-ink-secondary">{action.label}</span>
                 </button>
               ))}
             </div>
@@ -147,7 +152,7 @@ export default function WarRoomPage() {
 
           {/* Live Metrics */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-400 mb-3">
+            <h3 className="text-sm font-semibold text-ink-muted mb-3">
               Live Metrics
             </h3>
             <div className="space-y-3">
@@ -159,7 +164,7 @@ export default function WarRoomPage() {
 
           {/* Customer Status */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-400 mb-3">
+            <h3 className="text-sm font-semibold text-ink-muted mb-3">
               Customer Status
             </h3>
             <div className="space-y-2">
@@ -183,9 +188,9 @@ function ActivityItem({ activity }: { activity: Activity }) {
       <div
         className={clsx(
           'w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0',
-          isBot && 'bg-horizon-600/20 text-horizon-400',
-          isSystem && 'bg-gray-700 text-gray-400',
-          !isBot && !isSystem && 'bg-gray-700 text-white'
+          isBot && 'bg-ac-blue/10 text-ac-blue',
+          isSystem && 'bg-surface-subtle text-ink-muted',
+          !isBot && !isSystem && 'bg-surface-subtle text-ink-primary'
         )}
       >
         {isBot ? 'HB' : isSystem ? 'SY' : activity.actor[0]}
@@ -195,18 +200,18 @@ function ActivityItem({ activity }: { activity: Activity }) {
           <span
             className={clsx(
               'font-medium',
-              isBot && 'text-horizon-400',
-              !isBot && 'text-white'
+              isBot && 'text-ac-blue',
+              !isBot && 'text-ink-primary'
             )}
           >
             {activity.actor}
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-ink-muted">
             {activity.action.replace('_', ' ')}
           </span>
         </div>
-        <p className="text-sm text-gray-300 mt-1">{activity.description}</p>
-        <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+        <p className="text-sm text-ink-secondary mt-1">{activity.description}</p>
+        <div className="flex items-center gap-1 mt-1 text-xs text-ink-muted">
           <Clock className="w-3 h-3" />
           {activity.timestamp.toLocaleTimeString()}
         </div>
@@ -225,11 +230,31 @@ function MetricItem({
   unit: string;
 }) {
   return (
-    <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded-lg">
-      <span className="text-sm text-gray-400">{label}</span>
+    <div className="flex items-center justify-between p-2 border border-border-subtle bg-surface-base">
+      <span className="text-sm text-ink-secondary">{label}</span>
       <div className="text-right">
-        <span className="text-white font-medium">{value}</span>
-        <span className="text-xs text-gray-500 ml-1">{unit}</span>
+        <span className="text-ink-primary font-medium">{value}</span>
+        <span className="text-xs text-ink-muted ml-1">{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: string;
+}) {
+  return (
+    <div className="card p-4">
+      <div className="text-xs tracking-[0.18em] uppercase text-ink-muted">{label}</div>
+      <div className="mt-2 flex items-end gap-3">
+        <span className="text-3xl font-light text-ink-primary">{value}</span>
+        <span className={clsx('h-1 flex-1', tone)} />
       </div>
     </div>
   );
@@ -243,14 +268,14 @@ function CustomerStatus({
   status: 'protected' | 'monitoring' | 'at-risk';
 }) {
   return (
-    <div className="flex items-center justify-between p-2 bg-gray-800/50 rounded-lg">
-      <span className="text-sm text-gray-300">{name}</span>
+    <div className="flex items-center justify-between p-2 border border-border-subtle bg-surface-base">
+      <span className="text-sm text-ink-secondary">{name}</span>
       <span
         className={clsx(
-          'text-xs px-2 py-0.5 rounded',
-          status === 'protected' && 'bg-green-500/20 text-green-400',
-          status === 'monitoring' && 'bg-yellow-500/20 text-yellow-400',
-          status === 'at-risk' && 'bg-red-500/20 text-red-400'
+          'text-xs px-2 py-0.5 border',
+          status === 'protected' && 'bg-ac-green/10 text-ac-green border-ac-green/30',
+          status === 'monitoring' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
+          status === 'at-risk' && 'bg-ac-red/10 text-ac-red border-ac-red/30'
         )}
       >
         {status}

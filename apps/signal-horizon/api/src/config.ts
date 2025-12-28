@@ -55,6 +55,9 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
+  // Risk Server (upstream Synapse proxy)
+  RISK_SERVER_URL: z.string().url().default('http://localhost:3000'),
+
   // ClickHouse (optional - for historical data)
   CLICKHOUSE_ENABLED: z.enum(['true', 'false']).default('false'),
   CLICKHOUSE_HOST: z.string().default('localhost'),
@@ -129,6 +132,11 @@ function loadConfig() {
       level: env.LOG_LEVEL,
     },
 
+    // Risk Server (upstream Synapse)
+    riskServer: {
+      url: env.RISK_SERVER_URL,
+    },
+
     // ClickHouse for historical data (optional)
     clickhouse: {
       enabled: env.CLICKHOUSE_ENABLED === 'true',
@@ -149,6 +157,7 @@ function loadConfig() {
     console.log(`   Server: ${config.server.host}:${config.server.port}`);
     console.log(`   WebSocket paths: ${config.websocket.sensorPath}, ${config.websocket.dashboardPath}`);
     console.log(`   Log level: ${config.logging.level}`);
+    console.log(`   Risk Server: ${config.riskServer.url}`);
     console.log(`   ClickHouse: ${config.clickhouse.enabled ? `${config.clickhouse.host}:${config.clickhouse.port}` : 'disabled'}`);
   }
 

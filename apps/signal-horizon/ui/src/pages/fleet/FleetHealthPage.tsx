@@ -84,23 +84,23 @@ export function FleetHealthPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Fleet Health</h1>
-        <p className="mt-1 text-sm text-gray-600">
+        <h1 className="text-3xl font-light text-ink-primary">Fleet Health</h1>
+        <p className="mt-1 text-sm text-ink-secondary">
           Monitor the health and performance of your sensor fleet
         </p>
       </div>
 
       {/* Health Score */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <div className="bg-white border border-gray-200 p-6 md:col-span-2">
+        <div className="card p-6 md:col-span-2">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Overall Health Score</p>
-              <p className="mt-2 text-5xl font-bold text-gray-900">{healthScore}%</p>
+              <p className="text-sm font-medium text-ink-secondary">Overall Health Score</p>
+              <p className="mt-2 text-5xl font-light text-ink-primary">{healthScore}%</p>
             </div>
             <div
-              className={`w-20 h-20 flex items-center justify-center text-white text-2xl font-bold ${
-                healthScore >= 90 ? 'bg-green-500' : healthScore >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+              className={`w-20 h-20 flex items-center justify-center text-ac-white text-2xl font-semibold ${
+                healthScore >= 90 ? 'bg-ac-green' : healthScore >= 70 ? 'bg-ac-orange' : 'bg-ac-red'
               }`}
             >
               {healthScore >= 90 ? '✓' : healthScore >= 70 ? '!' : '✕'}
@@ -111,45 +111,45 @@ export function FleetHealthPage() {
         <MetricCard
           label="Critical Alerts"
           value={health?.criticalAlerts ?? criticalSensors.length}
-          className={criticalSensors.length > 0 ? 'border-red-300 bg-red-50' : ''}
+          className={criticalSensors.length > 0 ? 'border-ac-red/40 bg-ac-red/10' : ''}
         />
         <MetricCard
           label="Warnings"
           value={health?.warningAlerts ?? warningSensors.length}
-          className={warningSensors.length > 0 ? 'border-yellow-300 bg-yellow-50' : ''}
+          className={warningSensors.length > 0 ? 'border-ac-orange/40 bg-ac-orange/10' : ''}
         />
       </div>
 
       {/* Resource Usage */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="bg-white border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Fleet Resource Usage</h3>
+        <div className="card p-6">
+          <h3 className="text-lg font-medium text-ink-primary mb-4">Fleet Resource Usage</h3>
           <ResourceBarGroup cpu={avgCpu} memory={avgMemory} disk={35} size="lg" />
         </div>
 
-        <div className="bg-white border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Status Distribution</h3>
+        <div className="card p-6">
+          <h3 className="text-lg font-medium text-ink-primary mb-4">Status Distribution</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 bg-green-500" />
-                <span className="text-sm text-gray-700">Online</span>
+                <div className="w-4 h-4 bg-ac-green" />
+                <span className="text-sm text-ink-secondary">Online</span>
               </div>
-              <span className="text-sm font-medium text-gray-900">{metrics?.onlineCount ?? 0}</span>
+              <span className="text-sm font-medium text-ink-primary">{metrics?.onlineCount ?? 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 bg-yellow-500" />
-                <span className="text-sm text-gray-700">Warning</span>
+                <div className="w-4 h-4 bg-ac-orange" />
+                <span className="text-sm text-ink-secondary">Warning</span>
               </div>
-              <span className="text-sm font-medium text-gray-900">{metrics?.warningCount ?? 0}</span>
+              <span className="text-sm font-medium text-ink-primary">{metrics?.warningCount ?? 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 bg-gray-400" />
-                <span className="text-sm text-gray-700">Offline</span>
+                <div className="w-4 h-4 bg-ac-gray-mid" />
+                <span className="text-sm text-ink-secondary">Offline</span>
               </div>
-              <span className="text-sm font-medium text-gray-900">{metrics?.offlineCount ?? 0}</span>
+              <span className="text-sm font-medium text-ink-primary">{metrics?.offlineCount ?? 0}</span>
             </div>
           </div>
         </div>
@@ -157,22 +157,22 @@ export function FleetHealthPage() {
 
       {/* Sensors Requiring Attention */}
       {criticalSensors.length > 0 && (
-        <div className="bg-white border border-red-200 p-6">
-          <h3 className="text-lg font-semibold text-red-700 mb-4">
+        <div className="card border-ac-red/40 p-6">
+          <h3 className="text-lg font-medium text-ac-red mb-4">
             Critical Issues ({criticalSensors.length})
           </h3>
           <div className="space-y-3">
             {criticalSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 bg-red-50 cursor-pointer hover:bg-red-100"
+                className="flex items-center justify-between p-3 bg-ac-red/10 cursor-pointer hover:bg-ac-red/15"
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
               >
                 <div className="flex items-center gap-4">
                   <SensorStatusBadge status={sensor.status} />
-                  <span className="font-medium text-gray-900">{sensor.name}</span>
+                  <span className="font-medium text-ink-primary">{sensor.name}</span>
                 </div>
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-ink-secondary">
                   CPU: {sensor.cpu.toFixed(1)}% | Memory: {sensor.memory.toFixed(1)}%
                 </div>
               </div>
@@ -183,22 +183,22 @@ export function FleetHealthPage() {
 
       {/* Warning Sensors */}
       {warningSensors.length > 0 && (
-        <div className="bg-white border border-yellow-200 p-6">
-          <h3 className="text-lg font-semibold text-yellow-700 mb-4">
+        <div className="card border-ac-orange/40 p-6">
+          <h3 className="text-lg font-medium text-ac-orange mb-4">
             Warnings ({warningSensors.length})
           </h3>
           <div className="space-y-3">
             {warningSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 bg-yellow-50 cursor-pointer hover:bg-yellow-100"
+                className="flex items-center justify-between p-3 bg-ac-orange/10 cursor-pointer hover:bg-ac-orange/15"
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
               >
                 <div className="flex items-center gap-4">
                   <SensorStatusBadge status={sensor.status} />
-                  <span className="font-medium text-gray-900">{sensor.name}</span>
+                  <span className="font-medium text-ink-primary">{sensor.name}</span>
                 </div>
-                <div className="text-sm text-gray-600">
+                <div className="text-sm text-ink-secondary">
                   CPU: {sensor.cpu.toFixed(1)}% | Memory: {sensor.memory.toFixed(1)}%
                 </div>
               </div>
@@ -209,10 +209,10 @@ export function FleetHealthPage() {
 
       {/* All Healthy */}
       {criticalSensors.length === 0 && warningSensors.length === 0 && sensors.length > 0 && (
-        <div className="bg-green-50 border border-green-200 p-6 text-center">
-          <div className="text-green-600 text-4xl mb-2">✓</div>
-          <h3 className="text-lg font-semibold text-green-700">All Systems Healthy</h3>
-          <p className="text-sm text-green-600 mt-1">
+        <div className="card border-ac-green/40 p-6 text-center">
+          <div className="text-ac-green text-4xl mb-2">✓</div>
+          <h3 className="text-lg font-medium text-ac-green">All Systems Healthy</h3>
+          <p className="text-sm text-ink-secondary mt-1">
             All {sensors.length} sensors are operating normally
           </p>
         </div>

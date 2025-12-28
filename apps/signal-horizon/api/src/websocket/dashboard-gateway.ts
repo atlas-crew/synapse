@@ -5,7 +5,8 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server as HTTPServer } from 'node:http';
+import type { IncomingMessage } from 'node:http';
+import type { Socket } from 'node:net';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
@@ -51,7 +52,6 @@ export class DashboardGateway {
   private sequenceId = 0;
 
   constructor(
-    httpServer: HTTPServer,
     prisma: PrismaClient,
     logger: Logger,
     config: DashboardGatewayConfig
@@ -61,8 +61,7 @@ export class DashboardGateway {
     this.config = config;
 
     this.wss = new WebSocketServer({
-      server: httpServer,
-      path: config.path,
+      noServer: true,
     });
   }
 
@@ -79,6 +78,17 @@ export class DashboardGateway {
 
     this.startHeartbeat();
     this.logger.info({ path: this.config.path }, 'Dashboard gateway started');
+  }
+
+  handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
+    if (!this.wss) {
+      socket.destroy();
+      return;
+    }
+
+    this.wss.handleUpgrade(req, socket, head, (ws) => {
+      this.wss?.emit('connection', ws, req);
+    });
   }
 
   stop(): void {

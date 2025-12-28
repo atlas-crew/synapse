@@ -63,23 +63,23 @@ export class FleetErrorBoundary extends React.Component<
         <div
           className={`flex flex-col items-center justify-center ${
             level === 'page' ? 'min-h-screen' : 'min-h-[200px]'
-          } bg-white border border-red-200 p-6`}
+          } bg-surface-base border border-ac-red/30 p-6`}
         >
-          <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-          <p className="text-sm text-gray-600 mb-4 text-center max-w-md">
+          <AlertTriangle className="w-12 h-12 text-ac-red mb-4" />
+          <h3 className="text-lg font-light text-ink-primary mb-2">{title}</h3>
+          <p className="text-sm text-ink-secondary mb-4 text-center max-w-md">
             {description}
           </p>
           <div className="flex gap-3">
             <button
               onClick={this.handleReset}
-              className="px-4 py-2 bg-gray-200 text-gray-900 hover:bg-gray-300 rounded"
+              className="btn-outline h-12 px-5"
             >
               Try Again
             </button>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-[#0057B7] text-white hover:bg-[#001E62] rounded"
+              className="btn-primary"
             >
               Reload Page
             </button>

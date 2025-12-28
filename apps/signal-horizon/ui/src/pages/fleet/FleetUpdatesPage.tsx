@@ -111,10 +111,10 @@ export function FleetUpdatesPage() {
   const { upToDate, needsUpdate, updating, failed } = statusCounts;
 
   const statusColors = {
-    up_to_date: 'bg-green-100 text-green-800',
-    update_available: 'bg-yellow-100 text-yellow-800',
-    updating: 'bg-blue-100 text-blue-800',
-    failed: 'bg-red-100 text-red-800',
+    up_to_date: 'bg-ac-green/10 text-ac-green border-ac-green/30',
+    update_available: 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
+    updating: 'bg-ac-blue/10 text-ac-blue border-ac-blue/30',
+    failed: 'bg-ac-red/10 text-ac-red border-ac-red/30',
   };
 
   const statusLabels = {
@@ -128,15 +128,15 @@ export function FleetUpdatesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Fleet Updates</h1>
-          <p className="mt-1 text-sm text-gray-600">
+          <h1 className="text-3xl font-light text-ink-primary">Fleet Updates</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
             Manage sensor firmware and software updates
           </p>
         </div>
         <button
           onClick={() => updateMutation.mutate()}
           disabled={selectedSensors.size === 0 || !targetVersion || updateMutation.isPending}
-          className="px-4 py-2 text-sm font-medium text-white bg-[#0057B7] hover:bg-[#001E62] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary h-12 px-6 text-sm"
         >
           {updateMutation.isPending
             ? 'Updating...'
@@ -146,58 +146,58 @@ export function FleetUpdatesPage() {
 
       {/* Status Overview */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <MetricCard label="Up to Date" value={upToDate} className="border-green-200" />
+        <MetricCard label="Up to Date" value={upToDate} className="border-ac-green/40" />
         <MetricCard
           label="Needs Update"
           value={needsUpdate}
-          className={needsUpdate > 0 ? 'border-yellow-200' : ''}
+          className={needsUpdate > 0 ? 'border-ac-orange/40' : ''}
         />
         <MetricCard
           label="Updating"
           value={updating}
-          className={updating > 0 ? 'border-blue-200' : ''}
+          className={updating > 0 ? 'border-ac-blue/40' : ''}
         />
         <MetricCard
           label="Failed"
           value={failed}
-          className={failed > 0 ? 'border-red-200' : ''}
+          className={failed > 0 ? 'border-ac-red/40' : ''}
         />
       </div>
 
       {/* Available Updates */}
       {availableUpdates.length > 0 && (
-        <div className="bg-white border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Updates</h3>
+        <div className="card p-6">
+          <h3 className="text-lg font-medium text-ink-primary mb-4">Available Updates</h3>
           <div className="space-y-4">
             {availableUpdates.map((update) => (
               <div
                 key={update.version}
                 className={`p-4 border ${
-                  update.critical ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                  update.critical ? 'border-ac-red/40 bg-ac-red/10' : 'border-border-subtle'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-3">
-                      <span className="text-lg font-medium text-gray-900">
+                      <span className="text-lg font-medium text-ink-primary">
                         Version {update.version}
                       </span>
                       {update.critical && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+                        <span className="px-2 py-0.5 text-xs font-medium bg-ac-red/15 text-ac-red border border-ac-red/30">
                           Critical
                         </span>
                       )}
                     </div>
-                    <div className="text-sm text-gray-500 mt-1">
+                    <div className="text-sm text-ink-muted mt-1">
                       Released {new Date(update.releaseDate).toLocaleDateString()}
                     </div>
                   </div>
                   <button
                     onClick={() => setTargetVersion(update.version)}
-                    className={`px-3 py-1.5 text-sm font-medium ${
+                    className={`px-3 py-1.5 text-sm font-medium border ${
                       targetVersion === update.version
-                        ? 'bg-[#0057B7] text-white'
-                        : 'border border-[#0057B7] text-[#0057B7] hover:bg-[#0057B7] hover:text-white'
+                        ? 'bg-ac-blue text-ac-white border-ac-blue'
+                        : 'border-ac-blue text-ac-blue hover:bg-ac-blue hover:text-ac-white'
                     }`}
                   >
                     {targetVersion === update.version ? 'Selected' : 'Select'}
@@ -205,8 +205,8 @@ export function FleetUpdatesPage() {
                 </div>
                 <ul className="mt-3 space-y-1">
                   {update.changelog.map((item, idx) => (
-                    <li key={idx} className="text-sm text-gray-600 flex items-start gap-2">
-                      <span className="text-gray-400">•</span>
+                    <li key={idx} className="text-sm text-ink-secondary flex items-start gap-2">
+                      <span className="text-ink-muted">•</span>
                       {item}
                     </li>
                   ))}
@@ -218,9 +218,9 @@ export function FleetUpdatesPage() {
       )}
 
       {/* Sensor Versions Table */}
-      <div className="bg-white border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Sensor Versions</h2>
+      <div className="card">
+        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
+          <h2 className="text-lg font-medium text-ink-primary">Sensor Versions</h2>
           <div className="flex gap-2">
             <button
               onClick={() =>
@@ -232,74 +232,74 @@ export function FleetUpdatesPage() {
                   )
                 )
               }
-              className="px-3 py-1 text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50"
+              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle"
             >
               Select Outdated
             </button>
             <button
               onClick={() => setSelectedSensors(new Set())}
-              className="px-3 py-1 text-xs font-medium text-gray-600 border border-gray-300 hover:bg-gray-50"
+              className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle"
             >
               Clear Selection
             </button>
           </div>
         </div>
 
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-border-subtle">
+          <thead className="bg-surface-subtle">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
                 Select
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
                 Sensor
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
                 Current Version
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
                 Update Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
                 Last Updated
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-surface-base divide-y divide-border-subtle">
             {sensorVersions.map((sensor) => (
-              <tr key={sensor.id} className="hover:bg-gray-50">
+              <tr key={sensor.id} className="hover:bg-surface-subtle">
                 <td className="px-6 py-4">
                   <input
                     type="checkbox"
                     checked={selectedSensors.has(sensor.id)}
                     onChange={() => toggleSensor(sensor.id)}
                     disabled={sensor.updateStatus === 'updating'}
-                    className="w-4 h-4 text-[#0057B7] border-gray-300 disabled:opacity-50"
+                    className="w-4 h-4 text-ac-blue border-border-subtle disabled:opacity-50"
                   />
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <span className="font-medium text-gray-900">{sensor.name}</span>
-                    <span className="text-sm text-gray-500">{sensor.region}</span>
+                    <span className="font-medium text-ink-primary">{sensor.name}</span>
+                    <span className="text-sm text-ink-muted">{sensor.region}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <SensorStatusBadge status={sensor.status} />
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900 font-mono">
+                <td className="px-6 py-4 text-sm text-ink-primary font-mono">
                   {sensor.currentVersion}
                 </td>
                 <td className="px-6 py-4">
                   <span
-                    className={`px-2 py-1 text-xs font-medium ${statusColors[sensor.updateStatus]}`}
+                    className={`px-2 py-1 text-xs font-medium border ${statusColors[sensor.updateStatus]}`}
                   >
                     {statusLabels[sensor.updateStatus]}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
+                <td className="px-6 py-4 text-sm text-ink-muted">
                   {sensor.lastUpdated
                     ? new Date(sensor.lastUpdated).toLocaleDateString()
                     : '-'}

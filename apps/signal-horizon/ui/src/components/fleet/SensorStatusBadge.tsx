@@ -7,9 +7,9 @@ interface SensorStatusBadgeProps {
 }
 
 const statusConfig = {
-  online: { label: 'Online', icon: '●', color: 'text-green-600 bg-green-50 border-green-200' },
-  warning: { label: 'Warning', icon: '⚠', color: 'text-yellow-600 bg-yellow-50 border-yellow-200' },
-  offline: { label: 'Offline', icon: '○', color: 'text-gray-600 bg-gray-50 border-gray-200' },
+  online: { label: 'Online', icon: '●', color: 'text-ac-green bg-ac-green/10 border-ac-green/30' },
+  warning: { label: 'Warning', icon: '⚠', color: 'text-ac-orange bg-ac-orange/10 border-ac-orange/30' },
+  offline: { label: 'Offline', icon: '○', color: 'text-ink-muted bg-surface-subtle border-border-subtle' },
 };
 
 export const SensorStatusBadge = memo(function SensorStatusBadge({

@@ -198,13 +198,13 @@ async function start() {
   aggregator = new Aggregator(prisma, logger, correlator, config.aggregator, clickhouse ?? undefined, impossibleTravelService);
 
   // Initialize WebSocket gateways
-  sensorGateway = new SensorGateway(httpServer, prisma, logger, aggregator, fleetAggregator, {
+  sensorGateway = new SensorGateway(prisma, logger, aggregator, fleetAggregator, {
     path: config.websocket.sensorPath,
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxSensorConnections,
   });
 
-  dashboardGateway = new DashboardGateway(httpServer, prisma, logger, {
+  dashboardGateway = new DashboardGateway(prisma, logger, {
     path: config.websocket.dashboardPath,
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxDashboardConnections,
@@ -219,6 +219,27 @@ async function start() {
 
   // Wire up protocol handlers to sensor gateway for fleet operations
   sensorGateway.setProtocolHandlers(commandSender);
+
+  // Route WebSocket upgrades to the correct gateway
+  httpServer.on('upgrade', (req, socket, head) => {
+    const url = req.url ? new URL(req.url, 'http://localhost') : null;
+    const pathname = url?.pathname ?? '';
+    const normalize = (path: string) =>
+      path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+
+    const normalizedPath = normalize(pathname);
+    if (normalizedPath === normalize(config.websocket.sensorPath)) {
+      sensorGateway.handleUpgrade(req, socket, head);
+      return;
+    }
+
+    if (normalizedPath === normalize(config.websocket.dashboardPath)) {
+      dashboardGateway.handleUpgrade(req, socket, head);
+      return;
+    }
+
+    socket.destroy();
+  });
 
   // Start WebSocket gateways
   sensorGateway.start();

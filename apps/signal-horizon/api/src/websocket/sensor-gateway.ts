@@ -4,7 +4,8 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server as HTTPServer } from 'node:http';
+import type { IncomingMessage } from 'node:http';
+import type { Socket } from 'node:net';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
@@ -102,7 +103,6 @@ export class SensorGateway {
   private commandSender: CommandSender | null = null;
 
   constructor(
-    httpServer: HTTPServer,
     prisma: PrismaClient,
     logger: Logger,
     aggregator: Aggregator,
@@ -122,8 +122,7 @@ export class SensorGateway {
     );
 
     this.wss = new WebSocketServer({
-      server: httpServer,
-      path: config.path,
+      noServer: true,
     });
   }
 
@@ -151,6 +150,17 @@ export class SensorGateway {
 
     this.startHeartbeat();
     this.logger.info({ path: this.config.path }, 'Sensor gateway started');
+  }
+
+  handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
+    if (!this.wss) {
+      socket.destroy();
+      return;
+    }
+
+    this.wss.handleUpgrade(req, socket, head, (ws) => {
+      this.wss?.emit('connection', ws, req);
+    });
   }
 
   stop(): void {

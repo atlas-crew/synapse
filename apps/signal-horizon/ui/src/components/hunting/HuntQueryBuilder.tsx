@@ -26,10 +26,10 @@ const SIGNAL_TYPES = [
 ];
 
 const SEVERITIES = [
-  { value: 'CRITICAL', label: 'Critical', color: 'bg-red-500' },
-  { value: 'HIGH', label: 'High', color: 'bg-orange-500' },
-  { value: 'MEDIUM', label: 'Medium', color: 'bg-yellow-500' },
-  { value: 'LOW', label: 'Low', color: 'bg-blue-500' },
+  { value: 'CRITICAL', label: 'Critical', color: 'bg-ac-red' },
+  { value: 'HIGH', label: 'High', color: 'bg-ac-orange' },
+  { value: 'MEDIUM', label: 'Medium', color: 'bg-ac-orange/70' },
+  { value: 'LOW', label: 'Low', color: 'bg-ac-blue' },
 ];
 
 const TIME_PRESETS = [
@@ -158,11 +158,11 @@ export function HuntQueryBuilder({
       <div className="p-4 space-y-4">
         {/* Time Range */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
+          <label className="text-sm font-medium text-ink-secondary flex items-center gap-2">
             <Calendar className="w-4 h-4" />
             Time Range
             {!historicalEnabled && timePreset > 24 && (
-              <span className="text-xs text-yellow-500">
+              <span className="text-xs text-ac-orange">
                 (Historical queries limited without ClickHouse)
               </span>
             )}
@@ -176,10 +176,10 @@ export function HuntQueryBuilder({
                   onClick={() => setTimePreset(preset.hours)}
                   disabled={!historicalEnabled && preset.hours > 24}
                   className={clsx(
-                    'px-3 py-1.5 text-sm rounded-lg border transition-colors',
+                    'px-3 py-1.5 text-sm border transition-colors',
                     timePreset === preset.hours
-                      ? 'bg-horizon-600/20 border-horizon-500 text-horizon-400'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600',
+                      ? 'bg-ac-blue/10 border-ac-blue text-ac-blue'
+                      : 'bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong',
                     !historicalEnabled && preset.hours > 24 && 'opacity-50 cursor-not-allowed'
                   )}
                 >
@@ -188,7 +188,7 @@ export function HuntQueryBuilder({
               ))}
               <button
                 onClick={() => setUseCustomTime(true)}
-                className="px-3 py-1.5 text-sm rounded-lg border bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                className="px-3 py-1.5 text-sm border bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong"
               >
                 Custom
               </button>
@@ -202,21 +202,21 @@ export function HuntQueryBuilder({
                   type="datetime-local"
                   value={customStartTime}
                   onChange={(e) => setCustomStartTime(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                  className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-sm text-ink-primary"
                 />
               </div>
-              <span className="text-gray-500">to</span>
+              <span className="text-ink-muted">to</span>
               <div className="flex-1">
                 <input
                   type="datetime-local"
                   value={customEndTime}
                   onChange={(e) => setCustomEndTime(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                  className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-sm text-ink-primary"
                 />
               </div>
               <button
                 onClick={() => setUseCustomTime(false)}
-                className="p-2 text-gray-500 hover:text-white"
+                className="p-2 text-ink-muted hover:text-ink-primary"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -226,17 +226,17 @@ export function HuntQueryBuilder({
 
         {/* Signal Types */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-400">Signal Types</label>
+          <label className="text-sm font-medium text-ink-secondary">Signal Types</label>
           <div className="flex flex-wrap gap-2">
             {SIGNAL_TYPES.map((type) => (
               <button
                 key={type.value}
                 onClick={() => toggleSignalType(type.value)}
                 className={clsx(
-                  'px-3 py-1.5 text-sm rounded-lg border transition-colors',
+                  'px-3 py-1.5 text-sm border transition-colors',
                   selectedSignalTypes.includes(type.value)
-                    ? 'bg-horizon-600/20 border-horizon-500 text-horizon-400'
-                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                    ? 'bg-ac-blue/10 border-ac-blue text-ac-blue'
+                    : 'bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong'
                 )}
               >
                 {type.label}
@@ -247,17 +247,17 @@ export function HuntQueryBuilder({
 
         {/* Severities */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-400">Severities</label>
+          <label className="text-sm font-medium text-ink-secondary">Severities</label>
           <div className="flex gap-2">
             {SEVERITIES.map((severity) => (
               <button
                 key={severity.value}
                 onClick={() => toggleSeverity(severity.value)}
                 className={clsx(
-                  'flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors',
+                  'flex items-center gap-2 px-3 py-1.5 text-sm border transition-colors',
                   selectedSeverities.includes(severity.value)
-                    ? 'bg-horizon-600/20 border-horizon-500 text-horizon-400'
-                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                    ? 'bg-ac-blue/10 border-ac-blue text-ac-blue'
+                    : 'bg-surface-inset border-border-subtle text-ink-secondary hover:border-border-strong'
                 )}
               >
                 <span className={clsx('w-2 h-2 rounded-full', severity.color)} />
@@ -270,30 +270,30 @@ export function HuntQueryBuilder({
         {/* Advanced Filters */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-400">Source IPs (comma-separated)</label>
+            <label className="text-sm font-medium text-ink-secondary">Source IPs (comma-separated)</label>
             <input
               type="text"
               value={sourceIps}
               onChange={(e) => setSourceIps(e.target.value)}
               placeholder="192.168.1.100, 10.0.0.1"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-horizon-500 font-mono"
+              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-sm text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue font-mono"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-400">Fingerprint Hash</label>
+            <label className="text-sm font-medium text-ink-secondary">Fingerprint Hash</label>
             <input
               type="text"
               value={anonFingerprint}
               onChange={(e) => setAnonFingerprint(e.target.value)}
               placeholder="64-character hash"
               maxLength={64}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-horizon-500 font-mono"
+              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-sm text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue font-mono"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-400">Min Confidence (%)</label>
+            <label className="text-sm font-medium text-ink-secondary">Min Confidence (%)</label>
             <input
               type="number"
               value={minConfidence ?? ''}
@@ -301,16 +301,16 @@ export function HuntQueryBuilder({
               placeholder="0-100"
               min={0}
               max={100}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-horizon-500"
+              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-sm text-ink-primary placeholder-ink-muted focus:outline-none focus:border-ac-blue"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-400">Result Limit</label>
+            <label className="text-sm font-medium text-ink-secondary">Result Limit</label>
             <select
               value={limit}
               onChange={(e) => setLimit(parseInt(e.target.value))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-horizon-500"
+              className="w-full bg-surface-inset border border-border-subtle px-3 py-2 text-sm text-ink-primary focus:outline-none focus:border-ac-blue"
             >
               <option value={100}>100</option>
               <option value={500}>500</option>
@@ -326,7 +326,7 @@ export function HuntQueryBuilder({
             {hasFilters && (
               <button
                 onClick={clearFilters}
-                className="flex items-center gap-1 text-sm text-gray-400 hover:text-white"
+                className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink-primary"
               >
                 <X className="w-4 h-4" />
                 Clear filters

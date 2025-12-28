@@ -26,15 +26,15 @@ function formatTimestamp(timestamp: string): string {
 function getSeverityColor(severity: string): string {
   switch (severity) {
     case 'CRITICAL':
-      return 'bg-red-500/20 text-red-400 border-red-500/30';
+      return 'bg-ac-red/15 text-ac-red border border-ac-red/40';
     case 'HIGH':
-      return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+      return 'bg-ac-orange/20 text-ac-orange border border-ac-orange/40';
     case 'MEDIUM':
-      return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      return 'bg-ac-orange/10 text-ac-orange border border-ac-orange/30';
     case 'LOW':
-      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      return 'bg-ac-blue/10 text-ac-blue border border-ac-blue/30';
     default:
-      return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+      return 'bg-surface-subtle text-ink-muted border border-border-subtle';
   }
 }
 
@@ -103,7 +103,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
   if (!result && !isLoading) {
     return (
       <div className="card">
-        <div className="p-8 text-center text-gray-500">
+        <div className="p-8 text-center text-ink-muted">
           <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>Run a query to see results</p>
         </div>
@@ -114,8 +114,8 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
   if (isLoading) {
     return (
       <div className="card">
-        <div className="p-8 text-center text-gray-500">
-          <div className="animate-spin w-8 h-8 border-2 border-horizon-500 border-t-transparent rounded-full mx-auto mb-3" />
+        <div className="p-8 text-center text-ink-muted">
+          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full mx-auto mb-3" />
           <p>Searching...</p>
         </div>
       </div>
@@ -128,15 +128,15 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
     <div className="card">
       <div className="card-header flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h2 className="font-semibold text-white">Results</h2>
-          <div className="flex items-center gap-3 text-sm text-gray-500">
+          <h2 className="font-medium text-ink-primary">Results</h2>
+          <div className="flex items-center gap-3 text-sm text-ink-muted">
             <span>{result?.total.toLocaleString()} total</span>
-            <span className="text-gray-700">|</span>
+            <span className="text-ink-muted">|</span>
             <span className="flex items-center gap-1">
               <Database className="w-3.5 h-3.5" />
               {result ? getSourceLabel(result.source) : ''}
             </span>
-            <span className="text-gray-700">|</span>
+            <span className="text-ink-muted">|</span>
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               {result?.queryTimeMs}ms
@@ -154,7 +154,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
       </div>
 
       {signals.length === 0 ? (
-        <div className="p-8 text-center text-gray-500">
+        <div className="p-8 text-center text-ink-muted">
           <p>No signals found matching your query</p>
         </div>
       ) : (
@@ -179,24 +179,24 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
             <tbody>
               {signals.map((signal) => (
                 <tr key={signal.id}>
-                  <td className="text-sm text-gray-400 whitespace-nowrap">
+                  <td className="text-sm text-ink-muted whitespace-nowrap">
                     {formatTimestamp(signal.timestamp)}
                   </td>
                   <td>
-                    <span className="px-2 py-0.5 text-xs bg-gray-700 rounded font-mono">
+                    <span className="px-2 py-0.5 text-xs bg-surface-subtle border border-border-subtle font-mono">
                       {getSignalTypeLabel(signal.signalType)}
                     </span>
                   </td>
-                  <td className="font-mono text-sm text-white">
+                  <td className="font-mono text-sm text-ink-primary">
                     {signal.sourceIp || '-'}
                   </td>
-                  <td className="text-sm text-gray-400 font-mono">
+                  <td className="text-sm text-ink-muted font-mono">
                     {signal.tenantId.substring(0, 8)}...
                   </td>
                   <td>
                     <span
                       className={clsx(
-                        'px-2 py-0.5 text-xs rounded border',
+                        'px-2 py-0.5 text-xs',
                         getSeverityColor(signal.severity)
                       )}
                     >
@@ -205,13 +205,13 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
-                      <div className="w-12 h-1.5 rounded-full overflow-hidden bg-gray-700">
+                      <div className="w-12 h-1.5 overflow-hidden bg-surface-subtle">
                         <div
-                          className="h-full rounded-full bg-horizon-500"
+                          className="h-full bg-ac-blue"
                           style={{ width: `${signal.confidence * 100}%` }}
                         />
                       </div>
-                      <span className="text-sm text-gray-400">
+                      <span className="text-sm text-ink-muted">
                         {(signal.confidence * 100).toFixed(0)}%
                       </span>
                     </div>

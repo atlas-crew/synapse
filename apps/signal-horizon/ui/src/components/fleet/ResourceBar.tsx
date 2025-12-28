@@ -10,9 +10,9 @@ interface ResourceBarProps {
 }
 
 function getColorClass(percentage: number): string {
-  if (percentage >= 90) return 'bg-red-500';
-  if (percentage >= 75) return 'bg-yellow-500';
-  return 'bg-[#0057B7]';
+  if (percentage >= 90) return 'bg-ac-red';
+  if (percentage >= 75) return 'bg-ac-orange';
+  return 'bg-ac-blue';
 }
 
 const sizeClasses = {
@@ -35,12 +35,12 @@ export const ResourceBar = memo(function ResourceBar({
   return (
     <div className={className}>
       <div className="flex justify-between items-center mb-1">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className="text-sm font-medium text-ink-secondary">{label}</span>
         {showPercentage && (
-          <span className="text-sm text-gray-600">{percentage.toFixed(1)}%</span>
+          <span className="text-sm text-ink-muted">{percentage.toFixed(1)}%</span>
         )}
       </div>
-      <div className={`w-full bg-gray-200 ${sizeClasses[size]}`}>
+      <div className={`w-full bg-surface-subtle ${sizeClasses[size]}`}>
         <div
           className={`${colorClass} ${sizeClasses[size]} transition-all duration-300`}
           style={{ width: `${percentage}%` }}

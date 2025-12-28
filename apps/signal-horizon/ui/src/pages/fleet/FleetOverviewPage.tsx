@@ -16,7 +16,7 @@ export function FleetOverviewPage() {
   if (metricsLoading || sensorsLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">Loading fleet data...</div>
+        <div className="text-ink-muted">Loading fleet data...</div>
       </div>
     );
   }
@@ -24,8 +24,8 @@ export function FleetOverviewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Fleet Overview</h1>
-        <p className="mt-1 text-sm text-gray-600">
+        <h1 className="text-3xl font-light text-ink-primary">Fleet Overview</h1>
+        <p className="mt-1 text-sm text-ink-secondary">
           Monitor and manage your distributed sensor infrastructure
         </p>
       </div>
@@ -51,9 +51,9 @@ export function FleetOverviewPage() {
       </div>
 
       {/* Sensor Table */}
-      <div className="bg-white border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Sensor Fleet</h2>
+      <div className="card">
+        <div className="px-6 py-4 border-b border-border-subtle">
+          <h2 className="text-lg font-medium text-ink-primary">Sensor Fleet</h2>
         </div>
         <SensorTable sensors={sensors} onSensorClick={handleSensorClick} />
       </div>

@@ -3,8 +3,8 @@
  * Timeline, participating actors, correlation signals, actions
  */
 
-import { useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import {
   Target,
   Clock,
@@ -12,34 +12,74 @@ import {
   Shield,
   Activity,
   ExternalLink,
+  Flame,
+  Swords,
+  ChevronRight,
 } from 'lucide-react';
-import { useHorizonStore } from '../stores/horizonStore';
 import { clsx } from 'clsx';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
+import { useHorizonStore } from '../stores/horizonStore';
 
 const mockCorrelationSignals = [
-  { name: 'HTTP Fingerprint Match', confidence: 0.98, color: 'bg-purple-500' },
-  { name: 'TLS Fingerprint Match', confidence: 0.95, color: 'bg-blue-500' },
-  { name: 'Timing Pattern Match', confidence: 0.89, color: 'bg-green-500' },
-  { name: 'User-Agent Pattern', confidence: 0.82, color: 'bg-yellow-500' },
+  { name: 'HTTP Fingerprint Match', confidence: 0.98, color: 'bg-ac-green' },
+  { name: 'TLS Fingerprint Match', confidence: 0.95, color: 'bg-ac-blue' },
+  { name: 'Timing Correlation', confidence: 0.89, color: 'bg-ac-orange' },
+  { name: 'Target Endpoint Match', confidence: 0.82, color: 'bg-ac-purple' },
+  { name: 'Network Proximity', confidence: 0.72, color: 'bg-ac-red' },
+];
+
+const attackTimeline = [
+  { time: '10:15', volume: 120 },
+  { time: '10:30', volume: 240 },
+  { time: '10:45', volume: 420 },
+  { time: '11:00', volume: 820 },
+  { time: '11:15', volume: 1340 },
+  { time: '11:30', volume: 2100 },
+  { time: '11:45', volume: 1500 },
+  { time: '12:00', volume: 900 },
+];
+
+const participatingIps = [
+  { ip: '185.228.101.34', hits: 8421, status: 'BLOCKED' },
+  { ip: '185.228.101.35', hits: 7892, status: 'BLOCKED' },
+  { ip: '45.134.26.108', hits: 6234, status: 'BLOCKED' },
+  { ip: '45.134.26.109', hits: 5102, status: 'BLOCKED' },
+  { ip: '91.240.118.42', hits: 4891, status: 'MONITORING' },
+];
+
+const affectedCustomers = [
+  { name: 'Healthcare-A', attempts: 12421, status: 'ACTIVE' },
+  { name: 'Finance-B', attempts: 9832, status: 'ACTIVE' },
+  { name: 'Retail-C', attempts: 8421, status: 'PROTECTED' },
+  { name: 'Healthcare-D', attempts: 6234, status: 'PROTECTED' },
+  { name: 'E-commerce-E', attempts: 4102, status: 'PROTECTED' },
 ];
 
 export default function CampaignDetailPage() {
   const { id } = useParams();
   const campaigns = useHorizonStore((s) => s.campaigns);
 
-  const campaign = id
-    ? campaigns.find((c) => c.id === id)
-    : campaigns[0]; // Default to first campaign
+  const campaign = useMemo(() => {
+    return id ? campaigns.find((c) => c.id === id) : campaigns[0];
+  }, [campaigns, id]);
 
   if (!campaign) {
     return (
       <div className="p-6">
         <div className="text-center py-20">
-          <Target className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">
+          <Target className="w-12 h-12 text-ink-muted mx-auto mb-4" />
+          <h2 className="text-xl font-light text-ink-primary mb-2">
             No Campaign Selected
           </h2>
-          <p className="text-gray-400">
+          <p className="text-ink-secondary">
             Select a campaign from the overview to view details
           </p>
         </div>
@@ -50,177 +90,232 @@ export default function CampaignDetailPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{campaign.name}</h1>
+          <Link to="/campaigns" className="text-sm text-link hover:text-link-hover flex items-center gap-1">
+            <ChevronRight className="w-4 h-4 rotate-180" />
+            Back to Campaigns
+          </Link>
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl font-light text-ink-primary">{campaign.name}</h1>
             <span
               className={clsx(
-                'px-2 py-0.5 text-xs rounded border',
-                campaign.severity === 'CRITICAL' && 'text-red-400 bg-red-500/20 border-red-500/30',
-                campaign.severity === 'HIGH' && 'text-orange-400 bg-orange-500/20 border-orange-500/30',
-                campaign.severity === 'MEDIUM' && 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30',
-                campaign.severity === 'LOW' && 'text-green-400 bg-green-500/20 border-green-500/30'
+                'px-2 py-0.5 text-xs border',
+                campaign.severity === 'CRITICAL' && 'bg-ac-red/15 text-ac-red border-ac-red/40',
+                campaign.severity === 'HIGH' && 'bg-ac-orange/20 text-ac-orange border-ac-orange/40',
+                campaign.severity === 'MEDIUM' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
+                campaign.severity === 'LOW' && 'bg-ac-blue/10 text-ac-blue border-ac-blue/30'
               )}
             >
               {campaign.severity}
             </span>
             {campaign.isCrossTenant && (
-              <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded border border-purple-500/30">
+              <span className="px-2 py-0.5 text-xs border bg-ac-purple/10 text-ac-purple border-ac-purple/30">
                 Cross-Tenant
               </span>
             )}
           </div>
-          <p className="text-gray-400 mt-1">
+          <p className="text-ink-secondary mt-2">
             {campaign.description || 'Coordinated attack campaign detected by Signal Horizon'}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost">
+        <div className="flex items-center gap-2">
+          <button className="btn-outline h-10 px-4 text-xs">
             <ExternalLink className="w-4 h-4 mr-2" />
             Export IOCs
           </button>
-          <button className="btn-primary">
+          <button className="btn-primary h-10 px-4 text-xs">
             <Shield className="w-4 h-4 mr-2" />
-            Block All
+            Open War Room
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <Users className="w-5 h-5 text-purple-400" />
-            <div>
-              <div className="text-2xl font-bold text-white">
-                {campaign.tenantsAffected}
-              </div>
-              <div className="text-sm text-gray-400">Tenants Affected</div>
-            </div>
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <Activity className="w-5 h-5 text-horizon-400" />
-            <div>
-              <div className="text-2xl font-bold text-white">
-                {Math.round(campaign.confidence * 100)}%
-              </div>
-              <div className="text-sm text-gray-400">Confidence</div>
-            </div>
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-blue-400" />
-            <div>
-              <div className="text-2xl font-bold text-white">
-                {new Date(campaign.firstSeenAt).toLocaleDateString()}
-              </div>
-              <div className="text-sm text-gray-400">First Seen</div>
-            </div>
-          </div>
-        </div>
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <Target className="w-5 h-5 text-green-400" />
-            <div>
-              <div className="text-2xl font-bold text-white uppercase">
-                {campaign.status}
-              </div>
-              <div className="text-sm text-gray-400">Status</div>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatMini icon={Users} label="Customers" value={campaign.tenantsAffected.toString()} />
+        <StatMini icon={Activity} label="Confidence" value={`${Math.round(campaign.confidence * 100)}%`} />
+        <StatMini icon={Clock} label="First Seen" value={new Date(campaign.firstSeenAt).toLocaleDateString()} />
+        <StatMini icon={Flame} label="Total Attempts" value="47,832" />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        {/* Correlation Signals */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="font-semibold text-white">Correlation Signals</h2>
-          </div>
-          <div className="card-body space-y-4">
-            {mockCorrelationSignals.map((signal) => (
-              <div key={signal.name} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-300">{signal.name}</span>
-                  <span className="text-white font-medium">
-                    {Math.round(signal.confidence * 100)}%
-                  </span>
-                </div>
-                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${signal.confidence * 100}%` }}
-                    transition={{ duration: 0.5, delay: 0.1 }}
-                    className={clsx('h-full rounded-full', signal.color)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Attack Timeline */}
+      <section className="card">
+        <div className="card-header">
+          <h2 className="font-medium text-ink-primary">Attack Timeline</h2>
         </div>
+        <div className="card-body h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={attackTimeline}>
+              <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="4 4" />
+              <XAxis dataKey="time" stroke="var(--text-muted)" />
+              <YAxis stroke="var(--text-muted)" />
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--surface-base)',
+                  borderColor: 'var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <Area type="monotone" dataKey="volume" stroke="var(--ac-red)" fill="var(--ac-red)" fillOpacity={0.25} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
 
-        {/* Timeline */}
-        <div className="card">
-          <div className="card-header">
-            <h2 className="font-semibold text-white">Activity Timeline</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Participating IPs */}
+        <section className="card">
+          <div className="card-header flex items-center justify-between">
+            <h2 className="font-medium text-ink-primary">Participating IPs</h2>
+            <button className="btn-outline h-8 px-3 text-xs">Block All</button>
           </div>
-          <div className="card-body">
-            <div className="space-y-4">
-              <TimelineItem
-                time={campaign.lastActivityAt}
-                title="Latest Activity"
-                description="Campaign activity detected"
-                type="activity"
-              />
-              <TimelineItem
-                time={campaign.firstSeenAt}
-                title="Campaign Detected"
-                description="Cross-tenant pattern identified"
-                type="detection"
-              />
-            </div>
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>IP</th>
+                  <th>Hits</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {participatingIps.map((ip) => (
+                  <tr key={ip.ip}>
+                    <td className="font-mono text-sm text-ink-primary">{ip.ip}</td>
+                    <td className="text-ink-secondary">{ip.hits.toLocaleString()}</td>
+                    <td>
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 text-xs border',
+                          ip.status === 'BLOCKED'
+                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
+                            : 'bg-ac-orange/10 text-ac-orange border-ac-orange/30'
+                        )}
+                      >
+                        {ip.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </section>
+
+        {/* Affected Customers */}
+        <section className="card">
+          <div className="card-header flex items-center justify-between">
+            <h2 className="font-medium text-ink-primary">Affected Customers</h2>
+            <button className="btn-outline h-8 px-3 text-xs">View All</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Attempts</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {affectedCustomers.map((customer) => (
+                  <tr key={customer.name}>
+                    <td className="text-ink-primary">{customer.name}</td>
+                    <td className="text-ink-secondary">{customer.attempts.toLocaleString()}</td>
+                    <td>
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 text-xs border',
+                          customer.status === 'ACTIVE'
+                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
+                            : 'bg-ac-green/10 text-ac-green border-ac-green/30'
+                        )}
+                      >
+                        {customer.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      {/* Correlation Signals */}
+      <section className="card">
+        <div className="card-header">
+          <h2 className="font-medium text-ink-primary">Correlation Signals</h2>
         </div>
+        <div className="card-body space-y-4">
+          {mockCorrelationSignals.map((signal) => (
+            <div key={signal.name} className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-ink-secondary">{signal.name}</span>
+                <span className="text-ink-primary font-medium">
+                  {Math.round(signal.confidence * 100)}%
+                </span>
+              </div>
+              <div className="h-2 bg-surface-subtle border border-border-subtle">
+                <div
+                  className={clsx('h-2', signal.color)}
+                  style={{ width: `${signal.confidence * 100}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Response Actions */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <ActionButton icon={Swords} label="Block All IPs" tone="bg-ac-red" />
+        <ActionButton icon={Shield} label="Block Fingerprint" tone="bg-ac-red" />
+        <ActionButton icon={Activity} label="Block ASN" tone="bg-ac-red" />
+        <ActionButton icon={Flame} label="Challenge Mode" tone="bg-ac-orange" />
+        <ActionButton icon={ExternalLink} label="Export IOCs" tone="bg-ac-blue" />
+        <ActionButton icon={Users} label="Notify Customers" tone="bg-ac-blue" />
+      </section>
+    </div>
+  );
+}
+
+function StatMini({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="card p-4 flex items-center gap-3">
+      <div className="w-10 h-10 border border-border-subtle flex items-center justify-center text-ac-blue">
+        <Icon className="w-5 h-5" />
+      </div>
+      <div>
+        <div className="text-xs tracking-[0.18em] uppercase text-ink-muted">{label}</div>
+        <div className="text-xl font-light text-ink-primary">{value}</div>
       </div>
     </div>
   );
 }
 
-function TimelineItem({
-  time,
-  title,
-  description,
-  type,
+function ActionButton({
+  icon: Icon,
+  label,
+  tone,
 }: {
-  time: string;
-  title: string;
-  description: string;
-  type: 'detection' | 'activity' | 'block';
+  icon: React.ElementType;
+  label: string;
+  tone: string;
 }) {
   return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div
-          className={clsx(
-            'w-3 h-3 rounded-full',
-            type === 'detection' && 'bg-purple-500',
-            type === 'activity' && 'bg-horizon-500',
-            type === 'block' && 'bg-red-500'
-          )}
-        />
-        <div className="w-0.5 flex-1 bg-gray-800" />
-      </div>
-      <div className="pb-4">
-        <div className="text-sm font-medium text-white">{title}</div>
-        <div className="text-xs text-gray-400">{description}</div>
-        <div className="text-xs text-gray-500 mt-1">
-          {new Date(time).toLocaleString()}
-        </div>
-      </div>
-    </div>
+    <button className={clsx('px-4 py-3 text-sm font-medium text-ac-white flex items-center gap-2 transition-colors hover:brightness-110', tone)}>
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
   );
 }
