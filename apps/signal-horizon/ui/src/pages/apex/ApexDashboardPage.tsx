@@ -30,13 +30,14 @@ import {
   Cell,
 } from 'recharts';
 import {
-  // useApexDashboard,
   useApexStats,
   useBlockedRequests,
   useApexAlerts,
   useApexLoading,
   useTrafficTimeline,
 } from '../../stores/apexStore';
+import { useApexDashboard } from '../../hooks/useApexDashboard';
+import { useApexThreats } from '../../hooks/useApexThreats';
 import { StatsGridSkeleton, TableSkeleton, CardSkeleton } from '../../components/LoadingStates';
 import type { BlockedRequest, ProtectionAlert, TrafficDataPoint } from '../../types/apex';
 
@@ -441,15 +442,28 @@ const DEMO_ALERTS: ProtectionAlert[] = [
 
 // Main Dashboard Component
 export default function ApexDashboardPage() {
-  const isLoading = useApexLoading();
-  // const dashboard = useApexDashboard(); // Will be used when real data comes in
+  const storeLoading = useApexLoading();
   const stats = useApexStats();
-  const blockedRequests = useBlockedRequests();
+  const storeBlockedRequests = useBlockedRequests();
   const alerts = useApexAlerts();
   const trafficTimeline = useTrafficTimeline();
 
-  // Use demo data for now (will be replaced by real data from WebSocket/API)
-  const displayTraffic = trafficTimeline.length > 0 ? trafficTimeline : DEMO_TRAFFIC;
+  // API hooks for real data
+  const { data: dashboardData, isLoading: dashboardLoading } = useApexDashboard();
+  const { blocks: apiBlocks } = useApexThreats({ pollingInterval: 30000 });
+
+  // Combined loading state
+  const isLoading = storeLoading || (dashboardLoading && !dashboardData);
+
+  // Merge API data with store data (store takes priority for WebSocket updates)
+  const blockedRequests = storeBlockedRequests.length > 0 ? storeBlockedRequests : apiBlocks;
+
+  // Use demo data as fallback when no real data available
+  const displayTraffic = trafficTimeline.length > 0
+    ? trafficTimeline
+    : dashboardData?.trafficTimeline?.length
+      ? dashboardData.trafficTimeline
+      : DEMO_TRAFFIC;
   const displayBlocked = blockedRequests.length > 0 ? blockedRequests : DEMO_BLOCKED;
   const displayAlerts = alerts.length > 0 ? alerts : DEMO_ALERTS;
 
@@ -475,13 +489,14 @@ export default function ApexDashboardPage() {
     );
   }
 
-  // Calculate display values
-  const totalRequests = stats.blockedRequests24h || 1247;
-  const blockedCount = stats.blockedRequests24h || 89;
-  const endpointCount = stats.totalEndpoints || 45;
-  const coveragePercent = stats.protectedEndpoints
-    ? Math.round((stats.protectedEndpoints / Math.max(stats.totalEndpoints, 1)) * 100)
-    : 94;
+  // Calculate display values - prefer API data over store data over defaults
+  const totalRequests = dashboardData?.summary?.requests?.value || stats.blockedRequests24h || 1247;
+  const blockedCount = dashboardData?.summary?.blocked?.value || stats.blockedRequests24h || 89;
+  const endpointCount = dashboardData?.endpointCount || stats.totalEndpoints || 45;
+  const coveragePercent = dashboardData?.summary?.coverage?.value
+    || (stats.protectedEndpoints
+      ? Math.round((stats.protectedEndpoints / Math.max(stats.totalEndpoints, 1)) * 100)
+      : 94);
 
   return (
     <div className="p-6 space-y-6" role="main" aria-label="Apex protection dashboard">

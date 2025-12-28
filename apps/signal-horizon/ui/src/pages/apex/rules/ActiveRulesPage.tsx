@@ -18,9 +18,12 @@ import {
   Activity,
   AlertTriangle,
   Clock,
+  RefreshCw,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-// import { useActiveRules } from '../../../stores/apexStore';
+import { useApexRules } from '../../../hooks/useApexRules';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 
 type RuleStatus = 'active' | 'paused' | 'deploying' | 'failed';
@@ -355,11 +358,41 @@ function RuleCard({
 
 export default function ActiveRulesPage() {
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
+
+  // Fetch rules from API
+  const {
+    rules: apiRules,
+    isLoading: hookLoading,
+    isConnected,
+    refetch,
+  } = useApexRules({ pollingInterval: 60000 });
+
+  // Transform API rules to expected shape, or use demo data
   const [rules, setRules] = useState(DEMO_ACTIVE_RULES);
 
-  // Store integration will be added when backend is ready
-  // const storeRules = useActiveRules();
-  const isLoading = false;
+  // Update local state when API data changes
+  useMemo(() => {
+    if (apiRules.length > 0) {
+      const transformed = apiRules.map(rule => ({
+        id: rule.id,
+        name: rule.name,
+        description: rule.description,
+        category: rule.category.charAt(0).toUpperCase() + rule.category.slice(1).replace('-', ' '),
+        severity: rule.severity as RuleSeverity,
+        status: (rule.enabled ? 'active' : 'paused') as RuleStatus,
+        enabled: rule.enabled,
+        triggers: rule.triggers24h,
+        blocks: Math.round(rule.triggers24h * 0.94), // Estimate
+        lastTriggered: rule.lastTriggered || null,
+        deployedSensors: rule.deployedSensors,
+        totalSensors: rule.totalSensors,
+        createdAt: new Date().toISOString(), // Not in API yet
+      }));
+      setRules(transformed);
+    }
+  }, [apiRules]);
+
+  const isLoading = hookLoading && rules.length === 0;
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -407,9 +440,31 @@ export default function ActiveRulesPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Active Rules</h1>
-        <p className="text-gray-400 mt-1">Protection rules and policies</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Active Rules</h1>
+          <p className="text-gray-400 mt-1">Protection rules and policies</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            {isConnected ? (
+              <Wifi className="w-4 h-4 text-green-400" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-gray-400" />
+            )}
+            <span className={isConnected ? 'text-green-400' : 'text-gray-400'}>
+              {isConnected ? 'Live' : 'Demo Data'}
+            </span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+            disabled={hookLoading}
+          >
+            <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}

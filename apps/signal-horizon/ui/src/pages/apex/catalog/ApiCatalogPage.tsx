@@ -14,9 +14,12 @@ import {
   Shield,
   Clock,
   Activity,
+  RefreshCw,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-// import { useApexEndpoints } from '../../../stores/apexStore';
+import { useApexEndpoints } from '../../../hooks/useApexEndpoints';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
 
 type SortField = 'path' | 'method' | 'requestCount' | 'lastSeenAt' | 'avgLatencyMs';
@@ -366,12 +369,41 @@ export default function ApiCatalogPage() {
   const [sortField, setSortField] = useState<SortField>('requestCount');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  // Store integration will be added when backend is ready
-  // const storeEndpoints = useApexEndpoints();
-  const isLoading = false;
+  // Fetch endpoints from API
+  const {
+    endpoints: apiEndpoints,
+    isLoading: hookLoading,
+    isConnected,
+    refetch,
+  } = useApexEndpoints({
+    pollingInterval: 60000,
+    queryParams: methodFilter ? { method: methodFilter } : undefined,
+  });
 
-  // Use demo data for now (store types will be aligned later)
-  const endpoints = DEMO_ENDPOINTS;
+  const isLoading = hookLoading && apiEndpoints.length === 0;
+
+  // Transform API endpoints to expected shape, fall back to demo data
+  const endpoints = useMemo(() => {
+    if (apiEndpoints.length > 0) {
+      return apiEndpoints.map(ep => ({
+        id: ep.id,
+        method: ep.method,
+        path: ep.path,
+        pathTemplate: ep.pathTemplate,
+        service: ep.service,
+        firstSeenAt: ep.firstSeen,
+        lastSeenAt: ep.lastSeen,
+        requestCount: ep.requestCount24h || 0,
+        avgLatencyMs: 45, // Not available from current API
+        p95LatencyMs: 120,
+        errorRate: 0.5,
+        hasSchema: true,
+        authRequired: ep.sensitiveFields.length > 0,
+        sensitiveData: ep.sensitiveFields.length > 0,
+      }));
+    }
+    return DEMO_ENDPOINTS;
+  }, [apiEndpoints]);
 
   // Get unique services
   const services = useMemo(() => {
@@ -477,9 +509,31 @@ export default function ApiCatalogPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">API Catalog</h1>
-        <p className="text-gray-400 mt-1">Discovered endpoints and API inventory</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">API Catalog</h1>
+          <p className="text-gray-400 mt-1">Discovered endpoints and API inventory</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            {isConnected ? (
+              <Wifi className="w-4 h-4 text-green-400" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-gray-400" />
+            )}
+            <span className={isConnected ? 'text-green-400' : 'text-gray-400'}>
+              {isConnected ? 'Live' : 'Demo Data'}
+            </span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+            disabled={hookLoading}
+          >
+            <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}

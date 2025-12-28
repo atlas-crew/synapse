@@ -59,10 +59,11 @@ const fleetNavItems = [
 ];
 
 const apexNavItems = [
+  { path: '/apex', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/apex/analytics', icon: BarChart3, label: 'Analytics' },
-  // { path: '/apex/catalog', icon: Package, label: 'API Catalog' },
-  // { path: '/apex/rules', icon: Shield, label: 'Rules' },
-  // { path: '/apex/threats', icon: Target, label: 'Threats' },
+  { path: '/apex/catalog', icon: Package, label: 'API Catalog' },
+  { path: '/apex/rules', icon: Shield, label: 'Rules' },
+  { path: '/apex/threats', icon: Target, label: 'Threats' },
 ];
 
 const settingsItems = [

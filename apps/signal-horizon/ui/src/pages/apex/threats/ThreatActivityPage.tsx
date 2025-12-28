@@ -13,6 +13,9 @@ import {
   Clock,
   MapPin,
   Target,
+  RefreshCw,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import {
@@ -28,10 +31,11 @@ import {
   PieChart,
   Pie,
 } from 'recharts';
+import { useApexThreats, type ThreatTimeRange } from '../../../hooks/useApexThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
-type TimeRange = '1h' | '6h' | '24h' | '7d';
+type TimeRange = ThreatTimeRange;
 
 // Demo data - threat activity timeline
 const DEMO_THREAT_TIMELINE = [
@@ -306,17 +310,57 @@ function IncidentCard({ incident }: { incident: (typeof DEMO_INCIDENTS)[0] }) {
 
 export default function ThreatActivityPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
-  const isLoading = false;
 
-  // Calculate stats
+  // Fetch threats from API
+  const {
+    blocks,
+    stats: apiStats,
+    isLoading: hookLoading,
+    isConnected,
+    refetch,
+  } = useApexThreats({
+    pollingInterval: 15000,
+    queryParams: { timeRange },
+  });
+
+  const isLoading = hookLoading && blocks.length === 0;
+
+  // Transform blocks to incidents format
+  const incidents = useMemo(() => {
+    if (blocks.length > 0) {
+      return blocks.slice(0, 6).map(block => ({
+        id: block.id,
+        type: block.threatType.replace(/_/g, ' '),
+        severity: (block.riskScore >= 80 ? 'critical' :
+                   block.riskScore >= 60 ? 'high' :
+                   block.riskScore >= 40 ? 'medium' : 'low') as ThreatSeverity,
+        sourceIp: block.sourceIp,
+        targetEndpoint: block.endpoint,
+        timestamp: block.timestamp,
+        blocked: block.action === 'blocked',
+        details: `Risk score: ${block.riskScore}`,
+      }));
+    }
+    return DEMO_INCIDENTS;
+  }, [blocks]);
+
+  // Calculate stats from API data or demo data
   const stats = useMemo(() => {
+    if (apiStats.total > 0) {
+      return {
+        totalThreats: apiStats.total,
+        totalBlocked: apiStats.blocked,
+        criticalCount: apiStats.criticalCount,
+        blockRate: apiStats.total > 0 ? ((apiStats.blocked / apiStats.total) * 100).toFixed(1) : '0.0',
+      };
+    }
     const totalThreats = DEMO_THREAT_TIMELINE.reduce((sum, d) => sum + d.threats, 0);
     const totalBlocked = DEMO_THREAT_TIMELINE.reduce((sum, d) => sum + d.blocked, 0);
     const criticalCount = DEMO_THREAT_TIMELINE.reduce((sum, d) => sum + d.critical, 0);
     const blockRate = ((totalBlocked / totalThreats) * 100).toFixed(1);
 
     return { totalThreats, totalBlocked, criticalCount, blockRate };
-  }, []);
+  }, [apiStats]);
 
   if (isLoading) {
     return (
@@ -339,7 +383,27 @@ export default function ThreatActivityPage() {
           <h1 className="text-2xl font-bold text-white">Threat Activity</h1>
           <p className="text-gray-400 mt-1">Real-time threat monitoring and incident response</p>
         </div>
-        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            {isConnected ? (
+              <Wifi className="w-4 h-4 text-green-400" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-gray-400" />
+            )}
+            <span className={isConnected ? 'text-green-400' : 'text-gray-400'}>
+              {isConnected ? 'Live' : 'Demo Data'}
+            </span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
+            disabled={hookLoading}
+          >
+            <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
+            Refresh
+          </button>
+          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -478,7 +542,7 @@ export default function ThreatActivityPage() {
             </button>
           </div>
           <div className="space-y-3">
-            {DEMO_INCIDENTS.map((incident) => (
+            {incidents.map((incident) => (
               <IncidentCard key={incident.id} incident={incident} />
             ))}
           </div>
