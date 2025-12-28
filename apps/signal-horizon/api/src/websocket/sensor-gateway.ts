@@ -19,13 +19,10 @@ import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import type { Aggregator } from '../services/aggregator/index.js';
 import type { FleetAggregator } from '../services/fleet/fleet-aggregator.js';
-import type { HeartbeatHandler } from '../protocols/heartbeat-handler.js';
 import type { CommandSender } from '../protocols/command-sender.js';
 import type {
   ThreatSignal,
   BlocklistEntry,
-  SensorHeartbeatMessage,
-  SensorCommandAckMessage,
 } from '../types/protocol.js';
 import {
   validateSensorMessage,

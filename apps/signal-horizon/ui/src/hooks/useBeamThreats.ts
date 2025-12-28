@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { BlockedRequest, AttackPattern, ThreatEvent } from '../types/beam';
 
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+
 // ============================================================================
 // API Response Types
 // ============================================================================
@@ -198,7 +200,10 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
 
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
       });
 
       if (!response.ok) {
@@ -244,7 +249,10 @@ export function useBeamThreats(options: UseBeamThreatsOptions = {}): UseBeamThre
   const fetchBlockById = useCallback(async (id: string): Promise<BlockedRequest | null> => {
     try {
       const response = await fetch(`${apiBaseUrl}/beam/threats/${id}`, {
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
       });
 
       if (!response.ok) {

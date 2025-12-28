@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Rule, RuleDeployment, RuleTemplate, RuleCategory, RuleSeverity, RuleAction } from '../types/beam';
 
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+
 // ============================================================================
 // API Response/Request Types
 // ============================================================================
@@ -252,7 +254,10 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
     try {
       const response = await fetch(`${apiBaseUrl}/beam/rules`, {
         signal: controller.signal,
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
       });
 
       if (!response.ok) {
@@ -284,7 +289,10 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
   const fetchRuleById = useCallback(async (id: string): Promise<Rule | null> => {
     try {
       const response = await fetch(`${apiBaseUrl}/beam/rules/${id}`, {
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
       });
 
       if (!response.ok) {
@@ -310,6 +318,7 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
         },
         body: JSON.stringify(payload),
       });

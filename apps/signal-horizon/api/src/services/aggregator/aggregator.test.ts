@@ -37,17 +37,18 @@ const defaultConfig: AggregatorConfig = {
 };
 
 function createTestSignal(overrides: Partial<IncomingSignal> = {}): IncomingSignal {
-  return {
+  // Base signal with IP_THREAT type (doesn't require metadata)
+  const base = {
     tenantId: 'tenant-1',
     sensorId: 'sensor-1',
-    signalType: 'IP_THREAT',  // Use valid SignalType
+    signalType: 'IP_THREAT' as const,
     sourceIp: '192.168.1.100',
     fingerprint: 'test-fingerprint',
-    severity: 'MEDIUM',
+    severity: 'MEDIUM' as const,
     confidence: 0.85,
     eventCount: 1,
-    ...overrides,
   };
+  return { ...base, ...overrides } as IncomingSignal;
 }
 
 describe('Aggregator', () => {

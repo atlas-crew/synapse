@@ -8,7 +8,7 @@ import { Correlator } from './index.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Broadcaster } from '../broadcaster/index.js';
-import type { EnrichedSignal, Severity } from '../../types/protocol.js';
+import type { EnrichedSignal } from '../../types/protocol.js';
 
 // Mock Prisma client - use explicit type
 const mockPrisma = {
@@ -33,19 +33,21 @@ const mockBroadcaster = {
 } as unknown as Broadcaster;
 
 function createEnrichedSignal(overrides: Partial<EnrichedSignal> = {}): EnrichedSignal {
-  return {
+  // CREDENTIAL_STUFFING requires GeoMetadata with latitude/longitude
+  const base = {
     tenantId: 'tenant-1',
     sensorId: 'sensor-1',
-    signalType: 'CREDENTIAL_STUFFING',
+    signalType: 'CREDENTIAL_STUFFING' as const,
+    metadata: { latitude: 37.7749, longitude: -122.4194 },
     sourceIp: '192.168.1.100',
     fingerprint: 'raw-fingerprint',
     anonFingerprint: 'anon-fingerprint-abc123',
-    severity: 'HIGH' as Severity,
+    severity: 'HIGH' as const,
     confidence: 0.9,
     eventCount: 1,
     id: 'signal-id-123',
-    ...overrides,
   };
+  return { ...base, ...overrides } as EnrichedSignal;
 }
 
 describe('Correlator', () => {

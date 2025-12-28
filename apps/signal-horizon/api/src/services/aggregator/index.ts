@@ -13,11 +13,13 @@ import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse
 /**
  * Signal with tenant/sensor context from sensor gateway
  * This is what queueSignal receives before enrichment
+ * Note: Using type intersection instead of interface extends because
+ * ThreatSignal is a discriminated union (interfaces can't extend unions)
  */
-export interface IncomingSignal extends ThreatSignal {
+export type IncomingSignal = ThreatSignal & {
   tenantId: string;
   sensorId: string;
-}
+};
 
 export interface AggregatorConfig {
   batchSize: number;
@@ -264,7 +266,7 @@ export class Aggregator {
     if (this.impossibleTravel && signal.signalType === 'CREDENTIAL_STUFFING') {
       const { metadata } = signal;
       void this.impossibleTravel.processLogin({
-        userId: metadata.userId,
+        userId: metadata.userId ?? 'unknown',
         tenantId: signal.tenantId,
         timestamp: stored.createdAt,
         ip: signal.sourceIp || '0.0.0.0',

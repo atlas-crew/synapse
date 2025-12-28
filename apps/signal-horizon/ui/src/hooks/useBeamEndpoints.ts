@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Endpoint, Service } from '../types/beam';
 
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+
 // ============================================================================
 // API Response Types
 // ============================================================================
@@ -169,7 +171,10 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
 
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
       });
 
       if (!response.ok) {
@@ -216,7 +221,10 @@ export function useBeamEndpoints(options: UseBeamEndpointsOptions = {}): UseBeam
   const fetchEndpointById = useCallback(async (id: string): Promise<Endpoint | null> => {
     try {
       const response = await fetch(`${apiBaseUrl}/beam/endpoints/${id}`, {
-        headers: { 'Accept': 'application/json' },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
       });
 
       if (!response.ok) {

@@ -5,6 +5,7 @@ import { createDashboardRouter } from './dashboard.js';
 import { createEndpointsRouter } from './endpoints.js';
 import { createRulesRouter } from './rules.js';
 import { createThreatsRouter } from './threats.js';
+import { createAnalyticsRouter } from './analytics.js';
 
 export function createBeamRouter(
   prisma: PrismaClient,
@@ -17,6 +18,7 @@ export function createBeamRouter(
   router.use('/endpoints', createEndpointsRouter(prisma, beamLogger));
   router.use('/rules', createRulesRouter(prisma, beamLogger));
   router.use('/threats', createThreatsRouter(prisma, beamLogger));
+  router.use('/analytics', createAnalyticsRouter(prisma, beamLogger));
 
   beamLogger.info('Beam routes initialized');
 

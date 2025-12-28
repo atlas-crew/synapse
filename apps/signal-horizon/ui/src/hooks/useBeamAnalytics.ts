@@ -5,6 +5,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+
 // ============================================================================
 // Types (mirrored from API)
 // ============================================================================
@@ -288,6 +290,7 @@ export function useBeamAnalytics(options: UseBeamAnalyticsOptions = {}): UseBeam
         signal: controller.signal,
         headers: {
           'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
         },
       });
 

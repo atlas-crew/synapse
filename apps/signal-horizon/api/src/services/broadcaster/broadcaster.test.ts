@@ -58,19 +58,21 @@ function createCampaign(overrides: Partial<Campaign> = {}): Campaign {
 }
 
 function createEnrichedSignal(overrides: Partial<EnrichedSignal> = {}): EnrichedSignal {
-  return {
+  // CREDENTIAL_STUFFING requires GeoMetadata with latitude/longitude
+  const base = {
     tenantId: 'tenant-1',
     sensorId: 'sensor-1',
-    signalType: 'CREDENTIAL_STUFFING',
+    signalType: 'CREDENTIAL_STUFFING' as const,
+    metadata: { latitude: 37.7749, longitude: -122.4194 },
     sourceIp: '192.168.1.100',
     fingerprint: 'raw-fingerprint',
     anonFingerprint: 'anon-fingerprint-abc123',
-    severity: 'HIGH',
+    severity: 'HIGH' as const,
     confidence: 0.9,
     eventCount: 1,
     id: 'signal-id-123',
-    ...overrides,
   };
+  return { ...base, ...overrides } as EnrichedSignal;
 }
 
 describe('Broadcaster', () => {

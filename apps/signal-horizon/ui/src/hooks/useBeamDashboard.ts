@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { BeamDashboard, TrafficDataPoint, AttackTypeData } from '../types/beam';
 
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+
 // ============================================================================
 // API Response Types (from backend)
 // ============================================================================
@@ -128,6 +130,7 @@ export function useBeamDashboard(options: UseBeamDashboardOptions = {}): UseBeam
         signal: controller.signal,
         headers: {
           'Accept': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
         },
       });
 
