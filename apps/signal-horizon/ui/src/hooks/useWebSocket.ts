@@ -19,7 +19,7 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const CampaignSchema = z.object({
   id: z.string(),
   name: z.string(),
-  description: z.string().nullable().optional(),
+  description: z.string().nullish().transform(val => val ?? undefined),
   status: z.enum(['ACTIVE', 'MONITORING', 'RESOLVED', 'FALSE_POSITIVE']),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   isCrossTenant: z.boolean(),
@@ -34,7 +34,7 @@ const ThreatSchema = z.object({
   threatType: z.string(),
   indicator: z.string(),
   riskScore: z.number(),
-  fleetRiskScore: z.number().nullable().optional(),
+  fleetRiskScore: z.number().nullish().transform(val => val ?? undefined),
   hitCount: z.number(),
   tenantsAffected: z.number(),
   isFleetThreat: z.boolean(),
@@ -159,7 +159,6 @@ export function useWebSocket() {
       switch (message.type) {
         case 'auth-required':
           // Server requests authentication - send API key
-          console.log('[WebSocket] Auth required, sending credentials...');
           if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ type: 'auth', payload: { apiKey: API_KEY } }));
           }
