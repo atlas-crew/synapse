@@ -15,12 +15,12 @@ datasource db {
 // =============================================================================
 
 model Tenant {
-  id                String   @id @default(cuid())
+  id                String            @id @default(cuid())
   name              String
-  tier              TenantTier @default(STANDARD)
+  tier              TenantTier        @default(STANDARD)
   sharingPreference SharingPreference @default(CONTRIBUTE_AND_RECEIVE)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   // Relations
   apiKeys           ApiKey[]
@@ -33,25 +33,25 @@ model Tenant {
   warRoomActivities WarRoomActivity[]
 
   // Beam relations
-  beamEndpoints      Endpoint[] @relation("TenantEndpoints")
-  beamRules          CustomerRule[] @relation("TenantRules")
+  beamEndpoints      Endpoint[]      @relation("TenantEndpoints")
+  beamRules          CustomerRule[]  @relation("TenantRules")
   beamBlockDecisions BlockDecision[] @relation("TenantBlockDecisions")
 
   @@map("tenants")
 }
 
 enum TenantTier {
-  FREE        // Basic protection, receive-only
-  STANDARD    // Full bidirectional sharing
-  ENTERPRISE  // Priority push, advanced analytics
-  PLATINUM    // Custom retention, dedicated support
+  FREE // Basic protection, receive-only
+  STANDARD // Full bidirectional sharing
+  ENTERPRISE // Priority push, advanced analytics
+  PLATINUM // Custom retention, dedicated support
 }
 
 enum SharingPreference {
-  CONTRIBUTE_AND_RECEIVE  // Full participation
-  RECEIVE_ONLY            // Consume fleet intel, don't share
-  CONTRIBUTE_ONLY         // Share but don't receive (rare)
-  ISOLATED                // No fleet participation
+  CONTRIBUTE_AND_RECEIVE // Full participation
+  RECEIVE_ONLY // Consume fleet intel, don't share
+  CONTRIBUTE_ONLY // Share but don't receive (rare)
+  ISOLATED // No fleet participation
 }
 
 // =============================================================================
@@ -59,19 +59,19 @@ enum SharingPreference {
 // =============================================================================
 
 model ApiKey {
-  id          String   @id @default(cuid())
-  tenantId    String
-  keyHash     String   @unique  // SHA-256 of the actual key
-  name        String
-  scopes      String[] // e.g., ["signal:write", "blocklist:read"]
-  rateLimit   Int      @default(1000) // requests per minute
-  expiresAt   DateTime?
-  lastUsedAt  DateTime?
-  createdAt   DateTime @default(now())
-  isRevoked   Boolean  @default(false)
+  id         String    @id @default(cuid())
+  tenantId   String
+  keyHash    String    @unique // SHA-256 of the actual key
+  name       String
+  scopes     String[] // e.g., ["signal:write", "blocklist:read"]
+  rateLimit  Int       @default(1000) // requests per minute
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  isRevoked  Boolean   @default(false)
 
   // Relations
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([keyHash])
@@ -83,33 +83,59 @@ model ApiKey {
 // =============================================================================
 
 model Sensor {
-  id              String       @id @default(cuid())
+  id              String          @id @default(cuid())
   tenantId        String
   name            String
-  hostname        String?      // Machine hostname
-  region          String       @default("us-east-1") // Physical or cloud region
+  hostname        String? // Machine hostname
+  region          String          @default("us-east-1") // Physical or cloud region
   version         String
   connectionState ConnectionState @default(DISCONNECTED)
   lastHeartbeat   DateTime?
   lastSignalAt    DateTime?
-  signalsReported Int          @default(0)
-  blocksApplied   Int          @default(0)
+  signalsReported Int             @default(0)
+  blocksApplied   Int             @default(0)
   ipAddress       String?
-  metadata        Json?        // Additional sensor info
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  metadata        Json? // Additional sensor info
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Signal Array - System Info
+  publicIp     String?
+  privateIp    String?
+  os           String? // "Ubuntu 22.04 LTS"
+  kernel       String? // "5.15.0-89-generic"
+  architecture String? // "x86_64"
+  instanceType String? // "c5.xlarge"
+  lastBoot     DateTime?
+  uptime       Int? // Seconds since boot
+
+  // Signal Array - Tunnel/Remote Access
+  tunnelActive    Boolean @default(false)
+  tunnelSessionId String?
+
+  // Signal Array - Onboarding
+  registrationMethod RegistrationMethod @default(MANUAL)
+  registrationToken  String?
+  approvalStatus     ApprovalStatus     @default(APPROVED)
+  approvedAt         DateTime?
+  approvedBy         String?
 
   // Relations
-  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  signals         Signal[]
-  syncState       SensorSyncState?
-  commands        FleetCommand[]
-  ruleSyncState   RuleSyncState[]
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  signals       Signal[]
+  syncState     SensorSyncState?
+  commands      FleetCommand[]
+  ruleSyncState RuleSyncState[]
+
+  // Signal Array - Relations
+  apiKeys           SensorApiKey[]
+  diagnosticBundles DiagnosticBundle[]
+  updateHistory     SensorUpdate[]
 
   // Beam relations
-  beamEndpoints       Endpoint[] @relation("SensorEndpoints")
+  beamEndpoints       Endpoint[]       @relation("SensorEndpoints")
   beamRuleDeployments RuleDeployment[] @relation("SensorRuleDeployments")
-  beamBlockDecisions  BlockDecision[] @relation("SensorBlockDecisions")
+  beamBlockDecisions  BlockDecision[]  @relation("SensorBlockDecisions")
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -123,53 +149,71 @@ enum ConnectionState {
   RECONNECTING
 }
 
+enum RegistrationMethod {
+  MANUAL
+  AGENT_SCRIPT
+  AUTO_DISCOVERY
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum KeyStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
 // =============================================================================
 // Threat Signals
 // =============================================================================
 
 model Signal {
-  id              String      @id @default(cuid())
+  id              String     @id @default(cuid())
   tenantId        String
   sensorId        String
   signalType      SignalType
   sourceIp        String?
-  fingerprint     String?     // Original fingerprint (tenant-specific)
-  anonFingerprint String?     // SHA-256 for cross-tenant sharing
+  fingerprint     String? // Original fingerprint (tenant-specific)
+  anonFingerprint String? // SHA-256 for cross-tenant sharing
   severity        Severity
-  confidence      Float       // 0.0 - 1.0
-  eventCount      Int         @default(1)
-  metadata        Json?       // Signal-specific data
-  createdAt       DateTime    @default(now())
+  confidence      Float // 0.0 - 1.0
+  eventCount      Int        @default(1)
+  metadata        Json? // Signal-specific data
+  createdAt       DateTime   @default(now())
 
   // Relations
-  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor          Sensor      @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-  threatLinks     ThreatSignal[]
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor      Sensor         @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  threatLinks ThreatSignal[]
 
   @@index([tenantId])
   @@index([sensorId])
   @@index([signalType])
   @@index([anonFingerprint])
   @@index([createdAt])
-  @@index([severity])                      // Filter by severity level
+  @@index([severity]) // Filter by severity level
   // Compound indexes for efficient query patterns
-  @@index([createdAt, sensorId])           // Range queries by sensor
-  @@index([signalType, createdAt])         // Correlation queries by type
-  @@index([tenantId, createdAt])           // Tenant-scoped time ranges
-  @@index([anonFingerprint, createdAt])    // Cross-tenant fingerprint analysis
-  @@index([severity, createdAt])           // Dashboard: severity over time
+  @@index([createdAt, sensorId]) // Range queries by sensor
+  @@index([signalType, createdAt]) // Correlation queries by type
+  @@index([tenantId, createdAt]) // Tenant-scoped time ranges
+  @@index([anonFingerprint, createdAt]) // Cross-tenant fingerprint analysis
+  @@index([severity, createdAt]) // Dashboard: severity over time
   @@index([tenantId, severity, createdAt]) // Tenant dashboard severity filter
   @@map("signals")
 }
 
 enum SignalType {
-  IP_THREAT           // Malicious IP activity
-  FINGERPRINT_THREAT  // Browser/TLS fingerprint threat
-  CAMPAIGN_INDICATOR  // Campaign correlation signal
+  IP_THREAT // Malicious IP activity
+  FINGERPRINT_THREAT // Browser/TLS fingerprint threat
+  CAMPAIGN_INDICATOR // Campaign correlation signal
   CREDENTIAL_STUFFING // Credential stuffing attempt
-  RATE_ANOMALY        // Unusual request patterns
-  BOT_SIGNATURE       // Automated bot detection
-  IMPOSSIBLE_TRAVEL   // Login from geographically impossible locations
+  RATE_ANOMALY // Unusual request patterns
+  BOT_SIGNATURE // Automated bot detection
+  IMPOSSIBLE_TRAVEL // Login from geographically impossible locations
 }
 
 enum Severity {
@@ -184,28 +228,28 @@ enum Severity {
 // =============================================================================
 
 model Threat {
-  id              String      @id @default(cuid())
-  tenantId        String?     // Null for fleet-wide threats
+  id              String     @id @default(cuid())
+  tenantId        String? // Null for fleet-wide threats
   threatType      ThreatType
-  indicator       String      // IP, fingerprint hash, etc.
-  anonIndicator   String?     // Anonymized for cross-tenant
-  riskScore       Float       // 0.0 - 100.0
-  fleetRiskScore  Float?      // Aggregated across fleet
+  indicator       String // IP, fingerprint hash, etc.
+  anonIndicator   String? // Anonymized for cross-tenant
+  riskScore       Float // 0.0 - 100.0
+  fleetRiskScore  Float? // Aggregated across fleet
   firstSeenAt     DateTime
   lastSeenAt      DateTime
-  hitCount        Int         @default(1)
-  tenantsAffected Int         @default(1)
-  isFleetThreat   Boolean     @default(false) // 2+ tenants = fleet threat
-  ttl             DateTime?   // When to expire
+  hitCount        Int        @default(1)
+  tenantsAffected Int        @default(1)
+  isFleetThreat   Boolean    @default(false) // 2+ tenants = fleet threat
+  ttl             DateTime? // When to expire
   metadata        Json?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   // Relations
-  tenant          Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  signalLinks     ThreatSignal[]
+  tenant           Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  signalLinks      ThreatSignal[]
   blocklistEntries BlocklistEntry[]
-  campaignLinks   CampaignThreat[]
+  campaignLinks    CampaignThreat[]
 
   @@unique([threatType, indicator])
   @@index([tenantId])
@@ -214,9 +258,9 @@ model Threat {
   @@index([riskScore])
   @@index([lastSeenAt])
   // Compound indexes for threat queries
-  @@index([isFleetThreat, lastSeenAt])     // Fleet threats by recency
-  @@index([threatType, lastSeenAt])        // Threat type analysis
-  @@index([riskScore, lastSeenAt])         // High-risk threats dashboard
+  @@index([isFleetThreat, lastSeenAt]) // Fleet threats by recency
+  @@index([threatType, lastSeenAt]) // Threat type analysis
+  @@index([riskScore, lastSeenAt]) // High-risk threats dashboard
   @@map("threats")
 }
 
@@ -236,8 +280,8 @@ model ThreatSignal {
   signalId  String
   createdAt DateTime @default(now())
 
-  threat    Threat   @relation(fields: [threatId], references: [id], onDelete: Cascade)
-  signal    Signal   @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  threat Threat @relation(fields: [threatId], references: [id], onDelete: Cascade)
+  signal Signal @relation(fields: [signalId], references: [id], onDelete: Cascade)
 
   @@unique([threatId, signalId])
   @@map("threat_signals")
@@ -248,22 +292,22 @@ model ThreatSignal {
 // =============================================================================
 
 model BlocklistEntry {
-  id              String         @id @default(cuid())
-  tenantId        String?        // Null for fleet-wide blocks
-  threatId        String?
-  blockType       BlockType
-  indicator       String
-  source          BlockSource
-  reason          String?
-  expiresAt       DateTime?
-  propagatedAt    DateTime?      // When pushed to sensors
+  id                String            @id @default(cuid())
+  tenantId          String? // Null for fleet-wide blocks
+  threatId          String?
+  blockType         BlockType
+  indicator         String
+  source            BlockSource
+  reason            String?
+  expiresAt         DateTime?
+  propagatedAt      DateTime? // When pushed to sensors
   propagationStatus PropagationStatus @default(PENDING)
-  sensorsNotified Int            @default(0)
-  createdAt       DateTime       @default(now())
+  sensorsNotified   Int               @default(0)
+  createdAt         DateTime          @default(now())
 
   // Relations
-  tenant          Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  threat          Threat?        @relation(fields: [threatId], references: [id], onDelete: SetNull)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  threat Threat? @relation(fields: [threatId], references: [id], onDelete: SetNull)
 
   @@unique([blockType, indicator, tenantId])
   @@index([tenantId])
@@ -282,11 +326,11 @@ enum BlockType {
 }
 
 enum BlockSource {
-  AUTOMATIC      // System-detected threat
-  MANUAL         // SOC operator action
-  FLEET_INTEL    // Cross-tenant correlation
-  EXTERNAL_FEED  // Third-party threat feed
-  WAR_ROOM       // War room quick action
+  AUTOMATIC // System-detected threat
+  MANUAL // SOC operator action
+  FLEET_INTEL // Cross-tenant correlation
+  EXTERNAL_FEED // Third-party threat feed
+  WAR_ROOM // War room quick action
 }
 
 enum PropagationStatus {
@@ -294,7 +338,7 @@ enum PropagationStatus {
   IN_PROGRESS
   COMPLETED
   FAILED
-  PARTIAL  // Some sensors failed
+  PARTIAL // Some sensors failed
 }
 
 // =============================================================================
@@ -302,36 +346,36 @@ enum PropagationStatus {
 // =============================================================================
 
 model Campaign {
-  id              String         @id @default(cuid())
-  tenantId        String?        // Null for cross-tenant campaigns
-  name            String
-  description     String?
-  status          CampaignStatus @default(ACTIVE)
-  severity        Severity
-  isCrossTenant   Boolean        @default(false)
-  tenantsAffected Int            @default(1)
-  confidence      Float          // 0.0 - 1.0
-  correlationSignals Json?       // Array of correlation evidence
-  firstSeenAt     DateTime
-  lastActivityAt  DateTime
-  resolvedAt      DateTime?
-  resolvedBy      String?
-  metadata        Json?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id                 String         @id @default(cuid())
+  tenantId           String? // Null for cross-tenant campaigns
+  name               String
+  description        String?
+  status             CampaignStatus @default(ACTIVE)
+  severity           Severity
+  isCrossTenant      Boolean        @default(false)
+  tenantsAffected    Int            @default(1)
+  confidence         Float // 0.0 - 1.0
+  correlationSignals Json? // Array of correlation evidence
+  firstSeenAt        DateTime
+  lastActivityAt     DateTime
+  resolvedAt         DateTime?
+  resolvedBy         String?
+  metadata           Json?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   // Relations
-  tenant          Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  threatLinks     CampaignThreat[]
-  warRoomLinks    WarRoomCampaign[]
+  tenant       Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  threatLinks  CampaignThreat[]
+  warRoomLinks WarRoomCampaign[]
 
   @@index([tenantId])
   @@index([status])
   @@index([isCrossTenant])
   @@index([lastActivityAt])
   // Compound indexes for dashboard queries
-  @@index([status, lastActivityAt])        // Active campaigns by recency
-  @@index([isCrossTenant, status])         // Fleet campaigns filter
+  @@index([status, lastActivityAt]) // Active campaigns by recency
+  @@index([isCrossTenant, status]) // Fleet campaigns filter
   @@index([tenantId, status, lastActivityAt]) // Tenant dashboard
   @@map("campaigns")
 }
@@ -348,11 +392,11 @@ model CampaignThreat {
   id         String   @id @default(cuid())
   campaignId String
   threatId   String
-  role       String?  // e.g., "primary_actor", "infrastructure"
+  role       String? // e.g., "primary_actor", "infrastructure"
   createdAt  DateTime @default(now())
 
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  threat     Threat   @relation(fields: [threatId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  threat   Threat   @relation(fields: [threatId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, threatId])
   @@map("campaign_threats")
@@ -369,14 +413,14 @@ model WarRoom {
   description String?
   status      WarRoomStatus @default(ACTIVE)
   priority    Priority      @default(MEDIUM)
-  leaderId    String?       // User ID of incident lead
+  leaderId    String? // User ID of incident lead
   createdAt   DateTime      @default(now())
   closedAt    DateTime?
   updatedAt   DateTime      @updatedAt
 
   // Relations
-  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  activities  WarRoomActivity[]
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  activities    WarRoomActivity[]
   campaignLinks WarRoomCampaign[]
 
   @@index([tenantId])
@@ -399,20 +443,20 @@ enum Priority {
 }
 
 model WarRoomActivity {
-  id          String           @id @default(cuid())
+  id          String             @id @default(cuid())
   warRoomId   String
   tenantId    String
   actorType   ActivityActorType
-  actorId     String?          // User ID or "horizon-bot"
+  actorId     String? // User ID or "horizon-bot"
   actorName   String
   actionType  ActivityActionType
   description String
-  metadata    Json?            // Action-specific data
-  createdAt   DateTime         @default(now())
+  metadata    Json? // Action-specific data
+  createdAt   DateTime           @default(now())
 
   // Relations
-  warRoom     WarRoom          @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
-  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  warRoom WarRoom @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([warRoomId])
   @@index([tenantId])
@@ -444,10 +488,10 @@ model WarRoomCampaign {
   warRoomId  String
   campaignId String
   linkedAt   DateTime @default(now())
-  linkedBy   String?  // User ID
+  linkedBy   String? // User ID
 
-  warRoom    WarRoom  @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  warRoom  WarRoom  @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([warRoomId, campaignId])
   @@map("war_room_campaigns")
@@ -458,16 +502,16 @@ model WarRoomCampaign {
 // =============================================================================
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  tenantId    String?
-  userId      String?
-  action      String
-  resource    String
-  resourceId  String?
-  details     Json?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  tenantId   String?
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
 
   @@index([tenantId])
   @@index([action])
@@ -485,7 +529,7 @@ model ConfigTemplate {
   description String?
   environment String   @default("production") // production, staging, dev
   config      Json
-  hash        String   // SHA-256 of config
+  hash        String // SHA-256 of config
   version     String   @default("1.0.0")
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -493,75 +537,75 @@ model ConfigTemplate {
 
   @@index([environment])
   @@index([isActive])
-  @@index([environment, isActive])  // Filter active templates by environment (10x speedup)
+  @@index([environment, isActive]) // Filter active templates by environment (10x speedup)
   @@map("config_templates")
 }
 
 model SensorSyncState {
-  id                    String   @id @default(cuid())
-  sensorId              String   @unique
-  sensor                Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  sensorId String @unique
+  sensor   Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
 
   expectedConfigHash    String
   expectedRulesHash     String
   expectedBlocklistHash String
 
-  actualConfigHash      String?
-  actualRulesHash       String?
-  actualBlocklistHash   String?
+  actualConfigHash    String?
+  actualRulesHash     String?
+  actualBlocklistHash String?
 
-  lastSyncAttempt       DateTime?
-  lastSyncSuccess       DateTime?
-  syncErrors            String[]
+  lastSyncAttempt DateTime?
+  lastSyncSuccess DateTime?
+  syncErrors      String[]
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sensorId])
   @@map("sensor_sync_state")
 }
 
 model FleetCommand {
-  id          String   @id @default(cuid())
-  sensorId    String
-  sensor      Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  sensorId String
+  sensor   Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
 
-  commandType String   // push_config, push_rules, update, restart, etc.
+  commandType String // push_config, push_rules, update, restart, etc.
   payload     Json
 
-  status      String   @default("pending") // pending, sent, success, failed, timeout
-  result      Json?
-  error       String?
+  status String  @default("pending") // pending, sent, success, failed, timeout
+  result Json?
+  error  String?
 
-  queuedAt    DateTime @default(now())
+  queuedAt    DateTime  @default(now())
   sentAt      DateTime?
   completedAt DateTime?
-  attempts    Int      @default(0)
+  attempts    Int       @default(0)
   timeoutAt   DateTime
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([sensorId])
   @@index([status])
   @@index([queuedAt])
-  @@index([sensorId, status])      // Get pending commands per sensor (10-50x speedup)
-  @@index([status, queuedAt])      // FIFO command processing query
+  @@index([sensorId, status]) // Get pending commands per sensor (10-50x speedup)
+  @@index([status, queuedAt]) // FIFO command processing query
   @@map("fleet_commands")
 }
 
 model RuleSyncState {
-  id          String   @id @default(cuid())
-  sensorId    String
-  sensor      Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-  ruleId      String
+  id       String @id @default(cuid())
+  sensorId String
+  sensor   Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  ruleId   String
 
-  status      String   @default("pending") // pending, synced, failed
-  syncedAt    DateTime?
-  error       String?
+  status   String    @default("pending") // pending, synced, failed
+  syncedAt DateTime?
+  error    String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([sensorId, ruleId])
   @@index([sensorId])
@@ -570,45 +614,140 @@ model RuleSyncState {
   @@map("rule_sync_state")
 }
 
+// =============================================================================
+// Signal Array - Fleet Operations
+// =============================================================================
+
+model SensorApiKey {
+  id          String    @id @default(cuid())
+  name        String
+  keyHash     String
+  keyPrefix   String // "sk_****8f2k"
+  sensorId    String
+  sensor      Sensor    @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  status      KeyStatus @default(ACTIVE)
+  permissions String[]
+  createdBy   String?
+
+  @@index([sensorId])
+  @@index([keyHash])
+  @@map("sensor_api_keys")
+}
+
+model DiagnosticBundle {
+  id          String    @id @default(cuid())
+  sensorId    String
+  sensor      Sensor    @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  requestedAt DateTime  @default(now())
+  completedAt DateTime?
+  status      String    @default("pending")
+  includes    String[]
+  downloadUrl String?
+  expiresAt   DateTime?
+  notes       String?
+
+  @@index([sensorId])
+  @@map("diagnostic_bundles")
+}
+
+model SensorUpdate {
+  id                String    @id @default(cuid())
+  sensorId          String
+  sensor            Sensor    @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  fromVersion       String
+  toVersion         String
+  status            String    @default("scheduled")
+  scheduledFor      DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  rollbackAvailable Boolean   @default(true)
+  logs              String?
+
+  @@index([sensorId])
+  @@map("sensor_updates")
+}
+
+model FleetAlert {
+  id             String    @id @default(cuid())
+  tenantId       String
+  sensorId       String?
+  alertType      String // sensor_offline, high_cpu, high_memory, disk_warning, update_available
+  severity       String // info, warning, critical
+  title          String
+  message        String
+  metadata       Json?
+  acknowledged   Boolean   @default(false)
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+
+  @@index([tenantId])
+  @@index([sensorId])
+  @@index([alertType])
+  @@index([acknowledged])
+  @@map("fleet_alerts")
+}
+
+model RegistrationToken {
+  id        String    @id @default(cuid())
+  tenantId  String
+  token     String    @unique
+  name      String?
+  region    String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedBy    String? // Sensor ID that used this token
+  createdAt DateTime  @default(now())
+  createdBy String?
+
+  @@index([tenantId])
+  @@index([token])
+  @@map("registration_tokens")
+}
+
 // ============================================
 // APEX MODELS - Customer Protection Console
 // ============================================
 
 model Endpoint {
-  id              String   @id @default(cuid())
-  tenantId        String
-  sensorId        String
+  id       String @id @default(cuid())
+  tenantId String
+  sensorId String
 
-  method          String
-  path            String
-  pathTemplate    String
-  service         String   @default("default")
+  method       String
+  path         String
+  pathTemplate String
+  service      String @default("default")
 
-  firstSeenAt     DateTime @default(now())
-  lastSeenAt      DateTime @updatedAt
-  requestCount    Int      @default(1)
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+  requestCount Int      @default(1)
 
-  hasSchema       Boolean  @default(false)
-  schemaVersion   String?
-  schemaHash      String?
-  requestSchema   Json?
-  responseSchema  Json?
+  hasSchema      Boolean @default(false)
+  schemaVersion  String?
+  schemaHash     String?
+  requestSchema  Json?
+  responseSchema Json?
 
-  avgLatencyMs    Float?
-  p95LatencyMs    Float?
-  p99LatencyMs    Float?
-  errorRate       Float?
+  avgLatencyMs Float?
+  p95LatencyMs Float?
+  p99LatencyMs Float?
+  errorRate    Float?
 
-  riskLevel       String   @default("low")
-  authRequired    Boolean  @default(false)
-  sensitiveData   Boolean  @default(false)
+  riskLevel     String  @default("low")
+  authRequired  Boolean @default(false)
+  sensitiveData Boolean @default(false)
 
-  metadata        Json?
+  metadata Json?
 
-  tenant          Tenant   @relation("TenantEndpoints", fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor          Sensor   @relation("SensorEndpoints", fields: [sensorId], references: [id], onDelete: Cascade)
-  schemaChanges   EndpointSchemaChange[]
-  ruleBindings    RuleEndpointBinding[]
+  tenant        Tenant                 @relation("TenantEndpoints", fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor        Sensor                 @relation("SensorEndpoints", fields: [sensorId], references: [id], onDelete: Cascade)
+  schemaChanges EndpointSchemaChange[]
+  ruleBindings  RuleEndpointBinding[]
 
   @@unique([tenantId, sensorId, method, pathTemplate])
   @@index([tenantId])
@@ -618,22 +757,22 @@ model Endpoint {
 }
 
 model EndpointSchemaChange {
-  id              String   @id @default(cuid())
-  endpointId      String
-  tenantId        String
+  id         String @id @default(cuid())
+  endpointId String
+  tenantId   String
 
-  changeType      String
-  field           String
-  oldValue        String?
-  newValue        String?
-  riskLevel       String   @default("low")
+  changeType String
+  field      String
+  oldValue   String?
+  newValue   String?
+  riskLevel  String  @default("low")
 
-  previousHash    String?
-  currentHash     String?
+  previousHash String?
+  currentHash  String?
 
-  detectedAt      DateTime @default(now())
+  detectedAt DateTime @default(now())
 
-  endpoint        Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  endpoint Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, detectedAt])
   @@index([endpointId])
@@ -641,39 +780,39 @@ model EndpointSchemaChange {
 }
 
 model CustomerRule {
-  id              String   @id @default(cuid())
-  tenantId        String
+  id       String @id @default(cuid())
+  tenantId String
 
-  name            String
-  description     String?
-  category        String   @default("custom")
-  severity        String   @default("medium")
-  action          String   @default("block")
+  name        String
+  description String?
+  category    String  @default("custom")
+  severity    String  @default("medium")
+  action      String  @default("block")
 
-  patterns        Json
-  exclusions      Json?
-  sensitivity     Int      @default(50)
+  patterns    Json
+  exclusions  Json?
+  sensitivity Int   @default(50)
 
-  enabled         Boolean  @default(true)
+  enabled Boolean @default(true)
 
-  status          String   @default("draft")
-  rolloutStrategy String   @default("immediate")
+  status          String @default("draft")
+  rolloutStrategy String @default("immediate")
   rolloutConfig   Json?
 
-  totalSensors    Int      @default(0)
-  deployedSensors Int      @default(0)
-  failedSensors   Int      @default(0)
+  totalSensors    Int @default(0)
+  deployedSensors Int @default(0)
+  failedSensors   Int @default(0)
 
-  triggers24h     Int      @default(0)
-  lastTriggered   DateTime?
+  triggers24h   Int       @default(0)
+  lastTriggered DateTime?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  deployedAt      DateTime?
-  createdBy       String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deployedAt DateTime?
+  createdBy  String?
 
-  tenant          Tenant   @relation("TenantRules", fields: [tenantId], references: [id], onDelete: Cascade)
-  deployments     RuleDeployment[]
+  tenant           Tenant                @relation("TenantRules", fields: [tenantId], references: [id], onDelete: Cascade)
+  deployments      RuleDeployment[]
   endpointBindings RuleEndpointBinding[]
 
   @@index([tenantId, status])
@@ -682,21 +821,21 @@ model CustomerRule {
 }
 
 model RuleDeployment {
-  id          String   @id @default(cuid())
-  ruleId      String
-  sensorId    String
-  tenantId    String
+  id       String @id @default(cuid())
+  ruleId   String
+  sensorId String
+  tenantId String
 
-  status      String   @default("pending")
-  error       String?
-  attempts    Int      @default(0)
+  status   String  @default("pending")
+  error    String?
+  attempts Int     @default(0)
 
-  queuedAt    DateTime @default(now())
+  queuedAt    DateTime  @default(now())
   startedAt   DateTime?
   completedAt DateTime?
 
-  rule        CustomerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  sensor      Sensor       @relation("SensorRuleDeployments", fields: [sensorId], references: [id], onDelete: Cascade)
+  rule   CustomerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  sensor Sensor       @relation("SensorRuleDeployments", fields: [sensorId], references: [id], onDelete: Cascade)
 
   @@unique([ruleId, sensorId])
   @@index([ruleId, status])
@@ -705,49 +844,49 @@ model RuleDeployment {
 }
 
 model RuleEndpointBinding {
-  id          String   @id @default(cuid())
-  ruleId      String
-  endpointId  String
-  tenantId    String
+  id         String @id @default(cuid())
+  ruleId     String
+  endpointId String
+  tenantId   String
 
-  bindingType String   @default("include")
+  bindingType String @default("include")
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  rule        CustomerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  endpoint    Endpoint     @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  rule     CustomerRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  endpoint Endpoint     @relation(fields: [endpointId], references: [id], onDelete: Cascade)
 
   @@unique([ruleId, endpointId])
   @@map("beam_rule_endpoint_bindings")
 }
 
 model BlockDecision {
-  id            String   @id @default(cuid())
-  tenantId      String
-  sensorId      String
+  id       String @id @default(cuid())
+  tenantId String
+  sensorId String
 
-  blockId       String   @unique
-  entityId      String
-  sourceIp      String
+  blockId  String @unique
+  entityId String
+  sourceIp String
 
-  mode          String
-  ruleId        String?
-  ruleName      String?
-  reason        String
-  riskScore     Int
+  mode      String
+  ruleId    String?
+  ruleName  String?
+  reason    String
+  riskScore Int
 
-  requestMethod String
-  requestPath   String
+  requestMethod  String
+  requestPath    String
   requestHeaders Json?
 
-  entityState   Json
-  matchedRules  Json
+  entityState  Json
+  matchedRules Json
 
-  decidedAt     DateTime
-  createdAt     DateTime @default(now())
+  decidedAt DateTime
+  createdAt DateTime @default(now())
 
-  tenant        Tenant   @relation("TenantBlockDecisions", fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor        Sensor   @relation("SensorBlockDecisions", fields: [sensorId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation("TenantBlockDecisions", fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor Sensor @relation("SensorBlockDecisions", fields: [sensorId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, decidedAt])
   @@index([entityId])

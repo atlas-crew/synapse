@@ -13,6 +13,7 @@ Welcome to the Signal Horizon Hub documentation. This directory contains detaile
 - [Architecture Patterns](./architecture.md) - System-wide design decisions and data flows.
 - [Database Schema](./database-schema.md) - PostgreSQL and ClickHouse details.
 - [Communication Protocols](./protocols.md) - Sensor-to-Hub and Hub-to-Dashboard WebSocket details.
+- [Sensor Protocol Guide](./sensor-protocol.md) - How to integrate sensors (Cutlass, etc) with Signal Horizon.
 
 ## API References
 

@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
+import type { Topology, GeometryCollection } from 'topojson-specification';
 import land from 'world-atlas/land-110m.json';
 import {
   Shield,
@@ -396,21 +397,17 @@ function AttackMap({
   const mapHeight = 520;
 
   const landPath = useMemo(() => {
-    const landFeature = feature(
-      land as unknown as { objects: { land: unknown } },
-      (land as unknown as { objects: { land: unknown } }).objects.land
-    );
-    const projection = geoNaturalEarth1().fitSize([mapWidth, mapHeight], landFeature as any);
+    const topology = land as unknown as Topology<{ land: GeometryCollection }>;
+    const landFeature = feature(topology, topology.objects.land);
+    const projection = geoNaturalEarth1().fitSize([mapWidth, mapHeight], landFeature);
     const pathGenerator = geoPath(projection);
-    return pathGenerator(landFeature as any) ?? '';
+    return pathGenerator(landFeature) ?? '';
   }, [mapHeight, mapWidth]);
 
   const projectedPoints = useMemo(() => {
-    const landFeature = feature(
-      land as unknown as { objects: { land: unknown } },
-      (land as unknown as { objects: { land: unknown } }).objects.land
-    );
-    const projection = geoNaturalEarth1().fitSize([mapWidth, mapHeight], landFeature as any);
+    const topology = land as unknown as Topology<{ land: GeometryCollection }>;
+    const landFeature = feature(topology, topology.objects.land);
+    const projection = geoNaturalEarth1().fitSize([mapWidth, mapHeight], landFeature);
 
     return points
       .map((point) => {

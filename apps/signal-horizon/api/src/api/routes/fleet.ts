@@ -23,7 +23,12 @@ import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 // ======================== Validation Schemas ========================
 
 const ListSensorsQuerySchema = z.object({
-  status: z.enum(['CONNECTED', 'DISCONNECTED', 'RECONNECTING']).optional(),
+  status: z.enum(['online', 'warning', 'offline', 'CONNECTED', 'DISCONNECTED', 'RECONNECTING']).optional(),
+  region: z.string().optional(),
+  version: z.string().optional(),
+  search: z.string().optional(),
+  sort: z.enum(['name', 'status', 'cpu', 'memory', 'rps', 'latency', 'version', 'region', 'lastHeartbeat']).optional(),
+  sortDir: z.enum(['asc', 'desc']).default('asc'),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -106,6 +111,128 @@ export function createFleetRoutes(
     }
   });
 
+  /**
+   * GET /api/v1/fleet/overview
+   * Get comprehensive fleet overview with regional breakdown
+   */
+  router.get('/overview', requireScope('fleet:read'), async (req, res) => {
+    try {
+      const auth = req.auth!;
+
+      // Get all sensors for this tenant
+      const sensors = await prisma.sensor.findMany({
+        where: { tenantId: auth.tenantId },
+        select: {
+          id: true,
+          name: true,
+          region: true,
+          version: true,
+          connectionState: true,
+          lastHeartbeat: true,
+          metadata: true,
+        },
+      });
+
+      // Calculate status counts
+      const now = Date.now();
+      const warningThreshold = 2 * 60 * 1000; // 2 minutes
+      const offlineThreshold = 5 * 60 * 1000; // 5 minutes
+
+      let onlineCount = 0;
+      let warningCount = 0;
+      let offlineCount = 0;
+
+      const regionStats: Record<string, { online: number; warning: number; offline: number }> = {};
+
+      for (const sensor of sensors) {
+        const lastHeartbeat = sensor.lastHeartbeat ? new Date(sensor.lastHeartbeat).getTime() : 0;
+        const timeSinceHeartbeat = now - lastHeartbeat;
+
+        let status: 'online' | 'warning' | 'offline';
+        if (sensor.connectionState === 'DISCONNECTED' || timeSinceHeartbeat > offlineThreshold) {
+          status = 'offline';
+          offlineCount++;
+        } else if (timeSinceHeartbeat > warningThreshold) {
+          status = 'warning';
+          warningCount++;
+        } else {
+          status = 'online';
+          onlineCount++;
+        }
+
+        // Aggregate by region
+        const region = sensor.region || 'unknown';
+        if (!regionStats[region]) {
+          regionStats[region] = { online: 0, warning: 0, offline: 0 };
+        }
+        regionStats[region][status]++;
+      }
+
+      // Get fleet metrics from aggregator if available
+      let fleetMetrics = null;
+      if (fleetAggregator) {
+        fleetMetrics = fleetAggregator.getFleetMetrics();
+      }
+
+      // Get recent alerts
+      const recentAlerts = await prisma.fleetCommand.findMany({
+        where: {
+          sensor: { tenantId: auth.tenantId },
+          status: 'failed',
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: { sensor: { select: { name: true } } },
+      });
+
+      // Get version distribution
+      const versionCounts: Record<string, number> = {};
+      for (const sensor of sensors) {
+        const version = sensor.version || 'unknown';
+        versionCounts[version] = (versionCounts[version] || 0) + 1;
+      }
+
+      res.json({
+        summary: {
+          totalSensors: sensors.length,
+          onlineCount,
+          warningCount,
+          offlineCount,
+          healthScore: sensors.length > 0 ? Math.round((onlineCount / sensors.length) * 100) : 100,
+        },
+        fleetMetrics: fleetMetrics || {
+          totalRps: 0,
+          avgLatency: 0,
+          avgCpu: 0,
+          avgMemory: 0,
+        },
+        regionDistribution: Object.entries(regionStats).map(([region, stats]) => ({
+          region,
+          ...stats,
+          total: stats.online + stats.warning + stats.offline,
+        })),
+        versionDistribution: Object.entries(versionCounts).map(([version, count]) => ({
+          version,
+          count,
+        })),
+        recentAlerts: recentAlerts.map((cmd) => ({
+          id: cmd.id,
+          sensorName: cmd.sensor.name,
+          type: cmd.commandType,
+          error: cmd.error,
+          createdAt: cmd.createdAt,
+        })),
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to get fleet overview');
+      res.status(500).json({
+        error: 'Failed to get fleet overview',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
   // ======================== Sensor Management ========================
 
   /**
@@ -118,7 +245,7 @@ export function createFleetRoutes(
     validateQuery(ListSensorsQuerySchema),
     async (req, res) => {
       try {
-        const { status, limit, offset } = req.query as unknown as z.infer<
+        const { status, region, version, search, sort, sortDir, limit, offset } = req.query as unknown as z.infer<
           typeof ListSensorsQuerySchema
         >;
         const auth = req.auth!;
@@ -127,8 +254,32 @@ export function createFleetRoutes(
           tenantId: auth.tenantId,
         };
 
-        if (status) {
+        // Handle connection state status filter
+        if (status && ['CONNECTED', 'DISCONNECTED', 'RECONNECTING'].includes(status)) {
           where.connectionState = status;
+        }
+
+        // Handle region filter
+        if (region) {
+          where.region = region;
+        }
+
+        // Handle version filter
+        if (version) {
+          where.version = version;
+        }
+
+        // Handle search filter (search by name)
+        if (search) {
+          where.name = { contains: search, mode: 'insensitive' };
+        }
+
+        // Determine sort order
+        const orderBy: Record<string, string> = {};
+        if (sort) {
+          orderBy[sort] = sortDir;
+        } else {
+          orderBy.lastHeartbeat = 'desc';
         }
 
         const [sensors, total] = await Promise.all([
@@ -136,13 +287,37 @@ export function createFleetRoutes(
             where,
             take: limit,
             skip: offset,
-            orderBy: { lastHeartbeat: 'desc' },
+            orderBy,
           }),
           prisma.sensor.count({ where }),
         ]);
 
+        // If filtering by computed status (online/warning/offline), we need to post-process
+        let filteredSensors = sensors;
+        if (status && ['online', 'warning', 'offline'].includes(status)) {
+          const now = Date.now();
+          const warningThreshold = 2 * 60 * 1000; // 2 minutes
+          const offlineThreshold = 5 * 60 * 1000; // 5 minutes
+
+          filteredSensors = sensors.filter((sensor) => {
+            const lastHeartbeat = sensor.lastHeartbeat ? new Date(sensor.lastHeartbeat).getTime() : 0;
+            const timeSinceHeartbeat = now - lastHeartbeat;
+
+            let computedStatus: 'online' | 'warning' | 'offline';
+            if (sensor.connectionState === 'DISCONNECTED' || timeSinceHeartbeat > offlineThreshold) {
+              computedStatus = 'offline';
+            } else if (timeSinceHeartbeat > warningThreshold) {
+              computedStatus = 'warning';
+            } else {
+              computedStatus = 'online';
+            }
+
+            return computedStatus === status;
+          });
+        }
+
         res.json({
-          sensors,
+          sensors: filteredSensors,
           pagination: { total, limit, offset },
         });
       } catch (error) {

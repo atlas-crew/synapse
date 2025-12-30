@@ -8,6 +8,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createServer } from 'node:http';
+import type { Socket } from 'node:net';
 import { pino } from 'pino';
 import { pinoHttp } from 'pino-http';
 import { PrismaClient } from '@prisma/client';
@@ -228,13 +229,16 @@ async function start() {
       path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
 
     const normalizedPath = normalize(pathname);
+    // Cast socket to Socket - the upgrade event provides a net.Socket typed as Duplex for compatibility
+    const netSocket = socket as Socket;
+
     if (normalizedPath === normalize(config.websocket.sensorPath)) {
-      sensorGateway.handleUpgrade(req, socket, head);
+      sensorGateway.handleUpgrade(req, netSocket, head);
       return;
     }
 
     if (normalizedPath === normalize(config.websocket.dashboardPath)) {
-      dashboardGateway.handleUpgrade(req, socket, head);
+      dashboardGateway.handleUpgrade(req, netSocket, head);
       return;
     }
 

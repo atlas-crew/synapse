@@ -115,27 +115,6 @@ export type ValidatedSensorAuthPayload = z.infer<typeof SensorAuthPayloadSchema>
 export type ValidatedSensorHeartbeatPayload = z.infer<typeof SensorHeartbeatPayloadSchema>;
 export type ValidatedSensorCommandAckPayload = z.infer<typeof SensorCommandAckPayloadSchema>;
 
-// Heartbeat payload schema
-export const SensorHeartbeatPayloadSchema = z.object({
-  timestamp: z.number(),
-  status: z.enum(['healthy', 'degraded', 'unhealthy']),
-  cpu: z.number().min(0).max(100),
-  memory: z.number().min(0).max(100),
-  disk: z.number().min(0).max(100),
-  requestsLastMinute: z.number().int().nonnegative(),
-  avgLatencyMs: z.number().nonnegative(),
-  configHash: z.string(),
-  rulesHash: z.string(),
-});
-
-// Command acknowledgment payload schema
-export const SensorCommandAckPayloadSchema = z.object({
-  commandId: z.string().min(1),
-  success: z.boolean(),
-  message: z.string().optional(),
-  result: z.record(z.unknown()).optional(),
-});
-
 // Discriminated union for all sensor messages
 export const SensorMessageSchema = z.discriminatedUnion('type', [
   z.object({
@@ -163,14 +142,6 @@ export const SensorMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('blocklist-sync'),
-  }),
-  z.object({
-    type: z.literal('heartbeat'),
-    payload: SensorHeartbeatPayloadSchema,
-  }),
-  z.object({
-    type: z.literal('command-ack'),
-    payload: SensorCommandAckPayloadSchema,
   }),
 ]);
 

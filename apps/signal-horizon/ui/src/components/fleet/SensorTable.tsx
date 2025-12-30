@@ -80,7 +80,7 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
               onClick={() => onSensorClick?.(sensor)}
             >
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-ink-primary">{sensor.name}</td>
-              <td className="px-6 py-4 whitespace-nowrap"><SensorStatusBadge status={sensor.status ?? sensor.connectionState ?? 'DISCONNECTED'} /></td>
+              <td className="px-6 py-4 whitespace-nowrap"><SensorStatusBadge status={sensor.status ?? 'DISCONNECTED'} /></td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.cpu != null ? `${sensor.cpu.toFixed(1)}%` : '—'}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.memory != null ? `${sensor.memory.toFixed(1)}%` : '—'}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.rps != null ? sensor.rps.toLocaleString() : '—'}</td>

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useWebSocket } from './useWebSocket';
 
 // Mock the Zustand store
@@ -109,18 +109,20 @@ describe('useWebSocket', () => {
     // Save original WebSocket
     originalWebSocket = globalThis.WebSocket;
 
-    // Create a mock WebSocket constructor
-    const MockWebSocketConstructor = function (this: MockWebSocket, url: string) {
-      const instance = new MockWebSocket(url);
-      mockWebSocketInstances.push(instance);
-      return instance;
-    } as unknown as typeof WebSocket;
-
-    // Copy static properties
-    MockWebSocketConstructor.CONNECTING = 0;
-    MockWebSocketConstructor.OPEN = 1;
-    MockWebSocketConstructor.CLOSING = 2;
-    MockWebSocketConstructor.CLOSED = 3;
+    // Create a mock WebSocket constructor with static properties
+    const MockWebSocketConstructor = Object.assign(
+      function (this: MockWebSocket, url: string) {
+        const instance = new MockWebSocket(url);
+        mockWebSocketInstances.push(instance);
+        return instance;
+      },
+      {
+        CONNECTING: 0 as const,
+        OPEN: 1 as const,
+        CLOSING: 2 as const,
+        CLOSED: 3 as const,
+      }
+    ) as unknown as typeof WebSocket;
 
     // Replace global WebSocket
     globalThis.WebSocket = MockWebSocketConstructor;
