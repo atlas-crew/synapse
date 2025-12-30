@@ -21,7 +21,7 @@ const mockLogger: Logger = {
   child: vi.fn().mockReturnThis(),
 } as unknown as Logger;
 
-// Factory to create mock sensor (matches Prisma Sensor model)
+// Factory to create mock sensor
 const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   id: 'sensor-1',
   name: 'Test Sensor',
@@ -31,29 +31,15 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   lastHeartbeat: new Date(), // Online: just now
   createdAt: new Date(),
   updatedAt: new Date(),
-  region: 'us-east-1',
-  version: '1.0.0',
+  deploymentName: null,
+  description: null,
+  environment: null,
+  location: null,
+  signalCount: 0,
+  uniqueSignals: 0,
   lastSignalAt: null,
-  signalsReported: 0,
-  blocksApplied: 0,
-  ipAddress: null,
-  publicIp: null,
-  privateIp: null,
-  os: null,
-  kernel: null,
-  architecture: null,
-  instanceType: null,
-  lastBoot: null,
-  uptime: null,
-  tunnelActive: false,
-  tunnelSessionId: null,
-  metadata: null,
-  registrationMethod: 'MANUAL',
-  registrationToken: null,
-  approvalStatus: 'APPROVED',
-  approvedAt: null,
-  approvedBy: null,
-  registrationTokenId: null,
+  osInfo: null,
+  capabilities: null,
   ...overrides,
 });
 

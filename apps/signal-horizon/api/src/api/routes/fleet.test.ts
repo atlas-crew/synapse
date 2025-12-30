@@ -52,7 +52,7 @@ const injectAuth = (tenantId: string, scopes: string[] = ['fleet:read', 'fleet:w
   };
 };
 
-// Factory to create mock sensor (matches Prisma Sensor model)
+// Factory to create mock sensor
 const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   id: 'sensor-1',
   name: 'Test Sensor',
@@ -62,12 +62,17 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   lastHeartbeat: new Date(),
   createdAt: new Date(),
   updatedAt: new Date(),
+  deploymentName: null,
+  description: null,
+  environment: null,
+  location: null,
   region: 'us-east-1',
   version: '1.0.0',
+  signalCount: 0,
+  uniqueSignals: 0,
   lastSignalAt: null,
-  signalsReported: 0,
-  blocksApplied: 0,
-  ipAddress: null,
+  osInfo: null,
+  capabilities: null,
   publicIp: null,
   privateIp: null,
   os: null,
@@ -77,14 +82,7 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   lastBoot: null,
   uptime: null,
   tunnelActive: false,
-  tunnelSessionId: null,
   metadata: null,
-  registrationMethod: 'MANUAL',
-  registrationToken: null,
-  approvalStatus: 'APPROVED',
-  approvedAt: null,
-  approvedBy: null,
-  registrationTokenId: null,
   ...overrides,
 });
 
