@@ -81,10 +81,11 @@ async function main() {
   });
   console.log('Created dev dashboard key: dev-dashboard-key');
 
-  // Create sensors
+  // Create sensors with predictable IDs for testing
   const sensors = await Promise.all([
     prisma.sensor.create({
       data: {
+        id: 'sensor-acme-1',  // Predictable ID for tunnel testing
         tenantId: 'tenant-acme',
         name: 'acme-sensor-prod-1',
         version: '1.0.0',
@@ -93,6 +94,7 @@ async function main() {
     }),
     prisma.sensor.create({
       data: {
+        id: 'sensor-acme-2',
         tenantId: 'tenant-acme',
         name: 'acme-sensor-prod-2',
         version: '1.0.0',
@@ -101,6 +103,7 @@ async function main() {
     }),
     prisma.sensor.create({
       data: {
+        id: 'sensor-globex-1',
         tenantId: 'tenant-globex',
         name: 'globex-sensor-1',
         version: '1.0.0',
@@ -109,6 +112,7 @@ async function main() {
     }),
     prisma.sensor.create({
       data: {
+        id: 'sensor-initech-1',
         tenantId: 'tenant-initech',
         name: 'initech-sensor-1',
         version: '0.9.0',
@@ -294,13 +298,21 @@ async function main() {
   });
 
   console.log('Seed completed successfully!');
-  console.log('\nAPI Keys for testing:');
+  console.log('\n=== TEST CREDENTIALS ===');
+  console.log('\nSensor IDs (use for tunnel testing):');
+  console.log('  sensor-acme-1     (tenant-acme)');
+  console.log('  sensor-acme-2     (tenant-acme)');
+  console.log('  sensor-globex-1   (tenant-globex)');
+  console.log('  sensor-initech-1  (tenant-initech)');
+  console.log('\nAPI Keys:');
   console.log('  Sensor Keys:');
   console.log('    Acme:    sk-acme-dev-12345');
   console.log('    Globex:  sk-globex-dev-67890');
   console.log('    Initech: sk-initech-dev-54321');
   console.log('  Dashboard Key (fleet admin):');
   console.log('    dev-dashboard-key');
+  console.log('\n=== TUNNEL TEST COMMAND ===');
+  console.log('TUNNEL_ENABLED=true TUNNEL_SENSOR_ID=sensor-acme-1 TUNNEL_API_KEY=sk-acme-dev-12345 pnpm dev');
 }
 
 main()
