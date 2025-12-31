@@ -154,12 +154,12 @@ interface PendingRequest {
 
 /** Allowed API path prefixes to prevent SSRF */
 const ALLOWED_PATH_PREFIXES = [
-  '/api/v1/status',
-  '/api/v1/entities',
-  '/api/v1/blocks',
-  '/api/v1/rules',
-  '/api/v1/actors',
-  '/api/v1/evaluate',
+  '/_sensor/status',
+  '/_sensor/entities',
+  '/_sensor/blocks',
+  '/_sensor/rules',
+  '/_sensor/actors',
+  '/_sensor/evaluate',
 ] as const;
 
 /** Sensor ID format validation */
@@ -451,7 +451,7 @@ export class SynapseProxyService extends EventEmitter {
     const status = await this.proxyRequest<SynapseStatus>(
       sensorId,
       tenantId,
-      '/api/v1/status',
+      '/_sensor/status',
       'GET'
     );
 
@@ -479,7 +479,7 @@ export class SynapseProxyService extends EventEmitter {
     const result = await this.proxyRequest<{ entities: Entity[]; total: number }>(
       sensorId,
       tenantId,
-      `/api/v1/entities?${query.toString()}`,
+      `/_sensor/entities?${query.toString()}`,
       'GET'
     );
 
@@ -494,7 +494,7 @@ export class SynapseProxyService extends EventEmitter {
     return this.proxyRequest<Entity>(
       sensorId,
       tenantId,
-      `/api/v1/entities/${entityId}`,
+      `/_sensor/entities/${entityId}`,
       'GET'
     );
   }
@@ -519,7 +519,7 @@ export class SynapseProxyService extends EventEmitter {
     const result = await this.proxyRequest<{ blocks: Block[]; total: number }>(
       sensorId,
       tenantId,
-      `/api/v1/blocks?${query.toString()}`,
+      `/_sensor/blocks?${query.toString()}`,
       'GET'
     );
 
@@ -540,7 +540,7 @@ export class SynapseProxyService extends EventEmitter {
     return this.proxyRequest<Block>(
       sensorId,
       tenantId,
-      '/api/v1/blocks',
+      '/_sensor/blocks',
       'POST',
       block
     );
@@ -555,7 +555,7 @@ export class SynapseProxyService extends EventEmitter {
     await this.proxyRequest<void>(
       sensorId,
       tenantId,
-      `/api/v1/blocks/${blockId}`,
+      `/_sensor/blocks/${blockId}`,
       'DELETE'
     );
   }
@@ -569,7 +569,7 @@ export class SynapseProxyService extends EventEmitter {
     await this.proxyRequest<void>(
       sensorId,
       tenantId,
-      `/api/v1/entities/${entityId}`,
+      `/_sensor/entities/${entityId}`,
       'DELETE'
     );
   }
@@ -595,7 +595,7 @@ export class SynapseProxyService extends EventEmitter {
     const result = await this.proxyRequest<{ rules: Rule[]; total: number }>(
       sensorId,
       tenantId,
-      `/api/v1/rules?${query.toString()}`,
+      `/_sensor/rules?${query.toString()}`,
       'GET'
     );
 
@@ -618,7 +618,7 @@ export class SynapseProxyService extends EventEmitter {
     return this.proxyRequest<Rule>(
       sensorId,
       tenantId,
-      '/api/v1/rules',
+      '/_sensor/rules',
       'POST',
       body
     );
@@ -638,7 +638,7 @@ export class SynapseProxyService extends EventEmitter {
     return this.proxyRequest<Rule>(
       sensorId,
       tenantId,
-      `/api/v1/rules/${ruleId}`,
+      `/_sensor/rules/${ruleId}`,
       'PUT',
       updates
     );
@@ -653,7 +653,7 @@ export class SynapseProxyService extends EventEmitter {
     await this.proxyRequest<void>(
       sensorId,
       tenantId,
-      `/api/v1/rules/${ruleId}`,
+      `/_sensor/rules/${ruleId}`,
       'DELETE'
     );
   }
@@ -679,7 +679,7 @@ export class SynapseProxyService extends EventEmitter {
     const result = await this.proxyRequest<{ actors: Actor[]; total: number }>(
       sensorId,
       tenantId,
-      `/api/v1/actors?${query.toString()}`,
+      `/_sensor/actors?${query.toString()}`,
       'GET'
     );
 
@@ -694,7 +694,7 @@ export class SynapseProxyService extends EventEmitter {
     return this.proxyRequest<Actor>(
       sensorId,
       tenantId,
-      `/api/v1/actors/${actorId}`,
+      `/_sensor/actors/${actorId}`,
       'GET'
     );
   }
@@ -711,7 +711,7 @@ export class SynapseProxyService extends EventEmitter {
     return this.proxyRequest<EvalResult>(
       sensorId,
       tenantId,
-      '/api/v1/evaluate',
+      '/_sensor/evaluate',
       'POST',
       request
     );
