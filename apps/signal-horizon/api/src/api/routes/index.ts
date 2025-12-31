@@ -18,11 +18,13 @@ import { createBeamRouter } from './beam/index.js';
 import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
+import { createSynapseRoutes } from './synapse.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
+import type { SynapseProxyService } from '../../services/synapse-proxy.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
@@ -30,6 +32,7 @@ export interface ApiRouterOptions {
   configManager?: ConfigManager;
   fleetCommander?: FleetCommander;
   ruleDistributor?: RuleDistributor;
+  synapseProxy?: SynapseProxyService;
 }
 
 export function createApiRouter(
@@ -77,6 +80,12 @@ export function createApiRouter(
   // Mount Onboarding routes for sensor registration
   router.use('/onboarding', createOnboardingRoutes(prisma, logger));
   logger.info('Onboarding routes mounted at /api/v1/onboarding');
+
+  // Mount Synapse proxy routes for sensor introspection
+  if (options.synapseProxy) {
+    router.use('/synapse', createSynapseRoutes(options.synapseProxy, logger));
+    logger.info('Synapse routes mounted at /api/v1/synapse');
+  }
 
   return router;
 }

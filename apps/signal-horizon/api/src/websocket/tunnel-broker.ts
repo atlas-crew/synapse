@@ -144,6 +144,9 @@ export class TunnelBroker extends EventEmitter {
     try {
       const message = this.parseMessage(data);
 
+      // Emit event for external listeners (e.g., SynapseProxyService)
+      this.emit('tunnel:message', sensorId, message);
+
       switch (message.type) {
         case 'heartbeat':
           this.handleHeartbeat(sensorId);
