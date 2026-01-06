@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" rx="6" fill="#0057B7"/>
+  <rect x="7" y="7" width="86" height="86" rx="4" fill="#001E62"/>
+  
+  <!-- Radar circles -->
+  <circle cx="50" cy="50" r="32" fill="none" stroke="white" stroke-width="2" opacity="0.3"/>
+  <circle cx="50" cy="50" r="24" fill="none" stroke="white" stroke-width="2" opacity="0.5"/>
+  <circle cx="50" cy="50" r="16" fill="none" stroke="white" stroke-width="2" opacity="0.7"/>
+  
+  <!-- Radar sweep beam -->
+  <path d="M50 50 L50 18 A32 32 0 0 1 78 34 Z" fill="#D62598" opacity="0.8"/>
+  
+  <!-- Center hub -->
+  <circle cx="50" cy="50" r="8" fill="#D62598"/>
+  <circle cx="50" cy="50" r="4" fill="white"/>
+  
+  <!-- Sensor blips -->
+  <circle cx="65" cy="35" r="3" fill="white"/>
+  <circle cx="38" cy="62" r="2.5" fill="white"/>
+  <circle cx="70" cy="55" r="2" fill="white"/>
+</svg>
