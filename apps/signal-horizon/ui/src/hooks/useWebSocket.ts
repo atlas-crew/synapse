@@ -99,7 +99,7 @@ export function useWebSocket() {
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCleaningUpRef = useRef(false);
-  const demoLoadedRef = useRef(false);
+  const lastLoadedScenarioRef = useRef<string | null>(null);
 
   // Demo mode state
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
@@ -112,48 +112,60 @@ export function useWebSocket() {
     addCampaign,
     addThreat,
     addAlert,
+    clearAlerts,
   } = useHorizonStore();
 
-  // Load demo data when demo mode is enabled
+  // Load demo data when demo mode is enabled or scenario changes
   useEffect(() => {
-    if (isDemoMode && !demoLoadedRef.current) {
-      // Load Signal Horizon demo data into the store
-      const demoData = getDemoData(scenario);
-      const { signalHorizon } = demoData;
+    if (isDemoMode) {
+      // Only reload if scenario changed or not yet loaded
+      if (lastLoadedScenarioRef.current !== scenario) {
+        console.log('[WebSocket] Loading demo data for scenario:', scenario);
 
-      // Convert SensorStats to Record<string, number> format
-      const sensorStatsRecord: Record<string, number> = {
-        CONNECTED: signalHorizon.sensorStats.CONNECTED,
-        DISCONNECTED: signalHorizon.sensorStats.DISCONNECTED,
-        WARNING: signalHorizon.sensorStats.WARNING,
-      };
+        // Load Signal Horizon demo data into the store
+        const demoData = getDemoData(scenario);
+        const { signalHorizon } = demoData;
 
-      // Set snapshot with demo data
-      setSnapshot({
-        activeCampaigns: signalHorizon.campaigns,
-        recentThreats: signalHorizon.threats,
-        sensorStats: sensorStatsRecord,
-      });
+        // Convert SensorStats to Record<string, number> format
+        const sensorStatsRecord: Record<string, number> = {
+          CONNECTED: signalHorizon.sensorStats.CONNECTED,
+          DISCONNECTED: signalHorizon.sensorStats.DISCONNECTED,
+          WARNING: signalHorizon.sensorStats.WARNING,
+        };
 
-      // Add demo alerts
-      signalHorizon.alerts.forEach((alert) => {
-        addAlert(alert);
-      });
+        // Set snapshot with demo data
+        setSnapshot({
+          activeCampaigns: signalHorizon.campaigns,
+          recentThreats: signalHorizon.threats,
+          sensorStats: sensorStatsRecord,
+        });
 
-      // Mark demo as loaded and set connected state
-      demoLoadedRef.current = true;
-      setConnectionState('connected');
-      setSessionId('demo-session');
+        // Clear existing alerts and add demo alerts
+        clearAlerts();
+        signalHorizon.alerts.forEach((alert) => {
+          addAlert(alert);
+        });
 
-      console.log('[WebSocket] Demo mode enabled - loaded demo data for scenario:', scenario);
-    } else if (!isDemoMode && demoLoadedRef.current) {
+        // Mark scenario as loaded and set connected state
+        lastLoadedScenarioRef.current = scenario;
+        setConnectionState('connected');
+        setSessionId('demo-session');
+
+        console.log('[WebSocket] Demo mode loaded:', {
+          campaigns: signalHorizon.campaigns.length,
+          threats: signalHorizon.threats.length,
+          alerts: signalHorizon.alerts.length,
+          scenario,
+        });
+      }
+    } else if (lastLoadedScenarioRef.current !== null) {
       // Demo mode was disabled - reset state
-      demoLoadedRef.current = false;
+      lastLoadedScenarioRef.current = null;
       setConnectionState('disconnected');
       setSessionId(null);
       console.log('[WebSocket] Demo mode disabled');
     }
-  }, [isDemoMode, scenario, setSnapshot, addAlert, setConnectionState, setSessionId]);
+  }, [isDemoMode, scenario, setSnapshot, addAlert, clearAlerts, setConnectionState, setSessionId]);
 
   // Cleanup helper - clears timeout and closes websocket
   const cleanup = useCallback(() => {
