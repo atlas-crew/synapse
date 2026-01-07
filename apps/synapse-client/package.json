@@ -2,7 +2,6 @@
   "name": "synapse-client",
   "version": "0.1.0",
   "description": "TypeScript client and CLI for Synapse (risk-server) API",
-  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

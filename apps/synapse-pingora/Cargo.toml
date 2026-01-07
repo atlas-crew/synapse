@@ -3,7 +3,7 @@ name = "synapse-pingora"
 version = "0.1.0"
 edition = "2021"
 description = "Synapse WAF detection engine on Cloudflare Pingora proxy framework"
-authors = ["Atlas Crew"]
+authors = ["Nicholas Ferguson"]
 license = "Apache-2.0"
 repository = "https://github.com/atlascrew/atlascrew-monorepo"
 
