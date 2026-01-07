@@ -1,14 +1,29 @@
 # Phase 1 Issues Backlog
 
 **Created**: 2026-01-06
-**Status**: Active
+**Updated**: 2026-01-07
+**Status**: Partially Resolved
 **Source**: Phase 1C Quality Gate Reviews
 
-This document tracks P2-P4 issues identified during Phase 1 quality gate reviews that are documented for future work rather than blocking the current phase.
+This document tracks issues identified during Phase 1 quality gate reviews.
 
 ---
 
-## P2 Medium Priority Issues
+## ✅ Resolved Issues (P0/P1)
+
+The following critical issues from the security audit have been addressed:
+
+| ID | Issue | File | Resolution |
+|----|-------|------|------------|
+| SEC-001 (P0) | Private key path logged | tls.rs | ✅ Logs only domain, not paths |
+| SEC-002 (P1) | Unbounded config file read | config.rs | ✅ MAX_CONFIG_SIZE limit added |
+| SEC-003 (P1) | ReDoS in hostname matching | vhost.rs | ✅ MAX_WILDCARDS=3, MAX_HOSTNAME_LEN=253 |
+| SEC-004 (P1) | Host header not sanitized | vhost.rs | ✅ sanitize_host() validates DNS chars, rejects null bytes |
+| SEC-008 (P2) | Path traversal | tls.rs | ✅ validate_path() checks for traversal |
+
+---
+
+## 🔶 Outstanding P2 Medium Priority Issues
 
 ### Performance
 
@@ -25,7 +40,6 @@ This document tracks P2-P4 issues identified during Phase 1 quality gate reviews
 | SEC-005 | TLS version validation | tls.rs | min_tls_version accepts invalid values |
 | SEC-006 | Health endpoint info leak | health.rs | Version info aids fingerprinting |
 | SEC-007 | WAF threshold bounds | site_waf.rs | Zero threshold allowed |
-| SEC-008 | Path traversal | tls.rs | Cert paths not validated for traversal |
 
 ---
 
@@ -63,19 +77,41 @@ This document tracks P2-P4 issues identified during Phase 1 quality gate reviews
 
 ---
 
-## Recommended Dependencies (Phase 2)
+## 🔴 Outstanding Performance P1 Issues
+
+From performance review - should be addressed for production scale:
+
+| ID | Issue | File | Description | Impact |
+|----|-------|------|-------------|--------|
+| PERF-P0-1 | Hot path allocation | vhost.rs | `to_lowercase()` allocates on every request | ~500ns-2μs/req |
+| PERF-P0-2 | Blocking file I/O | config.rs | `std::fs::read_to_string` blocks async | Runtime stalls |
+| PERF-P1-1 | RwLock contention | vhost.rs | Read lock per-request under high concurrency | 10-50% throughput |
+| PERF-P1-2 | Linear wildcard scan | vhost.rs | O(n) scan for wildcard matches | Scales with config |
+| PERF-P1-3 | TLS cert clone | tls.rs | ✅ Now uses Arc<CertifiedKey> | Fixed |
+
+---
+
+## Recommended Dependencies (Future)
 
 ```toml
 [dependencies]
 ahash = "0.8"           # Faster hashing (PERF-P2-2)
-arc-swap = "1.6"        # Lock-free pointer swap (P1 remediation)
-unicase = "2.7"         # Case-insensitive comparison (P0 remediation)
+arc-swap = "1.6"        # Lock-free pointer swap (PERF-P1-1)
+unicase = "2.7"         # Case-insensitive comparison (PERF-P0-1)
 ```
 
 ---
 
-## Review Schedule
+## Status Summary
 
-- **Phase 2**: Address performance P2 issues during management features implementation
-- **Phase 3**: Address UI-related backlog during dashboard integration
-- **Phase 4**: Security hardening sweep to close remaining security backlog
+| Category | Total | Resolved | Outstanding |
+|----------|-------|----------|-------------|
+| Security P0/P1 | 4 | 4 | 0 |
+| Security P2/P3 | 6 | 1 | 5 |
+| Performance P0/P1 | 5 | 1 | 4 |
+| Performance P2/P3 | 6 | 0 | 6 |
+
+**Next Actions**:
+- Performance P0/P1 issues should be addressed before high-scale production deployment
+- Security P2/P3 issues are acceptable risk for initial deployment
+- Consider ahash and arc-swap dependencies for Phase 6+ optimization
