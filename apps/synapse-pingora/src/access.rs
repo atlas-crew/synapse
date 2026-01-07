@@ -267,6 +267,11 @@ impl AccessListManager {
         self.lists.insert(hostname.to_lowercase(), list);
     }
 
+    /// Removes a site-specific access list.
+    pub fn remove_site(&mut self, hostname: &str) {
+        self.lists.remove(&hostname.to_lowercase());
+    }
+
     /// Checks if an IP is allowed for a site.
     ///
     /// Evaluation order:

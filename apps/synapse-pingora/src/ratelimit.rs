@@ -289,6 +289,13 @@ impl RateLimitManager {
             .insert(hostname.to_lowercase(), limiter);
     }
 
+    /// Removes a site-specific rate limiter.
+    pub fn remove_site(&self, hostname: &str) {
+        self.site_limiters
+            .write()
+            .remove(&hostname.to_lowercase());
+    }
+
     /// Checks if a request is allowed.
     ///
     /// # Arguments
