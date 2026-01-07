@@ -53,6 +53,9 @@ use synapse_pingora::entity::{
     EntityManager, EntityConfig, BlockDecision,
 };
 
+// Phase 3: Tarpitting (Feature Migration from risk-server)
+use synapse_pingora::tarpit::{TarpitManager, TarpitConfig};
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -497,6 +500,10 @@ pub struct RequestContext {
     entity_risk: f64,
     /// Phase 3: Entity block decision from Pingora
     entity_blocked: Option<BlockDecision>,
+    /// Phase 3: Tarpit delay applied (in milliseconds)
+    tarpit_delay_ms: u64,
+    /// Phase 3: Tarpit level reached
+    tarpit_level: u32,
 }
 
 /// Rate limiter for early_request_filter
@@ -514,6 +521,8 @@ pub struct SynapseProxy {
     rps_limit: usize,
     /// Phase 3: Thread-safe entity manager for per-IP tracking
     entity_manager: Arc<EntityManager>,
+    /// Phase 3: Tarpit manager for progressive response delays
+    tarpit_manager: Arc<TarpitManager>,
     /// Health checker for /_sensor/status endpoint
     health_checker: Arc<HealthChecker>,
     /// Metrics registry for collecting statistics
@@ -541,6 +550,7 @@ impl SynapseProxy {
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
+            tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
             health_checker,
             metrics_registry,
         }
@@ -552,6 +562,7 @@ impl SynapseProxy {
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             entity_manager: Arc::new(EntityManager::new(entity_config)),
+            tarpit_manager: Arc::new(TarpitManager::new(TarpitConfig::default())),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
         }
@@ -612,6 +623,8 @@ impl ProxyHttp for SynapseProxy {
             fingerprint: None,
             entity_risk: 0.0,
             entity_blocked: None,
+            tarpit_delay_ms: 0,
+            tarpit_level: 0,
         }
     }
 
@@ -778,11 +791,30 @@ impl ProxyHttp for SynapseProxy {
             }
         }
 
+        // Phase 3: Tarpitting - apply progressive delays to suspicious actors
+        // Apply tarpit if: (1) there were matched rules, OR (2) entity has high risk
+        let should_tarpit = !result.matched_rules.is_empty() || ctx.entity_risk >= 50.0;
+        if should_tarpit && self.tarpit_manager.is_enabled() {
+            // Use async apply_delay which applies the actual delay
+            let tarpit_decision = self.tarpit_manager.apply_delay(client_ip).await;
+
+            ctx.tarpit_delay_ms = tarpit_decision.delay_ms;
+            ctx.tarpit_level = tarpit_decision.level;
+
+            if tarpit_decision.is_tarpitted {
+                info!(
+                    "Tarpit applied: {} delay={}ms level={} hits={}",
+                    client_ip, tarpit_decision.delay_ms, tarpit_decision.level, tarpit_decision.hit_count
+                );
+            }
+        }
+
         info!(
-            "Detection complete: blocked={}, risk={}, entity_risk={:.1}, rules={:?}, time={}μs, uri={}",
+            "Detection complete: blocked={}, risk={}, entity_risk={:.1}, tarpit={}ms, rules={:?}, time={}μs, uri={}",
             result.blocked,
             result.risk_score,
             ctx.entity_risk,
+            ctx.tarpit_delay_ms,
             result.matched_rules,
             result.detection_time_us,
             uri
@@ -945,6 +977,17 @@ impl ProxyHttp for SynapseProxy {
             }
         }
 
+        // Phase 3: Add tarpit headers for dual-running validation
+        // These headers allow risk-server to compare its tarpit calculations with Pingora's
+        upstream_request.insert_header(
+            "X-Tarpit-Delay-Pingora-Ms",
+            ctx.tarpit_delay_ms.to_string(),
+        )?;
+        upstream_request.insert_header(
+            "X-Tarpit-Level-Pingora",
+            ctx.tarpit_level.to_string(),
+        )?;
+
         Ok(())
     }
 
@@ -984,7 +1027,7 @@ impl ProxyHttp for SynapseProxy {
             .unwrap_or(false);
 
         info!(
-            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} entity_risk={:.1} entity_blocked={} backend={} fp={}",
+            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} entity_risk={:.1} entity_blocked={} tarpit={}ms@L{} backend={} fp={}",
             session.req_header().method,
             session.req_header().uri,
             status,
@@ -993,6 +1036,8 @@ impl ProxyHttp for SynapseProxy {
             blocked,
             ctx.entity_risk,
             entity_blocked,
+            ctx.tarpit_delay_ms,
+            ctx.tarpit_level,
             ctx.backend_idx,
             fp_hash
         );

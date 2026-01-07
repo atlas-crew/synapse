@@ -567,19 +567,21 @@ mod tests {
         };
         let manager = TarpitManager::new(config);
 
-        // Add 3 states
+        // Add 3 states with small delays to ensure different timestamps
         manager.tarpit("1.1.1.1");
+        std::thread::sleep(std::time::Duration::from_millis(2));
         manager.tarpit("2.2.2.2");
+        std::thread::sleep(std::time::Duration::from_millis(2));
         manager.tarpit("3.3.3.3");
         assert_eq!(manager.len(), 3);
 
-        // Add 4th - should evict oldest
+        // Add 4th - should evict oldest (1.1.1.1)
         manager.tarpit("4.4.4.4");
         assert_eq!(manager.len(), 3);
 
-        // First IP should be evicted
-        assert!(manager.get_state("1.1.1.1").is_none());
-        assert!(manager.get_state("4.4.4.4").is_some());
+        // First IP should be evicted (oldest by timestamp)
+        assert!(manager.get_state("1.1.1.1").is_none(), "1.1.1.1 should have been evicted as oldest");
+        assert!(manager.get_state("4.4.4.4").is_some(), "4.4.4.4 should exist");
     }
 
     #[test]
