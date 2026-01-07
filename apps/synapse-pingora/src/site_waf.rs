@@ -5,7 +5,9 @@
 
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{info, warn};
+use ahash::RandomState;
+use chrono::Utc;
 
 /// Default block page HTML template.
 const DEFAULT_BLOCK_PAGE: &str = r#"<!DOCTYPE html>
@@ -133,9 +135,13 @@ impl Default for SiteWafConfig {
 
 impl SiteWafConfig {
     /// Creates a new WAF config with the specified threshold.
+    ///
+    /// # Security (SEC-007)
+    /// Threshold is clamped to range [1, 100] - zero is not allowed as it would
+    /// effectively bypass WAF protection.
     pub fn with_threshold(threshold: u8) -> Self {
         Self {
-            threshold: threshold.min(100),
+            threshold: threshold.clamp(1, 100),
             ..Default::default()
         }
     }
@@ -218,12 +224,24 @@ impl SiteWafConfig {
 }
 
 /// Manager for multiple site WAF configurations.
-#[derive(Debug, Default)]
+///
+/// # Performance (PERF-P2-2)
+/// Uses ahash::RandomState for 2-3x faster HashMap operations.
+#[derive(Debug)]
 pub struct SiteWafManager {
-    /// Site hostname -> WAF config mapping
-    configs: HashMap<String, SiteWafConfig>,
+    /// Site hostname -> WAF config mapping (using fast ahash)
+    configs: HashMap<String, SiteWafConfig, RandomState>,
     /// Default WAF config for unmatched sites
     default_config: SiteWafConfig,
+}
+
+impl Default for SiteWafManager {
+    fn default() -> Self {
+        Self {
+            configs: HashMap::with_hasher(RandomState::new()),
+            default_config: SiteWafConfig::default(),
+        }
+    }
 }
 
 impl SiteWafManager {
@@ -235,19 +253,53 @@ impl SiteWafManager {
     /// Creates a manager with a custom default config.
     pub fn with_default(default_config: SiteWafConfig) -> Self {
         Self {
-            configs: HashMap::new(),
+            configs: HashMap::with_hasher(RandomState::new()),
             default_config,
         }
     }
 
     /// Adds a site-specific WAF configuration.
+    ///
+    /// # Security (SEC-011)
+    /// Logs structured audit events when WAF is disabled for security compliance.
     pub fn add_site(&mut self, hostname: &str, config: SiteWafConfig) {
         let normalized = hostname.to_lowercase();
 
+        // SEC-011: Structured audit logging for WAF state changes
+        let existing_enabled = self.configs.get(&normalized).map(|c| c.enabled);
+
         if !config.enabled {
+            let audit_event = serde_json::json!({
+                "event": "waf_state_change",
+                "hostname": hostname,
+                "old_state": existing_enabled.map(|e| if e { "enabled" } else { "disabled" }),
+                "new_state": "disabled",
+                "threshold": config.threshold,
+                "timestamp": Utc::now().to_rfc3339(),
+                "severity": "warning"
+            });
             warn!(
-                "WAF disabled for site '{}' - requests will not be analyzed",
-                hostname
+                target: "security_audit",
+                "WAF disabled for site '{}' - requests will not be analyzed. Audit: {}",
+                hostname,
+                audit_event
+            );
+        } else if existing_enabled == Some(false) {
+            // WAF being re-enabled
+            let audit_event = serde_json::json!({
+                "event": "waf_state_change",
+                "hostname": hostname,
+                "old_state": "disabled",
+                "new_state": "enabled",
+                "threshold": config.threshold,
+                "timestamp": Utc::now().to_rfc3339(),
+                "severity": "info"
+            });
+            info!(
+                target: "security_audit",
+                "WAF enabled for site '{}'. Audit: {}",
+                hostname,
+                audit_event
             );
         }
 
@@ -487,6 +539,13 @@ mod tests {
     fn test_threshold_capped_at_100() {
         let config = SiteWafConfig::with_threshold(150);
         assert_eq!(config.threshold, 100);
+    }
+
+    #[test]
+    fn test_threshold_clamped_to_minimum_1() {
+        // SEC-007: Zero threshold should be clamped to 1
+        let config = SiteWafConfig::with_threshold(0);
+        assert_eq!(config.threshold, 1);
     }
 
     #[test]

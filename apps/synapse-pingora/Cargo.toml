@@ -48,6 +48,16 @@ instant = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 humantime-serde = "1.1"
 
+# Performance optimizations (Phase 1 backlog)
+ahash = "0.8"           # Fast non-cryptographic hashing (PERF-P2-2)
+arc-swap = "1.6"        # Lock-free atomic pointer swap (PERF-P1-1)
+unicase = "2.7"         # Zero-allocation case-insensitive strings (PERF-P0-1)
+
+# Security hardening (Phase 1 backlog)
+zeroize = "1.7"         # Secure memory clearing (SEC-010)
+governor = "0.6"        # Rate limiting (SEC-009)
+chrono = { version = "0.4", features = ["serde"] }  # Timestamps for audit logging
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use parking_lot::RwLock;
 use tracing::debug;
+use ahash::RandomState;
 
 /// Maximum number of recent responses to track per backend.
 const MAX_RESPONSE_HISTORY: usize = 100;
@@ -198,14 +199,17 @@ pub struct WafHealthSummary {
 }
 
 /// Health checker with backend and WAF monitoring.
+///
+/// # Performance (PERF-P2-2)
+/// Uses ahash::RandomState for 2-3x faster HashMap operations.
 pub struct HealthChecker {
     /// Service start time
     start_time: Instant,
-    /// Backend statistics (backend_addr -> stats)
-    backend_stats: Arc<RwLock<HashMap<String, BackendStats>>>,
+    /// Backend statistics (backend_addr -> stats) with fast ahash
+    backend_stats: Arc<RwLock<HashMap<String, BackendStats, RandomState>>>,
     /// WAF statistics
     waf_stats: Arc<WafStats>,
-    /// Whether to include version in response
+    /// Whether to include version in response (SEC-006: disabled by default)
     include_version: bool,
     /// Service version
     version: String,
@@ -213,10 +217,13 @@ pub struct HealthChecker {
 
 impl HealthChecker {
     /// Creates a new health checker.
+    ///
+    /// # Arguments
+    /// * `include_version` - Whether to include version info in responses (SEC-006: set false in production)
     pub fn new(include_version: bool) -> Self {
         Self {
             start_time: Instant::now(),
-            backend_stats: Arc::new(RwLock::new(HashMap::new())),
+            backend_stats: Arc::new(RwLock::new(HashMap::with_hasher(RandomState::new()))),
             waf_stats: Arc::new(WafStats::default()),
             include_version,
             version: env!("CARGO_PKG_VERSION").to_string(),

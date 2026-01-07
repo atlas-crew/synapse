@@ -9,19 +9,57 @@ use std::path::Path;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use tracing::{debug, error, info, warn};
+use ahash::RandomState;
+use zeroize::Zeroize;
 
 /// Maximum certificate file size (1MB).
 const MAX_CERT_SIZE: u64 = 1024 * 1024;
 
 /// TLS certificate and key pair.
+///
+/// # Security (SEC-010)
+/// Private key is wrapped with zeroize to clear memory on drop.
 #[derive(Clone)]
 pub struct CertifiedKey {
     /// PEM-encoded certificate chain
     pub cert_pem: Arc<String>,
-    /// PEM-encoded private key (stored securely)
-    pub key_pem: Arc<String>,
+    /// PEM-encoded private key (stored securely, zeroized on drop via Arc)
+    pub key_pem: Arc<SecureString>,
     /// Associated domain
     pub domain: String,
+}
+
+/// Wrapper for sensitive string data that zeroizes on drop.
+///
+/// # Security (SEC-010)
+/// Ensures private key material is wiped from memory when no longer needed.
+#[derive(Clone)]
+pub struct SecureString(String);
+
+impl SecureString {
+    pub fn new(s: String) -> Self {
+        Self(s)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Drop for SecureString {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl std::fmt::Debug for SecureString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[REDACTED {} bytes]", self.0.len())
+    }
 }
 
 impl std::fmt::Debug for CertifiedKey {
@@ -30,7 +68,7 @@ impl std::fmt::Debug for CertifiedKey {
         f.debug_struct("CertifiedKey")
             .field("domain", &self.domain)
             .field("cert_pem", &format!("[{} bytes]", self.cert_pem.len()))
-            .field("key_pem", &"[REDACTED]")
+            .field("key_pem", &format!("[REDACTED {} bytes]", self.key_pem.len()))
             .finish()
     }
 }
@@ -49,11 +87,14 @@ pub struct TlsCertConfig {
 }
 
 /// TLS manager with SNI-based certificate selection and hot reload.
+///
+/// # Performance (PERF-P2-2)
+/// Uses ahash::RandomState for 2-3x faster HashMap operations.
 pub struct TlsManager {
-    /// Exact domain -> certificate mapping
-    exact_certs: RwLock<HashMap<String, Arc<CertifiedKey>>>,
+    /// Exact domain -> certificate mapping (using fast ahash)
+    exact_certs: RwLock<HashMap<String, Arc<CertifiedKey>, RandomState>>,
     /// Wildcard domain -> certificate mapping (e.g., "example.com" for *.example.com)
-    wildcard_certs: RwLock<HashMap<String, Arc<CertifiedKey>>>,
+    wildcard_certs: RwLock<HashMap<String, Arc<CertifiedKey>, RandomState>>,
     /// Default certificate (if any)
     default_cert: RwLock<Option<Arc<CertifiedKey>>>,
     /// Minimum TLS version
@@ -115,8 +156,8 @@ impl TlsManager {
     /// Creates a new TLS manager with the specified minimum version.
     pub fn new(min_version: TlsVersion) -> Self {
         Self {
-            exact_certs: RwLock::new(HashMap::new()),
-            wildcard_certs: RwLock::new(HashMap::new()),
+            exact_certs: RwLock::new(HashMap::with_hasher(RandomState::new())),
+            wildcard_certs: RwLock::new(HashMap::with_hasher(RandomState::new())),
             default_cert: RwLock::new(None),
             min_version,
         }
@@ -145,9 +186,10 @@ impl TlsManager {
         let key_pem = Self::read_file_secure(&config.key_path, MAX_CERT_SIZE, "key")?;
 
         // Create certified key (Arc for efficient sharing)
+        // SEC-010: Private key wrapped in SecureString for zeroization
         let certified_key = Arc::new(CertifiedKey {
             cert_pem: Arc::new(cert_pem),
-            key_pem: Arc::new(key_pem),
+            key_pem: Arc::new(SecureString::new(key_pem)),
             domain: config.domain.clone(),
         });
 
@@ -181,9 +223,10 @@ impl TlsManager {
         let cert_pem = Self::read_file_secure(&config.cert_path, MAX_CERT_SIZE, "certificate")?;
         let key_pem = Self::read_file_secure(&config.key_path, MAX_CERT_SIZE, "key")?;
 
+        // SEC-010: Private key wrapped in SecureString for zeroization
         let certified_key = Arc::new(CertifiedKey {
             cert_pem: Arc::new(cert_pem),
-            key_pem: Arc::new(key_pem),
+            key_pem: Arc::new(SecureString::new(key_pem)),
             domain: config.domain.clone(),
         });
 
@@ -452,7 +495,7 @@ mod tests {
     fn test_debug_redacts_key() {
         let cert = CertifiedKey {
             cert_pem: Arc::new("cert content".to_string()),
-            key_pem: Arc::new("secret key".to_string()),
+            key_pem: Arc::new(SecureString::new("secret key".to_string())),
             domain: "example.com".to_string(),
         };
 
