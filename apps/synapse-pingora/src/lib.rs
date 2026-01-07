@@ -26,6 +26,11 @@
 //! - [`telemetry`] - Signal Horizon telemetry integration
 //! - [`block_page`] - Custom block page rendering
 //! - [`shutdown`] - Graceful shutdown orchestration
+//!
+//! # Phase 5 Modules (Configuration Management)
+//!
+//! - [`validation`] - Input validation for API mutations
+//! - [`config_manager`] - Centralized configuration CRUD operations
 
 // Phase 1: Core Features
 pub mod config;
@@ -48,6 +53,10 @@ pub mod dlp;
 pub mod shutdown;
 pub mod telemetry;
 
+// Phase 5: Configuration Management
+pub mod config_manager;
+pub mod validation;
+
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
 pub use health::{HealthChecker, HealthResponse, HealthStatus};
@@ -68,3 +77,11 @@ pub use body::{BodyConfig, BodyInspector, ContentType, InspectionResult};
 pub use dlp::{DlpConfig, DlpMatch, DlpScanner, PatternType, Severity as DlpSeverity};
 pub use shutdown::{ShutdownConfig, ShutdownController, ShutdownHandle, ShutdownState};
 pub use telemetry::{TelemetryClient, TelemetryConfig, TelemetryEvent};
+
+// Re-export commonly used types from Phase 5
+pub use config_manager::{
+    ConfigManager, CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
+    RateLimitRequest, AccessListRequest, MutationResult, SiteDetailResponse,
+    ConfigManagerError,
+};
+pub use validation::{ValidationError, ValidationResult};

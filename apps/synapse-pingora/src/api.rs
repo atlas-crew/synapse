@@ -4,8 +4,9 @@
 //! - Health status (`GET /health`)
 //! - Prometheus metrics (`GET /metrics`)
 //! - Configuration reload (`POST /reload`)
-//! - Site management (`GET/POST/DELETE /sites`)
+//! - Site management (`GET/POST/PUT/DELETE /sites`)
 //! - WAF statistics (`GET /waf/stats`)
+//! - Site-specific configuration (`PUT /sites/:hostname/waf`, etc.)
 
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,10 @@ use crate::metrics::MetricsRegistry;
 use crate::reload::{ConfigReloader, ReloadResult};
 use crate::ratelimit::{RateLimitManager, RateLimitStats};
 use crate::access::AccessListManager;
+use crate::config_manager::{
+    ConfigManager, CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
+    RateLimitRequest, AccessListRequest, MutationResult, SiteDetailResponse,
+};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +67,8 @@ pub struct ApiHandler {
     rate_limiter: Arc<RwLock<RateLimitManager>>,
     /// Access list manager
     access_lists: Arc<RwLock<AccessListManager>>,
+    /// Configuration manager for CRUD operations
+    config_manager: Option<Arc<ConfigManager>>,
     /// API authentication token (if enabled)
     auth_token: Option<String>,
 }
@@ -140,6 +147,88 @@ impl ApiHandler {
         })
     }
 
+    // =========================================================================
+    // CRUD Mutation Handlers (Phase 5)
+    // =========================================================================
+
+    /// Handles POST /sites request - creates a new site.
+    pub fn handle_create_site(&self, request: CreateSiteRequest) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.create_site(request) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles GET /sites/:hostname request - gets site details.
+    pub fn handle_get_site(&self, hostname: &str) -> ApiResponse<SiteDetailResponse> {
+        match &self.config_manager {
+            Some(manager) => match manager.get_site(hostname) {
+                Ok(Some(site)) => ApiResponse::ok(site),
+                Ok(None) => ApiResponse::err(format!("Site '{}' not found", hostname)),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles PUT /sites/:hostname request - updates site configuration.
+    pub fn handle_update_site(&self, hostname: &str, request: UpdateSiteRequest) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.update_site(hostname, request) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles DELETE /sites/:hostname request - deletes a site.
+    pub fn handle_delete_site(&self, hostname: &str) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.delete_site(hostname) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles PUT /sites/:hostname/waf request - updates WAF configuration.
+    pub fn handle_update_site_waf(&self, hostname: &str, request: SiteWafRequest) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.update_site_waf(hostname, request) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles PUT /sites/:hostname/rate-limit request - updates rate limit configuration.
+    pub fn handle_update_site_rate_limit(&self, hostname: &str, request: RateLimitRequest) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.update_site_rate_limit(hostname, request) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
+    /// Handles PUT /sites/:hostname/access-list request - updates access list.
+    pub fn handle_update_site_access_list(&self, hostname: &str, request: AccessListRequest) -> ApiResponse<MutationResult> {
+        match &self.config_manager {
+            Some(manager) => match manager.update_site_access_list(hostname, request) {
+                Ok(result) => ApiResponse::ok(result),
+                Err(e) => ApiResponse::err(e.to_string()),
+            },
+            None => ApiResponse::err("Configuration manager not available"),
+        }
+    }
+
     /// Validates the API authentication token.
     pub fn validate_auth(&self, token: Option<&str>) -> bool {
         match (&self.auth_token, token) {
@@ -168,6 +257,7 @@ pub struct ApiHandlerBuilder {
     reloader: Option<Arc<ConfigReloader>>,
     rate_limiter: Option<Arc<RwLock<RateLimitManager>>>,
     access_lists: Option<Arc<RwLock<AccessListManager>>>,
+    config_manager: Option<Arc<ConfigManager>>,
     auth_token: Option<String>,
 }
 
@@ -202,6 +292,12 @@ impl ApiHandlerBuilder {
         self
     }
 
+    /// Sets the configuration manager for CRUD operations.
+    pub fn config_manager(mut self, config_manager: Arc<ConfigManager>) -> Self {
+        self.config_manager = Some(config_manager);
+        self
+    }
+
     /// Sets the API authentication token.
     pub fn auth_token(mut self, token: impl Into<String>) -> Self {
         self.auth_token = Some(token.into());
@@ -220,6 +316,7 @@ impl ApiHandlerBuilder {
             access_lists: self.access_lists.unwrap_or_else(|| {
                 Arc::new(RwLock::new(AccessListManager::new()))
             }),
+            config_manager: self.config_manager,
             auth_token: self.auth_token,
         }
     }
@@ -301,6 +398,7 @@ pub struct ApiRoute {
 
 /// Available API routes.
 pub const API_ROUTES: &[ApiRoute] = &[
+    // Health and monitoring (no auth)
     ApiRoute {
         method: HttpMethod::Get,
         path: "/health",
@@ -313,18 +411,62 @@ pub const API_ROUTES: &[ApiRoute] = &[
         description: "Prometheus metrics endpoint",
         auth_required: false,
     },
+    // Configuration management (auth required)
     ApiRoute {
         method: HttpMethod::Post,
         path: "/reload",
-        description: "Reload configuration",
+        description: "Reload configuration from file",
         auth_required: true,
     },
     ApiRoute {
         method: HttpMethod::Get,
         path: "/sites",
-        description: "List configured sites",
+        description: "List all configured sites",
         auth_required: true,
     },
+    ApiRoute {
+        method: HttpMethod::Post,
+        path: "/sites",
+        description: "Create a new site",
+        auth_required: true,
+    },
+    ApiRoute {
+        method: HttpMethod::Get,
+        path: "/sites/:hostname",
+        description: "Get site details",
+        auth_required: true,
+    },
+    ApiRoute {
+        method: HttpMethod::Put,
+        path: "/sites/:hostname",
+        description: "Update site configuration",
+        auth_required: true,
+    },
+    ApiRoute {
+        method: HttpMethod::Delete,
+        path: "/sites/:hostname",
+        description: "Delete a site",
+        auth_required: true,
+    },
+    ApiRoute {
+        method: HttpMethod::Put,
+        path: "/sites/:hostname/waf",
+        description: "Update site WAF configuration",
+        auth_required: true,
+    },
+    ApiRoute {
+        method: HttpMethod::Put,
+        path: "/sites/:hostname/rate-limit",
+        description: "Update site rate limit configuration",
+        auth_required: true,
+    },
+    ApiRoute {
+        method: HttpMethod::Put,
+        path: "/sites/:hostname/access-list",
+        description: "Update site access list",
+        auth_required: true,
+    },
+    // Statistics
     ApiRoute {
         method: HttpMethod::Get,
         path: "/stats",
