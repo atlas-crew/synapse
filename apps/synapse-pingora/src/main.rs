@@ -48,6 +48,11 @@ use synapse_pingora::fingerprint::{
     ClientFingerprint, HttpHeaders, extract_client_fingerprint,
 };
 
+// Phase 3: Entity Tracking (Feature Migration from risk-server)
+use synapse_pingora::entity::{
+    EntityManager, EntityConfig, BlockDecision,
+};
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -438,6 +443,10 @@ pub struct RequestContext {
     body_bytes_seen: usize,
     /// Phase 3: Client fingerprint (JA4 + JA4H)
     fingerprint: Option<ClientFingerprint>,
+    /// Phase 3: Entity risk from Pingora entity tracking
+    entity_risk: f64,
+    /// Phase 3: Entity block decision from Pingora
+    entity_blocked: Option<BlockDecision>,
 }
 
 /// Rate limiter for early_request_filter
@@ -453,6 +462,8 @@ pub struct SynapseProxy {
     backend_counter: AtomicUsize,
     /// Requests per second limit for rate limiting
     rps_limit: usize,
+    /// Phase 3: Thread-safe entity manager for per-IP tracking
+    entity_manager: Arc<EntityManager>,
 }
 
 impl SynapseProxy {
@@ -461,6 +472,16 @@ impl SynapseProxy {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
+            entity_manager: Arc::new(EntityManager::new(EntityConfig::default())),
+        }
+    }
+
+    pub fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig) -> Self {
+        Self {
+            backends,
+            backend_counter: AtomicUsize::new(0),
+            rps_limit,
+            entity_manager: Arc::new(EntityManager::new(entity_config)),
         }
     }
 
@@ -517,6 +538,8 @@ impl ProxyHttp for SynapseProxy {
             client_ip: None,
             body_bytes_seen: 0,
             fingerprint: None,
+            entity_risk: 0.0,
+            entity_blocked: None,
         }
     }
 
@@ -606,15 +629,61 @@ impl ProxyHttp for SynapseProxy {
         );
         debug!("Combined fingerprint hash: {}", fingerprint.combined_hash);
 
-        ctx.fingerprint = Some(fingerprint);
+        ctx.fingerprint = Some(fingerprint.clone());
 
         // Run detection using the real libsynapse engine
         let result = DetectionEngine::analyze(method, &uri, &headers, client_ip);
 
+        // Phase 3: Entity tracking - touch entity and apply risk from matched rules
+        // This tracks per-IP state for risk accumulation and blocking decisions
+        if self.entity_manager.is_enabled() {
+            // Touch entity with fingerprint for correlation
+            let ja4_str = fingerprint.ja4.as_ref().map(|j| j.raw.as_str());
+            let _entity_snapshot = self.entity_manager.touch_entity_with_fingerprint(
+                client_ip,
+                ja4_str,
+                Some(&fingerprint.combined_hash),
+            );
+
+            // Apply risk from each matched rule
+            for &rule_id in &result.matched_rules {
+                // Use base risk score divided by matched rules (simplified)
+                // In production, each rule would have its own risk value
+                let base_risk = result.risk_score as f64 / result.matched_rules.len().max(1) as f64;
+                if let Some(risk_result) = self.entity_manager.apply_rule_risk(
+                    client_ip,
+                    rule_id,
+                    base_risk,
+                    true, // enable repeat offender multiplier
+                ) {
+                    ctx.entity_risk = risk_result.new_risk;
+                    debug!(
+                        "Entity {} rule {} risk: base={:.1} x{:.2} = {:.1}, total={:.1}",
+                        client_ip, rule_id, risk_result.base_risk, risk_result.multiplier,
+                        risk_result.final_risk, risk_result.new_risk
+                    );
+                }
+            }
+
+            // Check if entity should be blocked based on accumulated risk
+            let block_decision = self.entity_manager.check_block(client_ip);
+            ctx.entity_blocked = Some(block_decision.clone());
+
+            if block_decision.blocked && !result.blocked {
+                // Entity is blocked but this specific request wasn't blocked by rules
+                // Log this for dual-running validation
+                warn!(
+                    "Entity {} blocked by risk threshold: risk={:.1}, reason={:?}",
+                    client_ip, block_decision.risk, block_decision.reason
+                );
+            }
+        }
+
         info!(
-            "Detection complete: blocked={}, risk={}, rules={:?}, time={}μs, uri={}",
+            "Detection complete: blocked={}, risk={}, entity_risk={:.1}, rules={:?}, time={}μs, uri={}",
             result.blocked,
             result.risk_score,
+            ctx.entity_risk,
             result.matched_rules,
             result.detection_time_us,
             uri
@@ -760,6 +829,23 @@ impl ProxyHttp for SynapseProxy {
             upstream_request.insert_header("X-Fingerprint-Combined-Pingora", &fp.combined_hash)?;
         }
 
+        // Phase 3: Add entity tracking headers for dual-running validation
+        // These headers allow risk-server to compare its entity tracking with Pingora's
+        upstream_request.insert_header(
+            "X-Entity-Risk-Pingora",
+            format!("{:.1}", ctx.entity_risk),
+        )?;
+
+        if let Some(ref block_decision) = ctx.entity_blocked {
+            upstream_request.insert_header(
+                "X-Entity-Blocked-Pingora",
+                if block_decision.blocked { "true" } else { "false" },
+            )?;
+            if let Some(ref reason) = block_decision.reason {
+                upstream_request.insert_header("X-Entity-Block-Reason-Pingora", reason)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -791,14 +877,23 @@ impl ProxyHttp for SynapseProxy {
             .map(|fp| fp.combined_hash.as_str())
             .unwrap_or("-");
 
+        // Phase 3: Include entity tracking in access log
+        let entity_blocked = ctx
+            .entity_blocked
+            .as_ref()
+            .map(|b| b.blocked)
+            .unwrap_or(false);
+
         info!(
-            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} backend={} fp={}",
+            "ACCESS: {} {} status={} total={}μs detection={}μs blocked={} entity_risk={:.1} entity_blocked={} backend={} fp={}",
             session.req_header().method,
             session.req_header().uri,
             status,
             total_time.as_micros(),
             detection_time,
             blocked,
+            ctx.entity_risk,
+            entity_blocked,
             ctx.backend_idx,
             fp_hash
         );

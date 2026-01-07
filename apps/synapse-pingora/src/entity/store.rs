@@ -1,0 +1,899 @@
+//! Thread-safe entity store using DashMap for concurrent access.
+//!
+//! Provides lock-free entity tracking for high-RPS WAF scenarios.
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use dashmap::DashMap;
+
+/// Configuration for entity tracking.
+#[derive(Debug, Clone)]
+pub struct EntityConfig {
+    /// Maximum number of entities to track (LRU eviction when exceeded).
+    pub max_entities: usize,
+    /// Risk points decayed per minute.
+    pub risk_decay_per_minute: f64,
+    /// Risk threshold for automatic blocking.
+    pub block_threshold: f64,
+    /// Maximum number of rule matches to track per entity.
+    pub max_rules_per_entity: usize,
+    /// Whether entity tracking is enabled.
+    pub enabled: bool,
+    /// Maximum risk score (default: 100.0, extended: 1000.0).
+    pub max_risk: f64,
+    /// Maximum number of anomaly entries to track per entity.
+    pub max_anomalies_per_entity: usize,
+}
+
+impl Default for EntityConfig {
+    fn default() -> Self {
+        Self {
+            max_entities: 100_000,  // 100K for production
+            risk_decay_per_minute: 10.0,
+            block_threshold: 70.0,
+            max_rules_per_entity: 50,
+            enabled: true,
+            max_risk: 100.0,
+            max_anomalies_per_entity: 100,
+        }
+    }
+}
+
+/// Per-IP entity state.
+#[derive(Debug, Clone)]
+pub struct EntityState {
+    /// IP address (primary key).
+    pub entity_id: String,
+    /// Accumulated risk score (0.0-max_risk).
+    pub risk: f64,
+    /// First seen timestamp (ms).
+    pub first_seen_at: u64,
+    /// Last seen timestamp (ms).
+    pub last_seen_at: u64,
+    /// Last decay timestamp (ms).
+    pub last_decay_at: u64,
+    /// Total request count.
+    pub request_count: u64,
+    /// Whether this entity is blocked.
+    pub blocked: bool,
+    /// Reason for blocking.
+    pub blocked_reason: Option<String>,
+    /// Timestamp when blocked (ms).
+    pub blocked_since: Option<u64>,
+    /// Rule match history (rule_id -> history).
+    pub matches: HashMap<u32, RuleMatchHistory>,
+    /// JA4 fingerprint (if available).
+    pub ja4_fingerprint: Option<String>,
+    /// Combined fingerprint hash (for correlation).
+    pub combined_fingerprint: Option<String>,
+}
+
+impl EntityState {
+    /// Create a new entity state for the given IP.
+    pub fn new(entity_id: String, now: u64) -> Self {
+        Self {
+            entity_id,
+            risk: 0.0,
+            first_seen_at: now,
+            last_seen_at: now,
+            last_decay_at: now,
+            request_count: 0, // touch will increment to 1
+            blocked: false,
+            blocked_reason: None,
+            blocked_since: None,
+            matches: HashMap::new(),
+            ja4_fingerprint: None,
+            combined_fingerprint: None,
+        }
+    }
+
+    /// Get the repeat offender multiplier for a rule.
+    ///
+    /// Returns 1.0 if rule hasn't been matched before.
+    /// Multiplier tiers: 1→1.0, 2→1.25, 6→1.5, 11→2.0
+    #[inline]
+    pub fn get_match_multiplier(&self, rule_id: u32) -> f64 {
+        self.matches
+            .get(&rule_id)
+            .map(|h| repeat_multiplier(h.count))
+            .unwrap_or(1.0)
+    }
+
+    /// Get match count for a rule (0 if not matched).
+    #[inline]
+    pub fn get_match_count(&self, rule_id: u32) -> u32 {
+        self.matches.get(&rule_id).map(|h| h.count).unwrap_or(0)
+    }
+}
+
+/// Rule match history for a single rule.
+#[derive(Debug, Clone)]
+pub struct RuleMatchHistory {
+    /// Rule ID.
+    pub rule_id: u32,
+    /// First match timestamp (ms).
+    pub first_matched_at: u64,
+    /// Last match timestamp (ms).
+    pub last_matched_at: u64,
+    /// Match count.
+    pub count: u32,
+}
+
+impl RuleMatchHistory {
+    /// Create a new rule match history.
+    pub fn new(rule_id: u32, now: u64) -> Self {
+        Self {
+            rule_id,
+            first_matched_at: now,
+            last_matched_at: now,
+            count: 1,
+        }
+    }
+}
+
+/// Calculate repeat offender multiplier based on match count.
+///
+/// Tiered multiplier system:
+/// - 1 match: 1.0x
+/// - 2-5 matches: 1.25x
+/// - 6-10 matches: 1.5x
+/// - 11+ matches: 2.0x
+#[inline]
+pub fn repeat_multiplier(count: u32) -> f64 {
+    match count {
+        0..=1 => 1.0,
+        2..=5 => 1.25,
+        6..=10 => 1.5,
+        _ => 2.0,
+    }
+}
+
+/// Block decision result.
+#[derive(Debug, Clone)]
+pub struct BlockDecision {
+    /// Whether the entity is blocked.
+    pub blocked: bool,
+    /// Current risk score.
+    pub risk: f64,
+    /// Reason for blocking (if blocked).
+    pub reason: Option<String>,
+    /// Timestamp when blocked (if blocked).
+    pub blocked_since: Option<u64>,
+}
+
+/// Risk application result.
+#[derive(Debug, Clone)]
+pub struct RiskApplication {
+    /// New risk score after application.
+    pub new_risk: f64,
+    /// Base risk that was applied.
+    pub base_risk: f64,
+    /// Multiplier used (1.0 if disabled).
+    pub multiplier: f64,
+    /// Final risk added (base * multiplier).
+    pub final_risk: f64,
+    /// Current match count for the rule.
+    pub match_count: u32,
+}
+
+/// Thread-safe entity manager using DashMap.
+///
+/// Provides lock-free concurrent access to entity state for high-RPS WAF scenarios.
+/// Uses timestamp-based LRU eviction instead of ordered list for better concurrency.
+pub struct EntityManager {
+    /// Entities by IP address (lock-free concurrent map).
+    entities: DashMap<String, EntityState>,
+    /// Configuration (immutable after creation).
+    config: EntityConfig,
+    /// Total entities ever created (for metrics).
+    total_created: AtomicU64,
+    /// Total entities evicted (for metrics).
+    total_evicted: AtomicU64,
+    /// Touch counter for lazy operations.
+    touch_counter: AtomicU32,
+}
+
+impl Default for EntityManager {
+    fn default() -> Self {
+        Self::new(EntityConfig::default())
+    }
+}
+
+impl EntityManager {
+    /// Create a new entity manager with the given configuration.
+    pub fn new(config: EntityConfig) -> Self {
+        Self {
+            entities: DashMap::with_capacity(config.max_entities),
+            config,
+            total_created: AtomicU64::new(0),
+            total_evicted: AtomicU64::new(0),
+            touch_counter: AtomicU32::new(0),
+        }
+    }
+
+    /// Get the configuration.
+    pub fn config(&self) -> &EntityConfig {
+        &self.config
+    }
+
+    /// Check if entity tracking is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.config.enabled
+    }
+
+    /// Get the number of tracked entities.
+    pub fn len(&self) -> usize {
+        self.entities.len()
+    }
+
+    /// Check if the store is empty.
+    pub fn is_empty(&self) -> bool {
+        self.entities.is_empty()
+    }
+
+    /// Get metrics about the entity store.
+    pub fn metrics(&self) -> EntityMetrics {
+        EntityMetrics {
+            current_entities: self.entities.len(),
+            max_entities: self.config.max_entities,
+            total_created: self.total_created.load(Ordering::Relaxed),
+            total_evicted: self.total_evicted.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Touch an entity (update last_seen, apply decay, increment request_count).
+    ///
+    /// Creates the entity if it doesn't exist.
+    /// Returns a snapshot of the entity state.
+    pub fn touch_entity(&self, ip: &str) -> EntitySnapshot {
+        let now = now_ms();
+
+        // Check capacity and evict if needed (before inserting)
+        self.maybe_evict();
+
+        // Use entry API for atomic get-or-insert
+        let mut entry = self.entities.entry(ip.to_string()).or_insert_with(|| {
+            self.total_created.fetch_add(1, Ordering::Relaxed);
+            EntityState::new(ip.to_string(), now)
+        });
+
+        let entity = entry.value_mut();
+
+        // Apply decay
+        self.apply_decay(entity, now);
+
+        // Update timestamps and count
+        entity.last_seen_at = now;
+        entity.request_count += 1;
+
+        // Return snapshot
+        EntitySnapshot {
+            entity_id: entity.entity_id.clone(),
+            risk: entity.risk,
+            request_count: entity.request_count,
+            blocked: entity.blocked,
+            blocked_reason: entity.blocked_reason.clone(),
+        }
+    }
+
+    /// Touch an entity and associate fingerprint.
+    pub fn touch_entity_with_fingerprint(
+        &self,
+        ip: &str,
+        ja4: Option<&str>,
+        combined: Option<&str>,
+    ) -> EntitySnapshot {
+        let now = now_ms();
+        self.maybe_evict();
+
+        let mut entry = self.entities.entry(ip.to_string()).or_insert_with(|| {
+            self.total_created.fetch_add(1, Ordering::Relaxed);
+            EntityState::new(ip.to_string(), now)
+        });
+
+        let entity = entry.value_mut();
+        self.apply_decay(entity, now);
+
+        entity.last_seen_at = now;
+        entity.request_count += 1;
+
+        // Update fingerprints if provided
+        if let Some(ja4) = ja4 {
+            entity.ja4_fingerprint = Some(ja4.to_string());
+        }
+        if let Some(combined) = combined {
+            entity.combined_fingerprint = Some(combined.to_string());
+        }
+
+        EntitySnapshot {
+            entity_id: entity.entity_id.clone(),
+            risk: entity.risk,
+            request_count: entity.request_count,
+            blocked: entity.blocked,
+            blocked_reason: entity.blocked_reason.clone(),
+        }
+    }
+
+    /// Get an entity snapshot (read-only).
+    pub fn get_entity(&self, ip: &str) -> Option<EntitySnapshot> {
+        self.entities.get(ip).map(|entry| {
+            let entity = entry.value();
+            EntitySnapshot {
+                entity_id: entity.entity_id.clone(),
+                risk: entity.risk,
+                request_count: entity.request_count,
+                blocked: entity.blocked,
+                blocked_reason: entity.blocked_reason.clone(),
+            }
+        })
+    }
+
+    /// Apply risk from a matched rule.
+    ///
+    /// Returns the risk application result, or None if entity doesn't exist.
+    pub fn apply_rule_risk(
+        &self,
+        ip: &str,
+        rule_id: u32,
+        base_risk: f64,
+        enable_multiplier: bool,
+    ) -> Option<RiskApplication> {
+        let now = now_ms();
+        let max_risk = self.config.max_risk;
+        let max_rules = self.config.max_rules_per_entity;
+
+        self.entities.get_mut(ip).map(|mut entry| {
+            let entity = entry.value_mut();
+
+            // Apply decay first
+            self.apply_decay(entity, now);
+
+            // Calculate multiplier based on current count (before incrementing)
+            let current_count = entity.get_match_count(rule_id);
+            let multiplier = if enable_multiplier {
+                repeat_multiplier(current_count + 1)
+            } else {
+                1.0
+            };
+
+            let final_risk = base_risk * multiplier;
+
+            // Add risk (clamped to max_risk)
+            entity.risk = (entity.risk + final_risk.max(0.0)).min(max_risk);
+
+            // Update rule match history
+            if let Some(history) = entity.matches.get_mut(&rule_id) {
+                history.last_matched_at = now;
+                history.count += 1;
+            } else {
+                entity.matches.insert(rule_id, RuleMatchHistory::new(rule_id, now));
+            }
+
+            // Trim rule history if needed
+            if entity.matches.len() > max_rules {
+                Self::trim_rule_history(&mut entity.matches, max_rules);
+            }
+
+            RiskApplication {
+                new_risk: entity.risk,
+                base_risk,
+                multiplier,
+                final_risk,
+                match_count: current_count + 1,
+            }
+        })
+    }
+
+    /// Apply external risk (e.g., from anomaly detection).
+    ///
+    /// Creates the entity if it doesn't exist.
+    pub fn apply_external_risk(&self, ip: &str, risk: f64, _reason: &str) -> f64 {
+        let now = now_ms();
+        let max_risk = self.config.max_risk;
+        self.maybe_evict();
+
+        let mut entry = self.entities.entry(ip.to_string()).or_insert_with(|| {
+            self.total_created.fetch_add(1, Ordering::Relaxed);
+            EntityState::new(ip.to_string(), now)
+        });
+
+        let entity = entry.value_mut();
+        self.apply_decay(entity, now);
+
+        entity.last_seen_at = now;
+        entity.request_count += 1;
+        entity.risk = (entity.risk + risk.max(0.0)).min(max_risk);
+
+        entity.risk
+    }
+
+    /// Check if an entity should be blocked based on risk threshold.
+    ///
+    /// Returns the block decision.
+    pub fn check_block(&self, ip: &str) -> BlockDecision {
+        let now = now_ms();
+        let threshold = self.config.block_threshold;
+
+        match self.entities.get_mut(ip) {
+            Some(mut entry) => {
+                let entity = entry.value_mut();
+                self.apply_decay(entity, now);
+
+                if entity.risk >= threshold {
+                    if !entity.blocked {
+                        entity.blocked = true;
+                        entity.blocked_since = Some(now);
+                    }
+                    entity.blocked_reason = Some(format!(
+                        "Risk {:.1} >= threshold {:.1}",
+                        entity.risk, threshold
+                    ));
+                    BlockDecision {
+                        blocked: true,
+                        risk: entity.risk,
+                        reason: entity.blocked_reason.clone(),
+                        blocked_since: entity.blocked_since,
+                    }
+                } else {
+                    // Below threshold - clear block status
+                    entity.blocked = false;
+                    entity.blocked_reason = None;
+                    entity.blocked_since = None;
+                    BlockDecision {
+                        blocked: false,
+                        risk: entity.risk,
+                        reason: None,
+                        blocked_since: None,
+                    }
+                }
+            }
+            None => BlockDecision {
+                blocked: false,
+                risk: 0.0,
+                reason: None,
+                blocked_since: None,
+            },
+        }
+    }
+
+    /// Manually block an entity.
+    pub fn manual_block(&self, ip: &str, reason: &str) -> bool {
+        let now = now_ms();
+        match self.entities.get_mut(ip) {
+            Some(mut entry) => {
+                let entity = entry.value_mut();
+                entity.blocked = true;
+                entity.blocked_reason = Some(reason.to_string());
+                if entity.blocked_since.is_none() {
+                    entity.blocked_since = Some(now);
+                }
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Release an entity (reset risk and unblock).
+    pub fn release_entity(&self, ip: &str) -> bool {
+        match self.entities.get_mut(ip) {
+            Some(mut entry) => {
+                let entity = entry.value_mut();
+                entity.risk = 0.0;
+                entity.blocked = false;
+                entity.blocked_reason = None;
+                entity.blocked_since = None;
+                entity.matches.clear();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Release all entities (reset risk and unblock all).
+    ///
+    /// Returns the number of entities released.
+    pub fn release_all(&self) -> usize {
+        let mut count = 0;
+        for mut entry in self.entities.iter_mut() {
+            let entity = entry.value_mut();
+            if entity.blocked || entity.risk > 0.0 {
+                entity.risk = 0.0;
+                entity.blocked = false;
+                entity.blocked_reason = None;
+                entity.blocked_since = None;
+                entity.matches.clear();
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Clear all entities.
+    pub fn clear(&self) {
+        self.entities.clear();
+    }
+
+    /// List all entity IDs.
+    pub fn list_entity_ids(&self) -> Vec<String> {
+        self.entities.iter().map(|e| e.key().clone()).collect()
+    }
+
+    // Internal helpers
+
+    /// Apply decay to an entity based on elapsed time.
+    fn apply_decay(&self, entity: &mut EntityState, now: u64) {
+        if entity.risk <= 0.0 {
+            entity.last_decay_at = now;
+            return;
+        }
+
+        let elapsed_ms = now.saturating_sub(entity.last_decay_at);
+        // Skip decay for short intervals (< 1 second) - optimization
+        if elapsed_ms < 1000 {
+            return;
+        }
+
+        // decay_per_minute / 60000 = decay per ms
+        let decay_per_ms = self.config.risk_decay_per_minute / 60_000.0;
+        let decay_amount = decay_per_ms * elapsed_ms as f64;
+
+        entity.risk = (entity.risk - decay_amount).max(0.0);
+        entity.last_decay_at = now;
+    }
+
+    /// Maybe evict oldest entities if at capacity.
+    ///
+    /// Uses lazy eviction: only check every 100th touch to avoid overhead.
+    fn maybe_evict(&self) {
+        // Lazy check - only evaluate every 100th operation
+        let count = self.touch_counter.fetch_add(1, Ordering::Relaxed);
+        if count % 100 != 0 {
+            return;
+        }
+
+        // Check if we need to evict
+        if self.entities.len() < self.config.max_entities {
+            return;
+        }
+
+        // Evict oldest 1% of entities (batch eviction for efficiency)
+        let evict_count = (self.config.max_entities / 100).max(1);
+        self.evict_oldest(evict_count);
+    }
+
+    /// Evict the N oldest entities by last_seen_at timestamp.
+    fn evict_oldest(&self, count: usize) {
+        // Collect (ip, last_seen_at) pairs
+        let mut candidates: Vec<(String, u64)> = self.entities
+            .iter()
+            .map(|e| (e.key().clone(), e.value().last_seen_at))
+            .collect();
+
+        // Sort by last_seen_at (oldest first)
+        candidates.sort_by_key(|(_, ts)| *ts);
+
+        // Evict oldest N
+        for (ip, _) in candidates.into_iter().take(count) {
+            if self.entities.remove(&ip).is_some() {
+                self.total_evicted.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Trim rule history to max size, keeping most recent.
+    fn trim_rule_history(matches: &mut HashMap<u32, RuleMatchHistory>, max_rules: usize) {
+        if matches.len() <= max_rules {
+            return;
+        }
+
+        // Find oldest entries to remove
+        let mut entries: Vec<_> = matches.iter().collect();
+        entries.sort_by_key(|(_, h)| h.last_matched_at);
+
+        let to_remove = matches.len() - max_rules;
+        let remove_ids: Vec<u32> = entries
+            .iter()
+            .take(to_remove)
+            .map(|(id, _)| **id)
+            .collect();
+
+        for id in remove_ids {
+            matches.remove(&id);
+        }
+    }
+}
+
+/// Snapshot of entity state (for returning across lock boundaries).
+#[derive(Debug, Clone)]
+pub struct EntitySnapshot {
+    pub entity_id: String,
+    pub risk: f64,
+    pub request_count: u64,
+    pub blocked: bool,
+    pub blocked_reason: Option<String>,
+}
+
+/// Entity store metrics.
+#[derive(Debug, Clone)]
+pub struct EntityMetrics {
+    pub current_entities: usize,
+    pub max_entities: usize,
+    pub total_created: u64,
+    pub total_evicted: u64,
+}
+
+/// Get current time in milliseconds since Unix epoch.
+#[inline]
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_entity_creation() {
+        let manager = EntityManager::default();
+        let snapshot = manager.touch_entity("192.168.1.1");
+
+        assert_eq!(snapshot.entity_id, "192.168.1.1");
+        assert_eq!(snapshot.risk, 0.0);
+        assert_eq!(snapshot.request_count, 1);
+        assert!(!snapshot.blocked);
+    }
+
+    #[test]
+    fn test_entity_touch_increments_count() {
+        let manager = EntityManager::default();
+        manager.touch_entity("192.168.1.1");
+        manager.touch_entity("192.168.1.1");
+        let snapshot = manager.touch_entity("192.168.1.1");
+
+        assert_eq!(snapshot.request_count, 3);
+    }
+
+    #[test]
+    fn test_apply_rule_risk() {
+        let manager = EntityManager::default();
+        manager.touch_entity("192.168.1.1");
+
+        let result = manager.apply_rule_risk("192.168.1.1", 100, 10.0, false);
+        assert!(result.is_some());
+
+        let result = result.unwrap();
+        assert!(result.new_risk >= 10.0);
+        assert_eq!(result.base_risk, 10.0);
+        assert_eq!(result.multiplier, 1.0);
+        assert_eq!(result.match_count, 1);
+    }
+
+    #[test]
+    fn test_apply_rule_risk_with_multiplier() {
+        let manager = EntityManager::default();
+        manager.touch_entity("192.168.1.1");
+
+        // First match: 1.0x
+        let r1 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        assert_eq!(r1.multiplier, 1.0);
+        assert_eq!(r1.match_count, 1);
+
+        // Second match: 1.25x
+        let r2 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        assert_eq!(r2.multiplier, 1.25);
+        assert_eq!(r2.match_count, 2);
+
+        // After 6 matches: 1.5x
+        for _ in 0..4 {
+            manager.apply_rule_risk("192.168.1.1", 100, 10.0, true);
+        }
+        let r6 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        assert_eq!(r6.multiplier, 1.5);
+
+        // After 11 matches: 2.0x
+        for _ in 0..4 {
+            manager.apply_rule_risk("192.168.1.1", 100, 10.0, true);
+        }
+        let r11 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        assert_eq!(r11.multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_risk_capping() {
+        let manager = EntityManager::default();
+        manager.touch_entity("192.168.1.1");
+
+        // Apply more than 100 risk
+        for _ in 0..15 {
+            manager.apply_rule_risk("192.168.1.1", 100, 10.0, false);
+        }
+
+        let snapshot = manager.get_entity("192.168.1.1").unwrap();
+        assert!(snapshot.risk <= 100.0);
+    }
+
+    #[test]
+    fn test_risk_blocking() {
+        let config = EntityConfig {
+            block_threshold: 50.0,
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+        manager.touch_entity("192.168.1.1");
+
+        // Apply 60 risk
+        manager.apply_rule_risk("192.168.1.1", 100, 60.0, false);
+
+        let decision = manager.check_block("192.168.1.1");
+        assert!(decision.blocked);
+        assert!(decision.reason.is_some());
+        assert!(decision.reason.unwrap().contains("60.0"));
+    }
+
+    #[test]
+    fn test_release_entity() {
+        let manager = EntityManager::default();
+        manager.touch_entity("192.168.1.1");
+        manager.apply_rule_risk("192.168.1.1", 100, 50.0, false);
+        manager.manual_block("192.168.1.1", "test");
+
+        let snapshot = manager.get_entity("192.168.1.1").unwrap();
+        assert!(snapshot.blocked);
+        assert!(snapshot.risk > 0.0);
+
+        manager.release_entity("192.168.1.1");
+
+        let snapshot = manager.get_entity("192.168.1.1").unwrap();
+        assert!(!snapshot.blocked);
+        assert_eq!(snapshot.risk, 0.0);
+    }
+
+    #[test]
+    fn test_lru_eviction() {
+        // Use max_entities=1000 to test eviction behavior
+        // Eviction happens every 100 touches, evicting 1% (10 entities) each time
+        let config = EntityConfig {
+            max_entities: 1000,
+            ..Default::default()
+        };
+        let manager = EntityManager::new(config);
+
+        // Add 1500 unique entities
+        // Eviction starts after touch 1000 when we exceed capacity
+        // With 500 over-capacity touches, we get ~5 eviction cycles (at 1001, 1101, 1201, 1301, 1401)
+        // Each cycle evicts 10 entities, so ~50 total evicted
+        for i in 0..1500 {
+            manager.touch_entity(&format!("{}.{}.{}.{}", i, i, i, i));
+        }
+
+        let after_loading = manager.len();
+
+        // Expected: 1500 created - ~50 evicted = ~1450 remaining
+        // Lazy eviction doesn't aggressively enforce the limit - it slowly brings it down
+        assert!(
+            after_loading <= 1500,
+            "Should not have more than created: {}",
+            after_loading
+        );
+
+        // Verify some eviction occurred (should be around 50)
+        let metrics = manager.metrics();
+        assert!(
+            metrics.total_evicted > 0,
+            "Should have evicted some entities: {}",
+            metrics.total_evicted
+        );
+
+        // Now force more eviction cycles to get closer to max_entities
+        // Each 100 touches triggers an eviction check
+        for _ in 0..500 {
+            manager.touch_entity("force.eviction");
+        }
+
+        let after_force = manager.len();
+
+        // After 500 more touches (5 more eviction cycles), should be closer to limit
+        assert!(
+            after_force < after_loading,
+            "Additional touches should trigger more eviction: before={}, after={}",
+            after_loading, after_force
+        );
+
+        println!(
+            "LRU eviction test: created={}, evicted={}, after_load={}, after_force={}",
+            metrics.total_created, manager.metrics().total_evicted, after_loading, after_force
+        );
+    }
+
+    #[test]
+    fn test_concurrent_access() {
+        let manager = Arc::new(EntityManager::default());
+        let mut handles = vec![];
+
+        // Spawn 10 threads, each touching entities 100 times
+        for thread_id in 0..10 {
+            let manager = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                for i in 0..100 {
+                    let ip = format!("192.168.{}.{}", thread_id, i % 10);
+                    manager.touch_entity(&ip);
+                    manager.apply_rule_risk(&ip, 100, 1.0, true);
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify no panics and reasonable state
+        assert!(manager.len() > 0);
+        assert!(manager.len() <= 100); // 10 threads * 10 unique IPs each
+    }
+
+    #[test]
+    fn test_fingerprint_association() {
+        let manager = EntityManager::default();
+
+        manager.touch_entity_with_fingerprint(
+            "192.168.1.1",
+            Some("t13d1516h2_abc123_def456"),
+            Some("combined_hash_xyz"),
+        );
+
+        // Fingerprints are stored but not in snapshot (kept internal)
+        let snapshot = manager.get_entity("192.168.1.1").unwrap();
+        assert_eq!(snapshot.entity_id, "192.168.1.1");
+        assert_eq!(snapshot.request_count, 1);
+    }
+
+    #[test]
+    fn test_release_all() {
+        let manager = EntityManager::default();
+
+        manager.touch_entity("1.1.1.1");
+        manager.touch_entity("2.2.2.2");
+        manager.apply_rule_risk("1.1.1.1", 100, 50.0, false);
+        manager.apply_rule_risk("2.2.2.2", 100, 30.0, false);
+
+        let count = manager.release_all();
+        assert_eq!(count, 2);
+
+        assert_eq!(manager.get_entity("1.1.1.1").unwrap().risk, 0.0);
+        assert_eq!(manager.get_entity("2.2.2.2").unwrap().risk, 0.0);
+    }
+
+    #[test]
+    fn test_metrics() {
+        let manager = EntityManager::default();
+
+        for i in 0..5 {
+            manager.touch_entity(&format!("192.168.1.{}", i));
+        }
+
+        let metrics = manager.metrics();
+        assert_eq!(metrics.current_entities, 5);
+        assert_eq!(metrics.max_entities, 100_000);
+        assert_eq!(metrics.total_created, 5);
+        assert_eq!(metrics.total_evicted, 0);
+    }
+
+    #[test]
+    fn test_repeat_multiplier() {
+        assert_eq!(repeat_multiplier(0), 1.0);
+        assert_eq!(repeat_multiplier(1), 1.0);
+        assert_eq!(repeat_multiplier(2), 1.25);
+        assert_eq!(repeat_multiplier(5), 1.25);
+        assert_eq!(repeat_multiplier(6), 1.5);
+        assert_eq!(repeat_multiplier(10), 1.5);
+        assert_eq!(repeat_multiplier(11), 2.0);
+        assert_eq!(repeat_multiplier(100), 2.0);
+    }
+}

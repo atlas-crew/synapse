@@ -22,6 +22,7 @@
 //! # Phase 3 Modules (Feature Migration from risk-server)
 //!
 //! - [`fingerprint`] - JA4/JA4H TLS and HTTP fingerprinting
+//! - [`entity`] - Per-IP entity tracking with risk scoring and decay
 
 // Phase 1: Core Features
 pub mod config;
@@ -40,6 +41,7 @@ pub mod reload;
 
 // Phase 3: Feature Migration from risk-server
 pub mod fingerprint;
+pub mod entity;
 
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
@@ -62,4 +64,8 @@ pub use fingerprint::{
     HttpHeaders,
     parse_ja4_from_header, generate_ja4h, extract_client_fingerprint,
     analyze_ja4, analyze_ja4h,
+};
+pub use entity::{
+    EntityConfig, EntityState, EntityManager,
+    BlockDecision, RiskApplication, EntitySnapshot, EntityMetrics,
 };

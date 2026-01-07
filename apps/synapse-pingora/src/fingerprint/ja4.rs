@@ -1046,7 +1046,13 @@ mod tests {
         }
 
         let elapsed = start.elapsed();
-        // Should complete 10K generations in under 200ms (20μs each)
-        assert!(elapsed.as_millis() < 200, "JA4H generation too slow: {:?}", elapsed);
+        // Should complete 10K generations in under 200ms (20μs each) in release mode
+        // Debug mode is ~5x slower, so allow 1000ms
+        #[cfg(debug_assertions)]
+        let max_time_ms = 1000;
+        #[cfg(not(debug_assertions))]
+        let max_time_ms = 200;
+
+        assert!(elapsed.as_millis() < max_time_ms, "JA4H generation too slow: {:?}", elapsed);
     }
 }
