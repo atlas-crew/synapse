@@ -141,26 +141,25 @@ struct Pattern {
 // Validators
 // ============================================================================
 
-/// Validate credit card using Luhn algorithm
+/// Validate credit card using Luhn algorithm (zero-allocation implementation)
 pub fn validate_credit_card(number: &str) -> bool {
-    // Remove all non-digits
-    let digits: String = number.chars().filter(|c| c.is_ascii_digit()).collect();
-
-    if digits.len() < 13 || digits.len() > 19 {
-        return false;
-    }
-
-    // Reject all zeros
-    if digits.chars().all(|c| c == '0') {
-        return false;
-    }
-
-    let mut sum = 0i32;
+    let mut sum = 0u32;
+    let mut digit_count = 0usize;
+    let mut has_nonzero = false;
     let mut is_even = false;
 
-    // Loop through digits from right to left
-    for c in digits.chars().rev() {
-        let mut digit = c.to_digit(10).unwrap_or(0) as i32;
+    // Process digits from right to left without allocation
+    for c in number.chars().rev() {
+        if !c.is_ascii_digit() {
+            continue;
+        }
+
+        let mut digit = c.to_digit(10).unwrap_or(0);
+        digit_count += 1;
+
+        if digit != 0 {
+            has_nonzero = true;
+        }
 
         if is_even {
             digit *= 2;
@@ -173,7 +172,8 @@ pub fn validate_credit_card(number: &str) -> bool {
         is_even = !is_even;
     }
 
-    sum % 10 == 0
+    // Valid card: 13-19 digits, not all zeros, Luhn checksum passes
+    digit_count >= 13 && digit_count <= 19 && has_nonzero && sum % 10 == 0
 }
 
 /// Validate SSN format
@@ -255,7 +255,26 @@ pub fn validate_phone(phone: &str) -> bool {
     true
 }
 
-/// Validate IBAN format using mod-97 check
+/// Country-specific IBAN lengths (ISO 13616)
+const IBAN_LENGTHS: &[(&str, usize)] = &[
+    ("AL", 28), ("AD", 24), ("AT", 20), ("AZ", 28), ("BH", 22),
+    ("BY", 28), ("BE", 16), ("BA", 20), ("BR", 29), ("BG", 22),
+    ("CR", 22), ("HR", 21), ("CY", 28), ("CZ", 24), ("DK", 18),
+    ("DO", 28), ("TL", 23), ("EE", 20), ("FO", 18), ("FI", 18),
+    ("FR", 27), ("GE", 22), ("DE", 22), ("GI", 23), ("GR", 27),
+    ("GL", 18), ("GT", 28), ("HU", 28), ("IS", 26), ("IQ", 23),
+    ("IE", 22), ("IL", 23), ("IT", 27), ("JO", 30), ("KZ", 20),
+    ("XK", 20), ("KW", 30), ("LV", 21), ("LB", 28), ("LI", 21),
+    ("LT", 20), ("LU", 20), ("MK", 19), ("MT", 31), ("MR", 27),
+    ("MU", 30), ("MC", 27), ("MD", 24), ("ME", 22), ("NL", 18),
+    ("NO", 15), ("PK", 24), ("PS", 29), ("PL", 28), ("PT", 25),
+    ("QA", 29), ("RO", 24), ("SM", 27), ("SA", 24), ("RS", 22),
+    ("SC", 31), ("SK", 24), ("SI", 19), ("ES", 24), ("SE", 24),
+    ("CH", 21), ("TN", 24), ("TR", 26), ("UA", 29), ("AE", 23),
+    ("GB", 22), ("VA", 22), ("VG", 24),
+];
+
+/// Validate IBAN format using mod-97 check with country-specific length validation
 pub fn validate_iban(iban: &str) -> bool {
     // Remove spaces and convert to uppercase
     let cleaned: String = iban
@@ -279,6 +298,14 @@ pub fn validate_iban(iban: &str) -> bool {
     }
     if !chars[2].is_ascii_digit() || !chars[3].is_ascii_digit() {
         return false;
+    }
+
+    // Validate country-specific length if known
+    let country_code: String = chars[0..2].iter().collect();
+    if let Some(&(_, expected_len)) = IBAN_LENGTHS.iter().find(|(c, _)| *c == country_code) {
+        if cleaned.len() != expected_len {
+            return false;
+        }
     }
 
     // Move first 4 characters to end
@@ -337,7 +364,8 @@ lazy_static! {
     // API Keys
     static ref RE_GENERIC_API_KEY: Regex = Regex::new(r"(?i)\b(?:api[_-]?key|apikey)[\s]*[=:]\s*['\x22]?([a-zA-Z0-9_-]{20,})['\x22]?").unwrap();
     static ref RE_GITHUB_TOKEN: Regex = Regex::new(r"\b(gh[ps]_[a-zA-Z0-9]{36,})\b").unwrap();
-    static ref RE_STRIPE_KEY: Regex = Regex::new(r"\b((?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,})\b").unwrap();
+    static ref RE_GITHUB_FINE_GRAINED_PAT: Regex = Regex::new(r"\b(github_pat_[a-zA-Z0-9_]{22,})\b").unwrap();
+    static ref RE_STRIPE_KEY: Regex = Regex::new(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})\b").unwrap();
     static ref RE_GOOGLE_API_KEY: Regex = Regex::new(r"AIza[a-zA-Z0-9_-]{35}").unwrap();
 
     // Passwords
@@ -387,6 +415,7 @@ lazy_static! {
         // API Keys
         Pattern { name: "Generic API Key", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::High, regex: &RE_GENERIC_API_KEY, validator: None },
         Pattern { name: "GitHub Token", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::Critical, regex: &RE_GITHUB_TOKEN, validator: None },
+        Pattern { name: "GitHub Fine-grained PAT", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::Critical, regex: &RE_GITHUB_FINE_GRAINED_PAT, validator: None },
         Pattern { name: "Stripe API Key", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::Critical, regex: &RE_STRIPE_KEY, validator: None },
         Pattern { name: "Google API Key", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::High, regex: &RE_GOOGLE_API_KEY, validator: None },
 
@@ -430,7 +459,16 @@ impl Default for DlpScanner {
 }
 
 impl DlpScanner {
+    /// Create a new DLP scanner with the given configuration.
+    ///
+    /// This validates all regex patterns at construction time to fail fast
+    /// if any pattern is invalid. Panics if pattern compilation fails.
     pub fn new(config: DlpConfig) -> Self {
+        // Force lazy_static initialization to validate all patterns at construction time.
+        // This ensures we fail fast rather than on first scan if a pattern is invalid.
+        let pattern_count = PATTERNS.len();
+        log::debug!("DLP scanner initialized with {} patterns", pattern_count);
+
         Self {
             config,
             total_scans: AtomicU64::new(0),
@@ -768,7 +806,7 @@ mod tests {
     fn test_scanner_creation() {
         let scanner = DlpScanner::default();
         assert!(scanner.is_enabled());
-        assert_eq!(scanner.pattern_count(), 24); // 23 base + 1 AWS Session Token
+        assert_eq!(scanner.pattern_count(), 25); // 24 base + 1 GitHub Fine-grained PAT
     }
 
     #[test]
@@ -842,6 +880,33 @@ mod tests {
         assert!(result.has_matches);
         let gh_match = result.matches.iter().find(|m| m.pattern_name == "GitHub Token");
         assert!(gh_match.is_some());
+    }
+
+    #[test]
+    fn test_scan_github_fine_grained_pat() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("GITHUB_TOKEN=github_pat_11ABCDEFG0xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+
+        assert!(result.has_matches);
+        let gh_match = result.matches.iter().find(|m| m.pattern_name == "GitHub Fine-grained PAT");
+        assert!(gh_match.is_some(), "Should detect GitHub fine-grained PAT");
+    }
+
+    #[test]
+    fn test_scan_stripe_keys() {
+        let scanner = DlpScanner::default();
+
+        // Secret key
+        let result = scanner.scan("STRIPE_SECRET_KEY=sk_live_51ABCdefGHI123456789012345");
+        assert!(result.has_matches, "Should detect Stripe secret key");
+
+        // Publishable key
+        let result = scanner.scan("STRIPE_PK=pk_test_51ABCdefGHI123456789012345");
+        assert!(result.has_matches, "Should detect Stripe publishable key");
+
+        // Restricted key (new)
+        let result = scanner.scan("STRIPE_RK=rk_live_51ABCdefGHI123456789012345");
+        assert!(result.has_matches, "Should detect Stripe restricted key");
     }
 
     #[test]
