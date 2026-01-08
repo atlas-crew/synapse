@@ -28,6 +28,7 @@
 
 // Phase 1: Core Features
 pub mod config;
+pub mod config_manager;
 pub mod health;
 pub mod site_waf;
 pub mod tls;
