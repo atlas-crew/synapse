@@ -1,0 +1,853 @@
+//! DLP Scanner Implementation
+//!
+//! Thread-safe scanner for detecting sensitive data in response bodies.
+
+use lazy_static::lazy_static;
+use regex::Regex;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+
+/// Sensitive data type categories
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SensitiveDataType {
+    CreditCard,
+    Ssn,
+    Email,
+    Phone,
+    ApiKey,
+    Password,
+    Iban,
+    IpAddress,
+    AwsKey,
+    PrivateKey,
+    Jwt,
+    MedicalRecord,
+}
+
+impl SensitiveDataType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::CreditCard => "credit_card",
+            Self::Ssn => "ssn",
+            Self::Email => "email",
+            Self::Phone => "phone",
+            Self::ApiKey => "api_key",
+            Self::Password => "password",
+            Self::Iban => "iban",
+            Self::IpAddress => "ip_address",
+            Self::AwsKey => "aws_key",
+            Self::PrivateKey => "private_key",
+            Self::Jwt => "jwt",
+            Self::MedicalRecord => "medical_record",
+        }
+    }
+}
+
+/// Pattern severity levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PatternSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl PatternSeverity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Critical => "critical",
+        }
+    }
+}
+
+/// A matched sensitive data pattern
+#[derive(Debug, Clone)]
+pub struct DlpMatch {
+    pub pattern_name: String,
+    pub data_type: SensitiveDataType,
+    pub severity: PatternSeverity,
+    pub masked_value: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// Result of a DLP scan
+#[derive(Debug, Clone)]
+pub struct ScanResult {
+    pub scanned: bool,
+    pub has_matches: bool,
+    pub matches: Vec<DlpMatch>,
+    pub match_count: usize,
+    pub scan_time_us: u64,
+    pub content_length: usize,
+}
+
+impl Default for ScanResult {
+    fn default() -> Self {
+        Self {
+            scanned: false,
+            has_matches: false,
+            matches: Vec::new(),
+            match_count: 0,
+            scan_time_us: 0,
+            content_length: 0,
+        }
+    }
+}
+
+/// DLP scanner statistics
+#[derive(Debug, Clone)]
+pub struct DlpStats {
+    pub total_scans: u64,
+    pub total_matches: u64,
+    pub matches_by_type: HashMap<SensitiveDataType, u64>,
+    pub matches_by_severity: HashMap<PatternSeverity, u64>,
+}
+
+/// DLP configuration
+#[derive(Debug, Clone)]
+pub struct DlpConfig {
+    pub enabled: bool,
+    pub max_scan_size: usize,
+    pub scan_text_only: bool,
+}
+
+impl Default for DlpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_scan_size: 5 * 1024 * 1024, // 5MB max
+            scan_text_only: true,
+        }
+    }
+}
+
+/// Internal pattern definition
+struct Pattern {
+    name: &'static str,
+    data_type: SensitiveDataType,
+    severity: PatternSeverity,
+    regex: &'static Regex,
+    validator: Option<fn(&str) -> bool>,
+}
+
+// ============================================================================
+// Validators
+// ============================================================================
+
+/// Validate credit card using Luhn algorithm
+pub fn validate_credit_card(number: &str) -> bool {
+    // Remove all non-digits
+    let digits: String = number.chars().filter(|c| c.is_ascii_digit()).collect();
+
+    if digits.len() < 13 || digits.len() > 19 {
+        return false;
+    }
+
+    // Reject all zeros
+    if digits.chars().all(|c| c == '0') {
+        return false;
+    }
+
+    let mut sum = 0i32;
+    let mut is_even = false;
+
+    // Loop through digits from right to left
+    for c in digits.chars().rev() {
+        let mut digit = c.to_digit(10).unwrap_or(0) as i32;
+
+        if is_even {
+            digit *= 2;
+            if digit > 9 {
+                digit -= 9;
+            }
+        }
+
+        sum += digit;
+        is_even = !is_even;
+    }
+
+    sum % 10 == 0
+}
+
+/// Validate SSN format
+pub fn validate_ssn(ssn: &str) -> bool {
+    // Remove all non-digits
+    let digits: String = ssn.chars().filter(|c| c.is_ascii_digit()).collect();
+
+    if digits.len() != 9 {
+        return false;
+    }
+
+    let area: u32 = digits[0..3].parse().unwrap_or(0);
+    let group = &digits[3..5];
+    let serial = &digits[5..9];
+
+    // Area cannot be 000, 666, or 900-999
+    if area == 0 || area == 666 || area >= 900 {
+        return false;
+    }
+
+    // Group cannot be 00
+    if group == "00" {
+        return false;
+    }
+
+    // Serial cannot be 0000
+    if serial == "0000" {
+        return false;
+    }
+
+    true
+}
+
+/// Validate IBAN format using mod-97 check
+pub fn validate_iban(iban: &str) -> bool {
+    // Remove spaces and convert to uppercase
+    let cleaned: String = iban
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+
+    // IBAN must be 15-34 characters
+    if cleaned.len() < 15 || cleaned.len() > 34 {
+        return false;
+    }
+
+    // Must start with 2 letters followed by 2 digits
+    let chars: Vec<char> = cleaned.chars().collect();
+    if chars.len() < 4 {
+        return false;
+    }
+    if !chars[0].is_ascii_alphabetic() || !chars[1].is_ascii_alphabetic() {
+        return false;
+    }
+    if !chars[2].is_ascii_digit() || !chars[3].is_ascii_digit() {
+        return false;
+    }
+
+    // Move first 4 characters to end
+    let rearranged = format!("{}{}", &cleaned[4..], &cleaned[0..4]);
+
+    // Convert letters to numbers (A=10, B=11, etc.)
+    let mut numeric_string = String::new();
+    for c in rearranged.chars() {
+        if c.is_ascii_alphabetic() {
+            let value = c as u32 - 'A' as u32 + 10;
+            numeric_string.push_str(&value.to_string());
+        } else {
+            numeric_string.push(c);
+        }
+    }
+
+    // Calculate mod 97 using chunked approach (handles large numbers)
+    let mut remainder: u64 = 0;
+    for c in numeric_string.chars() {
+        let digit = c.to_digit(10).unwrap_or(0) as u64;
+        remainder = (remainder * 10 + digit) % 97;
+    }
+
+    remainder == 1
+}
+
+// ============================================================================
+// Compiled Patterns
+// ============================================================================
+
+lazy_static! {
+    // Credit Cards
+    static ref RE_VISA: Regex = Regex::new(r"\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
+    static ref RE_MASTERCARD: Regex = Regex::new(r"\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
+    static ref RE_AMEX: Regex = Regex::new(r"\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b").unwrap();
+    static ref RE_DISCOVER: Regex = Regex::new(r"\b6(?:011|5\d{2})[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap();
+
+    // SSN
+    static ref RE_SSN_FORMATTED: Regex = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap();
+    // Note: Using \b instead of lookaround (not supported by Rust regex)
+    // The SSN validator filters out false positives anyway
+    static ref RE_SSN_UNFORMATTED: Regex = Regex::new(r"\b\d{9}\b").unwrap();
+
+    // Email
+    static ref RE_EMAIL: Regex = Regex::new(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b").unwrap();
+
+    // Phone
+    static ref RE_US_PHONE: Regex = Regex::new(r"\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b").unwrap();
+    static ref RE_INTL_PHONE: Regex = Regex::new(r"\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}").unwrap();
+
+    // AWS
+    static ref RE_AWS_ACCESS_KEY: Regex = Regex::new(r"\b(AKIA[0-9A-Z]{16})\b").unwrap();
+    static ref RE_AWS_SECRET_KEY: Regex = Regex::new(r"\b([a-zA-Z0-9+/]{40})\b").unwrap();
+
+    // API Keys
+    static ref RE_GENERIC_API_KEY: Regex = Regex::new(r"(?i)\b(?:api[_-]?key|apikey)[\s]*[=:]\s*['\x22]?([a-zA-Z0-9_-]{20,})['\x22]?").unwrap();
+    static ref RE_GITHUB_TOKEN: Regex = Regex::new(r"\b(gh[ps]_[a-zA-Z0-9]{36,})\b").unwrap();
+    static ref RE_STRIPE_KEY: Regex = Regex::new(r"\b((?:sk|pk)_(?:live|test)_[a-zA-Z0-9]{24,})\b").unwrap();
+    static ref RE_GOOGLE_API_KEY: Regex = Regex::new(r"AIza[a-zA-Z0-9_-]{35}").unwrap();
+
+    // Passwords
+    static ref RE_PASSWORD_URL: Regex = Regex::new(r"(?i)\b(?:password|passwd|pwd)=([^\s&]+)").unwrap();
+    static ref RE_PASSWORD_JSON: Regex = Regex::new(r#"(?i)"(?:password|passwd|pwd)"\s*:\s*"([^"]+)""#).unwrap();
+
+    // IBAN
+    static ref RE_IBAN: Regex = Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b").unwrap();
+
+    // IP Address
+    static ref RE_IPV4: Regex = Regex::new(r"\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b").unwrap();
+
+    // Private Keys
+    static ref RE_RSA_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----").unwrap();
+    static ref RE_EC_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN EC PRIVATE KEY-----[\s\S]*?-----END EC PRIVATE KEY-----").unwrap();
+
+    // JWT
+    static ref RE_JWT: Regex = Regex::new(r"\b(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)\b").unwrap();
+
+    // Medical Record
+    static ref RE_MEDICAL_RECORD: Regex = Regex::new(r"(?i)\b(?:MRN|medical[_\s-]?record[_\s-]?(?:number|#|num))[\s:]*([A-Z0-9]{6,})").unwrap();
+
+    /// All patterns for scanning
+    static ref PATTERNS: Vec<Pattern> = vec![
+        // Credit Cards
+        Pattern { name: "Visa Card", data_type: SensitiveDataType::CreditCard, severity: PatternSeverity::Critical, regex: &RE_VISA, validator: Some(validate_credit_card) },
+        Pattern { name: "MasterCard", data_type: SensitiveDataType::CreditCard, severity: PatternSeverity::Critical, regex: &RE_MASTERCARD, validator: Some(validate_credit_card) },
+        Pattern { name: "American Express", data_type: SensitiveDataType::CreditCard, severity: PatternSeverity::Critical, regex: &RE_AMEX, validator: Some(validate_credit_card) },
+        Pattern { name: "Discover Card", data_type: SensitiveDataType::CreditCard, severity: PatternSeverity::Critical, regex: &RE_DISCOVER, validator: Some(validate_credit_card) },
+
+        // SSN
+        Pattern { name: "SSN (formatted)", data_type: SensitiveDataType::Ssn, severity: PatternSeverity::Critical, regex: &RE_SSN_FORMATTED, validator: Some(validate_ssn) },
+        Pattern { name: "SSN (unformatted)", data_type: SensitiveDataType::Ssn, severity: PatternSeverity::Critical, regex: &RE_SSN_UNFORMATTED, validator: Some(validate_ssn) },
+
+        // Email
+        Pattern { name: "Email Address", data_type: SensitiveDataType::Email, severity: PatternSeverity::Medium, regex: &RE_EMAIL, validator: None },
+
+        // Phone
+        Pattern { name: "US Phone Number", data_type: SensitiveDataType::Phone, severity: PatternSeverity::Medium, regex: &RE_US_PHONE, validator: None },
+        Pattern { name: "International Phone", data_type: SensitiveDataType::Phone, severity: PatternSeverity::Medium, regex: &RE_INTL_PHONE, validator: None },
+
+        // AWS
+        Pattern { name: "AWS Access Key", data_type: SensitiveDataType::AwsKey, severity: PatternSeverity::Critical, regex: &RE_AWS_ACCESS_KEY, validator: None },
+        Pattern { name: "AWS Secret Key", data_type: SensitiveDataType::AwsKey, severity: PatternSeverity::Critical, regex: &RE_AWS_SECRET_KEY, validator: None },
+
+        // API Keys
+        Pattern { name: "Generic API Key", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::High, regex: &RE_GENERIC_API_KEY, validator: None },
+        Pattern { name: "GitHub Token", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::Critical, regex: &RE_GITHUB_TOKEN, validator: None },
+        Pattern { name: "Stripe API Key", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::Critical, regex: &RE_STRIPE_KEY, validator: None },
+        Pattern { name: "Google API Key", data_type: SensitiveDataType::ApiKey, severity: PatternSeverity::High, regex: &RE_GOOGLE_API_KEY, validator: None },
+
+        // Passwords
+        Pattern { name: "Password in URL", data_type: SensitiveDataType::Password, severity: PatternSeverity::Critical, regex: &RE_PASSWORD_URL, validator: None },
+        Pattern { name: "Password in JSON", data_type: SensitiveDataType::Password, severity: PatternSeverity::Critical, regex: &RE_PASSWORD_JSON, validator: None },
+
+        // IBAN
+        Pattern { name: "IBAN", data_type: SensitiveDataType::Iban, severity: PatternSeverity::High, regex: &RE_IBAN, validator: Some(validate_iban) },
+
+        // IP Address
+        Pattern { name: "IPv4 Address", data_type: SensitiveDataType::IpAddress, severity: PatternSeverity::Low, regex: &RE_IPV4, validator: None },
+
+        // Private Keys
+        Pattern { name: "RSA Private Key", data_type: SensitiveDataType::PrivateKey, severity: PatternSeverity::Critical, regex: &RE_RSA_PRIVATE_KEY, validator: None },
+        Pattern { name: "EC Private Key", data_type: SensitiveDataType::PrivateKey, severity: PatternSeverity::Critical, regex: &RE_EC_PRIVATE_KEY, validator: None },
+
+        // JWT
+        Pattern { name: "JWT Token", data_type: SensitiveDataType::Jwt, severity: PatternSeverity::High, regex: &RE_JWT, validator: None },
+
+        // Medical Record
+        Pattern { name: "Medical Record Number", data_type: SensitiveDataType::MedicalRecord, severity: PatternSeverity::Critical, regex: &RE_MEDICAL_RECORD, validator: None },
+    ];
+}
+
+// ============================================================================
+// DLP Scanner
+// ============================================================================
+
+/// Thread-safe DLP scanner
+pub struct DlpScanner {
+    config: DlpConfig,
+    total_scans: AtomicU64,
+    total_matches: AtomicU64,
+}
+
+impl Default for DlpScanner {
+    fn default() -> Self {
+        Self::new(DlpConfig::default())
+    }
+}
+
+impl DlpScanner {
+    pub fn new(config: DlpConfig) -> Self {
+        Self {
+            config,
+            total_scans: AtomicU64::new(0),
+            total_matches: AtomicU64::new(0),
+        }
+    }
+
+    /// Check if scanner is enabled
+    pub fn is_enabled(&self) -> bool {
+        self.config.enabled
+    }
+
+    /// Scan content for sensitive data
+    pub fn scan(&self, content: &str) -> ScanResult {
+        if !self.config.enabled {
+            return ScanResult::default();
+        }
+
+        let start = Instant::now();
+        let content_length = content.len();
+
+        // Check max size
+        if content_length > self.config.max_scan_size {
+            return ScanResult {
+                scanned: false,
+                content_length,
+                ..Default::default()
+            };
+        }
+
+        let mut matches = Vec::new();
+
+        // Scan with each pattern
+        for pattern in PATTERNS.iter() {
+            for m in pattern.regex.find_iter(content) {
+                let matched_value = m.as_str();
+
+                // Apply validator if present
+                if let Some(validator) = pattern.validator {
+                    if !validator(matched_value) {
+                        continue;
+                    }
+                }
+
+                let masked = self.mask_value(matched_value, pattern.data_type);
+
+                matches.push(DlpMatch {
+                    pattern_name: pattern.name.to_string(),
+                    data_type: pattern.data_type,
+                    severity: pattern.severity,
+                    masked_value: masked,
+                    start: m.start(),
+                    end: m.end(),
+                });
+            }
+        }
+
+        let scan_time_us = start.elapsed().as_micros() as u64;
+        let match_count = matches.len();
+
+        // Update stats
+        self.total_scans.fetch_add(1, Ordering::Relaxed);
+        self.total_matches.fetch_add(match_count as u64, Ordering::Relaxed);
+
+        ScanResult {
+            scanned: true,
+            has_matches: !matches.is_empty(),
+            matches,
+            match_count,
+            scan_time_us,
+            content_length,
+        }
+    }
+
+    /// Scan bytes as UTF-8 text
+    pub fn scan_bytes(&self, data: &[u8]) -> ScanResult {
+        match std::str::from_utf8(data) {
+            Ok(content) => self.scan(content),
+            Err(_) => ScanResult::default(),
+        }
+    }
+
+    /// Check if content type is text-based (should be scanned)
+    pub fn is_scannable_content_type(&self, content_type: &str) -> bool {
+        let text_types = [
+            "text/",
+            "application/json",
+            "application/xml",
+            "application/x-www-form-urlencoded",
+            "application/javascript",
+            "application/ld+json",
+        ];
+
+        let ct_lower = content_type.to_lowercase();
+        text_types.iter().any(|t| ct_lower.contains(t))
+    }
+
+    /// Mask a sensitive value for logging
+    fn mask_value(&self, value: &str, data_type: SensitiveDataType) -> String {
+        match data_type {
+            SensitiveDataType::CreditCard => {
+                let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
+                if digits.len() >= 4 {
+                    format!("****-****-****-{}", &digits[digits.len() - 4..])
+                } else {
+                    "****-****-****-****".to_string()
+                }
+            }
+            SensitiveDataType::Ssn => {
+                let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
+                if digits.len() >= 4 {
+                    format!("***-**-{}", &digits[digits.len() - 4..])
+                } else {
+                    "***-**-****".to_string()
+                }
+            }
+            SensitiveDataType::Email => {
+                if let Some(at_idx) = value.find('@') {
+                    let (local, domain) = value.split_at(at_idx);
+                    let prefix = if local.len() >= 3 { &local[..3] } else { local };
+                    format!("{}***{}", prefix, domain)
+                } else {
+                    "***@***.***".to_string()
+                }
+            }
+            SensitiveDataType::Phone => {
+                let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
+                if digits.len() >= 4 {
+                    format!("***-***-{}", &digits[digits.len() - 4..])
+                } else {
+                    "***-***-****".to_string()
+                }
+            }
+            SensitiveDataType::Iban => {
+                if value.len() >= 6 {
+                    format!("{}************{}", &value[..2], &value[value.len() - 4..])
+                } else {
+                    "**************".to_string()
+                }
+            }
+            SensitiveDataType::Jwt => "eyJ***.eyJ***.***".to_string(),
+            SensitiveDataType::PrivateKey => "[PRIVATE KEY REDACTED]".to_string(),
+            SensitiveDataType::AwsKey | SensitiveDataType::ApiKey => {
+                if value.len() >= 4 {
+                    format!("{}...{}", &value[..4], &value[value.len() - 4..])
+                } else {
+                    "********".to_string()
+                }
+            }
+            SensitiveDataType::Password => "********".to_string(),
+            SensitiveDataType::IpAddress => {
+                // Mask middle octets
+                let parts: Vec<&str> = value.split('.').collect();
+                if parts.len() == 4 {
+                    format!("{}.***.***.{}", parts[0], parts[3])
+                } else {
+                    "***.***.***.***".to_string()
+                }
+            }
+            SensitiveDataType::MedicalRecord => "MRN: ********".to_string(),
+        }
+    }
+
+    /// Get scanner statistics
+    pub fn stats(&self) -> DlpStats {
+        DlpStats {
+            total_scans: self.total_scans.load(Ordering::Relaxed),
+            total_matches: self.total_matches.load(Ordering::Relaxed),
+            matches_by_type: HashMap::new(), // Would need per-type counters for this
+            matches_by_severity: HashMap::new(),
+        }
+    }
+
+    /// Get pattern count
+    pub fn pattern_count(&self) -> usize {
+        PATTERNS.len()
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Luhn Validation Tests
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_luhn_valid_visa() {
+        assert!(validate_credit_card("4532015112830366"));
+        assert!(validate_credit_card("4532-0151-1283-0366"));
+        assert!(validate_credit_card("4532 0151 1283 0366"));
+    }
+
+    #[test]
+    fn test_luhn_valid_mastercard() {
+        assert!(validate_credit_card("5425233430109903"));
+    }
+
+    #[test]
+    fn test_luhn_valid_amex() {
+        assert!(validate_credit_card("374245455400126"));
+    }
+
+    #[test]
+    fn test_luhn_invalid() {
+        assert!(!validate_credit_card("1234567890123456"));
+        assert!(!validate_credit_card("0000000000000000"));
+        assert!(!validate_credit_card("12345")); // Too short
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // SSN Validation Tests
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ssn_valid() {
+        assert!(validate_ssn("123-45-6789"));
+        assert!(validate_ssn("123456789"));
+    }
+
+    #[test]
+    fn test_ssn_invalid_area() {
+        assert!(!validate_ssn("000-45-6789")); // Area 000
+        assert!(!validate_ssn("666-45-6789")); // Area 666
+        assert!(!validate_ssn("900-45-6789")); // Area 900+
+    }
+
+    #[test]
+    fn test_ssn_invalid_group() {
+        assert!(!validate_ssn("123-00-6789")); // Group 00
+    }
+
+    #[test]
+    fn test_ssn_invalid_serial() {
+        assert!(!validate_ssn("123-45-0000")); // Serial 0000
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // IBAN Validation Tests
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_iban_valid_de() {
+        assert!(validate_iban("DE89370400440532013000"));
+    }
+
+    #[test]
+    fn test_iban_valid_gb() {
+        assert!(validate_iban("GB82WEST12345698765432"));
+    }
+
+    #[test]
+    fn test_iban_valid_with_spaces() {
+        assert!(validate_iban("DE89 3704 0044 0532 0130 00"));
+    }
+
+    #[test]
+    fn test_iban_invalid_checksum() {
+        assert!(!validate_iban("DE00370400440532013000")); // Wrong check digits
+    }
+
+    #[test]
+    fn test_iban_too_short() {
+        assert!(!validate_iban("DE89370400")); // Too short
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Scanner Tests
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_scanner_creation() {
+        let scanner = DlpScanner::default();
+        assert!(scanner.is_enabled());
+        assert_eq!(scanner.pattern_count(), 23);
+    }
+
+    #[test]
+    fn test_scanner_disabled() {
+        let config = DlpConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let scanner = DlpScanner::new(config);
+        let result = scanner.scan("4532015112830366");
+        assert!(!result.scanned);
+    }
+
+    #[test]
+    fn test_scan_credit_card() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("My card is 4532015112830366");
+
+        assert!(result.scanned);
+        assert!(result.has_matches);
+        assert_eq!(result.match_count, 1);
+        assert_eq!(result.matches[0].data_type, SensitiveDataType::CreditCard);
+        assert_eq!(result.matches[0].severity, PatternSeverity::Critical);
+    }
+
+    #[test]
+    fn test_scan_ssn() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("SSN: 123-45-6789");
+
+        assert!(result.has_matches);
+        assert_eq!(result.matches[0].data_type, SensitiveDataType::Ssn);
+    }
+
+    #[test]
+    fn test_scan_email() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("Contact: user@example.com");
+
+        assert!(result.has_matches);
+        assert_eq!(result.matches[0].data_type, SensitiveDataType::Email);
+        assert_eq!(result.matches[0].severity, PatternSeverity::Medium);
+    }
+
+    #[test]
+    fn test_scan_jwt() {
+        let scanner = DlpScanner::default();
+        let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+        let result = scanner.scan(&format!("Token: {}", jwt));
+
+        assert!(result.has_matches);
+        let jwt_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Jwt);
+        assert!(jwt_match.is_some());
+    }
+
+    #[test]
+    fn test_scan_aws_key() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE");
+
+        assert!(result.has_matches);
+        let aws_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::AwsKey);
+        assert!(aws_match.is_some());
+    }
+
+    #[test]
+    fn test_scan_github_token() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+
+        assert!(result.has_matches);
+        let gh_match = result.matches.iter().find(|m| m.pattern_name == "GitHub Token");
+        assert!(gh_match.is_some());
+    }
+
+    #[test]
+    fn test_scan_private_key() {
+        let scanner = DlpScanner::default();
+        let key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+        let result = scanner.scan(key);
+
+        assert!(result.has_matches);
+        assert_eq!(result.matches[0].data_type, SensitiveDataType::PrivateKey);
+    }
+
+    #[test]
+    fn test_scan_password_in_url() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("https://api.example.com/login?password=secret123");
+
+        assert!(result.has_matches);
+        let pwd_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Password);
+        assert!(pwd_match.is_some());
+    }
+
+    #[test]
+    fn test_scan_password_in_json() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan(r#"{"username": "admin", "password": "secret123"}"#);
+
+        assert!(result.has_matches);
+        let pwd_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Password);
+        assert!(pwd_match.is_some());
+    }
+
+    #[test]
+    fn test_scan_no_matches() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("This is just normal text with no sensitive data.");
+
+        assert!(result.scanned);
+        assert!(!result.has_matches);
+        assert_eq!(result.match_count, 0);
+    }
+
+    #[test]
+    fn test_scan_multiple_matches() {
+        let scanner = DlpScanner::default();
+        let content = "Card: 4532015112830366, SSN: 123-45-6789, Email: test@example.com";
+        let result = scanner.scan(content);
+
+        assert!(result.has_matches);
+        assert!(result.match_count >= 3);
+    }
+
+    #[test]
+    fn test_masking() {
+        let scanner = DlpScanner::default();
+        let result = scanner.scan("4532015112830366");
+
+        assert!(result.has_matches);
+        assert!(result.matches[0].masked_value.contains("****"));
+        assert!(result.matches[0].masked_value.ends_with("0366"));
+    }
+
+    #[test]
+    fn test_content_type_detection() {
+        let scanner = DlpScanner::default();
+
+        assert!(scanner.is_scannable_content_type("text/html"));
+        assert!(scanner.is_scannable_content_type("application/json"));
+        assert!(scanner.is_scannable_content_type("application/xml"));
+        assert!(!scanner.is_scannable_content_type("image/png"));
+        assert!(!scanner.is_scannable_content_type("application/octet-stream"));
+    }
+
+    #[test]
+    fn test_stats() {
+        let scanner = DlpScanner::default();
+        scanner.scan("Card: 4532015112830366");
+        scanner.scan("No sensitive data here");
+
+        let stats = scanner.stats();
+        assert_eq!(stats.total_scans, 2);
+        assert!(stats.total_matches >= 1);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Performance Tests
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_scan_performance() {
+        let scanner = DlpScanner::default();
+
+        // Generate 100KB of content with some sensitive data
+        let mut content = String::with_capacity(100_000);
+        for i in 0..1000 {
+            content.push_str(&format!("Line {}: This is normal text content.\n", i));
+            if i % 100 == 0 {
+                content.push_str("Credit card: 4532015112830366\n");
+            }
+        }
+
+        let result = scanner.scan(&content);
+
+        // Should complete in reasonable time
+        // Debug mode: up to 50ms, Release mode: under 5ms
+        #[cfg(debug_assertions)]
+        let max_time_us = 50_000;
+        #[cfg(not(debug_assertions))]
+        let max_time_us = 5_000;
+
+        assert!(
+            result.scan_time_us < max_time_us,
+            "Scan took {}μs, expected < {}μs for 100KB",
+            result.scan_time_us,
+            max_time_us
+        );
+        assert!(result.match_count >= 10); // At least 10 credit cards
+    }
+}
