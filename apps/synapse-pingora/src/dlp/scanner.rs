@@ -175,6 +175,12 @@ pub fn validate_credit_card(number: &str) -> bool {
 }
 
 /// Validate SSN format
+///
+/// Validates against SSA rules including:
+/// - Invalid area numbers (000, 666, 900-999 reserved for ITIN)
+/// - Invalid group numbers (00)
+/// - Invalid serial numbers (0000)
+/// - Advertising SSNs (987-65-4320 through 987-65-4329 used in commercials)
 pub fn validate_ssn(ssn: &str) -> bool {
     // Remove all non-digits
     let digits: String = ssn.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -184,21 +190,26 @@ pub fn validate_ssn(ssn: &str) -> bool {
     }
 
     let area: u32 = digits[0..3].parse().unwrap_or(0);
-    let group = &digits[3..5];
-    let serial = &digits[5..9];
+    let group: u32 = digits[3..5].parse().unwrap_or(0);
+    let serial: u32 = digits[5..9].parse().unwrap_or(0);
 
-    // Area cannot be 000, 666, or 900-999
+    // Area cannot be 000, 666, or 900-999 (ITIN range)
     if area == 0 || area == 666 || area >= 900 {
         return false;
     }
 
     // Group cannot be 00
-    if group == "00" {
+    if group == 0 {
         return false;
     }
 
     // Serial cannot be 0000
-    if serial == "0000" {
+    if serial == 0 {
+        return false;
+    }
+
+    // Reject advertising SSNs used in commercials (987-65-4320 to 987-65-4329)
+    if area == 987 && group == 65 && (4320..=4329).contains(&serial) {
         return false;
     }
 
@@ -272,8 +283,8 @@ lazy_static! {
     // The SSN validator filters out false positives anyway
     static ref RE_SSN_UNFORMATTED: Regex = Regex::new(r"\b\d{9}\b").unwrap();
 
-    // Email
-    static ref RE_EMAIL: Regex = Regex::new(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b").unwrap();
+    // Email - length limits prevent ReDoS via catastrophic backtracking
+    static ref RE_EMAIL: Regex = Regex::new(r"\b[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]{1,253}\.[a-zA-Z]{2,10}\b").unwrap();
 
     // Phone
     static ref RE_US_PHONE: Regex = Regex::new(r"\b(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})\b").unwrap();
@@ -303,8 +314,8 @@ lazy_static! {
     static ref RE_RSA_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----").unwrap();
     static ref RE_EC_PRIVATE_KEY: Regex = Regex::new(r"-----BEGIN EC PRIVATE KEY-----[\s\S]*?-----END EC PRIVATE KEY-----").unwrap();
 
-    // JWT
-    static ref RE_JWT: Regex = Regex::new(r"\b(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)\b").unwrap();
+    // JWT - minimum segment lengths reduce false positives on base64 data
+    static ref RE_JWT: Regex = Regex::new(r"\b(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{20,})\b").unwrap();
 
     // Medical Record
     static ref RE_MEDICAL_RECORD: Regex = Regex::new(r"(?i)\b(?:MRN|medical[_\s-]?record[_\s-]?(?:number|#|num))[\s:]*([A-Z0-9]{6,})").unwrap();
@@ -619,6 +630,21 @@ mod tests {
     #[test]
     fn test_ssn_invalid_serial() {
         assert!(!validate_ssn("123-45-0000")); // Serial 0000
+    }
+
+    #[test]
+    fn test_ssn_advertising_numbers() {
+        // SSNs 987-65-4320 through 987-65-4329 are used in advertising/commercials
+        // Note: These are also rejected by area >= 900 rule (ITIN range)
+        // but we have explicit checks for documentation/defense-in-depth
+        assert!(!validate_ssn("987-65-4320"));
+        assert!(!validate_ssn("987-65-4325"));
+        assert!(!validate_ssn("987-65-4329"));
+        // All 9xx area codes are ITIN range and should be rejected
+        assert!(!validate_ssn("987-65-4319"));
+        assert!(!validate_ssn("987-65-4330"));
+        assert!(!validate_ssn("900-12-3456"));
+        assert!(!validate_ssn("999-99-9999"));
     }
 
     // ────────────────────────────────────────────────────────────────────────
