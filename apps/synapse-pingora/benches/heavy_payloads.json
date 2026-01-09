@@ -1,0 +1,520 @@
+{
+  "complex_request": {
+    "uri": "/api/v2/bulk?search=large%20order&page=1&limit=100",
+    "headers": [
+      [
+        "host",
+        "api.atlascrew.com"
+      ],
+      [
+        "user-agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ],
+      [
+        "content-type",
+        "application/json"
+      ],
+      [
+        "authorization",
+        "Bearer k0mmoldoi4hihfdol9jwo2yxzxc42j1owd5ln9xyft77vitj38799a70cq7pu2rwhpecdymi7oqwy4kthn9ehbcx394yptcfx6g36sra88c0xgbhdmf5v00qrzd2wwl2"
+      ],
+      [
+        "x-request-id",
+        "7a6857ea-d5db-43e7-93be-793c55db67f7"
+      ],
+      [
+        "cookie",
+        "session_id=r1iosnlcn6jqspow2fdp7d1550q8iw4w; _ga=GA1.2.3.4"
+      ]
+    ],
+    "body_json": {
+      "operationName": "BulkUpdate",
+      "variables": {
+        "input": {
+          "items": [
+            {
+              "id": "prod_0",
+              "sku": "SKU-8TOSGGNN",
+              "description": "Detailed description for enterprise product 0 with many features and compliance requirements: npbuo3twwr89jv8rz5uwykai2k0izzfhoi2jgc7gme6dldwlkx5y4x1i7cy5uqve1p63c035tw9hczi3ll46g5yqglhp6kh2acmo",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_1",
+              "sku": "SKU-Z0KGT4FO",
+              "description": "Detailed description for enterprise product 1 with many features and compliance requirements: 5xhzvy1k992j0hqb9x53vy5nyszoqy7g7ku702wdroe64p292s90i2w9sjirmprwjlzxc99tjgp15iac5gpkj5jcfbanvm4h82qm",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_2",
+              "sku": "SKU-X2JI3KSG",
+              "description": "Detailed description for enterprise product 2 with many features and compliance requirements: pspz426zryrkq9z3wy3if7ddvwxm0xtklaosbq9ikvn67n0knx4cewt4z4nf4kxzipb2k3kjnxtnodjpczlws8o4ualibxytg5ga",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_3",
+              "sku": "SKU-A8ZETNL2",
+              "description": "Detailed description for enterprise product 3 with many features and compliance requirements: yfsn7q5900rypfj2nu1fsq5koskldpngbjmvvjjx2d34ylytwjunhax215x1gwqfl407dzotnk22iwjbwqzuhoolzasebu1jsv4r",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_4",
+              "sku": "SKU-V5NPHW1V",
+              "description": "Detailed description for enterprise product 4 with many features and compliance requirements: ogu6i0vq2d05prmj6oupby94rmlitrnziyw414m3j112dvjbe84eplnkezoioobx8dnxkde2c66phq2m70qp7omkbc3u4oen3n4g",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_5",
+              "sku": "SKU-WEZ81BTJ",
+              "description": "Detailed description for enterprise product 5 with many features and compliance requirements: sublmc6wqua1ngpjcwcrssowzrqp3t4znu0zmyyjo4unyadw2lxe6x0rgz1koii72u0ydv3yst6f1dp4oairtorcmp3z46eh4ibl",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_6",
+              "sku": "SKU-U8Q16VL6",
+              "description": "Detailed description for enterprise product 6 with many features and compliance requirements: zdzq1pkkotade9mvsctobci1afq4kn6rydoyz9okbbqke2uzfin7oui67vtzq878qsde2gy2eio0ewskhuboln96ascssevrk64k",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_7",
+              "sku": "SKU-CZGXQRX4",
+              "description": "Detailed description for enterprise product 7 with many features and compliance requirements: ewujx6254acuf25eq36kkbpbsz9265ixdy2b8npsqza54sjkbmklvbyc006clq99abksb3mnv5768igbguhqlrjggzz7xda7ae3u",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_8",
+              "sku": "SKU-PK8KAFN2",
+              "description": "Detailed description for enterprise product 8 with many features and compliance requirements: uqcvcbfo7ixyj7eznuo6g2zji3y0m91cmncsnsx12fiixac00jfx82rvmkxzg48a40qnqmij82y8281jwqdckwuswdamdl8zwfkv",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_9",
+              "sku": "SKU-WXF3FJOS",
+              "description": "Detailed description for enterprise product 9 with many features and compliance requirements: hf9q815v5i9hct6rl6a2ow7wd0cv154z5ksi9hlkx3wzkv5wbn49094mfq3bhfwlvzba1cvkm1vigdeslcehde2vg9jjtn99f7x6",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_10",
+              "sku": "SKU-RPLIEY0L",
+              "description": "Detailed description for enterprise product 10 with many features and compliance requirements: dkna1hzgzk84uuj1n4j3rsqm4hn74f8we8rcx5vs2dy9fh9227ufuw0sk646ipchmm68krqu2xdra62gmcvcytg44i0g09touz0k",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_11",
+              "sku": "SKU-7N27OEYJ",
+              "description": "Detailed description for enterprise product 11 with many features and compliance requirements: hcfz724ngnr7u5sq4orznmhvqa9qi09vc35rms5v4769yp2vjy05nw8dlo8w7t5guok8q7xtnjl9h8cf2rfc2y8ovrb4z2e1z810",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_12",
+              "sku": "SKU-AUOCC04W",
+              "description": "Detailed description for enterprise product 12 with many features and compliance requirements: mwnf0tb4taw3b7d26ecvvbk6jlc55y9s3ckcrkf3ucj9p2adh8nyjwegcwdneotdek3ecvhxm1b5kj4jhtu8j7l61hlxa998o4d0",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_13",
+              "sku": "SKU-P2NHT3KJ",
+              "description": "Detailed description for enterprise product 13 with many features and compliance requirements: 27xz17t0g8vtvbqo5e7dcyqbb9y4xjvq8k9nfjpd74slnh17xfxme3t5hyk59h047edailfhhzyktct0y2lspw6jhd5y9lu03yhn",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_14",
+              "sku": "SKU-NQD02APD",
+              "description": "Detailed description for enterprise product 14 with many features and compliance requirements: c2l2t8722bhhduqaan6i0fwdf1om2hl1pkooekqglfry55ifbivxkazckl6q9ox4acarqsjm9cj32my9wylfloqsxyr3l3rwo69d",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_15",
+              "sku": "SKU-XBU9QS1S",
+              "description": "Detailed description for enterprise product 15 with many features and compliance requirements: hm7th3e92a0o1kopnj0wze304ov3iwz83t46k0dy3pu3zjjpf16id9n4pamv685x0lhwm5hwvrux5cs2bnpf69z6n3vvndss0w0q",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_16",
+              "sku": "SKU-2QA8Y6EP",
+              "description": "Detailed description for enterprise product 16 with many features and compliance requirements: uq6p6boxe2nmu5ineaxdq5o1k0nrefg8jjiy3y5qqjfypsgezpny2xwx1d4be73ub93fhqi2aqb514sawclzdjf6pxpa7qpdt5lo",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_17",
+              "sku": "SKU-61GBL9YS",
+              "description": "Detailed description for enterprise product 17 with many features and compliance requirements: qan32wr7kl2pvk3ce5f9bphel17rawid7cxvhl4e1m1eaqpxqcavkvswqzbni2u1wgh1e305fhjs65kdn3vd455jqxpxv1c6ev22",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_18",
+              "sku": "SKU-FHMY17GD",
+              "description": "Detailed description for enterprise product 18 with many features and compliance requirements: fs8us2fz679qdk242i8fmrttmx0lj9q2l8lxkq4z7px6kg5nc39f07yrgw9bns7m27dnf5b2j4nyzu9i64zswthh4vsgvgfs1cww",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_19",
+              "sku": "SKU-OQ5BQWOH",
+              "description": "Detailed description for enterprise product 19 with many features and compliance requirements: dvvmhmnsw42ttxvhe9gnr2mw2ln36een3ah7zk28fnv7dzcn32pe26en7sr9tadpdfh0lx66vmj3g227rd3iczxs93xp0uvqs662",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_20",
+              "sku": "SKU-ERJO8RE6",
+              "description": "Detailed description for enterprise product 20 with many features and compliance requirements: 935nqpqhvie76388jsl4bnnnk4rxy9srh41r3o6v6qs06z3h73z2u7a9tsob8ndt0o1x2le98n8py1uena88nxmzh85w8wtzuz9t",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_21",
+              "sku": "SKU-QUVW96Y0",
+              "description": "Detailed description for enterprise product 21 with many features and compliance requirements: n6zoba2t2mpf8xj2a15epuhtii3lhkcqe6qtrnlvu58lhryhs5h6js02f8loi6lal9nztmwv23wzagmi99604xjq1dpgbiwkh51f",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_22",
+              "sku": "SKU-7GJ30X3P",
+              "description": "Detailed description for enterprise product 22 with many features and compliance requirements: agyvsl3i42gjwvanewjn49hcoehzzcs4vurtum0fks641bl301btww35muorfvn41vchm4jnuhyorgbhfkaj1msgk06ibxawdyxq",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_23",
+              "sku": "SKU-OMKNYTU7",
+              "description": "Detailed description for enterprise product 23 with many features and compliance requirements: t8k9v9ba3e58iig5303io8u93rnudo8e2je26nf27dwedy00duksn4ltjuzw7n22irs10tv1m953tj0zxszkl87zz0n0awye8fvq",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_24",
+              "sku": "SKU-4SFIX64F",
+              "description": "Detailed description for enterprise product 24 with many features and compliance requirements: r8mnslaqyf3sfqpfhj7yw6vlz6aplow5wtly3i8pi1pi5uagju8a5amwngv2lnxq6xz352lhnr1h73hg38an8t11o6basazibjvr",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_25",
+              "sku": "SKU-Y9YR4042",
+              "description": "Detailed description for enterprise product 25 with many features and compliance requirements: 9mjymd12v08i60ggxvr1osufi9qkv3drwt9vwxyqsst0ckbvucbl7vpxfj3udkvmkf26v5gmkcx4o876kzgvwnrb8drg46fqphnw",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_26",
+              "sku": "SKU-BOEMD0R9",
+              "description": "Detailed description for enterprise product 26 with many features and compliance requirements: hl7nrdqhfgp386lq13qoxlku8hbrz4d4gzaycbr8t79uscfuqamn7kybuerusgt4n06k8jxwjnxyc39ay3pwuqivuo1dwi7vpp95",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_27",
+              "sku": "SKU-NDDY3W5X",
+              "description": "Detailed description for enterprise product 27 with many features and compliance requirements: sthnffbzy8swvubkheacjat4ouftcigguoe8e600j7rkuknjbppctdr1khj8oud4ncnpafzwmxuzx88d8nwydjho3dudaj5wirbh",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_28",
+              "sku": "SKU-E6AXBJY0",
+              "description": "Detailed description for enterprise product 28 with many features and compliance requirements: g8pgkivjay8ntjxnz74785q2alpc4izwh9g4moc1szz8cnp6ec6nrkty0b0m1jcenaijtqtfdj43nqhm4fce6x1i1zash416p5bn",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            },
+            {
+              "id": "prod_29",
+              "sku": "SKU-T4PRAGFN",
+              "description": "Detailed description for enterprise product 29 with many features and compliance requirements: 17djf8es2thn6qor0ypm7lew4u5wdahstl8f4pgoz8y0rncqcsmrwi6mwhhc1pqv3z7pky285k7khv6suf3nl3siykne0274qu2s",
+              "metadata": {
+                "tags": [
+                  "enterprise",
+                  "bulk",
+                  "sale"
+                ],
+                "specs": {
+                  "weight": 50,
+                  "material": "alloy"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

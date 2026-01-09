@@ -53,6 +53,15 @@ struct ComplexRequest {
     body_json: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize)]
+struct ScenarioRequest {
+    name: String,
+    method: String,
+    uri: String,
+    headers: Vec<(String, String)>,
+    body_json: serde_json::Value,
+}
+
 static PAYLOADS: Lazy<PayloadData> = Lazy::new(|| {
     let path = Path::new("benches/payloads.json");
     if !path.exists() {
@@ -81,6 +90,16 @@ static HEAVY_PAYLOADS: Lazy<HeavyPayloadData> = Lazy::new(|| {
     }
     let content = fs::read_to_string(path).expect("Failed to read heavy_payloads.json");
     serde_json::from_str(&content).expect("Failed to parse heavy_payloads.json")
+});
+
+static SCENARIOS: Lazy<Vec<ScenarioRequest>> = Lazy::new(|| {
+    let path = Path::new("benches/scenarios.json");
+    if !path.exists() {
+        eprintln!("WARNING: benches/scenarios.json not found.");
+        return vec![];
+    }
+    let content = fs::read_to_string(path).expect("Failed to read scenarios.json");
+    serde_json::from_str(&content).expect("Failed to parse scenarios.json")
 });
 
 // ============================================================================
@@ -397,6 +416,212 @@ fn bench_heavy_complex(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_realistic_scenarios(c: &mut Criterion) {
+    DetectionEngine::ensure_init();
+    let _ = &*SCENARIOS;
+
+    let mut group = c.benchmark_group("realistic_scenarios");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(200);
+
+    for scenario in SCENARIOS.iter() {
+        let body_bytes = serde_json::to_vec(&scenario.body_json).unwrap();
+        
+        group.bench_with_input(
+            BenchmarkId::new("scenario", &scenario.name),
+            &body_bytes,
+            |b, body| {
+                b.iter(|| {
+                    DetectionEngine::analyze(
+                        black_box(&scenario.method),
+                        black_box(&scenario.uri),
+                        black_box(&scenario.headers),
+                        black_box(Some(body)),
+                    )
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// ============================================================================
+// DLP Body Inspection Benchmarks
+// ============================================================================
+
+use synapse_pingora::dlp::{DlpScanner, DlpConfig};
+
+/// Generate a realistic e-commerce order payload with some sensitive data
+fn generate_order_payload(size_kb: usize) -> String {
+    let base_order = r#"{
+  "order_id": "ORD-12345678",
+  "customer": {
+    "name": "John Smith",
+    "email": "john.smith@example.com",
+    "phone": "212-555-1234",
+    "address": {
+      "street": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "zip": "10001"
+    }
+  },
+  "payment": {
+    "method": "credit_card",
+    "card_number": "4532015112830366",
+    "exp_date": "12/25"
+  },
+  "items": ["#;
+
+    let item_template = r#"
+    {"sku": "PROD-0001", "name": "Widget Pro", "qty": 2, "price": 29.99},"#;
+
+    let mut payload = base_order.to_string();
+
+    // Add items to reach target size
+    let target_bytes = size_kb * 1024;
+    while payload.len() < target_bytes {
+        payload.push_str(item_template);
+    }
+
+    // Close the JSON
+    payload.push_str("\n  ]\n}");
+    payload
+}
+
+/// Generate a clean payload with no sensitive data
+fn generate_clean_payload(size_kb: usize) -> String {
+    let base = r#"{"data": ["#;
+    let item = r#""Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.","#;
+
+    let mut payload = base.to_string();
+    let target_bytes = size_kb * 1024;
+    while payload.len() < target_bytes {
+        payload.push_str(item);
+    }
+    payload.push_str("]}");
+    payload
+}
+
+fn bench_dlp_body_inspection(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dlp_body_inspection");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(1000);
+
+    // Test payloads at different sizes
+    let sizes_kb = [4, 8, 18, 32];
+
+    // Create scanner with default config (8KB inspection cap)
+    let scanner = DlpScanner::new(DlpConfig::default());
+
+    for size_kb in sizes_kb {
+        // Payload WITH sensitive data (realistic e-commerce scenario)
+        let payload_with_pii = generate_order_payload(size_kb);
+        let name = format!("with_pii_{}kb", size_kb);
+
+        group.bench_with_input(
+            BenchmarkId::new("scan", &name),
+            &payload_with_pii,
+            |b, payload| {
+                b.iter(|| {
+                    scanner.scan(black_box(payload))
+                })
+            },
+        );
+
+        // Payload WITHOUT sensitive data (clean traffic)
+        let payload_clean = generate_clean_payload(size_kb);
+        let name = format!("clean_{}kb", size_kb);
+
+        group.bench_with_input(
+            BenchmarkId::new("scan", &name),
+            &payload_clean,
+            |b, payload| {
+                b.iter(|| {
+                    scanner.scan(black_box(payload))
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_dlp_content_type_skip(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dlp_content_type");
+    group.measurement_time(Duration::from_secs(5));
+    group.sample_size(10000);
+
+    let scanner = DlpScanner::new(DlpConfig::default());
+
+    // Test content-type checking overhead
+    let content_types = [
+        ("application/json", true),
+        ("text/html", true),
+        ("image/png", false),
+        ("video/mp4", false),
+        ("multipart/form-data", false),
+        ("application/octet-stream", false),
+    ];
+
+    for (ct, should_scan) in content_types {
+        group.bench_with_input(
+            BenchmarkId::new("is_scannable", ct),
+            &ct,
+            |b, ct| {
+                b.iter(|| {
+                    let result = scanner.is_scannable_content_type(black_box(ct));
+                    assert_eq!(result, should_scan, "Content-type {} should_scan={}", ct, should_scan);
+                    result
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_dlp_truncation_performance(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dlp_truncation");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(500);
+
+    // Compare scan times with different inspection caps
+    let configs = [
+        ("4kb_cap", 4 * 1024),
+        ("8kb_cap", 8 * 1024),
+        ("16kb_cap", 16 * 1024),
+        ("32kb_cap", 32 * 1024),
+    ];
+
+    // 32KB payload to test truncation at different caps
+    let large_payload = generate_order_payload(32);
+
+    for (name, cap) in configs {
+        let config = DlpConfig {
+            enabled: true,
+            max_scan_size: 5 * 1024 * 1024,
+            max_matches: 100,
+            scan_text_only: true,
+            max_body_inspection_bytes: cap,
+        };
+        let scanner = DlpScanner::new(config);
+
+        group.bench_with_input(
+            BenchmarkId::new("scan_32kb_payload", name),
+            &large_payload,
+            |b, payload| {
+                b.iter(|| {
+                    scanner.scan(black_box(payload))
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_clean_requests,
@@ -405,6 +630,10 @@ criterion_group!(
     bench_throughput,
     bench_sub_10us_verification,
     bench_heavy_complex,
+    bench_realistic_scenarios,
+    bench_dlp_body_inspection,
+    bench_dlp_content_type_skip,
+    bench_dlp_truncation_performance,
 );
 
 criterion_main!(benches);

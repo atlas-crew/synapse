@@ -1,0 +1,3105 @@
+[
+  {
+    "name": "ecommerce_order_heavy",
+    "method": "POST",
+    "uri": "/api/v2/orders",
+    "headers": [
+      [
+        "Host",
+        "api.example.com"
+      ],
+      [
+        "Accept",
+        "application/json"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br"
+      ],
+      [
+        "Connection",
+        "keep-alive"
+      ],
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ],
+      [
+        "Authorization",
+        "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.2q4p91he1dw2x2w91bj1340wn1ug7lncgwzwc1byt59buin4jcywy62af47pgb39tmi6z9g5oc2odwkuj7nnufo16fn1bk4d2ra08hcyusv8oevzbt2vga4hs1s2oh3fpz851eyxpinec8vinmngyk4fi5dopeyagwqr06hmz5m0w10hwyy01loh4wrjarge2rkwu861ju5q9e4ns46zm79q3eystfnh4an0ir4p1cw61rgfs267plyyo4k0c5amxmi856mskywe2xhubnmsji0n25qd3e16ad5owajd4k4yby6mlv39s0hxwdvgr4tjx0rqfb3z602px2eir8d932uv33st9hmnigwxiznmm68iiepfbgi0gzxh5kwatn0rynkvi9fuh5ds9y9ht4ujwhfymz18hxl764ghyav0k1ro4xn74974gjvzzpwjxeoq43xcvnwig1s1djatllpbmru3kvijgesicvzjqe43mlrtr769zehfqssa2qymuwet1dxcottkdrrho4a78hapecejjcygqlffgp4nb77kk06il3bsrcvawpy1dcxrsbxnsm9xfuzvz5dyh0lsaiyhi07l9swccn8375codgo1he4h6pvxa15g5r6cezynq9xki50i97ud4939d3per9uso2093902o8v1p5s49ic4t6k8dbapm60c0f768bqk"
+      ],
+      [
+        "Content-Type",
+        "application/json"
+      ],
+      [
+        "X-Request-ID",
+        "3ebcddfb-0e41-4a3e-8962-43423fbcac59"
+      ],
+      [
+        "X-Correlation-ID",
+        "58cb3ade-9f3f-4de0-9c01-c49a6981840c"
+      ],
+      [
+        "X-Tenant-ID",
+        "tenant_enterprise_042"
+      ],
+      [
+        "Cookie",
+        "session=l5ntlgrga97ubihrp4g5zgp47891vnxc; cart_id=p7jc5hh958k09t8l"
+      ]
+    ],
+    "body_json": {
+      "order": {
+        "customer_id": "cust_5jx4ki0d7k",
+        "shipping_address": {
+          "street": "123 Innovation Dr",
+          "city": "Tech City",
+          "state": "CA",
+          "zip": "94043",
+          "country": "USA"
+        },
+        "billing_address": {
+          "street": "123 Innovation Dr",
+          "city": "Tech City",
+          "state": "CA",
+          "zip": "94043",
+          "country": "USA"
+        },
+        "items": [
+          {
+            "sku": "SKU-63M5NWR0",
+            "qty": 5,
+            "price": 5.235908771945952,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-8E0PRBF4",
+            "qty": 2,
+            "price": 6.230333753602335,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-6C3BPSU9",
+            "qty": 4,
+            "price": 4.356729606936405,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-2BQIBN1Z",
+            "qty": 1,
+            "price": 48.73712786634279,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-7ACMU4EF",
+            "qty": 5,
+            "price": 0.5360430406485817,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-HUTWLA8T",
+            "qty": 1,
+            "price": 49.14374022247308,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-D2KN6WGR",
+            "qty": 1,
+            "price": 95.270372895699,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-RR8ZABGQ",
+            "qty": 3,
+            "price": 18.98690567822181,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-L16WGSES",
+            "qty": 1,
+            "price": 15.632533849133011,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-GJ084P6D",
+            "qty": 1,
+            "price": 30.2024972207785,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-KWRRVRDS",
+            "qty": 4,
+            "price": 44.7918116123891,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-GT8ST1SM",
+            "qty": 3,
+            "price": 32.72592696801786,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-BOFKO0MU",
+            "qty": 2,
+            "price": 39.58384451912587,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-1J019BTA",
+            "qty": 4,
+            "price": 88.08717838467072,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-B89LHMPP",
+            "qty": 4,
+            "price": 41.271047813135596,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-JPIGVLLE",
+            "qty": 2,
+            "price": 58.80012066095581,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-IJKN89RM",
+            "qty": 1,
+            "price": 15.833789643719154,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-YSAOJYBN",
+            "qty": 3,
+            "price": 95.69647473170902,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-NOZASND5",
+            "qty": 4,
+            "price": 12.036342693737323,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-42V2SFOF",
+            "qty": 3,
+            "price": 36.32447339052316,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          }
+        ],
+        "payment": {
+          "token": "tok_mc421yp8r7qk5fpg1g6rtigq",
+          "method": "credit_card",
+          "last4": "4242"
+        },
+        "metadata": {
+          "session_id": "2b48435c-7299-42d6-82b1-f17d6a71b4d9",
+          "ip": "203.0.113.195",
+          "user_agent": "Mozilla/5.0..."
+        }
+      }
+    }
+  },
+  {
+    "name": "graphql_mutation_heavy",
+    "method": "POST",
+    "uri": "/graphql?operationName=UpdateUserProfile",
+    "headers": [
+      [
+        "Host",
+        "api.example.com"
+      ],
+      [
+        "Accept",
+        "application/json"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br"
+      ],
+      [
+        "Connection",
+        "keep-alive"
+      ],
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ],
+      [
+        "Content-Type",
+        "application/json"
+      ],
+      [
+        "Authorization",
+        "Bearer szq6q2efwn1brof716k0htl2txy58ljrgj9zn797lz4k94jm4vy2f6locr0phud3"
+      ]
+    ],
+    "body_json": {
+      "query": "mutation UpdateUserProfile($input: UserProfileInput!) {\n      updateProfile(input: $input) {\n        user { id name email preferences { theme notifications { email push sms } privacy { tracking sharing } } }\n        audit { timestamp actor changes { field old new } }\n      }\n    }",
+      "variables": {
+        "input": {
+          "id": "1609b2e2-6769-49bf-8a2c-fa8201a29b0e",
+          "preferences": {
+            "theme": "dark",
+            "notifications": {
+              "email": true,
+              "push": false,
+              "sms": true
+            },
+            "privacy": {
+              "tracking": false,
+              "sharing": "friends"
+            },
+            "accessibility": {
+              "contrast": "high",
+              "font_size": "large"
+            }
+          },
+          "history": [
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.901Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            },
+            {
+              "action": "login",
+              "timestamp": "2026-01-09T01:24:25.902Z",
+              "ip": "192.168.1.1"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "healthcare_claim_heavy",
+    "method": "POST",
+    "uri": "/api/claims/submit",
+    "headers": [
+      [
+        "Host",
+        "api.example.com"
+      ],
+      [
+        "Accept",
+        "application/json"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br"
+      ],
+      [
+        "Connection",
+        "keep-alive"
+      ],
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ],
+      [
+        "Content-Type",
+        "application/json"
+      ],
+      [
+        "X-HIPAA-Audit",
+        "true"
+      ],
+      [
+        "X-Organization-ID",
+        "ORG-555"
+      ]
+    ],
+    "body_json": {
+      "claim": {
+        "patient": {
+          "id": "PAT-v3wtz8x2oo",
+          "dob": "1980-01-01",
+          "gender": "M"
+        },
+        "provider": {
+          "npi": "1234567890",
+          "taxonomy": "207Q00000X"
+        },
+        "diagnosis_codes": [
+          "ICD-10-X55",
+          "ICD-10-B1M",
+          "ICD-10-HEQ",
+          "ICD-10-4PG",
+          "ICD-10-N79",
+          "ICD-10-MX5",
+          "ICD-10-DNW",
+          "ICD-10-SMW",
+          "ICD-10-1F3",
+          "ICD-10-0BF",
+          "ICD-10-3WA",
+          "ICD-10-ZKJ",
+          "ICD-10-N1H",
+          "ICD-10-TYQ",
+          "ICD-10-U4R"
+        ],
+        "procedure_codes": [
+          {
+            "code": "CPT-ybl3n",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-3022r",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-7k5ue",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-zd04l",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-spi8f",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-arbms",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-62kg6",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-br1aw",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-x8kz0",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-yt5qh",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-yq3vu",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-slgmx",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-hp9ot",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-67tfq",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-7uun0",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-ew2fe",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-sviaq",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-28bsu",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-cso7k",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-3166e",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-qx7oi",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-aiiqi",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-fi0qd",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-bxuve",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          },
+          {
+            "code": "CPT-79tm0",
+            "modifiers": [
+              "25",
+              "RT"
+            ],
+            "units": 1,
+            "charge": 150
+          }
+        ],
+        "attachments": [
+          {
+            "type": "image/jpeg",
+            "ref": "4d138081-ac52-4627-8b20-9acae8a22dd8",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "0614b20f-f462-4ec0-8135-07d01c764ed2",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "202c6300-7bb5-4278-8335-08952093bbb7",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "a0966308-f203-4a8e-b1bc-2a26841c87cf",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "d15343fe-a7ce-4c9d-8b5f-e8bf85a1ff18",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "1f615327-730a-4c6d-964d-987ab7bab85e",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "76c1e3fa-ced3-4399-9e03-03e3708102a5",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "58192d06-547f-44df-812c-06eac0dbea75",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "c25ab247-938a-48dc-a235-d3ce39562732",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "efa0fb7d-edfd-46c9-9705-801914eda9b0",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "8593cf0b-2fcf-4780-a801-53564d749df1",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "54ffdf8a-a544-490d-8d46-b5bbb3da9bf6",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "229ee78f-c712-4a7e-aeba-cc17dd58880d",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "72fee4f7-2d93-4d87-ad09-9081e96a9b34",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "a74f5020-9df0-4051-a3f4-e4cafd729543",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "986f528a-9dd0-4775-acb0-100f3d71ef39",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "917ee463-ea58-4b15-b1b9-10b8738158c4",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "e0a01178-18b1-412d-963e-edb6279ccfbf",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "eb99c313-fdec-4735-8c0d-637a105a7fd9",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "58636aee-6bee-486e-acab-965be2bf0ac3",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "b05658e2-3163-4261-924d-61234e19a1f8",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "6eb674ad-889b-4727-9bbf-e4990864f546",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "1003fb47-970b-49a1-847a-a642a241fd7b",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "cb7074b6-5b70-4d17-a34a-b382b2d47948",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "f9913ea6-f679-4423-8a9a-4a5967a47c3b",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "e90d20ef-9afc-4b3c-ab8f-f09bf4fb5267",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "3347dec8-a5ae-4046-a363-dcda206bbfd6",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "2e34085c-773b-4e14-9347-726777bb0814",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "f806dbf9-7aff-4379-919c-89cf498786a0",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "b775d091-8310-4463-9d4e-5e43c7386a02",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "66df7906-d613-4af3-a6b9-dc2f4518f23a",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "3fe756a6-8c1c-48b1-9d87-972f085e81dc",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "23370381-7ae1-494d-9fa3-812365f505ef",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "889dcd45-c755-417d-95e7-adc9e4636f4c",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "78d389bd-91e3-4ab2-a205-ec6cb91cfb22",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "3cb4522e-ad54-4277-adb3-b0633dd0e37b",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "026d6b02-ea89-403b-b634-3023f32019ac",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "b2afdd52-02db-4b67-b328-26f6a63b7852",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "e122379f-741c-437b-a0d8-7e7c4c657f08",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "47806667-f058-4238-ab1a-33e18fc9b290",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "19855094-23f7-4659-a533-ed61bb602745",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "b07c2e50-6e31-4757-9b5f-dd911b614f47",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "9966d0c4-1b58-4a8c-a9ac-0f93f76d520f",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "06812198-16ff-4fb5-8711-5789cc557cf9",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "43d989ed-71c8-4c81-8202-9bd199883b56",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "4d69df58-e131-4042-9725-93a6a4a128fc",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "8fbc69dc-2eb7-48d5-bf5a-75fa618ba7c6",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "f1f54e16-2e0f-4cb7-9bb8-f9d471588ef5",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "6c445ea6-795c-4e04-92d5-5aa639d5e109",
+            "desc": "clinical notes page"
+          },
+          {
+            "type": "image/jpeg",
+            "ref": "9e8d6527-cdcd-4df9-8ba7-7daa3f7e0b4e",
+            "desc": "clinical notes page"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "bulk_import_extreme",
+    "method": "POST",
+    "uri": "/api/v1/bulk/contacts?validate=true&dedupe=email&batch_id=abc123",
+    "headers": [
+      [
+        "Host",
+        "api.example.com"
+      ],
+      [
+        "Accept",
+        "application/json"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br"
+      ],
+      [
+        "Connection",
+        "keep-alive"
+      ],
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ],
+      [
+        "Content-Type",
+        "application/json"
+      ]
+    ],
+    "body_json": {
+      "contacts": [
+        {
+          "id": 0,
+          "email": "user0@example.com",
+          "first_name": "User0",
+          "last_name": "Test0",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 56.35738601692648,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 1,
+          "email": "user1@example.com",
+          "first_name": "User1",
+          "last_name": "Test1",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 63.746831845505845,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 2,
+          "email": "user2@example.com",
+          "first_name": "User2",
+          "last_name": "Test2",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 49.90822433987656,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 3,
+          "email": "user3@example.com",
+          "first_name": "User3",
+          "last_name": "Test3",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 42.88622966182643,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 4,
+          "email": "user4@example.com",
+          "first_name": "User4",
+          "last_name": "Test4",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 0.9193428007568727,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 5,
+          "email": "user5@example.com",
+          "first_name": "User5",
+          "last_name": "Test5",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 18.64217818548044,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 6,
+          "email": "user6@example.com",
+          "first_name": "User6",
+          "last_name": "Test6",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 31.563275921245282,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 7,
+          "email": "user7@example.com",
+          "first_name": "User7",
+          "last_name": "Test7",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 66.59812727186282,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 8,
+          "email": "user8@example.com",
+          "first_name": "User8",
+          "last_name": "Test8",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 17.575297798368815,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 9,
+          "email": "user9@example.com",
+          "first_name": "User9",
+          "last_name": "Test9",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 3.8413949002733094,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 10,
+          "email": "user10@example.com",
+          "first_name": "User10",
+          "last_name": "Test10",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 57.96872010926766,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 11,
+          "email": "user11@example.com",
+          "first_name": "User11",
+          "last_name": "Test11",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 31.941149219280685,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 12,
+          "email": "user12@example.com",
+          "first_name": "User12",
+          "last_name": "Test12",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 13.912461988976998,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 13,
+          "email": "user13@example.com",
+          "first_name": "User13",
+          "last_name": "Test13",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 10.761170547096999,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 14,
+          "email": "user14@example.com",
+          "first_name": "User14",
+          "last_name": "Test14",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 68.53947152408197,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 15,
+          "email": "user15@example.com",
+          "first_name": "User15",
+          "last_name": "Test15",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 65.68082705466307,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 16,
+          "email": "user16@example.com",
+          "first_name": "User16",
+          "last_name": "Test16",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 49.22961561634081,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 17,
+          "email": "user17@example.com",
+          "first_name": "User17",
+          "last_name": "Test17",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 55.160562465224984,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 18,
+          "email": "user18@example.com",
+          "first_name": "User18",
+          "last_name": "Test18",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 1.0539524962653202,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 19,
+          "email": "user19@example.com",
+          "first_name": "User19",
+          "last_name": "Test19",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 94.77953301507142,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 20,
+          "email": "user20@example.com",
+          "first_name": "User20",
+          "last_name": "Test20",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 54.051893684490324,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 21,
+          "email": "user21@example.com",
+          "first_name": "User21",
+          "last_name": "Test21",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 95.21451644872147,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 22,
+          "email": "user22@example.com",
+          "first_name": "User22",
+          "last_name": "Test22",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 90.50263903614568,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 23,
+          "email": "user23@example.com",
+          "first_name": "User23",
+          "last_name": "Test23",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 24.916138306621093,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 24,
+          "email": "user24@example.com",
+          "first_name": "User24",
+          "last_name": "Test24",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 3.3704020443984017,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 25,
+          "email": "user25@example.com",
+          "first_name": "User25",
+          "last_name": "Test25",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 43.296365148756124,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 26,
+          "email": "user26@example.com",
+          "first_name": "User26",
+          "last_name": "Test26",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 48.054517686857444,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 27,
+          "email": "user27@example.com",
+          "first_name": "User27",
+          "last_name": "Test27",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 64.1977512065062,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 28,
+          "email": "user28@example.com",
+          "first_name": "User28",
+          "last_name": "Test28",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 80.02302737553106,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 29,
+          "email": "user29@example.com",
+          "first_name": "User29",
+          "last_name": "Test29",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 56.77256555445975,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 30,
+          "email": "user30@example.com",
+          "first_name": "User30",
+          "last_name": "Test30",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 38.31110296854183,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 31,
+          "email": "user31@example.com",
+          "first_name": "User31",
+          "last_name": "Test31",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 94.71745496841079,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 32,
+          "email": "user32@example.com",
+          "first_name": "User32",
+          "last_name": "Test32",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 19.80738206132684,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 33,
+          "email": "user33@example.com",
+          "first_name": "User33",
+          "last_name": "Test33",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 14.223455109439609,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 34,
+          "email": "user34@example.com",
+          "first_name": "User34",
+          "last_name": "Test34",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 81.50797814388851,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 35,
+          "email": "user35@example.com",
+          "first_name": "User35",
+          "last_name": "Test35",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 58.22642304980605,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 36,
+          "email": "user36@example.com",
+          "first_name": "User36",
+          "last_name": "Test36",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 67.97935867807922,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 37,
+          "email": "user37@example.com",
+          "first_name": "User37",
+          "last_name": "Test37",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 45.6944145240187,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 38,
+          "email": "user38@example.com",
+          "first_name": "User38",
+          "last_name": "Test38",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 24.077533528844608,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 39,
+          "email": "user39@example.com",
+          "first_name": "User39",
+          "last_name": "Test39",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 23.303275692357104,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 40,
+          "email": "user40@example.com",
+          "first_name": "User40",
+          "last_name": "Test40",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 87.5835645124851,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 41,
+          "email": "user41@example.com",
+          "first_name": "User41",
+          "last_name": "Test41",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 17.719888256807216,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 42,
+          "email": "user42@example.com",
+          "first_name": "User42",
+          "last_name": "Test42",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 38.62154109906566,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 43,
+          "email": "user43@example.com",
+          "first_name": "User43",
+          "last_name": "Test43",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 75.57368944184933,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 44,
+          "email": "user44@example.com",
+          "first_name": "User44",
+          "last_name": "Test44",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 65.06906700031534,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 45,
+          "email": "user45@example.com",
+          "first_name": "User45",
+          "last_name": "Test45",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 78.24649545077517,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 46,
+          "email": "user46@example.com",
+          "first_name": "User46",
+          "last_name": "Test46",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 57.983660449857254,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 47,
+          "email": "user47@example.com",
+          "first_name": "User47",
+          "last_name": "Test47",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 57.95228222341522,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 48,
+          "email": "user48@example.com",
+          "first_name": "User48",
+          "last_name": "Test48",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 71.44010918151282,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 49,
+          "email": "user49@example.com",
+          "first_name": "User49",
+          "last_name": "Test49",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 79.79435841542704,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 50,
+          "email": "user50@example.com",
+          "first_name": "User50",
+          "last_name": "Test50",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 47.07611809263441,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 51,
+          "email": "user51@example.com",
+          "first_name": "User51",
+          "last_name": "Test51",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 93.5249013669655,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 52,
+          "email": "user52@example.com",
+          "first_name": "User52",
+          "last_name": "Test52",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 2.940840293138325,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 53,
+          "email": "user53@example.com",
+          "first_name": "User53",
+          "last_name": "Test53",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 20.90536195024153,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 54,
+          "email": "user54@example.com",
+          "first_name": "User54",
+          "last_name": "Test54",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 69.3711461304336,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 55,
+          "email": "user55@example.com",
+          "first_name": "User55",
+          "last_name": "Test55",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 57.79471508713008,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 56,
+          "email": "user56@example.com",
+          "first_name": "User56",
+          "last_name": "Test56",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 10.782351809217715,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 57,
+          "email": "user57@example.com",
+          "first_name": "User57",
+          "last_name": "Test57",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 35.454318797037686,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 58,
+          "email": "user58@example.com",
+          "first_name": "User58",
+          "last_name": "Test58",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 87.28106758383115,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 59,
+          "email": "user59@example.com",
+          "first_name": "User59",
+          "last_name": "Test59",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 75.9443554957137,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 60,
+          "email": "user60@example.com",
+          "first_name": "User60",
+          "last_name": "Test60",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 31.028203035529355,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 61,
+          "email": "user61@example.com",
+          "first_name": "User61",
+          "last_name": "Test61",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 38.86606611691077,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 62,
+          "email": "user62@example.com",
+          "first_name": "User62",
+          "last_name": "Test62",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 76.8151153207304,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 63,
+          "email": "user63@example.com",
+          "first_name": "User63",
+          "last_name": "Test63",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 26.021014399836485,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 64,
+          "email": "user64@example.com",
+          "first_name": "User64",
+          "last_name": "Test64",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 65.21119031970196,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 65,
+          "email": "user65@example.com",
+          "first_name": "User65",
+          "last_name": "Test65",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 87.919593113362,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 66,
+          "email": "user66@example.com",
+          "first_name": "User66",
+          "last_name": "Test66",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 39.88255420617843,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 67,
+          "email": "user67@example.com",
+          "first_name": "User67",
+          "last_name": "Test67",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 4.281372483460744,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 68,
+          "email": "user68@example.com",
+          "first_name": "User68",
+          "last_name": "Test68",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 57.24797241319437,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 69,
+          "email": "user69@example.com",
+          "first_name": "User69",
+          "last_name": "Test69",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 36.4596220282134,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 70,
+          "email": "user70@example.com",
+          "first_name": "User70",
+          "last_name": "Test70",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 74.2947750684148,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 71,
+          "email": "user71@example.com",
+          "first_name": "User71",
+          "last_name": "Test71",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 1.088951606318167,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 72,
+          "email": "user72@example.com",
+          "first_name": "User72",
+          "last_name": "Test72",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 77.97316887378376,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 73,
+          "email": "user73@example.com",
+          "first_name": "User73",
+          "last_name": "Test73",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 40.07513093567419,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 74,
+          "email": "user74@example.com",
+          "first_name": "User74",
+          "last_name": "Test74",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 3.1215626262922846,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 75,
+          "email": "user75@example.com",
+          "first_name": "User75",
+          "last_name": "Test75",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 36.78607043224442,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 76,
+          "email": "user76@example.com",
+          "first_name": "User76",
+          "last_name": "Test76",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 55.45195136900274,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 77,
+          "email": "user77@example.com",
+          "first_name": "User77",
+          "last_name": "Test77",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 40.72352329241895,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 78,
+          "email": "user78@example.com",
+          "first_name": "User78",
+          "last_name": "Test78",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 58.0545478112519,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 79,
+          "email": "user79@example.com",
+          "first_name": "User79",
+          "last_name": "Test79",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 21.910152062132447,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 80,
+          "email": "user80@example.com",
+          "first_name": "User80",
+          "last_name": "Test80",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 83.92629000883419,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 81,
+          "email": "user81@example.com",
+          "first_name": "User81",
+          "last_name": "Test81",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 18.09035243952739,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 82,
+          "email": "user82@example.com",
+          "first_name": "User82",
+          "last_name": "Test82",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 88.96088726674733,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 83,
+          "email": "user83@example.com",
+          "first_name": "User83",
+          "last_name": "Test83",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 49.90142222047358,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 84,
+          "email": "user84@example.com",
+          "first_name": "User84",
+          "last_name": "Test84",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 39.31492532850507,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 85,
+          "email": "user85@example.com",
+          "first_name": "User85",
+          "last_name": "Test85",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 17.454316825905924,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 86,
+          "email": "user86@example.com",
+          "first_name": "User86",
+          "last_name": "Test86",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 71.73022030229419,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 87,
+          "email": "user87@example.com",
+          "first_name": "User87",
+          "last_name": "Test87",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 60.618114477481,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 88,
+          "email": "user88@example.com",
+          "first_name": "User88",
+          "last_name": "Test88",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 3.631581634594605,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 89,
+          "email": "user89@example.com",
+          "first_name": "User89",
+          "last_name": "Test89",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 37.41893534021932,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 90,
+          "email": "user90@example.com",
+          "first_name": "User90",
+          "last_name": "Test90",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 50.82348383050939,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 91,
+          "email": "user91@example.com",
+          "first_name": "User91",
+          "last_name": "Test91",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 81.77285252744815,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 92,
+          "email": "user92@example.com",
+          "first_name": "User92",
+          "last_name": "Test92",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 47.82544566038385,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 93,
+          "email": "user93@example.com",
+          "first_name": "User93",
+          "last_name": "Test93",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 9.592505717333676,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 94,
+          "email": "user94@example.com",
+          "first_name": "User94",
+          "last_name": "Test94",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 99.4705392173923,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 95,
+          "email": "user95@example.com",
+          "first_name": "User95",
+          "last_name": "Test95",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 20.15577357718914,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 96,
+          "email": "user96@example.com",
+          "first_name": "User96",
+          "last_name": "Test96",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 64.95578789422383,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 97,
+          "email": "user97@example.com",
+          "first_name": "User97",
+          "last_name": "Test97",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 2.9149958234829354,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 98,
+          "email": "user98@example.com",
+          "first_name": "User98",
+          "last_name": "Test98",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 48.289893317292496,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        },
+        {
+          "id": 99,
+          "email": "user99@example.com",
+          "first_name": "User99",
+          "last_name": "Test99",
+          "attributes": {
+            "segment": "enterprise",
+            "score": 33.26361374029621,
+            "tags": [
+              "lead",
+              "webinar",
+              "2024"
+            ]
+          }
+        }
+      ],
+      "options": {
+        "dedupe": "email",
+        "notify": false,
+        "priority": "high"
+      }
+    }
+  },
+  {
+    "name": "sqli_in_heavy_noise",
+    "method": "POST",
+    "uri": "/api/v2/orders",
+    "headers": [
+      [
+        "Host",
+        "api.example.com"
+      ],
+      [
+        "Accept",
+        "application/json"
+      ],
+      [
+        "Accept-Encoding",
+        "gzip, deflate, br"
+      ],
+      [
+        "Connection",
+        "keep-alive"
+      ],
+      [
+        "User-Agent",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      ],
+      [
+        "Content-Type",
+        "application/json"
+      ]
+    ],
+    "body_json": {
+      "order": {
+        "customer_id": "cust_5jx4ki0d7k",
+        "shipping_address": {
+          "street": "123 Innovation Dr",
+          "city": "Tech City",
+          "state": "CA",
+          "zip": "94043",
+          "country": "USA"
+        },
+        "billing_address": {
+          "street": "123 Innovation Dr",
+          "city": "Tech City",
+          "state": "CA",
+          "zip": "94043",
+          "country": "USA"
+        },
+        "items": [
+          {
+            "sku": "SKU-63M5NWR0",
+            "qty": 5,
+            "price": 5.235908771945952,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-8E0PRBF4",
+            "qty": 2,
+            "price": 6.230333753602335,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-6C3BPSU9",
+            "qty": 4,
+            "price": 4.356729606936405,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-2BQIBN1Z",
+            "qty": 1,
+            "price": 48.73712786634279,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-7ACMU4EF",
+            "qty": 5,
+            "price": 0.5360430406485817,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-HUTWLA8T",
+            "qty": 1,
+            "price": 49.14374022247308,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-D2KN6WGR",
+            "qty": 1,
+            "price": 95.270372895699,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-RR8ZABGQ",
+            "qty": 3,
+            "price": 18.98690567822181,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-L16WGSES",
+            "qty": 1,
+            "price": 15.632533849133011,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-GJ084P6D",
+            "qty": 1,
+            "price": 30.2024972207785,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-KWRRVRDS",
+            "qty": 4,
+            "price": 44.7918116123891,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-GT8ST1SM",
+            "qty": 3,
+            "price": 32.72592696801786,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-BOFKO0MU",
+            "qty": 2,
+            "price": 39.58384451912587,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-1J019BTA",
+            "qty": 4,
+            "price": 88.08717838467072,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-B89LHMPP",
+            "qty": 4,
+            "price": 41.271047813135596,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-JPIGVLLE",
+            "qty": 2,
+            "price": 58.80012066095581,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "' OR '1'='1"
+            }
+          },
+          {
+            "sku": "SKU-IJKN89RM",
+            "qty": 1,
+            "price": 15.833789643719154,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-YSAOJYBN",
+            "qty": 3,
+            "price": 95.69647473170902,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-NOZASND5",
+            "qty": 4,
+            "price": 12.036342693737323,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          },
+          {
+            "sku": "SKU-42V2SFOF",
+            "qty": 3,
+            "price": 36.32447339052316,
+            "variant": {
+              "color": "black",
+              "size": "L",
+              "material": "cotton"
+            },
+            "metadata": {
+              "source": "web",
+              "promo": "SUMMER2024"
+            }
+          }
+        ],
+        "payment": {
+          "token": "tok_mc421yp8r7qk5fpg1g6rtigq",
+          "method": "credit_card",
+          "last4": "4242"
+        },
+        "metadata": {
+          "session_id": "2b48435c-7299-42d6-82b1-f17d6a71b4d9",
+          "ip": "203.0.113.195",
+          "user_agent": "Mozilla/5.0..."
+        }
+      }
+    }
+  }
+]
