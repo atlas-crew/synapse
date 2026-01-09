@@ -605,6 +605,7 @@ fn bench_dlp_truncation_performance(c: &mut Criterion) {
             max_matches: 100,
             scan_text_only: true,
             max_body_inspection_bytes: cap,
+            fast_mode: false,
         };
         let scanner = DlpScanner::new(config);
 
@@ -614,6 +615,53 @@ fn bench_dlp_truncation_performance(c: &mut Criterion) {
             |b, payload| {
                 b.iter(|| {
                     scanner.scan(black_box(payload))
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_dlp_fast_mode(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dlp_fast_mode");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(1000);
+
+    // Test payloads at 4KB and 8KB (most relevant sizes)
+    let sizes_kb = [4, 8];
+
+    for size_kb in sizes_kb {
+        let payload_with_pii = generate_order_payload(size_kb);
+
+        // Normal mode (comprehensive)
+        let normal_scanner = DlpScanner::new(DlpConfig::default());
+        let name = format!("normal_{}kb", size_kb);
+
+        group.bench_with_input(
+            BenchmarkId::new("scan", &name),
+            &payload_with_pii,
+            |b, payload| {
+                b.iter(|| {
+                    normal_scanner.scan(black_box(payload))
+                })
+            },
+        );
+
+        // Fast mode (skip email, phone, IPv4)
+        let fast_config = DlpConfig {
+            fast_mode: true,
+            ..Default::default()
+        };
+        let fast_scanner = DlpScanner::new(fast_config);
+        let name = format!("fast_{}kb", size_kb);
+
+        group.bench_with_input(
+            BenchmarkId::new("scan", &name),
+            &payload_with_pii,
+            |b, payload| {
+                b.iter(|| {
+                    fast_scanner.scan(black_box(payload))
                 })
             },
         );
@@ -634,6 +682,7 @@ criterion_group!(
     bench_dlp_body_inspection,
     bench_dlp_content_type_skip,
     bench_dlp_truncation_performance,
+    bench_dlp_fast_mode,
 );
 
 criterion_main!(benches);

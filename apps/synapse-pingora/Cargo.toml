@@ -93,7 +93,7 @@ panic = "abort"
 lto = "fat"
 codegen-units = 1
 opt-level = 3
-panic = "abort"
+# Note: panic = "abort" removed for criterion compatibility
 
 [profile.dev]
 panic = "abort"
