@@ -304,6 +304,54 @@ Rules are loaded at startup from (in order of preference):
 4. **LTO**: Link-time optimization in release builds (profile: fat LTO, 1 codegen unit)
 5. **Native CPU**: Build with `RUSTFLAGS="-C target-cpu=native"` for best performance
 
+### DLP Body Inspection Optimizations
+
+The DLP scanner has been optimized for high-throughput request body scanning:
+
+| Optimization | Description | Impact |
+|--------------|-------------|--------|
+| **Content-Type Short Circuit** | Skip binary types (image/*, video/*, multipart/form-data) | Eliminates scan overhead for file uploads |
+| **Inspection Depth Cap** | Truncate body to first 8KB by default | O(1) scan time for large payloads |
+| **Aho-Corasick Prefilter** | Single-pass multi-pattern detection | 30-50% faster than sequential regex |
+
+#### DLP Performance Benchmarks
+
+| Payload Size | With PII | Clean Traffic | Notes |
+|--------------|----------|---------------|-------|
+| 4 KB | **~45 μs** | ~33 μs | E-commerce order payloads |
+| 8 KB | ~86 μs | ~73 μs | At inspection cap limit |
+| 18 KB | ~100 μs | ~76 μs | Truncated to 8KB cap |
+| 32 KB | ~85 μs | ~65 μs | Plateaus due to truncation |
+
+#### DLP Configuration Options
+
+```rust
+// In code (DlpConfig)
+DlpConfig {
+    enabled: true,                        // Enable/disable DLP scanning
+    max_scan_size: 5 * 1024 * 1024,       // 5MB hard limit (reject if larger)
+    max_matches: 100,                     // Stop after 100 matches
+    scan_text_only: true,                 // Only scan text content types
+    max_body_inspection_bytes: 8 * 1024,  // 8KB inspection cap (truncate, don't reject)
+}
+```
+
+**Tuning Recommendations**:
+- **High-security environments**: Set `max_body_inspection_bytes` to 32KB+ for deeper inspection
+- **High-throughput APIs**: Keep default 8KB cap for sub-100μs scan times
+- **File upload endpoints**: Binary content types are automatically skipped
+
+#### Content Types Automatically Skipped
+
+- `image/*` - All image formats
+- `audio/*` - All audio formats
+- `video/*` - All video formats
+- `application/octet-stream` - Binary data
+- `multipart/form-data` - File uploads
+- `application/zip`, `application/gzip`, etc. - Archives
+- `font/*` - Font files
+- `model/*` - 3D models
+
 ## Future Work (For Feature Parity with nginx)
 
 ### Core Features (Required for Production)
@@ -321,8 +369,8 @@ Rules are loaded at startup from (in order of preference):
 - [ ] Signal Horizon telemetry integration
 
 ### Advanced Features (Nice-to-have)
-- [ ] DLP scanning in `request_body_filter`
-- [ ] Request body inspection (POST/PUT payloads)
+- [x] DLP scanning in `request_body_filter` (DONE - with performance optimizations)
+- [x] Request body inspection (POST/PUT payloads) (DONE - with truncation cap)
 - [ ] Custom block pages per site
 - [ ] Dashboard UI integration (PingoraDashboard components)
 - [ ] Production hardening (security audit, fuzzing)

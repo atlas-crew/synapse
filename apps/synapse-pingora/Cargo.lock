@@ -1399,6 +1399,7 @@ dependencies = [
  "cbindgen",
  "crossbeam-channel",
  "dashmap 5.5.3",
+ "lru 0.16.3",
  "once_cell",
  "parking_lot",
  "percent-encoding",
@@ -1464,6 +1465,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
 dependencies = [
  "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "lru"
+version = "0.16.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1dc47f592c06f33f8e3aea9591776ec7c9f9e4124778ff8a3c3b87159f7e593"
+dependencies = [
+ "hashbrown 0.16.1",
 ]
 
 [[package]]
@@ -1685,7 +1695,7 @@ dependencies = [
  "httpdate",
  "indexmap 1.9.3",
  "log",
- "lru",
+ "lru 0.14.0",
  "once_cell",
  "parking_lot",
  "pingora-core",
@@ -1812,7 +1822,7 @@ checksum = "a74589c2e4f089d00fde78030e2d51b44406341e1e43b0bdb5456b93b4459937"
 dependencies = [
  "crossbeam-queue",
  "log",
- "lru",
+ "lru 0.14.0",
  "parking_lot",
  "pingora-timeout",
  "thread_local",
@@ -2473,6 +2483,7 @@ name = "synapse-pingora"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "aho-corasick",
  "arc-swap",
  "async-trait",
  "axum",

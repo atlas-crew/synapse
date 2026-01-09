@@ -1,7 +1,13 @@
 //! DLP Scanner Implementation
 //!
 //! Thread-safe scanner for detecting sensitive data in response bodies.
+//!
+//! Performance optimizations:
+//! - Aho-Corasick automaton for single-pass multi-pattern matching
+//! - Configurable inspection depth cap to bound scan time
+//! - Content-type filtering to skip binary payloads
 
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
@@ -84,6 +90,10 @@ pub struct ScanResult {
     pub match_count: usize,
     pub scan_time_us: u64,
     pub content_length: usize,
+    /// True if content was truncated to max_body_inspection_bytes
+    pub truncated: bool,
+    /// Original content length before truncation (0 if not truncated)
+    pub original_length: usize,
 }
 
 impl Default for ScanResult {
@@ -95,6 +105,8 @@ impl Default for ScanResult {
             match_count: 0,
             scan_time_us: 0,
             content_length: 0,
+            truncated: false,
+            original_length: 0,
         }
     }
 }
@@ -112,18 +124,26 @@ pub struct DlpStats {
 #[derive(Debug, Clone)]
 pub struct DlpConfig {
     pub enabled: bool,
+    /// Maximum body size to accept for scanning (reject if larger)
     pub max_scan_size: usize,
+    /// Maximum matches before stopping scan
     pub max_matches: usize,
+    /// Only scan text-based content types
     pub scan_text_only: bool,
+    /// Maximum bytes to inspect for DLP patterns (truncate if larger).
+    /// This bounds scan time for large payloads. Default 8KB.
+    /// Content beyond this limit is not scanned but the request continues.
+    pub max_body_inspection_bytes: usize,
 }
 
 impl Default for DlpConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_scan_size: 5 * 1024 * 1024, // 5MB max
+            max_scan_size: 5 * 1024 * 1024, // 5MB max (reject if larger)
             max_matches: 100, // Stop after 100 matches
             scan_text_only: true,
+            max_body_inspection_bytes: 8 * 1024, // 8KB inspection cap for performance
         }
     }
 }
@@ -439,6 +459,87 @@ lazy_static! {
         // Medical Record
         Pattern { name: "Medical Record Number", data_type: SensitiveDataType::MedicalRecord, severity: PatternSeverity::Critical, regex: &RE_MEDICAL_RECORD, validator: None },
     ];
+
+    // ========================================================================
+    // Aho-Corasick Prefilter Automaton
+    // ========================================================================
+    //
+    // For patterns with reliable literal prefixes, we use Aho-Corasick for
+    // single-pass multi-pattern detection. This is O(n) in content length
+    // regardless of pattern count, vs O(n * patterns) for sequential regex.
+    //
+    // Strategy: AC finds candidate regions, then we validate with full regex.
+
+    /// Literal prefixes for Aho-Corasick prefiltering.
+    /// Each entry: (literal_prefix, pattern_index_in_PATTERNS)
+    ///
+    /// PATTERNS order (for reference):
+    ///  0: Visa, 1: MasterCard, 2: Amex, 3: Discover
+    ///  4: SSN formatted, 5: SSN unformatted
+    ///  6: Email, 7: US Phone, 8: Intl Phone
+    ///  9: AWS Access Key, 10: AWS Secret Key, 11: AWS Session Token
+    /// 12: Generic API Key, 13: GitHub Token, 14: GitHub Fine-grained PAT
+    /// 15: Stripe API Key, 16: Google API Key
+    /// 17: Password URL, 18: Password JSON
+    /// 19: IBAN, 20: IPv4
+    /// 21: RSA Private Key, 22: EC Private Key
+    /// 23: JWT Token, 24: Medical Record
+    static ref AC_PREFIXES: Vec<(&'static str, usize)> = vec![
+        // Credit cards (indices 0-3): digit prefixes
+        ("4", 0),      // Visa starts with 4
+        ("51", 1), ("52", 1), ("53", 1), ("54", 1), ("55", 1), // MasterCard 51-55
+        ("34", 2), ("37", 2), // Amex 34, 37
+        ("6011", 3), ("65", 3), // Discover
+
+        // AWS keys (indices 9-11)
+        ("AKIA", 9),   // AWS Access Key (index 9)
+        ("aws", 11), ("AWS", 11), // AWS Session Token (index 11)
+
+        // API Keys (indices 12-16)
+        ("api_key", 12), ("api-key", 12), ("apikey", 12), ("API_KEY", 12), // Generic API Key (12)
+        ("ghp_", 13), ("ghs_", 13), // GitHub Token (13)
+        ("github_pat_", 14), // GitHub Fine-grained PAT (14)
+        ("sk_live_", 15), ("sk_test_", 15), ("pk_live_", 15), ("pk_test_", 15), ("rk_live_", 15), // Stripe (15)
+        ("AIza", 16), // Google API Key (16)
+
+        // Passwords (indices 17-18)
+        ("password=", 17), ("passwd=", 17), ("pwd=", 17), // Password in URL (17)
+        ("\"password\"", 18), ("\"passwd\"", 18), ("\"pwd\"", 18), // Password in JSON (18)
+
+        // Private Keys (indices 21-22)
+        ("-----BEGIN RSA PRIVATE KEY", 21),
+        ("-----BEGIN PRIVATE KEY", 21),
+        ("-----BEGIN EC PRIVATE KEY", 22),
+
+        // JWT (index 23)
+        ("eyJ", 23),
+    ];
+
+    /// Aho-Corasick automaton for fast prefix detection
+    static ref AC_AUTOMATON: AhoCorasick = {
+        let patterns: Vec<&str> = AC_PREFIXES.iter().map(|(p, _)| *p).collect();
+        AhoCorasickBuilder::new()
+            .match_kind(MatchKind::LeftmostFirst)
+            .build(&patterns)
+            .expect("Failed to build Aho-Corasick automaton")
+    };
+
+    /// Binary content types that should be skipped for DLP scanning
+    static ref SKIP_CONTENT_TYPES: Vec<&'static str> = vec![
+        "image/",
+        "audio/",
+        "video/",
+        "application/octet-stream",
+        "application/zip",
+        "application/gzip",
+        "application/x-gzip",
+        "application/x-tar",
+        "application/pdf",
+        "application/x-7z-compressed",
+        "application/x-rar-compressed",
+        "font/",
+        "model/",
+    ];
 }
 
 // ============================================================================
@@ -481,34 +582,77 @@ impl DlpScanner {
         self.config.enabled
     }
 
-    /// Scan content for sensitive data
+    /// Scan content for sensitive data with optimizations:
+    /// - Inspection depth cap (truncation for large payloads)
+    /// - Aho-Corasick prefiltering for patterns with literal prefixes
     pub fn scan(&self, content: &str) -> ScanResult {
         if !self.config.enabled {
             return ScanResult::default();
         }
 
         let start = Instant::now();
-        let content_length = content.len();
+        let original_length = content.len();
 
-        // Check max size
-        if content_length > self.config.max_scan_size {
+        // Check max size (hard limit - reject entirely)
+        if original_length > self.config.max_scan_size {
             return ScanResult {
                 scanned: false,
-                content_length,
+                content_length: original_length,
                 ..Default::default()
             };
         }
 
+        // Apply inspection depth cap (soft limit - truncate and continue)
+        let (scan_content, truncated) = if original_length > self.config.max_body_inspection_bytes {
+            // Find a safe truncation point (don't cut in middle of UTF-8 char)
+            let mut truncate_at = self.config.max_body_inspection_bytes;
+            while truncate_at > 0 && !content.is_char_boundary(truncate_at) {
+                truncate_at -= 1;
+            }
+            log::debug!(
+                "DLP: Truncating {} bytes to {} for inspection",
+                original_length,
+                truncate_at
+            );
+            (&content[..truncate_at], true)
+        } else {
+            (content, false)
+        };
+
+        let content_length = scan_content.len();
         let mut matches = Vec::new();
 
-        // Scan with each pattern - use labeled break to exit both loops when limit reached
-        'outer: for pattern in PATTERNS.iter() {
+        // Phase 1: Use Aho-Corasick to find candidate positions for patterns with literal prefixes
+        // This is O(n) single-pass vs O(n * patterns) for sequential regex
+        let mut ac_candidate_patterns: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for ac_match in AC_AUTOMATON.find_iter(scan_content) {
+            let prefix_idx = ac_match.pattern().as_usize();
+            if prefix_idx < AC_PREFIXES.len() {
+                let pattern_idx = AC_PREFIXES[prefix_idx].1;
+                ac_candidate_patterns.insert(pattern_idx);
+            }
+        }
+
+        // Phase 2: Scan with patterns - prioritize AC-identified patterns, skip others
+        // For patterns with AC prefixes, only scan if AC found a candidate
+        // For patterns without AC prefixes (SSN, email, phone, IBAN, IP), always scan
+        let ac_covered_patterns: std::collections::HashSet<usize> = AC_PREFIXES
+            .iter()
+            .map(|(_, idx)| *idx)
+            .collect();
+
+        'outer: for (pattern_idx, pattern) in PATTERNS.iter().enumerate() {
             // Early exit if we've hit max matches
             if matches.len() >= self.config.max_matches {
                 break 'outer;
             }
 
-            for m in pattern.regex.find_iter(content) {
+            // Skip patterns covered by AC if AC didn't find any candidates
+            if ac_covered_patterns.contains(&pattern_idx) && !ac_candidate_patterns.contains(&pattern_idx) {
+                continue;
+            }
+
+            for m in pattern.regex.find_iter(scan_content) {
                 // Check limit before processing each match
                 if matches.len() >= self.config.max_matches {
                     break 'outer;
@@ -550,6 +694,8 @@ impl DlpScanner {
             match_count,
             scan_time_us,
             content_length,
+            truncated,
+            original_length: if truncated { original_length } else { 0 },
         }
     }
 
@@ -561,8 +707,26 @@ impl DlpScanner {
         }
     }
 
-    /// Check if content type is text-based (should be scanned)
+    /// Check if content type should be scanned.
+    /// Returns false for binary types (images, audio, video, archives, etc.)
+    /// Returns true for text-based types that may contain sensitive data.
     pub fn is_scannable_content_type(&self, content_type: &str) -> bool {
+        let ct_lower = content_type.to_lowercase();
+
+        // First check skip list (binary types)
+        for skip_type in SKIP_CONTENT_TYPES.iter() {
+            if ct_lower.starts_with(skip_type) || ct_lower.contains(skip_type) {
+                return false;
+            }
+        }
+
+        // Check for multipart/form-data with file uploads (skip files, scan form fields)
+        // For now, skip all multipart to avoid scanning uploaded file contents
+        if ct_lower.starts_with("multipart/") {
+            return false;
+        }
+
+        // Scannable text types
         let text_types = [
             "text/",
             "application/json",
@@ -572,8 +736,12 @@ impl DlpScanner {
             "application/ld+json",
         ];
 
-        let ct_lower = content_type.to_lowercase();
-        text_types.iter().any(|t| ct_lower.contains(t))
+        text_types.iter().any(|t| ct_lower.starts_with(t) || ct_lower.contains(t))
+    }
+
+    /// Quick check if content type should skip DLP entirely (binary content)
+    pub fn should_skip_content_type(&self, content_type: &str) -> bool {
+        !self.is_scannable_content_type(content_type)
     }
 
     /// Mask a sensitive value for logging
@@ -997,7 +1165,15 @@ mod tests {
 
     #[test]
     fn test_scan_performance() {
-        let scanner = DlpScanner::default();
+        // Use a scanner with high inspection cap to test full 100KB scan
+        let config = DlpConfig {
+            enabled: true,
+            max_scan_size: 5 * 1024 * 1024,
+            max_matches: 100,
+            scan_text_only: true,
+            max_body_inspection_bytes: 200 * 1024, // 200KB cap for this test
+        };
+        let scanner = DlpScanner::new(config);
 
         // Generate 100KB of content with some sensitive data
         let mut content = String::with_capacity(100_000);
@@ -1024,5 +1200,25 @@ mod tests {
             max_time_us
         );
         assert!(result.match_count >= 10); // At least 10 credit cards
+    }
+
+    #[test]
+    fn test_truncation() {
+        // Default scanner with 8KB cap
+        let scanner = DlpScanner::default();
+
+        // Generate 20KB of content with credit card at the start
+        let mut content = String::from("Credit card: 4532015112830366\n");
+        for _ in 0..500 {
+            content.push_str("Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n");
+        }
+
+        let result = scanner.scan(&content);
+
+        // Should be truncated and still find the credit card
+        assert!(result.truncated);
+        assert!(result.original_length > result.content_length);
+        assert!(result.has_matches);
+        assert_eq!(result.match_count, 1);
     }
 }

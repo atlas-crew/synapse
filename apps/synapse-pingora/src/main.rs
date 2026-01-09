@@ -545,6 +545,10 @@ pub struct RequestContext {
     request_dlp_match_count: usize,
     /// Phase 4: DLP matched types from request body (comma-separated)
     request_dlp_types: String,
+    /// Request Content-Type header for DLP skip optimization
+    request_content_type: Option<String>,
+    /// Whether to skip DLP scanning for this request (binary content)
+    skip_request_dlp: bool,
 }
 
 /// Rate limiter for early_request_filter
@@ -676,6 +680,8 @@ impl ProxyHttp for SynapseProxy {
             request_body_buffer: Vec::new(),
             request_dlp_match_count: 0,
             request_dlp_types: String::new(),
+            request_content_type: None,
+            skip_request_dlp: false,
         }
     }
 
@@ -724,6 +730,21 @@ impl ProxyHttp for SynapseProxy {
         let uri = req_header.uri.to_string();
         let headers = Self::extract_headers(session);
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+
+        // Extract Content-Type for DLP optimization (skip binary types)
+        ctx.request_content_type = req_header
+            .headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        // Check if we should skip DLP scanning for this content type
+        if let Some(ref ct) = ctx.request_content_type {
+            ctx.skip_request_dlp = self.dlp_scanner.should_skip_content_type(ct);
+            if ctx.skip_request_dlp {
+                debug!("DLP: Skipping request body scan for content-type: {}", ct);
+            }
+        }
 
         // ===== Phase 6: Health Check Endpoint =====
         // Handle /_sensor/status endpoint for load balancer health checks
@@ -915,6 +936,10 @@ impl ProxyHttp for SynapseProxy {
     ///
     /// Phase 4: Scans request body chunks for PII and sensitive data patterns.
     /// Detects data exfiltration attempts by scanning outbound data.
+    ///
+    /// Performance optimizations:
+    /// - Content-type short circuit: Skip binary types (images, video, etc.)
+    /// - Inspection depth cap: Only scan first N bytes of large payloads
     async fn request_body_filter(
         &self,
         _session: &mut Session,
@@ -922,10 +947,27 @@ impl ProxyHttp for SynapseProxy {
         end_of_stream: bool,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        // Track body size even if skipping DLP
+        if let Some(ref body_chunk) = body {
+            ctx.body_bytes_seen += body_chunk.len();
+        }
+
+        // Short circuit: Skip body accumulation and scanning for binary content types
+        // This is a major performance win for image/video uploads
+        if ctx.skip_request_dlp {
+            if end_of_stream && ctx.body_bytes_seen > 0 {
+                debug!(
+                    "DLP: Skipped {} bytes of binary content ({})",
+                    ctx.body_bytes_seen,
+                    ctx.request_content_type.as_deref().unwrap_or("unknown")
+                );
+            }
+            return Ok(());
+        }
+
         // Accumulate request body for DLP scanning
         if let Some(ref body_chunk) = body {
             let chunk_size = body_chunk.len();
-            ctx.body_bytes_seen += chunk_size;
 
             // Only accumulate if under max scan size (5MB default)
             if ctx.request_body_buffer.len() + body_chunk.len() <= 5 * 1024 * 1024 {
@@ -941,6 +983,15 @@ impl ProxyHttp for SynapseProxy {
         // Scan on end of stream
         if end_of_stream && !ctx.request_body_buffer.is_empty() && self.dlp_scanner.is_enabled() {
             let scan_result = self.dlp_scanner.scan_bytes(&ctx.request_body_buffer);
+
+            // Log truncation if it occurred
+            if scan_result.truncated {
+                debug!(
+                    "DLP: Truncated {} bytes to {} for inspection",
+                    scan_result.original_length,
+                    scan_result.content_length
+                );
+            }
 
             if scan_result.has_matches {
                 // Collect unique types
