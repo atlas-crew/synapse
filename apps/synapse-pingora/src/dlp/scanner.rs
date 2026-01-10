@@ -73,7 +73,7 @@ impl PatternSeverity {
 /// A matched sensitive data pattern
 #[derive(Debug, Clone)]
 pub struct DlpMatch {
-    pub pattern_name: String,
+    pub pattern_name: &'static str,
     pub data_type: SensitiveDataType,
     pub severity: PatternSeverity,
     pub masked_value: String,
@@ -201,7 +201,7 @@ pub fn validate_credit_card(number: &str) -> bool {
     digit_count >= 13 && digit_count <= 19 && has_nonzero && sum % 10 == 0
 }
 
-/// Validate SSN format
+/// Validate SSN format (zero-allocation implementation)
 ///
 /// Validates against SSA rules including:
 /// - Invalid area numbers (000, 666, 900-999 reserved for ITIN)
@@ -209,16 +209,28 @@ pub fn validate_credit_card(number: &str) -> bool {
 /// - Invalid serial numbers (0000)
 /// - Advertising SSNs (987-65-4320 through 987-65-4329 used in commercials)
 pub fn validate_ssn(ssn: &str) -> bool {
-    // Remove all non-digits
-    let digits: String = ssn.chars().filter(|c| c.is_ascii_digit()).collect();
+    // Parse digits in-place without allocation
+    let mut area: u32 = 0;
+    let mut group: u32 = 0;
+    let mut serial: u32 = 0;
+    let mut digit_count = 0;
 
-    if digits.len() != 9 {
-        return false;
+    for c in ssn.chars() {
+        if let Some(d) = c.to_digit(10) {
+            match digit_count {
+                0..=2 => area = area * 10 + d,
+                3..=4 => group = group * 10 + d,
+                5..=8 => serial = serial * 10 + d,
+                _ => return false, // Too many digits
+            }
+            digit_count += 1;
+        }
     }
 
-    let area: u32 = digits[0..3].parse().unwrap_or(0);
-    let group: u32 = digits[3..5].parse().unwrap_or(0);
-    let serial: u32 = digits[5..9].parse().unwrap_or(0);
+    // Must have exactly 9 digits
+    if digit_count != 9 {
+        return false;
+    }
 
     // Area cannot be 000, 666, or 900-999 (ITIN range)
     if area == 0 || area == 666 || area >= 900 {
@@ -243,29 +255,43 @@ pub fn validate_ssn(ssn: &str) -> bool {
     true
 }
 
-/// Validate US phone number format
+/// Validate US phone number format (zero-allocation implementation)
 ///
 /// Reduces false positives by checking:
 /// - Must be 10 or 11 digits (with country code)
 /// - If 11 digits, must start with 1
 /// - Area code cannot be N11 (e.g., 411, 911 - service codes)
 pub fn validate_phone(phone: &str) -> bool {
-    // Extract only digits
-    let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+    // Parse digits in-place without allocation
+    // Max 11 digits (with country code)
+    let mut digits = [0u8; 11];
+    let mut digit_count = 0;
+
+    for c in phone.chars() {
+        if let Some(d) = c.to_digit(10) {
+            if digit_count >= 11 {
+                return false; // Too many digits
+            }
+            digits[digit_count] = d as u8;
+            digit_count += 1;
+        }
+    }
 
     // Must be 10 or 11 digits
-    if digits.len() != 10 && digits.len() != 11 {
+    if digit_count != 10 && digit_count != 11 {
         return false;
     }
 
     // If 11 digits, must start with country code 1
-    if digits.len() == 11 && !digits.starts_with('1') {
+    if digit_count == 11 && digits[0] != 1 {
         return false;
     }
 
     // Get area code (skip country code if present)
-    let area_start = if digits.len() == 11 { 1 } else { 0 };
-    let area_code: u32 = digits[area_start..area_start + 3].parse().unwrap_or(0);
+    let area_start = if digit_count == 11 { 1 } else { 0 };
+    let area_code: u32 = (digits[area_start] as u32) * 100
+        + (digits[area_start + 1] as u32) * 10
+        + (digits[area_start + 2] as u32);
 
     // Area code cannot be 0xx or 1xx
     if area_code < 200 {
@@ -532,6 +558,17 @@ lazy_static! {
             .expect("Failed to build Aho-Corasick automaton")
     };
 
+    /// Pre-computed bitmask of pattern indices covered by Aho-Corasick prefiltering.
+    /// Each bit position corresponds to a PATTERNS index. If bit N is set, pattern N
+    /// has a literal prefix in AC_PREFIXES and can be skipped if AC finds no matches.
+    static ref AC_COVERED_MASK: u32 = {
+        let mut mask: u32 = 0;
+        for &(_, idx) in AC_PREFIXES.iter() {
+            mask |= 1 << idx;
+        }
+        mask
+    };
+
     // ========================================================================
     // RegexSet for Non-AC Patterns (Single-Pass Prefilter)
     // ========================================================================
@@ -552,6 +589,16 @@ lazy_static! {
     /// 19: IBAN, 20: IPv4
     /// 24: Medical Record
     static ref NON_AC_PATTERN_INDICES: Vec<usize> = vec![4, 5, 7, 8, 10, 19, 20, 24];
+
+    /// Pre-computed bitmask of pattern indices handled by RegexSet (non-AC patterns).
+    /// Each bit position corresponds to a PATTERNS index.
+    static ref NON_AC_PATTERN_MASK: u32 = {
+        let mut mask: u32 = 0;
+        for &idx in NON_AC_PATTERN_INDICES.iter() {
+            mask |= 1 << idx;
+        }
+        mask
+    };
 
     /// RegexSet for non-AC patterns - single pass detects which patterns have potential matches
     static ref NON_AC_REGEX_SET: RegexSet = RegexSet::new(&[
@@ -673,30 +720,29 @@ impl DlpScanner {
 
         // Phase 1: Use Aho-Corasick to find candidate positions for patterns with literal prefixes
         // This is O(n) single-pass vs O(n * patterns) for sequential regex
-        let mut ac_candidate_patterns: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        // Using u32 bitset instead of HashSet to eliminate heap allocation (25 patterns fit in 32 bits)
+        let mut ac_candidates: u32 = 0;
         for ac_match in AC_AUTOMATON.find_iter(scan_content) {
             let prefix_idx = ac_match.pattern().as_usize();
             if prefix_idx < AC_PREFIXES.len() {
                 let pattern_idx = AC_PREFIXES[prefix_idx].1;
-                ac_candidate_patterns.insert(pattern_idx);
+                ac_candidates |= 1 << pattern_idx;
             }
         }
 
         // Phase 1b: Use RegexSet to find candidates for non-AC patterns (SSN, Phone, IBAN, IPv4, etc.)
         // This is O(n) single-pass for all non-AC patterns combined
+        // Using u32 bitset instead of HashSet to eliminate heap allocation
         let regex_set_matches = NON_AC_REGEX_SET.matches(scan_content);
-        let mut non_ac_candidate_patterns: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut non_ac_candidates: u32 = 0;
         for (set_idx, &pattern_idx) in NON_AC_PATTERN_INDICES.iter().enumerate() {
             if regex_set_matches.matched(set_idx) {
-                non_ac_candidate_patterns.insert(pattern_idx);
+                non_ac_candidates |= 1 << pattern_idx;
             }
         }
 
         // Phase 2: Scan with patterns - only scan patterns that have candidates from prefilters
-        let ac_covered_patterns: std::collections::HashSet<usize> = AC_PREFIXES
-            .iter()
-            .map(|(_, idx)| *idx)
-            .collect();
+        // AC_COVERED_MASK and NON_AC_PATTERN_MASK are pre-computed lazy_static u32 bitmasks
 
         // Fast mode skips low-priority patterns: Email(6), US Phone(7), Intl Phone(8), IPv4(20)
         const FAST_MODE_SKIP_PATTERNS: [usize; 4] = [6, 7, 8, 20];
@@ -712,13 +758,17 @@ impl DlpScanner {
                 continue;
             }
 
+            let pattern_bit = 1u32 << pattern_idx;
+
             // Skip patterns covered by AC if AC didn't find any candidates
-            if ac_covered_patterns.contains(&pattern_idx) && !ac_candidate_patterns.contains(&pattern_idx) {
+            // Using bitwise: check if pattern is in AC_COVERED_MASK but not in ac_candidates
+            if (*AC_COVERED_MASK & pattern_bit) != 0 && (ac_candidates & pattern_bit) == 0 {
                 continue;
             }
 
             // Skip non-AC patterns if RegexSet didn't find any candidates
-            if NON_AC_PATTERN_INDICES.contains(&pattern_idx) && !non_ac_candidate_patterns.contains(&pattern_idx) {
+            // Using bitwise: check if pattern is in NON_AC_PATTERN_MASK but not in non_ac_candidates
+            if (*NON_AC_PATTERN_MASK & pattern_bit) != 0 && (non_ac_candidates & pattern_bit) == 0 {
                 continue;
             }
 
@@ -740,7 +790,7 @@ impl DlpScanner {
                 let masked = self.mask_value(matched_value, pattern.data_type);
 
                 matches.push(DlpMatch {
-                    pattern_name: pattern.name.to_string(),
+                    pattern_name: pattern.name,
                     data_type: pattern.data_type,
                     severity: pattern.severity,
                     masked_value: masked,
