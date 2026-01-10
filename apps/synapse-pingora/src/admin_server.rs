@@ -60,6 +60,7 @@ pub async fn start_admin_server(addr: SocketAddr, handler: Arc<ApiHandler>) -> s
         .route("/waf/stats", get(waf_stats_handler))
         // Debugging / Profiling
         .route("/debug/profiles", get(profiles_handler))
+        .route("/debug/profiles/save", post(save_profiles_handler))
         // Root endpoint (API info)
         .route("/", get(root_handler))
         .layer(cors)
@@ -153,10 +154,29 @@ async fn waf_stats_handler(State(state): State<AdminState>) -> impl IntoResponse
     wrap_response(response)
 }
 
+use crate::persistence::SnapshotManager;
+use std::path::Path;
+
 /// GET /debug/profiles - Get learned endpoint profiles
 async fn profiles_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let response = state.handler.handle_get_profiles();
     wrap_response(response)
+}
+
+/// POST /debug/profiles/save - Force save profiles to disk
+async fn save_profiles_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    // Get profiles from the current thread (Admin API thread)
+    // Note: In production this would need to aggregate from workers
+    let response = state.handler.handle_get_profiles();
+    
+    if let Some(profiles) = response.data {
+        if let Err(e) = SnapshotManager::save_profiles(&profiles, Path::new("data/profiles.json")) {
+            return wrap_response(crate::api::ApiResponse::err(format!("Failed to save: {}", e)));
+        }
+        return wrap_response(crate::api::ApiResponse::ok("Profiles saved to data/profiles.json".to_string()));
+    }
+    
+    wrap_response(crate::api::ApiResponse::err("No profiles to save"))
 }
 
 /// Wraps an ApiResponse into an HTTP response with appropriate status code.

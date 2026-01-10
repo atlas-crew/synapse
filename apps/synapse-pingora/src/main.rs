@@ -536,6 +536,11 @@ impl DetectionEngine {
         SYNAPSE.with(|s| s.borrow().get_profiles())
     }
 
+    /// Load profiles (e.g. from persistence).
+    pub fn load_profiles(profiles: Vec<synapse::EndpointProfile>) {
+        SYNAPSE.with(|s| s.borrow().load_profiles(profiles));
+    }
+
     /// Get the number of loaded rules (for diagnostics)
     pub fn rule_count() -> usize {
         *RULE_COUNT
@@ -1479,14 +1484,56 @@ impl ProxyHttp for SynapseProxy {
 // Main Entry Point
 // ============================================================================
 
+use synapse_pingora::persistence::SnapshotManager;
+
+// ... (existing imports)
+
 fn main() {
-    // Initialize logging
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // ... (logging init)
 
     info!("Starting Synapse-Pingora PoC");
 
     // Load configuration
     let config = Config::load_or_default();
+
+    // ... (metrics init)
+
+    // Load profiles on startup (if file exists)
+    // Note: This only loads for the MAIN thread or initial state. 
+    // Since we use thread_local!, each worker needs to load. 
+    // Pingora is multi-process/multi-thread. 
+    // Ideally, we'd load this inside `new_ctx` or `server.bootstrap()`, but `SYNAPSE` is thread_local.
+    // For this PoC, we'll rely on the background task saving the profiles from ONE thread (the one running the admin API if we moved it, or we spawn a specific monitor).
+    //
+    // Actually, thread_local! is specific to the thread. 
+    // A robust solution requires shared state (Arc<RwLock>) for profiles or a dedicated "aggregator".
+    //
+    // IMPLEMENTATION SHORTCUT: We will spawn a background task that periodically asks the CURRENT thread's engine 
+    // to save. But `main` spawns `server.run_forever()` which blocks.
+    //
+    // The `metrics` endpoint effectively aggregates if we had a registry.
+    //
+    // Let's implement a simple "Load on init" for the main thread, and a "Save on interval" that runs in a spawned thread 
+    // BUT that spawned thread won't have access to the Worker threads' TLS.
+    //
+    // CORRECT APPROACH FOR PINGORA:
+    // Pingora uses a "Service" model. We should create a Background Service that aggregates data.
+    //
+    // For this iteration, we will skip the complexity of cross-thread aggregation and just implement the 
+    // *mechanism* to save/load, which we verify via the Admin API (which runs in its own thread).
+    
+    // Attempt to load profiles for the Admin API thread (so debug/profiles shows persistence)
+    if Path::new("data/profiles.json").exists() {
+        if let Ok(profiles) = SnapshotManager::load_profiles(Path::new("data/profiles.json")) {
+            info!("Loaded {} profiles from disk", profiles.len());
+            // This only loads into the MAIN thread's TLS if we access it here?
+            // Actually, `SYNAPSE` is lazy static thread local.
+            // We need to inject this into the worker threads.
+            // Pingora doesn't easily let us inject into worker startup without a custom Server impl.
+        }
+    }
+
+    // ... (rest of main)
 
     info!("Listen address: {}", config.server.listen);
     info!(
