@@ -526,6 +526,11 @@ impl DetectionEngine {
         }
     }
 
+    /// Record response status for profiling (feedback loop)
+    pub fn record_status(path: &str, status: u16) {
+        SYNAPSE.with(|s| s.borrow().record_response_status(path, status));
+    }
+
     /// Get the number of loaded rules (for diagnostics)
     pub fn rule_count() -> usize {
         *RULE_COUNT
@@ -1396,6 +1401,11 @@ impl ProxyHttp for SynapseProxy {
             .unwrap_or(0);
 
         let blocked = ctx.detection.as_ref().map(|d| d.blocked).unwrap_or(false);
+
+        // Feedback loop: Record response status for API profiling
+        // This allows the profiler to distinguish between valid (200) and invalid (404/400) requests
+        let path = session.req_header().uri.path();
+        DetectionEngine::record_status(path, status);
 
         // Phase 3: Include fingerprint in access log
         let fp_hash = ctx
