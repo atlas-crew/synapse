@@ -670,6 +670,111 @@ fn bench_dlp_fast_mode(c: &mut Criterion) {
     group.finish();
 }
 
+/// Combined benchmark: libsynapse (237 rules + entity tracking) + DLP scanner
+/// This simulates the realistic production path for a request with body inspection.
+fn bench_combined_waf_dlp(c: &mut Criterion) {
+    // Ensure libsynapse engine is initialized with 237 rules
+    DetectionEngine::ensure_init();
+
+    let mut group = c.benchmark_group("combined_waf_dlp");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(1000);
+
+    // Test with realistic e-commerce payloads
+    let sizes_kb = [4, 8];
+
+    // Headers for a realistic POST request
+    let headers = vec![
+        ("content-type".to_string(), "application/json".to_string()),
+        ("user-agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string()),
+        ("accept".to_string(), "application/json".to_string()),
+        ("x-forwarded-for".to_string(), "203.0.113.42".to_string()),
+    ];
+
+    for size_kb in sizes_kb {
+        let payload = generate_order_payload(size_kb);
+
+        // Benchmark 1: libsynapse only (237 rules + entity tracking)
+        let name = format!("waf_only_{}kb", size_kb);
+        group.bench_with_input(
+            BenchmarkId::new("analyze", &name),
+            &(&payload, &headers),
+            |b, (body, hdrs)| {
+                b.iter(|| {
+                    DetectionEngine::analyze(
+                        black_box("POST"),
+                        black_box("/api/checkout"),
+                        black_box(hdrs),
+                        black_box(Some(body.as_bytes())),
+                    )
+                })
+            },
+        );
+
+        // Benchmark 2: DLP scanner only (for comparison)
+        let dlp_scanner = DlpScanner::new(DlpConfig::default());
+        let name = format!("dlp_only_{}kb", size_kb);
+        group.bench_with_input(
+            BenchmarkId::new("analyze", &name),
+            &payload,
+            |b, body| {
+                b.iter(|| {
+                    dlp_scanner.scan(black_box(body))
+                })
+            },
+        );
+
+        // Benchmark 3: Combined WAF + DLP (realistic production path)
+        let name = format!("waf_plus_dlp_{}kb", size_kb);
+        group.bench_with_input(
+            BenchmarkId::new("analyze", &name),
+            &(&payload, &headers),
+            |b, (body, hdrs)| {
+                b.iter(|| {
+                    // Step 1: WAF detection (headers, URI, body for rule matching)
+                    let waf_result = DetectionEngine::analyze(
+                        black_box("POST"),
+                        black_box("/api/checkout"),
+                        black_box(hdrs),
+                        black_box(Some(body.as_bytes())),
+                    );
+
+                    // Step 2: DLP body inspection (sensitive data detection)
+                    let dlp_result = dlp_scanner.scan(black_box(body));
+
+                    // Return both results (simulates real decision logic)
+                    (waf_result, dlp_result)
+                })
+            },
+        );
+
+        // Benchmark 4: Combined WAF + DLP fast mode
+        let fast_scanner = DlpScanner::new(DlpConfig {
+            fast_mode: true,
+            ..Default::default()
+        });
+        let name = format!("waf_plus_dlp_fast_{}kb", size_kb);
+        group.bench_with_input(
+            BenchmarkId::new("analyze", &name),
+            &(&payload, &headers),
+            |b, (body, hdrs)| {
+                b.iter(|| {
+                    let waf_result = DetectionEngine::analyze(
+                        black_box("POST"),
+                        black_box("/api/checkout"),
+                        black_box(hdrs),
+                        black_box(Some(body.as_bytes())),
+                    );
+                    let dlp_result = fast_scanner.scan(black_box(body));
+                    (waf_result, dlp_result)
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_clean_requests,
@@ -683,6 +788,7 @@ criterion_group!(
     bench_dlp_content_type_skip,
     bench_dlp_truncation_performance,
     bench_dlp_fast_mode,
+    bench_combined_waf_dlp,
 );
 
 criterion_main!(benches);
