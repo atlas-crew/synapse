@@ -1412,6 +1412,21 @@ impl ProxyHttp for SynapseProxy {
         let path = session.req_header().uri.path();
         DetectionEngine::record_status(path, status);
 
+        // Phase 2: Report profiling metrics
+        // We do this in logging to avoid blocking the request path
+        // In a real system, we might sample this or use a background task
+        if let Some(detection) = &ctx.detection {
+            // Collect anomalies from the detection result (if we exposed them in DetectionResult)
+            // For now, we just update the active profile count periodically
+            // Ideally, DetectionResult should carry the anomalies
+        }
+        
+        // Report active profiles count (sampled, not every request)
+        if fastrand::bool() && fastrand::u8(0..100) < 5 { // ~5% sample rate
+             let profiles = DetectionEngine::get_profiles();
+             self.metrics_registry.record_profile_metrics(profiles.len(), &[]);
+        }
+
         // Phase 3: Include fingerprint in access log
         let fp_hash = ctx
             .fingerprint

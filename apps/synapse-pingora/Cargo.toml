@@ -65,6 +65,7 @@ unicase = "2.7"         # Zero-allocation case-insensitive strings (PERF-P0-1)
 # Security hardening (Phase 1 backlog)
 zeroize = "1.7"         # Secure memory clearing (SEC-010)
 governor = "0.6"        # Rate limiting (SEC-009)
+fastrand = "2.0"        # Fast random number generation for sampling
 
 # Phase 3: Feature Migration - JA4 Fingerprinting
 sha2 = "0.10"           # SHA256 for fingerprint hashing

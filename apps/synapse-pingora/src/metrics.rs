@@ -18,10 +18,50 @@ pub struct MetricsRegistry {
     latencies: LatencyHistogram,
     /// WAF-specific metrics
     waf_metrics: WafMetrics,
+    /// Profiling metrics (Phase 2)
+    profiling_metrics: ProfilingMetrics,
     /// Backend health metrics
     backend_metrics: Arc<RwLock<HashMap<String, BackendMetrics>>>,
     /// Registry start time for uptime calculation
     start_time: Option<Instant>,
+}
+
+/// Profiling and anomaly detection metrics (Phase 2).
+#[derive(Debug, Default)]
+pub struct ProfilingMetrics {
+    /// Active endpoint profiles
+    pub profiles_active: AtomicU64,
+    /// Anomalies detected by type
+    pub anomalies_detected: Arc<RwLock<HashMap<String, u64>>>,
+    /// Average anomaly score
+    pub avg_anomaly_score: AtomicU64, // Scaled by 1000
+    /// Requests with anomalies
+    pub requests_with_anomalies: AtomicU64,
+}
+
+impl ProfilingMetrics {
+    /// Update active profiles count.
+    pub fn set_active_profiles(&self, count: u64) {
+        self.profiles_active.store(count, Ordering::Relaxed);
+    }
+
+    /// Record an anomaly detection.
+    pub fn record_anomaly(&self, anomaly_type: &str, score: f64) {
+        let mut anomalies = self.anomalies_detected.write();
+        *anomalies.entry(anomaly_type.to_string()).or_insert(0) += 1;
+        
+        self.requests_with_anomalies.fetch_add(1, Ordering::Relaxed);
+        
+        // Update rolling average (simplified)
+        let scaled_score = (score * 1000.0) as u64;
+        let current = self.avg_anomaly_score.load(Ordering::Relaxed);
+        let new = if current == 0 {
+            scaled_score
+        } else {
+            (current * 9 + scaled_score) / 10 // EMA with alpha 0.1
+        };
+        self.avg_anomaly_score.store(new, Ordering::Relaxed);
+    }
 }
 
 /// Request counters broken down by status code class.
@@ -200,6 +240,14 @@ impl MetricsRegistry {
         self.waf_metrics.record_rule_match(rule_id);
     }
 
+    /// Records profiling metrics (Phase 2).
+    pub fn record_profile_metrics(&self, active_profiles: usize, anomalies: &[(String, f64)]) {
+        self.profiling_metrics.set_active_profiles(active_profiles as u64);
+        for (anomaly_type, score) in anomalies {
+            self.profiling_metrics.record_anomaly(anomaly_type, *score);
+        }
+    }
+
     /// Records backend response.
     pub fn record_backend(&self, backend: &str, success: bool, response_time_us: u64) {
         let mut backends = self.backend_metrics.write();
@@ -305,6 +353,31 @@ impl MetricsRegistry {
         output.push_str(&format!(
             "synapse_waf_detection_avg_us {:.2}\n",
             self.waf_metrics.avg_detection_us()
+        ));
+
+        // Profiling metrics (Phase 2)
+        output.push_str("# HELP synapse_profiles_active_count Number of active endpoint profiles\n");
+        output.push_str("# TYPE synapse_profiles_active_count gauge\n");
+        output.push_str(&format!(
+            "synapse_profiles_active_count {}\n",
+            self.profiling_metrics.profiles_active.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_anomalies_detected_total Anomalies detected by type\n");
+        output.push_str("# TYPE synapse_anomalies_detected_total counter\n");
+        let anomalies = self.profiling_metrics.anomalies_detected.read();
+        for (anomaly_type, count) in anomalies.iter() {
+            output.push_str(&format!(
+                "synapse_anomalies_detected_total{{type=\"{}\"}} {}\n",
+                anomaly_type, count
+            ));
+        }
+
+        output.push_str("# HELP synapse_avg_anomaly_score Average anomaly score (0-10)\n");
+        output.push_str("# TYPE synapse_avg_anomaly_score gauge\n");
+        output.push_str(&format!(
+            "synapse_avg_anomaly_score {:.2}\n",
+            self.profiling_metrics.avg_anomaly_score.load(Ordering::Relaxed) as f64 / 1000.0
         ));
 
         // Backend metrics
