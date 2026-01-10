@@ -30,6 +30,7 @@ use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_limits::rate::Rate;
 use pingora_proxy::{ProxyHttp, Session};
 use serde::Deserialize;
+use std::cell::RefCell;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -433,6 +434,29 @@ static RULES_DATA: Lazy<Option<Vec<u8>>> = Lazy::new(|| {
 // Each Pingora worker thread gets its own instance.
 thread_local! {
     static SYNAPSE: std::cell::RefCell<Synapse> = std::cell::RefCell::new(create_synapse_engine());
+    static BUFFER_POOL: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::with_capacity(128));
+}
+
+/// Get a buffer from the thread-local pool or allocate a new one
+fn get_buffer() -> Vec<u8> {
+    BUFFER_POOL.with(|pool| {
+        pool.borrow_mut().pop().unwrap_or_else(|| Vec::with_capacity(8192))
+    })
+}
+
+/// Return a buffer to the thread-local pool for reuse
+fn return_buffer(mut buf: Vec<u8>) {
+    // Only keep buffers up to 64KB to avoid hoarding huge memory
+    if buf.capacity() <= 64 * 1024 {
+        buf.clear(); // Ensure it's empty but keeps capacity
+        BUFFER_POOL.with(|pool| {
+            // Limit pool size to 128 buffers per thread to avoid unlimited growth
+            let mut p = pool.borrow_mut();
+            if p.len() < 128 {
+                p.push(buf);
+            }
+        });
+    }
 }
 
 /// Create a new Synapse engine with rules
@@ -560,6 +584,22 @@ pub struct RequestContext {
     dlp_scan_time_us: u64,
 }
 
+impl Drop for RequestContext {
+    fn drop(&mut self) {
+        // Return response buffer to pool
+        let resp_buf = std::mem::take(&mut self.response_body_buffer);
+        if resp_buf.capacity() > 0 {
+             return_buffer(resp_buf);
+        }
+        
+        // Request body buffer might have been moved to async task, but if not, return it
+        let req_buf = std::mem::take(&mut self.request_body_buffer);
+        if req_buf.capacity() > 0 {
+            return_buffer(req_buf);
+        }
+    }
+}
+
 /// Rate limiter for early_request_filter
 #[allow(dead_code)]
 static RATE_LIMITER: Lazy<Rate> = Lazy::new(|| Rate::new(std::time::Duration::from_secs(1)));
@@ -656,14 +696,15 @@ impl SynapseProxy {
 
     /// Extract headers as Vec for detection engine
     fn extract_headers(session: &Session) -> Vec<(String, String)> {
-        session
-            .req_header()
-            .headers
-            .iter()
-            .filter_map(|(name, value)| {
-                value.to_str().ok().map(|v| (name.to_string(), v.to_string()))
-            })
-            .collect()
+        let headers = &session.req_header().headers;
+        let mut result = Vec::with_capacity(headers.len());
+        
+        for (name, value) in headers {
+             if let Ok(v) = value.to_str() {
+                 result.push((name.to_string(), v.to_string()));
+             }
+        }
+        result
     }
 }
 
@@ -685,8 +726,8 @@ impl ProxyHttp for SynapseProxy {
             tarpit_level: 0,
             dlp_match_count: 0,
             dlp_types: String::new(),
-            response_body_buffer: Vec::new(),
-            request_body_buffer: Vec::new(),
+            response_body_buffer: get_buffer(),
+            request_body_buffer: get_buffer(),
             request_dlp_match_count: 0,
             request_dlp_types: String::new(),
             request_content_type: None,
