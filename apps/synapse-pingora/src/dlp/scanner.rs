@@ -326,58 +326,99 @@ const IBAN_LENGTHS: &[(&str, usize)] = &[
 ];
 
 /// Validate IBAN format using mod-97 check with country-specific length validation
+/// (zero-allocation implementation)
+///
+/// Uses in-place character iteration and direct mod-97 computation without
+/// building intermediate strings. Letters are converted to their numeric
+/// representation (A=10, B=11, etc.) and processed directly in the modulo chain.
 pub fn validate_iban(iban: &str) -> bool {
-    // Remove spaces and convert to uppercase
-    let cleaned: String = iban
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .map(|c| c.to_ascii_uppercase())
-        .collect();
+    // First pass: count length, extract first 4 chars, validate basic format
+    // Store first 4 characters (country code + check digits) as bytes for later
+    let mut first_four = [0u8; 4];
+    let mut first_four_idx = 0;
+    let mut total_len = 0;
 
-    // IBAN must be 15-34 characters
-    if cleaned.len() < 15 || cleaned.len() > 34 {
-        return false;
+    for c in iban.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        let upper = c.to_ascii_uppercase();
+
+        if total_len < 4 {
+            // Validate format: first 2 must be letters, next 2 must be digits
+            match total_len {
+                0 | 1 => {
+                    if !upper.is_ascii_alphabetic() {
+                        return false;
+                    }
+                }
+                2 | 3 => {
+                    if !upper.is_ascii_digit() {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+            first_four[first_four_idx] = upper as u8;
+            first_four_idx += 1;
+        }
+        total_len += 1;
     }
 
-    // Must start with 2 letters followed by 2 digits
-    let chars: Vec<char> = cleaned.chars().collect();
-    if chars.len() < 4 {
-        return false;
-    }
-    if !chars[0].is_ascii_alphabetic() || !chars[1].is_ascii_alphabetic() {
-        return false;
-    }
-    if !chars[2].is_ascii_digit() || !chars[3].is_ascii_digit() {
+    // IBAN must be 15-34 characters (after removing whitespace)
+    if total_len < 15 || total_len > 34 {
         return false;
     }
 
     // Validate country-specific length if known
-    let country_code: String = chars[0..2].iter().collect();
-    if let Some(&(_, expected_len)) = IBAN_LENGTHS.iter().find(|(c, _)| *c == country_code) {
-        if cleaned.len() != expected_len {
-            return false;
+    // Country code is first two characters
+    let country_code = [first_four[0], first_four[1]];
+    for &(code, expected_len) in IBAN_LENGTHS.iter() {
+        if code.as_bytes() == &country_code {
+            if total_len != expected_len {
+                return false;
+            }
+            break;
         }
     }
 
-    // Move first 4 characters to end
-    let rearranged = format!("{}{}", &cleaned[4..], &cleaned[0..4]);
-
-    // Convert letters to numbers (A=10, B=11, etc.)
-    let mut numeric_string = String::new();
-    for c in rearranged.chars() {
-        if c.is_ascii_alphabetic() {
-            let value = c as u32 - 'A' as u32 + 10;
-            numeric_string.push_str(&value.to_string());
-        } else {
-            numeric_string.push(c);
-        }
-    }
-
-    // Calculate mod 97 using chunked approach (handles large numbers)
+    // Second pass: compute mod-97 directly
+    // IBAN validation rearranges: BBAN (chars 4+) followed by country+check (chars 0-3)
+    // We process each character, converting letters to their numeric value (A=10..Z=35)
+    // For letters (2 digits), we do: remainder = (remainder * 100 + value) % 97
+    // For digits (1 digit), we do: remainder = (remainder * 10 + digit) % 97
     let mut remainder: u64 = 0;
-    for c in numeric_string.chars() {
-        let digit = c.to_digit(10).unwrap_or(0) as u64;
-        remainder = (remainder * 10 + digit) % 97;
+    let mut char_idx = 0;
+
+    // Process BBAN first (skip first 4 characters)
+    for c in iban.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        char_idx += 1;
+        if char_idx <= 4 {
+            continue; // Skip country code and check digits
+        }
+
+        let upper = c.to_ascii_uppercase();
+        if upper.is_ascii_alphabetic() {
+            // A=10, B=11, ..., Z=35 (two digits, so multiply by 100)
+            let value = (upper as u64) - ('A' as u64) + 10;
+            remainder = (remainder * 100 + value) % 97;
+        } else if let Some(d) = upper.to_digit(10) {
+            remainder = (remainder * 10 + d as u64) % 97;
+        }
+    }
+
+    // Now process the first 4 characters (country code + check digits)
+    for &byte in &first_four {
+        let c = byte as char;
+        if c.is_ascii_alphabetic() {
+            let value = (c as u64) - ('A' as u64) + 10;
+            remainder = (remainder * 100 + value) % 97;
+        } else if let Some(d) = c.to_digit(10) {
+            remainder = (remainder * 10 + d as u64) % 97;
+        }
     }
 
     remainder == 1
