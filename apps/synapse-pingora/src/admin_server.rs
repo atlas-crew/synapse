@@ -168,15 +168,15 @@ async fn save_profiles_handler(State(state): State<AdminState>) -> impl IntoResp
     // Get profiles from the current thread (Admin API thread)
     // Note: In production this would need to aggregate from workers
     let response = state.handler.handle_get_profiles();
-    
+
     if let Some(profiles) = response.data {
         if let Err(e) = SnapshotManager::save_profiles(&profiles, Path::new("data/profiles.json")) {
-            return wrap_response(crate::api::ApiResponse::err(format!("Failed to save: {}", e)));
+            return wrap_response(crate::api::ApiResponse::<String>::err(format!("Failed to save: {}", e)));
         }
         return wrap_response(crate::api::ApiResponse::ok("Profiles saved to data/profiles.json".to_string()));
     }
-    
-    wrap_response(crate::api::ApiResponse::err("No profiles to save"))
+
+    wrap_response(crate::api::ApiResponse::<String>::err("No profiles to save"))
 }
 
 /// Wraps an ApiResponse into an HTTP response with appropriate status code.

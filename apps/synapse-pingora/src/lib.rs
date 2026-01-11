@@ -51,6 +51,9 @@ pub mod dlp;
 // Phase 6: Security Hardening
 pub mod validation;
 
+// Phase 7: Persistence
+pub mod persistence;
+
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
 pub use health::{HealthChecker, HealthResponse, HealthStatus};

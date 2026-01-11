@@ -2492,6 +2492,7 @@ dependencies = [
  "criterion",
  "dashmap 6.1.0",
  "env_logger",
+ "fastrand",
  "governor",
  "hex",
  "http",

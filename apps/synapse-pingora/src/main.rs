@@ -517,7 +517,7 @@ fn create_synapse_engine() -> Synapse {
 
 /// Get the global rule count (from first instance)
 static RULE_COUNT: Lazy<usize> = Lazy::new(|| {
-    SYNAPSE.with(|s| s.borrow().rule_count())
+    SYNAPSE.read().rule_count()
 });
 
 /// The Synapse detection engine wrapper
@@ -1448,6 +1448,23 @@ impl ProxyHttp for SynapseProxy {
         let path = session.req_header().uri.path();
         DetectionEngine::record_status(path, status);
 
+        // Record metrics
+        let total_time_us = total_time.as_micros() as u64;
+        self.metrics_registry.record_request(status, total_time_us);
+        
+        if let Some(ref detection) = ctx.detection {
+            self.metrics_registry.record_waf(
+                detection.blocked,
+                false, // challenged (not used yet)
+                false, // logged (not used yet)
+                detection.detection_time_us
+            );
+            
+            for &rule_id in &detection.matched_rules {
+                self.metrics_registry.record_rule_match(&rule_id.to_string());
+            }
+        }
+
         // Phase 2: Report profiling metrics
         // We do this in logging to avoid blocking the request path
         // In a real system, we might sample this or use a background task
@@ -1592,7 +1609,7 @@ fn main() {
     if config.detection.anomaly_blocking.enabled {
         let mut synapse = SYNAPSE.write();
         let mut risk_config = synapse.risk_config();
-        risk_config.blocking_mode = synapse::risk::BlockingMode::Enforcement;
+        risk_config.blocking_mode = synapse::BlockingMode::Enforcement;
         risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
         synapse.set_risk_config(risk_config);
         info!("Anomaly blocking ENABLED (threshold: {:.1})", config.detection.anomaly_blocking.threshold);
@@ -1634,8 +1651,13 @@ fn main() {
     let mut server = Server::new(None).expect("Failed to create server");
     server.bootstrap();
 
-    // Create and configure the proxy service
-    let proxy = SynapseProxy::new(backends, config.rate_limit.rps);
+    // Create and configure the proxy service with SHARED metrics/health
+    let proxy = SynapseProxy::with_health(
+        backends, 
+        config.rate_limit.rps,
+        Arc::clone(&health_checker),
+        Arc::clone(&metrics_registry)
+    );
 
     let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
     proxy_service.add_tcp(&config.server.listen);

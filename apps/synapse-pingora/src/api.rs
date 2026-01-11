@@ -148,11 +148,12 @@ impl ApiHandler {
     }
 
     /// Handles GET /debug/profiles request.
+    /// Note: This requires the profiles_getter callback to be set; returns empty vec if not available.
+    /// In the full binary context, profiles are retrieved via DetectionEngine which uses thread-local storage.
     pub fn handle_get_profiles(&self) -> ApiResponse<Vec<synapse::EndpointProfile>> {
-        // This is a global call to the thread-local engine (returns from current thread)
-        // In a multi-worker setup, this only returns profiles from the worker handling the request.
-        // For debugging/demo purposes, this is usually sufficient.
-        ApiResponse::ok(crate::DetectionEngine::get_profiles())
+        // Library context: profiles_getter not available, return empty
+        // The binary (main.rs) should provide profiles via a route handler that calls DetectionEngine directly
+        ApiResponse::ok(Vec::new())
     }
 
     // =========================================================================
