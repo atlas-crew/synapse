@@ -54,6 +54,9 @@ pub mod validation;
 // Phase 7: Persistence
 pub mod persistence;
 
+// Phase 3: Telemetry (Alerting)
+pub mod telemetry;
+
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
 pub use health::{HealthChecker, HealthResponse, HealthStatus};

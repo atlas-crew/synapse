@@ -204,6 +204,20 @@ impl Default for LoggingConfig {
     }
 }
 
+use synapse_pingora::telemetry::{AlertForwarder, SecurityEvent, ActorContext, SignalContext, RequestContext};
+
+// ... (existing imports)
+
+// Global Alert Forwarder (Shared)
+static ALERT_FORWARDER: Lazy<Option<AlertForwarder>> = Lazy::new(|| {
+    let config = Config::load_or_default();
+    if let Some(url) = config.detection.risk_server_url {
+        Some(AlertForwarder::new(url, "synapse-pingora".to_string()))
+    } else {
+        None
+    }
+});
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct DetectionConfig {
     #[serde(default = "default_enabled")]
@@ -223,6 +237,8 @@ pub struct DetectionConfig {
     /// Anomaly blocking settings (Phase 2)
     #[serde(default)]
     pub anomaly_blocking: AnomalyBlockingConfig,
+    /// Risk Server URL for telemetry (Phase 3)
+    pub risk_server_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -270,6 +286,7 @@ impl Default for DetectionConfig {
             block_status: default_block_status(),
             rules_path: default_rules_path(),
             anomaly_blocking: AnomalyBlockingConfig::default(),
+            risk_server_url: None,
         }
     }
 }
@@ -1462,6 +1479,38 @@ impl ProxyHttp for SynapseProxy {
             
             for &rule_id in &detection.matched_rules {
                 self.metrics_registry.record_rule_match(&rule_id.to_string());
+            }
+
+            // Phase 3: Send telemetry alert if blocked or high anomaly
+            if let Some(forwarder) = &*ALERT_FORWARDER {
+                if detection.blocked || detection.anomaly_score > 5.0 {
+                    let client_ip = session.client_ip().map(|ip| ip.to_string()).unwrap_or_else(|| "unknown".to_string());
+                    
+                    let event = SecurityEvent {
+                        sensor_id: "synapse-pingora".to_string(),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        actor: ActorContext {
+                            ip: client_ip,
+                            session_id: None, // Session tracking is Phase 3.1
+                            fingerprint: None, // Fingerprinting is Phase 3.2
+                        },
+                        signal: SignalContext {
+                            type_: if detection.blocked { "block" } else { "anomaly" }.to_string(),
+                            severity: if detection.anomaly_score > 8.0 { "critical" } else { "high" }.to_string(),
+                            details: serde_json::json!({
+                                "rule_id": detection.matched_rules.first(), // Primary rule
+                                "anomaly_score": detection.anomaly_score,
+                                "block_reason": detection.block_reason
+                            }),
+                        },
+                        request: RequestContext {
+                            path: session.req_header().uri.path().to_string(),
+                            method: session.req_header().method.to_string(),
+                            user_agent: session.req_header().headers.get("user-agent").and_then(|v| v.to_str().ok()).map(|s| s.to_string()),
+                        }
+                    };
+                    forwarder.send(event);
+                }
             }
         }
 
