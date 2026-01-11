@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
+use serde::Serialize;
 
 /// Configuration for entity tracking.
 #[derive(Debug, Clone)]
@@ -520,6 +521,28 @@ impl EntityManager {
         self.entities.iter().map(|e| e.key().clone()).collect()
     }
 
+    /// Returns top N entities sorted by risk score (highest first)
+    pub fn list_top_risk(&self, limit: usize) -> Vec<EntitySnapshot> {
+        let mut entities: Vec<_> = self.entities.iter()
+            .map(|entry| {
+                let state = entry.value();
+                EntitySnapshot {
+                    entity_id: state.entity_id.clone(),
+                    risk: state.risk,
+                    request_count: state.request_count,
+                    blocked: state.blocked,
+                    blocked_reason: state.blocked_reason.clone(),
+                }
+            })
+            .collect();
+
+        entities.sort_by(|a, b| {
+            b.risk.partial_cmp(&a.risk).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        entities.truncate(limit);
+        entities
+    }
+
     // Internal helpers
 
     /// Apply decay to an entity based on elapsed time.
@@ -606,7 +629,7 @@ impl EntityManager {
 }
 
 /// Snapshot of entity state (for returning across lock boundaries).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EntitySnapshot {
     pub entity_id: String,
     pub risk: f64,

@@ -14,12 +14,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, Method, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
+use serde::Deserialize;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
@@ -307,14 +308,36 @@ async fn sensor_config_handler(State(state): State<AdminState>) -> impl IntoResp
     (StatusCode::OK, Json(response))
 }
 
-/// GET /_sensor/entities - Returns empty entity list
-async fn sensor_entities_handler() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({ "entities": [] })))
+/// Query parameters for entities endpoint
+#[derive(Debug, Deserialize)]
+struct EntitiesQuery {
+    limit: Option<usize>,
 }
 
-/// GET /_sensor/blocks - Returns empty blocks list
-async fn sensor_blocks_handler() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({ "blocks": [] })))
+/// GET /_sensor/entities - Returns top entities by risk score
+async fn sensor_entities_handler(
+    Query(params): Query<EntitiesQuery>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(100);
+    let entities = state.handler.handle_list_entities(limit);
+    (StatusCode::OK, Json(serde_json::json!({ "entities": entities })))
+}
+
+/// Query parameters for blocks endpoint
+#[derive(Debug, Deserialize)]
+struct BlocksQuery {
+    limit: Option<usize>,
+}
+
+/// GET /_sensor/blocks - Returns recent block events
+async fn sensor_blocks_handler(
+    Query(params): Query<BlocksQuery>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(100);
+    let blocks = state.handler.handle_list_blocks(limit);
+    (StatusCode::OK, Json(serde_json::json!({ "blocks": blocks })))
 }
 
 /// GET /_sensor/trends - Returns empty trends data

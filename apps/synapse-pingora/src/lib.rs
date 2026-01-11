@@ -57,6 +57,9 @@ pub mod persistence;
 // Phase 3: Telemetry (Alerting)
 pub mod telemetry;
 
+// Dashboard support
+pub mod block_log;
+
 // Re-export commonly used types from Phase 1
 pub use config::{ConfigFile, ConfigLoader, GlobalConfig};
 pub use health::{HealthChecker, HealthResponse, HealthStatus};
@@ -99,3 +102,6 @@ pub use validation::{
     validate_domain_name, validate_certificate_file, validate_private_key_file,
     validate_tls_config,
 };
+
+// Re-export dashboard support types
+pub use block_log::{BlockLog, BlockEvent};

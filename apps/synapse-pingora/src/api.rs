@@ -21,6 +21,8 @@ use crate::config_manager::{
     ConfigManager, CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
     RateLimitRequest, AccessListRequest, MutationResult, SiteDetailResponse,
 };
+use crate::block_log::{BlockLog, BlockEvent};
+use crate::entity::{EntityManager, EntitySnapshot};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +73,10 @@ pub struct ApiHandler {
     config_manager: Option<Arc<ConfigManager>>,
     /// API authentication token (if enabled)
     auth_token: Option<String>,
+    /// Entity manager for per-IP tracking (dashboard feature)
+    entity_manager: Option<Arc<EntityManager>>,
+    /// Block log for recent block events (dashboard feature)
+    block_log: Option<Arc<BlockLog>>,
 }
 
 impl ApiHandler {
@@ -255,6 +261,32 @@ impl ApiHandler {
     pub fn health(&self) -> Arc<HealthChecker> {
         Arc::clone(&self.health)
     }
+
+    /// Returns the entity manager (if configured).
+    pub fn entity_manager(&self) -> Option<Arc<EntityManager>> {
+        self.entity_manager.as_ref().map(Arc::clone)
+    }
+
+    /// Returns the block log (if configured).
+    pub fn block_log(&self) -> Option<Arc<BlockLog>> {
+        self.block_log.as_ref().map(Arc::clone)
+    }
+
+    /// Handles GET /_sensor/entities request - returns top entities by risk.
+    pub fn handle_list_entities(&self, limit: usize) -> Vec<EntitySnapshot> {
+        match &self.entity_manager {
+            Some(manager) => manager.list_top_risk(limit),
+            None => Vec::new(),
+        }
+    }
+
+    /// Handles GET /_sensor/blocks request - returns recent block events.
+    pub fn handle_list_blocks(&self, limit: usize) -> Vec<BlockEvent> {
+        match &self.block_log {
+            Some(log) => log.recent(limit),
+            None => Vec::new(),
+        }
+    }
 }
 
 /// Builder for ApiHandler.
@@ -267,6 +299,8 @@ pub struct ApiHandlerBuilder {
     access_lists: Option<Arc<RwLock<AccessListManager>>>,
     config_manager: Option<Arc<ConfigManager>>,
     auth_token: Option<String>,
+    entity_manager: Option<Arc<EntityManager>>,
+    block_log: Option<Arc<BlockLog>>,
 }
 
 impl ApiHandlerBuilder {
@@ -312,6 +346,18 @@ impl ApiHandlerBuilder {
         self
     }
 
+    /// Sets the entity manager for dashboard entity tracking.
+    pub fn entity_manager(mut self, entity_manager: Arc<EntityManager>) -> Self {
+        self.entity_manager = Some(entity_manager);
+        self
+    }
+
+    /// Sets the block log for dashboard block event history.
+    pub fn block_log(mut self, block_log: Arc<BlockLog>) -> Self {
+        self.block_log = Some(block_log);
+        self
+    }
+
     /// Builds the API handler.
     pub fn build(self) -> ApiHandler {
         ApiHandler {
@@ -326,6 +372,8 @@ impl ApiHandlerBuilder {
             }),
             config_manager: self.config_manager,
             auth_token: self.auth_token,
+            entity_manager: self.entity_manager,
+            block_log: self.block_log,
         }
     }
 }
