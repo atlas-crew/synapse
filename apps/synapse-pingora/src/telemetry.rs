@@ -42,6 +42,7 @@ pub enum EventType {
     RateLimitHit,
     ConfigReload,
     ServiceHealth,
+    SensorReport,
 }
 
 /// Telemetry event payload.
