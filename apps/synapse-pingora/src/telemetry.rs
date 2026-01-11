@@ -447,28 +447,41 @@ impl TelemetryClient {
 
     /// Reports a single event immediately (bypassing batching).
     /// Used for critical security alerts like blocks.
-    ///
-    /// NOTE: This is a stub implementation. To enable HTTP reporting,
-    /// add reqwest to Cargo.toml and uncomment the HTTP client code.
     pub async fn report(&self, event: TelemetryEvent) -> TelemetryResult<()> {
         if !self.config.enabled {
             return Ok(());
         }
 
-        // Serialize event to JSON for transmission
-        let _payload = serde_json::to_value(&event)
-            .map_err(|e| TelemetryError::SerializationError(e.to_string()))?;
+        // Map TelemetryEvent::SensorReport to the flat format expected by Risk Server
+        let payload = match event {
+            TelemetryEvent::SensorReport { sensor_id, actor, signal, request } => {
+                serde_json::json!({
+                    "sensorId": sensor_id,
+                    "actor": actor,
+                    "signal": signal,
+                    "request": request,
+                    "timestamp": TimestampedEvent::new(TelemetryEvent::ServiceHealth { 
+                        uptime_secs: 0, memory_mb: 0, active_connections: 0, requests_per_sec: 0.0 
+                    }, None).timestamp_ms
+                })
+            },
+            _ => serde_json::to_value(&event).map_err(|e| TelemetryError::SerializationError(e.to_string()))?
+        };
 
-        // TODO: Add reqwest to Cargo.toml and enable HTTP reporting
-        // let client = reqwest::Client::new();
-        // let response = client.post(&self.config.endpoint)
-        //     .json(&_payload)
-        //     .timeout(Duration::from_secs(2))
-        //     .send()
-        //     .await
-        //     .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
+        let client = reqwest::Client::new();
+        let response = client.post(&self.config.endpoint)
+            .json(&payload)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+            .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
 
-        warn!("Telemetry reporting not implemented - event type {:?} discarded", event.event_type());
+        if !response.status().is_success() {
+            return Err(TelemetryError::EndpointUnreachable { 
+                message: format!("HTTP {}", response.status()) 
+            });
+        }
+
         Ok(())
     }
 
