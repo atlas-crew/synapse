@@ -124,6 +124,11 @@ pub async fn start_admin_server(
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
         .route("/_sensor/system/config", get(sensor_system_config_handler))
+        .route("/_sensor/system/overview", get(sensor_system_overview_handler))
+        .route("/_sensor/system/performance", get(sensor_system_performance_handler))
+        .route("/_sensor/system/network", get(sensor_system_network_handler))
+        .route("/_sensor/system/processes", get(sensor_system_processes_handler))
+        .route("/_sensor/system/logs", get(sensor_system_logs_handler))
         .route("/", get(root_handler));
 
     let app = Router::new()
@@ -553,6 +558,117 @@ async fn sensor_system_config_handler(State(state): State<AdminState>) -> impl I
             },
             "startupFlags": [],
             "sites": sites.data.map(|s| s.sites).unwrap_or_default()
+        }
+    })))
+}
+
+/// GET /_sensor/system/overview - System overview metrics
+async fn sensor_system_overview_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let health = state.handler.handle_health();
+    let uptime_secs = health.data.as_ref().map(|h| h.uptime_secs).unwrap_or(0);
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "uptime": uptime_secs,
+            "version": env!("CARGO_PKG_VERSION"),
+            "hostname": "synapse-pingora",
+            "cpu": {
+                "cores": std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1),
+                "usagePercent": 0.0
+            },
+            "memory": {
+                "totalMb": 0,
+                "usedMb": 0,
+                "usagePercent": 0.0
+            },
+            "requests": {
+                "total": 0,
+                "perSecond": 0.0,
+                "blocked": 0,
+                "blockedPercent": 0.0
+            }
+        }
+    })))
+}
+
+/// GET /_sensor/system/performance - Performance metrics
+async fn sensor_system_performance_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let health = state.handler.handle_health();
+    let waf_stats = health.data.as_ref().map(|h| &h.waf);
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "latency": {
+                "p50Ms": 0.0,
+                "p95Ms": 0.0,
+                "p99Ms": 0.0,
+                "avgMs": waf_stats.map(|w| w.avg_detection_us as f64 / 1000.0).unwrap_or(0.0)
+            },
+            "throughput": {
+                "requestsPerSecond": 0.0,
+                "bytesPerSecond": 0
+            },
+            "connections": {
+                "active": 0,
+                "idle": 0,
+                "total": 0
+            },
+            "timeline": []
+        }
+    })))
+}
+
+/// GET /_sensor/system/network - Network statistics
+async fn sensor_system_network_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "interfaces": [],
+            "connections": {
+                "established": 0,
+                "timeWait": 0,
+                "closeWait": 0
+            },
+            "bandwidth": {
+                "inBytesPerSecond": 0,
+                "outBytesPerSecond": 0
+            },
+            "timeline": []
+        }
+    })))
+}
+
+/// GET /_sensor/system/processes - Process information
+async fn sensor_system_processes_handler() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "workers": [],
+            "totalThreads": 0,
+            "totalMemoryMb": 0
+        }
+    })))
+}
+
+/// GET /_sensor/system/logs - System logs
+#[derive(Debug, serde::Deserialize)]
+struct LogsQuery {
+    #[serde(default = "default_log_limit")]
+    limit: usize,
+    #[serde(default)]
+    level: Option<String>,
+}
+
+fn default_log_limit() -> usize { 100 }
+
+async fn sensor_system_logs_handler(Query(_params): Query<LogsQuery>) -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "entries": [],
+            "hasMore": false
         }
     })))
 }
