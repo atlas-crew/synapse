@@ -58,6 +58,82 @@ status:
     @lsof -i :6191 -P 2>/dev/null | grep LISTEN && echo "Admin (6191): UP" || echo "Admin (6191): DOWN"
     @curl -s http://localhost:5001/healthz > /dev/null 2>&1 && echo "Backend (5001): UP" || echo "Backend (5001): DOWN"
 
+# Pre-flight check: Verify all services ready for demo
+demo-preflight:
+    #!/usr/bin/env bash
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  PRE-FLIGHT CHECK: VERIFYING DEMO SERVICES                   ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    PASS=0
+    FAIL=0
+
+    # Check 1: Backend API (Flask on 5001)
+    printf "  [1/5] Backend API (localhost:5001)............."
+    if curl -sf http://localhost:5001/healthz > /dev/null 2>&1; then
+        echo " ✓ UP"
+        PASS=$((PASS + 1))
+    else
+        echo " ✗ DOWN"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Check 2: Synapse Admin API (6191)
+    printf "  [2/5] Synapse Admin API (localhost:6191)......."
+    if curl -sf http://localhost:6191/health > /dev/null 2>&1; then
+        echo " ✓ UP"
+        PASS=$((PASS + 1))
+    else
+        echo " ✗ DOWN"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Check 3: Synapse Proxy (HTTPS 6190)
+    printf "  [3/5] Synapse Proxy TLS (localhost:6190)......."
+    if curl -sfk https://localhost:6190/healthz > /dev/null 2>&1; then
+        echo " ✓ UP"
+        PASS=$((PASS + 1))
+    else
+        echo " ✗ DOWN"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Check 4: WAF is enabled
+    printf "  [4/5] WAF Protection............................"
+    WAF_STATUS=$(curl -s http://localhost:6191/health 2>/dev/null | jq -r '.data.waf.enabled // false')
+    if [ "$WAF_STATUS" = "true" ]; then
+        echo " ✓ ENABLED"
+        PASS=$((PASS + 1))
+    else
+        echo " ✗ DISABLED"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Check 5: Backend is routable through proxy
+    printf "  [5/5] End-to-end routing........................"
+    RESP=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:6190/healthz 2>/dev/null)
+    if [ "$RESP" = "200" ]; then
+        echo " ✓ OK"
+        PASS=$((PASS + 1))
+    else
+        echo " ✗ FAIL (HTTP $RESP)"
+        FAIL=$((FAIL + 1))
+    fi
+
+    echo ""
+    echo "───────────────────────────────────────────────────────────────"
+    if [ $FAIL -eq 0 ]; then
+        echo "  ✅ ALL CHECKS PASSED ($PASS/5) — Ready for demo!"
+        echo ""
+        echo "  Run: just demo-demo"
+    else
+        echo "  ❌ CHECKS FAILED: $FAIL/5"
+        echo ""
+        echo "  To start services: just up"
+        exit 1
+    fi
+    echo "───────────────────────────────────────────────────────────────"
+
 # Show WAF metrics (Prometheus format)
 metrics:
     @curl -s http://localhost:6191/metrics | grep synapse_waf
@@ -409,6 +485,8 @@ demo-reset:
 
 # Run complete VP demo sequence
 demo-demo:
+    @just demo-preflight
+    @echo "\n[Press Enter to begin demo...]" && read
     @just restart
     @sleep 2
     @just demo-1-dashboard
@@ -460,9 +538,10 @@ help-demo:
     @echo "║   just demo-11-campaign   Campaign correlation (botnet)      ║"
     @echo "╠══════════════════════════════════════════════════════════════╣"
     @echo "║ SETUP & RESET                                                ║"
-    @echo "║   just up          Start all services (backend + proxy)      ║"
-    @echo "║   just restart     Reset state (clears risk scores)          ║"
-    @echo "║   just demo-reset    Release all blocked entities              ║"
+    @echo "║   just up              Start all services (backend + proxy)  ║"
+    @echo "║   just demo-preflight  Pre-flight check (verify services)    ║"
+    @echo "║   just restart         Reset state (clears risk scores)      ║"
+    @echo "║   just demo-reset      Release all blocked entities          ║"
     @echo "╠══════════════════════════════════════════════════════════════╣"
     @echo "║ QUICK ATTACKS                                                ║"
     @echo "║   just demo-clean  Clean request (HTTP 200)                  ║"
