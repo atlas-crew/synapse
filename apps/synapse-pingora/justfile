@@ -227,10 +227,10 @@ campaigns:
     @echo "=== Attack Campaigns ==="
     @curl -s http://localhost:6191/_sensor/campaigns | jq '.data[] | {id, status, actorCount, attackTypes, confidence, firstSeen, lastSeen}'
 
-# Show recent blocked requests with details
-requests:
-    @echo "=== Recent Requests ==="
-    @curl -s http://localhost:6191/_sensor/requests 2>/dev/null | jq '.requests[:10] | .[] | {timestamp, client_ip, method, path, status, rule_triggered}' 2>/dev/null || echo "Request log not available (enable in config)"
+# Show blocked request audit log with details
+audit:
+    @echo "=== Blocked Request Audit Log ==="
+    @curl -s http://localhost:6191/_sensor/blocks | jq '.blocks[:20] | .[] | {timestamp: (.timestamp / 1000 | strftime("%Y-%m-%d %H:%M:%S")), client_ip, method, path, risk_score, block_reason, matched_rules}'
 
 # Show entity details for a specific IP
 entity IP:
@@ -638,7 +638,7 @@ help-demo:
     @echo "║   just entities       Show all tracked entities (IPs)        ║"
     @echo "║   just blocked        Show only blocked entities             ║"
     @echo "║   just campaigns      Show detected attack campaigns         ║"
-    @echo "║   just requests       Show recent request log                ║"
+    @echo "║   just audit          Show blocked request audit log         ║"
     @echo "║   just entity <IP>    Show details for specific IP           ║"
     @echo "╠══════════════════════════════════════════════════════════════╣"
     @echo "║ QUICK ATTACKS                                                ║"
