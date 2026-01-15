@@ -26,8 +26,8 @@
 
 pub mod campaign_state;
 pub mod fingerprint_index;
+pub mod detectors;
 // pub mod manager;         // Phase 3
-// pub mod detectors;       // Phase 2
 
 pub use campaign_state::{
     Campaign, CampaignError, CampaignStatus, CampaignStore, CampaignStoreStats,
