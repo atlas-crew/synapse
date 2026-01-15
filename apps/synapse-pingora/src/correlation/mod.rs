@@ -27,10 +27,11 @@
 pub mod campaign_state;
 pub mod fingerprint_index;
 pub mod detectors;
-// pub mod manager;         // Phase 3
+pub mod manager;
 
 pub use campaign_state::{
     Campaign, CampaignError, CampaignStatus, CampaignStore, CampaignStoreStats,
     CampaignUpdate, CorrelationReason, CorrelationType,
 };
 pub use fingerprint_index::{FingerprintGroup, FingerprintIndex, FingerprintType, IndexStats};
+pub use manager::{CampaignManager, ManagerConfig, ManagerStats};

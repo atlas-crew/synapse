@@ -395,7 +395,7 @@ impl CampaignUpdate {
 // ============================================================================
 
 /// Statistics about the campaign store.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CampaignStoreStats {
     /// Total number of campaigns in the store.
     pub total_campaigns: usize,

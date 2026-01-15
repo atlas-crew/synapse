@@ -1,0 +1,1350 @@
+//! Campaign Correlation Manager
+//!
+//! Orchestrates fingerprint indexing, campaign detection, and state management.
+//! This is the main entry point for the correlation subsystem.
+//!
+//! # Architecture
+//!
+//! The `CampaignManager` coordinates three main components:
+//! - **FingerprintIndex**: O(1) fingerprint→IPs lookup for efficient correlation
+//! - **CampaignStore**: Campaign state storage with thread-safe access
+//! - **Detectors**: SharedFingerprintDetector and Ja4RotationDetector for pattern detection
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use synapse_pingora::correlation::{CampaignManager, ManagerConfig};
+//! use std::sync::Arc;
+//!
+//! // Create manager with custom configuration
+//! let config = ManagerConfig {
+//!     shared_threshold: 3,
+//!     rotation_threshold: 3,
+//!     background_scanning: true,
+//!     ..Default::default()
+//! };
+//! let manager = Arc::new(CampaignManager::with_config(config));
+//!
+//! // Register fingerprints during request processing (fast path)
+//! let ip = "192.168.1.100".parse().unwrap();
+//! manager.register_ja4(ip, "t13d1516h2_abc123".to_string());
+//!
+//! // Start background worker for periodic detection
+//! let worker = Arc::clone(&manager).start_background_worker();
+//! ```
+//!
+//! # Performance
+//!
+//! - Registration operations are O(1) and non-blocking for hot path
+//! - Detection cycles are run periodically in background, not per-request
+//! - All structures use lock-free DashMap for high concurrency
+
+use std::net::IpAddr;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use tokio::sync::RwLock;
+use tokio::time::interval;
+
+use crate::correlation::{
+    Campaign, CampaignStatus, CampaignStore, CampaignStoreStats, CampaignUpdate,
+    FingerprintIndex, IndexStats,
+};
+use crate::correlation::detectors::{
+    Detector, DetectorError, DetectorResult, Ja4RotationDetector, RotationConfig,
+    SharedFingerprintDetector,
+};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/// Configuration for the campaign manager.
+///
+/// Controls detector thresholds, timing windows, and background scanning behavior.
+#[derive(Debug, Clone)]
+pub struct ManagerConfig {
+    /// Minimum IPs sharing fingerprint to form campaign (shared FP detector).
+    ///
+    /// Default: 3
+    pub shared_threshold: usize,
+
+    /// Time window for rotation detection.
+    ///
+    /// Default: 60 seconds
+    pub rotation_window: Duration,
+
+    /// Minimum fingerprints for rotation detection.
+    ///
+    /// Default: 3
+    pub rotation_threshold: usize,
+
+    /// How often to run full detector scans.
+    ///
+    /// Default: 5 seconds
+    pub scan_interval: Duration,
+
+    /// Enable background scanning.
+    ///
+    /// When enabled, a background worker periodically runs detection cycles.
+    /// Default: true
+    pub background_scanning: bool,
+
+    /// Track combined fingerprints (JA4+JA4H) in rotation detector.
+    ///
+    /// Default: true
+    pub track_combined: bool,
+
+    /// Base confidence for shared fingerprint detections.
+    ///
+    /// Default: 0.85
+    pub shared_confidence: f64,
+}
+
+impl Default for ManagerConfig {
+    fn default() -> Self {
+        Self {
+            shared_threshold: 3,
+            rotation_window: Duration::from_secs(60),
+            rotation_threshold: 3,
+            scan_interval: Duration::from_secs(5),
+            background_scanning: true,
+            track_combined: true,
+            shared_confidence: 0.85,
+        }
+    }
+}
+
+impl ManagerConfig {
+    /// Create a new configuration with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Builder method to set shared threshold.
+    pub fn with_shared_threshold(mut self, threshold: usize) -> Self {
+        self.shared_threshold = threshold;
+        self
+    }
+
+    /// Builder method to set rotation window.
+    pub fn with_rotation_window(mut self, window: Duration) -> Self {
+        self.rotation_window = window;
+        self
+    }
+
+    /// Builder method to set rotation threshold.
+    pub fn with_rotation_threshold(mut self, threshold: usize) -> Self {
+        self.rotation_threshold = threshold;
+        self
+    }
+
+    /// Builder method to set scan interval.
+    pub fn with_scan_interval(mut self, interval: Duration) -> Self {
+        self.scan_interval = interval;
+        self
+    }
+
+    /// Builder method to enable/disable background scanning.
+    pub fn with_background_scanning(mut self, enabled: bool) -> Self {
+        self.background_scanning = enabled;
+        self
+    }
+
+    /// Builder method to enable/disable combined fingerprint tracking.
+    pub fn with_track_combined(mut self, enabled: bool) -> Self {
+        self.track_combined = enabled;
+        self
+    }
+
+    /// Builder method to set shared confidence.
+    pub fn with_shared_confidence(mut self, confidence: f64) -> Self {
+        self.shared_confidence = confidence.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Validate the configuration.
+    ///
+    /// Returns an error message if configuration is invalid.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.shared_threshold < 2 {
+            return Err("shared_threshold must be at least 2".to_string());
+        }
+        if self.rotation_threshold < 2 {
+            return Err("rotation_threshold must be at least 2".to_string());
+        }
+        if self.rotation_window.is_zero() {
+            return Err("rotation_window must be positive".to_string());
+        }
+        if self.scan_interval.is_zero() {
+            return Err("scan_interval must be positive".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Statistics
+// ============================================================================
+
+/// Statistics for the campaign manager.
+///
+/// Provides observability into manager operations including registration counts,
+/// detection cycles, and campaign creation.
+#[derive(Debug, Clone, Default)]
+pub struct ManagerStats {
+    /// Total fingerprints registered since start.
+    pub fingerprints_registered: u64,
+
+    /// Total detection cycles run.
+    pub detections_run: u64,
+
+    /// Total campaigns created.
+    pub campaigns_created: u64,
+
+    /// Last successful scan timestamp.
+    pub last_scan: Option<Instant>,
+
+    /// Statistics from the fingerprint index.
+    pub index_stats: IndexStats,
+
+    /// Statistics from the campaign store.
+    pub campaign_stats: CampaignStoreStats,
+}
+
+// ============================================================================
+// Campaign Manager
+// ============================================================================
+
+/// Main orchestrator for campaign correlation.
+///
+/// Coordinates fingerprint indexing, campaign detection, and state management.
+/// This is the entry point for the correlation subsystem.
+///
+/// # Thread Safety
+///
+/// All methods are thread-safe and can be called concurrently. The manager uses
+/// lock-free data structures (DashMap) and atomic counters for high-performance
+/// concurrent access.
+///
+/// # Registration vs Detection
+///
+/// - **Registration** (`register_*` methods): Called per-request, must be FAST.
+///   Only updates indexes, no detection logic.
+/// - **Detection** (`run_detection_cycle`): Called periodically by background
+///   worker or on-demand. Processes all detectors and applies campaign updates.
+pub struct CampaignManager {
+    /// Manager configuration.
+    config: ManagerConfig,
+
+    /// Fingerprint index for O(1) lookups.
+    index: Arc<FingerprintIndex>,
+
+    /// Campaign state storage.
+    store: Arc<CampaignStore>,
+
+    /// Shared fingerprint detector.
+    shared_detector: SharedFingerprintDetector,
+
+    /// JA4 rotation detector.
+    rotation_detector: Ja4RotationDetector,
+
+    /// Internal statistics (atomic counters for thread safety).
+    stats_fingerprints_registered: AtomicU64,
+    stats_detections_run: AtomicU64,
+    stats_campaigns_created: AtomicU64,
+
+    /// Last scan timestamp (protected by RwLock for safe concurrent access).
+    last_scan: RwLock<Option<Instant>>,
+
+    /// Flag to signal background worker shutdown.
+    shutdown: AtomicBool,
+}
+
+impl CampaignManager {
+    /// Create a new campaign manager with default configuration.
+    pub fn new() -> Self {
+        Self::with_config(ManagerConfig::default())
+    }
+
+    /// Create a new campaign manager with custom configuration.
+    pub fn with_config(config: ManagerConfig) -> Self {
+        // Create shared fingerprint detector
+        let shared_detector = SharedFingerprintDetector::with_config(
+            config.shared_threshold,
+            config.shared_confidence,
+            config.scan_interval.as_millis() as u64,
+        );
+
+        // Create rotation detector
+        let rotation_config = RotationConfig {
+            min_fingerprints: config.rotation_threshold,
+            window: config.rotation_window,
+            track_combined: config.track_combined,
+        };
+        let rotation_detector = Ja4RotationDetector::new(rotation_config);
+
+        Self {
+            config,
+            index: Arc::new(FingerprintIndex::new()),
+            store: Arc::new(CampaignStore::new()),
+            shared_detector,
+            rotation_detector,
+            stats_fingerprints_registered: AtomicU64::new(0),
+            stats_detections_run: AtomicU64::new(0),
+            stats_campaigns_created: AtomicU64::new(0),
+            last_scan: RwLock::new(None),
+            shutdown: AtomicBool::new(false),
+        }
+    }
+
+    /// Register a JA4 fingerprint for an IP address.
+    ///
+    /// Called during request processing - must be fast.
+    /// Only updates indexes, no detection logic is run.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the client
+    /// * `fingerprint` - The JA4 TLS fingerprint
+    pub fn register_ja4(&self, ip: IpAddr, fingerprint: String) {
+        if fingerprint.is_empty() {
+            return;
+        }
+
+        let ip_str = ip.to_string();
+
+        // Update fingerprint index
+        self.index.update_entity(&ip_str, Some(&fingerprint), None);
+
+        // Record in rotation detector
+        self.rotation_detector.record_fingerprint(ip, fingerprint);
+
+        // Increment stats
+        self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Register a combined (JA4+JA4H) fingerprint for an IP address.
+    ///
+    /// Combined fingerprints provide higher confidence correlation due to
+    /// increased specificity.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the client
+    /// * `fingerprint` - The combined fingerprint hash
+    pub fn register_combined(&self, ip: IpAddr, fingerprint: String) {
+        if fingerprint.is_empty() {
+            return;
+        }
+
+        let ip_str = ip.to_string();
+
+        // Update fingerprint index (combined only)
+        self.index.update_entity(&ip_str, None, Some(&fingerprint));
+
+        // Record in rotation detector if tracking combined
+        if self.config.track_combined {
+            self.rotation_detector.record_fingerprint(ip, fingerprint);
+        }
+
+        // Increment stats
+        self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Register both JA4 and JA4H fingerprints.
+    ///
+    /// Convenience method for registering both fingerprint types in one call.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address of the client
+    /// * `ja4` - Optional JA4 TLS fingerprint
+    /// * `ja4h` - Optional JA4H HTTP fingerprint (used in combined hash)
+    pub fn register_fingerprints(&self, ip: IpAddr, ja4: Option<String>, ja4h: Option<String>) {
+        let ip_str = ip.to_string();
+        let mut registered = false;
+
+        // Update fingerprint index
+        let ja4_ref = ja4.as_deref();
+        let combined = ja4h.as_ref().map(|h| {
+            // Create combined hash from JA4+JA4H
+            format!(
+                "{}_{}",
+                ja4.as_deref().unwrap_or(""),
+                h
+            )
+        });
+        let combined_ref = combined.as_deref();
+
+        self.index.update_entity(&ip_str, ja4_ref, combined_ref);
+
+        // Record JA4 in rotation detector
+        if let Some(ref fp) = ja4 {
+            if !fp.is_empty() {
+                self.rotation_detector.record_fingerprint(ip, fp.clone());
+                registered = true;
+            }
+        }
+
+        // Record combined in rotation detector if tracking
+        if self.config.track_combined {
+            if let Some(ref fp) = combined {
+                if !fp.is_empty() {
+                    self.rotation_detector.record_fingerprint(ip, fp.clone());
+                    registered = true;
+                }
+            }
+        }
+
+        if registered {
+            self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Run all detectors and process updates.
+    ///
+    /// Called periodically by background worker or on-demand.
+    /// This is the main detection cycle that:
+    /// 1. Runs the shared fingerprint detector
+    /// 2. Runs the JA4 rotation detector
+    /// 3. Creates or updates campaigns based on results
+    ///
+    /// # Returns
+    /// Number of campaign updates processed.
+    ///
+    /// # Errors
+    /// Returns an error if any detector fails.
+    pub async fn run_detection_cycle(&self) -> DetectorResult<usize> {
+        let mut total_updates = 0;
+
+        // Run shared fingerprint detector
+        let shared_updates = self.shared_detector.analyze(&self.index)?;
+        for update in shared_updates {
+            self.process_campaign_update(update);
+            total_updates += 1;
+        }
+
+        // Run rotation detector
+        let rotation_updates = self.rotation_detector.analyze(&self.index)?;
+        for update in rotation_updates {
+            self.process_campaign_update(update);
+            total_updates += 1;
+        }
+
+        // Update stats
+        self.stats_detections_run.fetch_add(1, Ordering::Relaxed);
+        {
+            let mut last_scan = self.last_scan.write().await;
+            *last_scan = Some(Instant::now());
+        }
+
+        Ok(total_updates)
+    }
+
+    /// Process a campaign update from a detector.
+    ///
+    /// If the update contains a correlation reason with IPs, we try to:
+    /// 1. Find existing campaign for any of those IPs
+    /// 2. If found, update the existing campaign
+    /// 3. If not found, create a new campaign
+    fn process_campaign_update(&self, update: CampaignUpdate) {
+        // Extract IPs from correlation reason if present
+        let ips: Vec<String> = update
+            .add_correlation_reason
+            .as_ref()
+            .map(|reason| reason.evidence.clone())
+            .unwrap_or_default();
+
+        if ips.is_empty() {
+            return;
+        }
+
+        // Check if any IP is already in a campaign
+        let existing_campaign_id = ips.iter().find_map(|ip| self.store.get_campaign_for_ip(ip));
+
+        match existing_campaign_id {
+            Some(campaign_id) => {
+                // Update existing campaign
+                let _ = self.store.update_campaign(&campaign_id, update);
+
+                // Add any new IPs to the campaign
+                for ip in &ips {
+                    let _ = self.store.add_actor_to_campaign(&campaign_id, ip);
+                }
+            }
+            None => {
+                // Create new campaign
+                let confidence = update.confidence.unwrap_or(0.5);
+
+                // Generate a unique ID, retrying if collision occurs (rare edge case)
+                // ID collisions can happen if two campaigns are created in the same millisecond
+                let mut campaign_id = Campaign::generate_id();
+                let mut retry_count = 0;
+                while self.store.get_campaign(&campaign_id).is_some() && retry_count < 10 {
+                    // Add random suffix to handle collision
+                    campaign_id = format!("{}-{:x}", Campaign::generate_id(), fastrand::u32(..));
+                    retry_count += 1;
+                }
+
+                let mut campaign = Campaign::new(campaign_id, ips, confidence);
+
+                // Apply update fields to new campaign
+                if let Some(status) = update.status {
+                    campaign.status = status;
+                }
+                if let Some(ref attack_types) = update.attack_types {
+                    campaign.attack_types = attack_types.clone();
+                }
+                if let Some(reason) = update.add_correlation_reason {
+                    campaign.correlation_reasons.push(reason);
+                }
+                if let Some(risk_score) = update.risk_score {
+                    campaign.risk_score = risk_score;
+                }
+
+                // Store the campaign
+                if self.store.create_campaign(campaign).is_ok() {
+                    self.stats_campaigns_created.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+    }
+
+    /// Check if an IP should trigger immediate detection.
+    ///
+    /// Used for event-driven detection on new requests. Returns true if
+    /// the IP's fingerprint group has reached a threshold that warrants
+    /// immediate analysis.
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address to check
+    ///
+    /// # Returns
+    /// `true` if immediate detection should be triggered.
+    pub fn should_trigger_detection(&self, ip: &IpAddr) -> bool {
+        self.shared_detector.should_trigger(ip, &self.index)
+            || self.rotation_detector.should_trigger(ip, &self.index)
+    }
+
+    /// Get all active campaigns for API response.
+    ///
+    /// Returns campaigns with Detected or Active status.
+    pub fn get_campaigns(&self) -> Vec<Campaign> {
+        self.store.list_active_campaigns()
+    }
+
+    /// Get all campaigns (including resolved/dormant).
+    pub fn get_all_campaigns(&self) -> Vec<Campaign> {
+        self.store.list_campaigns(None)
+    }
+
+    /// Get a specific campaign by ID.
+    ///
+    /// # Arguments
+    /// * `id` - The campaign ID to retrieve
+    ///
+    /// # Returns
+    /// The campaign if found, None otherwise.
+    pub fn get_campaign(&self, id: &str) -> Option<Campaign> {
+        self.store.get_campaign(id)
+    }
+
+    /// Get IPs that are members of a campaign.
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID to query
+    ///
+    /// # Returns
+    /// Vector of IP addresses in the campaign.
+    pub fn get_campaign_actors(&self, campaign_id: &str) -> Vec<IpAddr> {
+        self.store
+            .get_campaign(campaign_id)
+            .map(|campaign| {
+                campaign
+                    .actors
+                    .iter()
+                    .filter_map(|ip_str| ip_str.parse().ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get current statistics.
+    ///
+    /// Returns a snapshot of manager statistics including index and store stats.
+    pub fn stats(&self) -> ManagerStats {
+        let last_scan = {
+            // Use try_read to avoid blocking; if locked, use None
+            self.last_scan
+                .try_read()
+                .map(|guard| *guard)
+                .unwrap_or(None)
+        };
+
+        ManagerStats {
+            fingerprints_registered: self.stats_fingerprints_registered.load(Ordering::Relaxed),
+            detections_run: self.stats_detections_run.load(Ordering::Relaxed),
+            campaigns_created: self.stats_campaigns_created.load(Ordering::Relaxed),
+            last_scan,
+            index_stats: self.index.stats(),
+            campaign_stats: self.store.stats(),
+        }
+    }
+
+    /// Start background detection worker.
+    ///
+    /// Returns a handle that can be used to await worker completion.
+    /// The worker runs detection cycles at the configured interval until
+    /// the manager is dropped or shutdown is signaled.
+    ///
+    /// # Returns
+    /// JoinHandle for the background task.
+    pub fn start_background_worker(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let manager = self;
+        let scan_interval = manager.config.scan_interval;
+
+        tokio::spawn(async move {
+            let mut ticker = interval(scan_interval);
+
+            loop {
+                ticker.tick().await;
+
+                // Check for shutdown signal
+                if manager.shutdown.load(Ordering::Relaxed) {
+                    log::info!("Campaign manager background worker shutting down");
+                    break;
+                }
+
+                // Run detection cycle
+                match manager.run_detection_cycle().await {
+                    Ok(updates) => {
+                        if updates > 0 {
+                            log::debug!("Detection cycle processed {} updates", updates);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Detection cycle error: {}", e);
+                    }
+                }
+            }
+        })
+    }
+
+    /// Signal the background worker to shut down.
+    pub fn shutdown(&self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+    }
+
+    /// Check if shutdown has been signaled.
+    pub fn is_shutdown(&self) -> bool {
+        self.shutdown.load(Ordering::Relaxed)
+    }
+
+    /// Remove an IP from tracking (called when entity is evicted).
+    ///
+    /// Cleans up the IP from:
+    /// - Fingerprint index
+    /// - Any associated campaigns
+    ///
+    /// # Arguments
+    /// * `ip` - The IP address to remove
+    pub fn remove_ip(&self, ip: &IpAddr) {
+        let ip_str = ip.to_string();
+
+        // Remove from fingerprint index
+        self.index.remove_entity(&ip_str);
+
+        // Remove from any campaign
+        if let Some(campaign_id) = self.store.get_campaign_for_ip(&ip_str) {
+            let _ = self.store.remove_actor_from_campaign(&campaign_id, &ip_str);
+        }
+    }
+
+    /// Get the fingerprint index (for integration with EntityManager).
+    ///
+    /// Allows direct access to the index for advanced use cases.
+    pub fn index(&self) -> &Arc<FingerprintIndex> {
+        &self.index
+    }
+
+    /// Get the campaign store (for integration).
+    ///
+    /// Allows direct access to the store for advanced use cases.
+    pub fn store(&self) -> &Arc<CampaignStore> {
+        &self.store
+    }
+
+    /// Get the current configuration.
+    pub fn config(&self) -> &ManagerConfig {
+        &self.config
+    }
+
+    /// Resolve a campaign.
+    ///
+    /// # Arguments
+    /// * `campaign_id` - The campaign ID to resolve
+    /// * `reason` - The reason for resolution
+    ///
+    /// # Returns
+    /// Ok(()) if successful, Err if campaign not found or already resolved.
+    pub fn resolve_campaign(&self, campaign_id: &str, reason: &str) -> Result<(), DetectorError> {
+        self.store
+            .resolve_campaign(campaign_id, reason)
+            .map_err(|e| DetectorError::DetectionFailed(e.to_string()))
+    }
+
+    /// Clear all state (primarily for testing).
+    ///
+    /// Clears fingerprint index, campaign store, and detector state.
+    pub fn clear(&self) {
+        self.index.clear();
+        self.store.clear();
+        self.shared_detector.clear_processed();
+        self.rotation_detector.cleanup_old_observations();
+    }
+}
+
+impl Default for CampaignManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+
+    // ========================================================================
+    // Helper Functions
+    // ========================================================================
+
+    fn create_test_manager() -> CampaignManager {
+        let config = ManagerConfig {
+            shared_threshold: 3,
+            rotation_threshold: 3,
+            rotation_window: Duration::from_secs(60),
+            scan_interval: Duration::from_millis(100),
+            background_scanning: false,
+            ..Default::default()
+        };
+        CampaignManager::with_config(config)
+    }
+
+    fn create_test_ip(last_octet: u8) -> IpAddr {
+        format!("192.168.1.{}", last_octet).parse().unwrap()
+    }
+
+    // ========================================================================
+    // Configuration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_config_default() {
+        let config = ManagerConfig::default();
+
+        assert_eq!(config.shared_threshold, 3);
+        assert_eq!(config.rotation_threshold, 3);
+        assert_eq!(config.rotation_window, Duration::from_secs(60));
+        assert_eq!(config.scan_interval, Duration::from_secs(5));
+        assert!(config.background_scanning);
+        assert!(config.track_combined);
+        assert!((config.shared_confidence - 0.85).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_config_builder() {
+        let config = ManagerConfig::new()
+            .with_shared_threshold(5)
+            .with_rotation_threshold(4)
+            .with_rotation_window(Duration::from_secs(120))
+            .with_scan_interval(Duration::from_secs(10))
+            .with_background_scanning(false)
+            .with_track_combined(false)
+            .with_shared_confidence(0.9);
+
+        assert_eq!(config.shared_threshold, 5);
+        assert_eq!(config.rotation_threshold, 4);
+        assert_eq!(config.rotation_window, Duration::from_secs(120));
+        assert_eq!(config.scan_interval, Duration::from_secs(10));
+        assert!(!config.background_scanning);
+        assert!(!config.track_combined);
+        assert!((config.shared_confidence - 0.9).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_config_validation() {
+        // Valid config
+        let config = ManagerConfig::default();
+        assert!(config.validate().is_ok());
+
+        // Invalid shared_threshold
+        let config = ManagerConfig::new().with_shared_threshold(1);
+        assert!(config.validate().is_err());
+
+        // Invalid rotation_threshold
+        let config = ManagerConfig::new().with_rotation_threshold(1);
+        assert!(config.validate().is_err());
+
+        // Invalid rotation_window
+        let config = ManagerConfig {
+            rotation_window: Duration::ZERO,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        // Invalid scan_interval
+        let config = ManagerConfig {
+            scan_interval: Duration::ZERO,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_config_confidence_clamping() {
+        let config = ManagerConfig::new().with_shared_confidence(1.5);
+        assert!((config.shared_confidence - 1.0).abs() < 0.001);
+
+        let config = ManagerConfig::new().with_shared_confidence(-0.5);
+        assert!(config.shared_confidence >= 0.0);
+    }
+
+    // ========================================================================
+    // Registration Flow Tests
+    // ========================================================================
+
+    #[test]
+    fn test_register_ja4() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.register_ja4(ip, "t13d1516h2_abc123".to_string());
+
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 1);
+        assert_eq!(stats.index_stats.total_ips, 1);
+        assert_eq!(stats.index_stats.ja4_fingerprints, 1);
+    }
+
+    #[test]
+    fn test_register_ja4_empty_skipped() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.register_ja4(ip, "".to_string());
+
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 0);
+        assert_eq!(stats.index_stats.total_ips, 0);
+    }
+
+    #[test]
+    fn test_register_combined() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.register_combined(ip, "combined_hash_xyz".to_string());
+
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 1);
+        assert_eq!(stats.index_stats.total_ips, 1);
+        assert_eq!(stats.index_stats.combined_fingerprints, 1);
+    }
+
+    #[test]
+    fn test_register_fingerprints_both() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.register_fingerprints(
+            ip,
+            Some("ja4_test".to_string()),
+            Some("ja4h_test".to_string()),
+        );
+
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 1);
+        assert_eq!(stats.index_stats.ja4_fingerprints, 1);
+        assert_eq!(stats.index_stats.combined_fingerprints, 1);
+    }
+
+    #[test]
+    fn test_register_fingerprints_ja4_only() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.register_fingerprints(ip, Some("ja4_only".to_string()), None);
+
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 1);
+        assert_eq!(stats.index_stats.ja4_fingerprints, 1);
+        assert_eq!(stats.index_stats.combined_fingerprints, 0);
+    }
+
+    // ========================================================================
+    // Detection Cycle Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_detection_cycle_empty() {
+        let manager = create_test_manager();
+
+        let updates = manager.run_detection_cycle().await.unwrap();
+
+        assert_eq!(updates, 0);
+        assert_eq!(manager.stats().detections_run, 1);
+    }
+
+    #[tokio::test]
+    async fn test_detection_cycle_creates_campaign() {
+        let manager = create_test_manager();
+
+        // Register 3 IPs with same fingerprint (threshold)
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "shared_fingerprint".to_string());
+        }
+
+        let updates = manager.run_detection_cycle().await.unwrap();
+
+        assert!(updates >= 1);
+        assert_eq!(manager.stats().campaigns_created, 1);
+
+        let campaigns = manager.get_campaigns();
+        assert_eq!(campaigns.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_detection_cycle_no_duplicate_campaigns() {
+        let manager = create_test_manager();
+
+        // Register 3 IPs with same fingerprint
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "shared_fp".to_string());
+        }
+
+        // First detection cycle
+        manager.run_detection_cycle().await.unwrap();
+        let first_count = manager.stats().campaigns_created;
+
+        // Second detection cycle - should not create duplicate
+        manager.run_detection_cycle().await.unwrap();
+        let second_count = manager.stats().campaigns_created;
+
+        assert_eq!(first_count, second_count);
+    }
+
+    // ========================================================================
+    // Campaign Retrieval Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_get_campaigns() {
+        let manager = create_test_manager();
+
+        // Create a campaign
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "test_fp".to_string());
+        }
+        manager.run_detection_cycle().await.unwrap();
+
+        let campaigns = manager.get_campaigns();
+        assert!(!campaigns.is_empty());
+
+        // Verify campaign has the expected actors
+        let campaign = &campaigns[0];
+        assert_eq!(campaign.actor_count, 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_campaign_by_id() {
+        let manager = create_test_manager();
+
+        // Create a campaign
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "get_by_id_fp".to_string());
+        }
+        manager.run_detection_cycle().await.unwrap();
+
+        let campaigns = manager.get_campaigns();
+        let campaign_id = &campaigns[0].id;
+
+        let retrieved = manager.get_campaign(campaign_id);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id, *campaign_id);
+
+        // Non-existent ID
+        let not_found = manager.get_campaign("nonexistent");
+        assert!(not_found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_campaign_actors() {
+        let manager = create_test_manager();
+
+        // Create a campaign
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "actors_fp".to_string());
+        }
+        manager.run_detection_cycle().await.unwrap();
+
+        let campaigns = manager.get_campaigns();
+        let campaign_id = &campaigns[0].id;
+
+        let actors = manager.get_campaign_actors(campaign_id);
+        assert_eq!(actors.len(), 3);
+
+        // Non-existent campaign
+        let no_actors = manager.get_campaign_actors("nonexistent");
+        assert!(no_actors.is_empty());
+    }
+
+    // ========================================================================
+    // Stats Tracking Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_stats_tracking() {
+        let manager = create_test_manager();
+
+        // Initial stats
+        let initial = manager.stats();
+        assert_eq!(initial.fingerprints_registered, 0);
+        assert_eq!(initial.detections_run, 0);
+        assert_eq!(initial.campaigns_created, 0);
+        assert!(initial.last_scan.is_none());
+
+        // Register some fingerprints
+        for i in 1..=5 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "stats_test_fp".to_string());
+        }
+
+        let after_register = manager.stats();
+        assert_eq!(after_register.fingerprints_registered, 5);
+        assert_eq!(after_register.index_stats.total_ips, 5);
+
+        // Run detection
+        manager.run_detection_cycle().await.unwrap();
+
+        let after_detect = manager.stats();
+        assert_eq!(after_detect.detections_run, 1);
+        assert!(after_detect.last_scan.is_some());
+        assert!(after_detect.campaigns_created >= 1);
+    }
+
+    // ========================================================================
+    // Remove IP Cleanup Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_remove_ip_cleanup() {
+        let manager = create_test_manager();
+
+        // Create a campaign
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "remove_test_fp".to_string());
+        }
+        manager.run_detection_cycle().await.unwrap();
+
+        // Verify campaign exists
+        let campaigns = manager.get_campaigns();
+        assert_eq!(campaigns[0].actor_count, 3);
+
+        // Remove one IP
+        let ip_to_remove = create_test_ip(1);
+        manager.remove_ip(&ip_to_remove);
+
+        // Verify IP was removed from index
+        assert_eq!(manager.index.len(), 2);
+
+        // Verify IP was removed from campaign
+        let updated_campaigns = manager.get_campaigns();
+        assert_eq!(updated_campaigns[0].actor_count, 2);
+    }
+
+    // ========================================================================
+    // Concurrent Registration Tests
+    // ========================================================================
+
+    #[test]
+    fn test_concurrent_registration() {
+        let manager = Arc::new(create_test_manager());
+        let mut handles = vec![];
+
+        // Spawn multiple threads registering fingerprints
+        for thread_id in 0..10 {
+            let manager = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                for i in 0..100 {
+                    let ip: IpAddr = format!("10.{}.0.{}", thread_id, i % 256).parse().unwrap();
+                    manager.register_ja4(ip, format!("fp_t{}_{}", thread_id, i % 5));
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify no panics and reasonable state
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 1000);
+        assert!(stats.index_stats.total_ips > 0);
+    }
+
+    // ========================================================================
+    // Trigger Detection Logic Tests
+    // ========================================================================
+
+    #[test]
+    fn test_should_trigger_detection_below_threshold() {
+        let manager = create_test_manager();
+
+        // Register only 2 IPs (below threshold of 3)
+        for i in 1..=2 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "trigger_test_fp".to_string());
+        }
+
+        let ip = create_test_ip(1);
+        assert!(!manager.should_trigger_detection(&ip));
+    }
+
+    #[test]
+    fn test_should_trigger_detection_at_threshold() {
+        let manager = create_test_manager();
+
+        // Register 3 IPs (at threshold)
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "trigger_threshold_fp".to_string());
+        }
+
+        let ip = create_test_ip(1);
+        assert!(manager.should_trigger_detection(&ip));
+    }
+
+    // ========================================================================
+    // Background Worker Lifecycle Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_background_worker_lifecycle() {
+        let config = ManagerConfig {
+            scan_interval: Duration::from_millis(50),
+            background_scanning: true,
+            shared_threshold: 3,
+            ..Default::default()
+        };
+        let manager = Arc::new(CampaignManager::with_config(config));
+
+        // Register some fingerprints
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "worker_test_fp".to_string());
+        }
+
+        // Start worker
+        let worker = Arc::clone(&manager).start_background_worker();
+
+        // Wait for a few cycles
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Verify detection ran
+        let stats = manager.stats();
+        assert!(stats.detections_run >= 1);
+
+        // Signal shutdown
+        manager.shutdown();
+
+        // Worker should complete
+        let timeout = tokio::time::timeout(Duration::from_millis(500), worker).await;
+        assert!(timeout.is_ok(), "Worker should shut down gracefully");
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_flag() {
+        let manager = CampaignManager::new();
+
+        assert!(!manager.is_shutdown());
+
+        manager.shutdown();
+
+        assert!(manager.is_shutdown());
+    }
+
+    // ========================================================================
+    // Integration Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_full_flow() {
+        let manager = create_test_manager();
+
+        // Phase 1: Register fingerprints from multiple IPs
+        let fingerprint = "t13d1516h2_full_flow_test";
+        for i in 1..=5 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, fingerprint.to_string());
+        }
+
+        // Phase 2: Run detection
+        let updates = manager.run_detection_cycle().await.unwrap();
+        assert!(updates >= 1);
+
+        // Phase 3: Verify campaign was created
+        let campaigns = manager.get_campaigns();
+        assert_eq!(campaigns.len(), 1);
+
+        let campaign = &campaigns[0];
+        assert_eq!(campaign.actor_count, 5);
+        assert!(campaign.confidence >= 0.8);
+        assert!(!campaign.correlation_reasons.is_empty());
+
+        // Phase 4: Get campaign by ID
+        let retrieved = manager.get_campaign(&campaign.id).unwrap();
+        assert_eq!(retrieved.actors.len(), 5);
+
+        // Phase 5: Get actors
+        let actors = manager.get_campaign_actors(&campaign.id);
+        assert_eq!(actors.len(), 5);
+
+        // Phase 6: Remove an IP
+        manager.remove_ip(&create_test_ip(1));
+        let updated = manager.get_campaign(&campaign.id).unwrap();
+        assert_eq!(updated.actors.len(), 4);
+
+        // Phase 7: Verify stats
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 5);
+        assert_eq!(stats.campaigns_created, 1);
+        assert_eq!(stats.campaign_stats.total_campaigns, 1);
+    }
+
+    #[test]
+    fn test_clear() {
+        let manager = create_test_manager();
+
+        // Add some data
+        for i in 1..=5 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "clear_test_fp".to_string());
+        }
+
+        assert_eq!(manager.index.len(), 5);
+
+        // Clear
+        manager.clear();
+
+        assert_eq!(manager.index.len(), 0);
+        assert!(manager.store.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_campaign() {
+        let manager = create_test_manager();
+
+        // Create a campaign
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "resolve_test_fp".to_string());
+        }
+        manager.run_detection_cycle().await.unwrap();
+
+        let campaigns = manager.get_campaigns();
+        let campaign_id = campaigns[0].id.clone();
+
+        // Resolve the campaign
+        let result = manager.resolve_campaign(&campaign_id, "Threat mitigated");
+        assert!(result.is_ok());
+
+        // Verify campaign is resolved
+        let resolved = manager.get_campaign(&campaign_id).unwrap();
+        assert_eq!(resolved.status, CampaignStatus::Resolved);
+
+        // Active campaigns should now be empty
+        let active = manager.get_campaigns();
+        assert!(active.is_empty());
+    }
+
+    #[test]
+    fn test_index_and_store_access() {
+        let manager = create_test_manager();
+
+        // Verify we can access internal components
+        let _index = manager.index();
+        let _store = manager.store();
+        let _config = manager.config();
+
+        // These should not panic
+        assert!(manager.index().is_empty());
+        assert!(manager.store().is_empty());
+    }
+
+    // ========================================================================
+    // Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_ipv6_addresses() {
+        let manager = create_test_manager();
+
+        let ipv6_1: IpAddr = "2001:db8::1".parse().unwrap();
+        let ipv6_2: IpAddr = "2001:db8::2".parse().unwrap();
+        let ipv6_3: IpAddr = "2001:db8::3".parse().unwrap();
+
+        manager.register_ja4(ipv6_1, "ipv6_fp".to_string());
+        manager.register_ja4(ipv6_2, "ipv6_fp".to_string());
+        manager.register_ja4(ipv6_3, "ipv6_fp".to_string());
+
+        let stats = manager.stats();
+        assert_eq!(stats.fingerprints_registered, 3);
+        assert_eq!(stats.index_stats.total_ips, 3);
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let manager = CampaignManager::default();
+
+        assert!(manager.index.is_empty());
+        assert!(manager.store.is_empty());
+        assert!(!manager.is_shutdown());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_fingerprint_groups() {
+        let manager = create_test_manager();
+
+        // Group 1: 3 IPs with fingerprint A
+        for i in 1..=3 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "group_a_fp".to_string());
+        }
+
+        // Group 2: 4 IPs with fingerprint B
+        for i in 10..=13 {
+            let ip = create_test_ip(i);
+            manager.register_ja4(ip, "group_b_fp".to_string());
+        }
+
+        manager.run_detection_cycle().await.unwrap();
+
+        let campaigns = manager.get_campaigns();
+        assert_eq!(campaigns.len(), 2);
+
+        // Verify both groups created campaigns
+        let actor_counts: Vec<usize> = campaigns.iter().map(|c| c.actor_count).collect();
+        assert!(actor_counts.contains(&3));
+        assert!(actor_counts.contains(&4));
+    }
+}
