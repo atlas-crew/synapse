@@ -723,66 +723,81 @@ async fn sensor_anomalies_handler() -> impl IntoResponse {
 }
 
 /// GET /_sensor/campaigns - Returns active threat campaigns
-async fn sensor_campaigns_handler() -> impl IntoResponse {
-    let now = chrono::Utc::now();
-
-    // Seed data matching Campaign interface
-    let campaigns = vec![
-        serde_json::json!({
-            "id": "camp-001",
-            "status": "active",
-            "actorCount": 12,
-            "confidence": 0.87,
-            "attackTypes": ["credential_stuffing", "rate_abuse"],
-            "firstSeen": (now - chrono::Duration::hours(4)).to_rfc3339(),
-            "lastActivity": (now - chrono::Duration::minutes(8)).to_rfc3339(),
-            "totalRequests": 2450,
-            "blockedRequests": 1890,
-            "rulesTriggered": 156
-        }),
-        serde_json::json!({
-            "id": "camp-002",
-            "status": "active",
-            "actorCount": 5,
-            "confidence": 0.72,
-            "attackTypes": ["sql_injection", "path_traversal"],
-            "firstSeen": (now - chrono::Duration::hours(2)).to_rfc3339(),
-            "lastActivity": (now - chrono::Duration::minutes(15)).to_rfc3339(),
-            "totalRequests": 380,
-            "blockedRequests": 342,
-            "rulesTriggered": 89
-        }),
-        serde_json::json!({
-            "id": "camp-003",
-            "status": "detected",
-            "actorCount": 3,
-            "confidence": 0.65,
-            "attackTypes": ["enumeration", "scraping"],
-            "firstSeen": (now - chrono::Duration::hours(6)).to_rfc3339(),
-            "lastActivity": (now - chrono::Duration::minutes(45)).to_rfc3339(),
-            "totalRequests": 8500,
-            "blockedRequests": 2100,
-            "rulesTriggered": 42
-        }),
-        serde_json::json!({
-            "id": "camp-004",
-            "status": "resolved",
-            "actorCount": 8,
-            "confidence": 0.91,
-            "attackTypes": ["xss", "csrf"],
-            "firstSeen": (now - chrono::Duration::hours(12)).to_rfc3339(),
-            "lastActivity": (now - chrono::Duration::hours(3)).to_rfc3339(),
-            "totalRequests": 1200,
-            "blockedRequests": 1180,
-            "rulesTriggered": 234
-        }),
-    ];
+async fn sensor_campaigns_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let campaigns = match state.handler.campaign_manager() {
+        Some(manager) => {
+            manager.get_campaigns()
+                .into_iter()
+                .map(|c| serde_json::json!({
+                    "id": c.id,
+                    "status": format!("{:?}", c.status).to_lowercase(),
+                    "actorCount": c.actor_count,
+                    "confidence": (c.confidence * 100.0) as u8,
+                    "attackTypes": c.correlation_reasons.iter()
+                        .map(|r| format!("{:?}", r.correlation_type).to_lowercase())
+                        .collect::<Vec<_>>(),
+                    "firstSeen": c.first_seen.to_rfc3339(),
+                    "lastActivity": c.last_activity.to_rfc3339(),
+                    "totalRequests": c.total_requests,
+                    "blockedRequests": c.blocked_requests,
+                    "rulesTriggered": c.rules_triggered,
+                    "riskScore": c.risk_score as u8
+                }))
+                .collect::<Vec<_>>()
+        }
+        None => vec![]
+    };
 
     (StatusCode::OK, Json(serde_json::json!({ "data": campaigns })))
 }
 
 /// GET /_sensor/campaigns/:id - Campaign detail
-async fn sensor_campaign_detail_handler(Path(id): Path<String>) -> impl IntoResponse {
+async fn sensor_campaign_detail_handler(
+    State(state): State<AdminState>,
+    Path(id): Path<String>
+) -> impl IntoResponse {
+    match state.handler.campaign_manager() {
+        Some(manager) => {
+            match manager.get_campaign(&id) {
+                Some(c) => {
+                    let data = serde_json::json!({
+                        "id": c.id,
+                        "status": format!("{:?}", c.status).to_lowercase(),
+                        "actorCount": c.actor_count,
+                        "confidence": (c.confidence * 100.0) as u8,
+                        "attackTypes": c.correlation_reasons.iter()
+                            .map(|r| format!("{:?}", r.correlation_type).to_lowercase())
+                            .collect::<Vec<_>>(),
+                        "firstSeen": c.first_seen.to_rfc3339(),
+                        "lastActivity": c.last_activity.to_rfc3339(),
+                        "totalRequests": c.total_requests,
+                        "blockedRequests": c.blocked_requests,
+                        "rulesTriggered": c.rules_triggered,
+                        "riskScore": c.risk_score as u8,
+                        "correlationReasons": c.correlation_reasons.iter().map(|r| {
+                            serde_json::json!({
+                                "type": format!("{:?}", r.correlation_type).to_lowercase(),
+                                "confidence": (r.confidence * 100.0) as u8,
+                                "description": r.description
+                            })
+                        }).collect::<Vec<_>>()
+                    });
+                    (StatusCode::OK, Json(serde_json::json!({ "data": data })))
+                }
+                None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                    "error": format!("Campaign {} not found", id)
+                })))
+            }
+        }
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Campaign correlation not enabled"
+        })))
+    }
+}
+
+// Placeholder for future campaign detail implementation
+#[allow(dead_code)]
+async fn _sensor_campaign_detail_handler_mock(Path(id): Path<String>) -> impl IntoResponse {
     let now = chrono::Utc::now();
 
     // Campaign data lookup (would come from real store in production)
@@ -907,97 +922,33 @@ async fn sensor_campaign_detail_handler(Path(id): Path<String>) -> impl IntoResp
 }
 
 /// GET /_sensor/campaigns/:id/actors - Campaign actors
-async fn sensor_campaign_actors_handler(Path(id): Path<String>) -> impl IntoResponse {
-    let now = chrono::Utc::now();
+async fn sensor_campaign_actors_handler(
+    State(state): State<AdminState>,
+    Path(id): Path<String>
+) -> impl IntoResponse {
+    match state.handler.campaign_manager() {
+        Some(manager) => {
+            let actors = manager.get_campaign_actors(&id);
+            let actor_data: Vec<serde_json::Value> = actors.into_iter().map(|ip| {
+                serde_json::json!({
+                    "ip": ip.to_string(),
+                    "risk": 50,  // Would come from EntityManager in full integration
+                    "sessionCount": 1,
+                    "fingerprintCount": 1,
+                    "jsExecuted": false,
+                    "suspicious": true,
+                    "lastActivity": chrono::Utc::now().to_rfc3339(),
+                    "joinedAt": chrono::Utc::now().to_rfc3339(),
+                    "role": "member",
+                    "requestsInCampaign": 0,
+                    "blockedInCampaign": 0
+                })
+            }).collect();
 
-    // Mock actors data based on campaign
-    let actors: Vec<serde_json::Value> = match id.as_str() {
-        "camp-001" => vec![
-            serde_json::json!({
-                "ip": "192.168.1.100",
-                "risk": 85,
-                "sessionCount": 3,
-                "fingerprintCount": 1,
-                "jsExecuted": false,
-                "suspicious": true,
-                "lastActivity": (now - chrono::Duration::minutes(10)).to_rfc3339(),
-                "joinedAt": (now - chrono::Duration::hours(4)).to_rfc3339(),
-                "role": "leader",
-                "requestsInCampaign": 450,
-                "blockedInCampaign": 380
-            }),
-            serde_json::json!({
-                "ip": "192.168.1.101",
-                "risk": 72,
-                "sessionCount": 2,
-                "fingerprintCount": 1,
-                "jsExecuted": false,
-                "suspicious": true,
-                "lastActivity": (now - chrono::Duration::minutes(12)).to_rfc3339(),
-                "joinedAt": (now - chrono::Duration::hours(3)).to_rfc3339(),
-                "role": "follower",
-                "requestsInCampaign": 320,
-                "blockedInCampaign": 245
-            }),
-            serde_json::json!({
-                "ip": "192.168.1.102",
-                "risk": 68,
-                "sessionCount": 2,
-                "fingerprintCount": 1,
-                "jsExecuted": false,
-                "suspicious": true,
-                "lastActivity": (now - chrono::Duration::minutes(15)).to_rfc3339(),
-                "joinedAt": (now - chrono::Duration::hours(3)).to_rfc3339(),
-                "role": "follower",
-                "requestsInCampaign": 280,
-                "blockedInCampaign": 210
-            }),
-            serde_json::json!({
-                "ip": "10.0.0.50",
-                "risk": 65,
-                "sessionCount": 1,
-                "fingerprintCount": 1,
-                "jsExecuted": false,
-                "suspicious": true,
-                "lastActivity": (now - chrono::Duration::minutes(20)).to_rfc3339(),
-                "joinedAt": (now - chrono::Duration::hours(2)).to_rfc3339(),
-                "role": "follower",
-                "requestsInCampaign": 180,
-                "blockedInCampaign": 145
-            }),
-        ],
-        "camp-002" => vec![
-            serde_json::json!({
-                "ip": "203.0.113.10",
-                "risk": 92,
-                "sessionCount": 5,
-                "fingerprintCount": 2,
-                "jsExecuted": true,
-                "suspicious": true,
-                "lastActivity": (now - chrono::Duration::minutes(18)).to_rfc3339(),
-                "joinedAt": (now - chrono::Duration::hours(2)).to_rfc3339(),
-                "role": "leader",
-                "requestsInCampaign": 150,
-                "blockedInCampaign": 142
-            }),
-            serde_json::json!({
-                "ip": "203.0.113.11",
-                "risk": 78,
-                "sessionCount": 3,
-                "fingerprintCount": 2,
-                "jsExecuted": true,
-                "suspicious": true,
-                "lastActivity": (now - chrono::Duration::minutes(22)).to_rfc3339(),
-                "joinedAt": (now - chrono::Duration::hours(1)).to_rfc3339(),
-                "role": "follower",
-                "requestsInCampaign": 95,
-                "blockedInCampaign": 88
-            }),
-        ],
-        _ => vec![],
-    };
-
-    (StatusCode::OK, Json(serde_json::json!({ "actors": actors })))
+            (StatusCode::OK, Json(serde_json::json!({ "actors": actor_data })))
+        }
+        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [] })))
+    }
 }
 
 /// GET /_sensor/campaigns/:id/timeline - Campaign timeline events

@@ -23,6 +23,7 @@ use crate::config_manager::{
 };
 use crate::block_log::{BlockLog, BlockEvent};
 use crate::entity::{EntityManager, EntitySnapshot};
+use crate::correlation::CampaignManager;
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +78,8 @@ pub struct ApiHandler {
     entity_manager: Option<Arc<EntityManager>>,
     /// Block log for recent block events (dashboard feature)
     block_log: Option<Arc<BlockLog>>,
+    /// Campaign manager for threat correlation (dashboard feature)
+    campaign_manager: Option<Arc<CampaignManager>>,
 }
 
 impl ApiHandler {
@@ -279,6 +282,11 @@ impl ApiHandler {
         self.block_log.as_ref().map(Arc::clone)
     }
 
+    /// Returns the campaign manager (if configured).
+    pub fn campaign_manager(&self) -> Option<&Arc<CampaignManager>> {
+        self.campaign_manager.as_ref()
+    }
+
     /// Handles GET /_sensor/entities request - returns top entities by risk.
     pub fn handle_list_entities(&self, limit: usize) -> Vec<EntitySnapshot> {
         match &self.entity_manager {
@@ -308,6 +316,7 @@ pub struct ApiHandlerBuilder {
     auth_token: Option<String>,
     entity_manager: Option<Arc<EntityManager>>,
     block_log: Option<Arc<BlockLog>>,
+    campaign_manager: Option<Arc<CampaignManager>>,
 }
 
 impl ApiHandlerBuilder {
@@ -365,6 +374,12 @@ impl ApiHandlerBuilder {
         self
     }
 
+    /// Sets the campaign manager for threat correlation.
+    pub fn campaign_manager(mut self, manager: Arc<CampaignManager>) -> Self {
+        self.campaign_manager = Some(manager);
+        self
+    }
+
     /// Builds the API handler.
     pub fn build(self) -> ApiHandler {
         ApiHandler {
@@ -381,6 +396,7 @@ impl ApiHandlerBuilder {
             auth_token: self.auth_token,
             entity_manager: self.entity_manager,
             block_log: self.block_log,
+            campaign_manager: self.campaign_manager,
         }
     }
 }

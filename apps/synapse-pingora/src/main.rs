@@ -81,6 +81,8 @@ use synapse_pingora::telemetry::{
     ExternalActorContext, ExternalSignalContext, ExternalRequestContext
 };
 use synapse_pingora::trap::{TrapConfig, TrapMatcher};
+use synapse_pingora::block_log::{BlockLog, BlockEvent};
+use synapse_pingora::correlation::CampaignManager;
 use parking_lot::RwLock;
 
 // ============================================================================
@@ -801,6 +803,8 @@ pub struct SynapseProxy {
     trap_matcher: Option<Arc<TrapMatcher>>,
     /// Trusted proxy CIDR ranges for X-Forwarded-For validation
     trusted_proxies: Vec<CidrRange>,
+    /// Block log for dashboard visibility
+    block_log: Arc<BlockLog>,
 }
 
 impl SynapseProxy {
@@ -817,6 +821,7 @@ impl SynapseProxy {
             TarpitConfig::default(),
             DlpConfig::default(),
             Arc::new(EntityManager::new(EntityConfig::default())),
+            Arc::new(BlockLog::default()),
         )
     }
 
@@ -832,6 +837,7 @@ impl SynapseProxy {
         tarpit_config: TarpitConfig,
         dlp_config: DlpConfig,
         entity_manager: Arc<EntityManager>,
+        block_log: Arc<BlockLog>,
     ) -> Self {
         Self {
             backends,
@@ -852,6 +858,7 @@ impl SynapseProxy {
             rate_limit_manager: None,
             access_list_manager: None,
             trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
+            block_log,
         }
     }
 
@@ -875,6 +882,7 @@ impl SynapseProxy {
             rate_limit_manager: None,
             access_list_manager: None,
             trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
+            block_log: Arc::new(BlockLog::default()),
         }
     }
 
@@ -896,6 +904,7 @@ impl SynapseProxy {
         tarpit_config: TarpitConfig,
         dlp_config: DlpConfig,
         entity_manager: Arc<EntityManager>,
+        block_log: Arc<BlockLog>,
     ) -> Self {
         Self {
             backends: default_backends,
@@ -916,6 +925,7 @@ impl SynapseProxy {
             rate_limit_manager: Some(rate_limit_manager),
             access_list_manager: Some(access_list_manager),
             trap_matcher: Some(Arc::new(TrapMatcher::new(TrapConfig::default()).expect("default trap config should be valid"))),
+            block_log,
         }
     }
 
@@ -924,6 +934,11 @@ impl SynapseProxy {
         let idx = self.backend_counter.fetch_add(1, Ordering::Relaxed) % self.backends.len();
         let backend = &self.backends[idx];
         (backend.0.clone(), backend.1, idx)
+    }
+
+    /// Returns a clone of the block log Arc for sharing with ApiHandler
+    pub fn block_log(&self) -> Arc<BlockLog> {
+        Arc::clone(&self.block_log)
     }
 
     /// Extract client IP from headers or connection, validating X-Forwarded-For against trusted proxies.
@@ -1466,6 +1481,17 @@ impl ProxyHttp for SynapseProxy {
                 block_reason
             );
 
+            // Record block event for dashboard visibility
+            self.block_log.record(BlockEvent::new(
+                client_ip.to_string(),
+                method.to_string(),
+                uri.clone(),
+                result.risk_score,
+                result.matched_rules.clone(),
+                block_reason.clone(),
+                ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
+            ));
+
             // Store result for logging hook
             ctx.detection = Some(result);
 
@@ -1570,10 +1596,21 @@ impl ProxyHttp for SynapseProxy {
                 if result.blocked {
                     warn!(
                         "BLOCKED (Body): {} from {} - risk={}, rules={:?}, reason={}",
-                        uri, client_ip, result.risk_score, result.matched_rules, 
+                        uri, client_ip, result.risk_score, result.matched_rules,
                         result.block_reason.as_deref().unwrap_or("unknown")
                     );
-                    
+
+                    // Record block event for dashboard visibility
+                    self.block_log.record(BlockEvent::new(
+                        client_ip.to_string(),
+                        method.to_string(),
+                        uri.clone(),
+                        result.risk_score,
+                        result.matched_rules.clone(),
+                        result.block_reason.clone().unwrap_or_else(|| "body_payload".to_string()),
+                        ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
+                    ));
+
                     // Update detection result in context
                     ctx.detection = Some(result);
 
@@ -2362,12 +2399,20 @@ fn main() {
     // Create shared EntityManager for both admin API and proxy
     let shared_entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
 
+    // Create shared BlockLog for both admin API and proxy
+    let shared_block_log = Arc::new(BlockLog::default());
+
+    // Create shared CampaignManager for threat correlation
+    let campaign_manager = Arc::new(CampaignManager::new());
+
     // Build the API handler with ConfigManager if available
     let api_handler = Arc::new({
         let mut builder = ApiHandler::builder()
             .health(Arc::clone(&health_checker))
             .metrics(Arc::clone(&metrics_registry))
-            .entity_manager(Arc::clone(&shared_entity_manager));
+            .entity_manager(Arc::clone(&shared_entity_manager))
+            .block_log(Arc::clone(&shared_block_log))
+            .campaign_manager(Arc::clone(&campaign_manager));
 
         if let Some(ref cm) = config_manager {
             builder = builder.config_manager(Arc::clone(cm));
@@ -2465,6 +2510,7 @@ fn main() {
             config.tarpit.clone(),
             config.dlp.clone(),
             Arc::clone(&shared_entity_manager),
+            Arc::clone(&shared_block_log),
         )
     } else {
         SynapseProxy::with_health(
@@ -2479,6 +2525,7 @@ fn main() {
             config.tarpit.clone(),
             config.dlp.clone(),
             Arc::clone(&shared_entity_manager),
+            Arc::clone(&shared_block_log),
         )
     };
 
@@ -2845,6 +2892,8 @@ tls:
         }));
 
         let tls_manager = Arc::new(synapse_pingora::tls::TlsManager::default());
+        let entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
+        let block_log = Arc::new(BlockLog::default());
         let proxy = SynapseProxy::with_health(
             backends.clone(),
             10000,
@@ -2856,6 +2905,8 @@ tls:
             Arc::clone(&tls_manager),
             TarpitConfig::default(),
             DlpConfig::default(),
+            entity_manager,
+            block_log,
         );
 
         // Verify health status is accessible through proxy
