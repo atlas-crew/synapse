@@ -171,13 +171,59 @@ export interface Rule {
   priority: number;
 }
 
-export type RolloutStrategy = 'immediate' | 'canary' | 'scheduled';
+export type RolloutStrategy = 'immediate' | 'canary' | 'scheduled' | 'rolling' | 'blue_green';
 
 export interface RolloutConfig {
   strategy: RolloutStrategy;
   canaryPercentages?: number[]; // e.g., [10, 50, 100]
   delayBetweenStages?: number; // milliseconds
   scheduledTime?: Date;
+  // Rolling strategy options
+  rollingBatchSize?: number; // Default: 1
+  healthCheckTimeout?: number; // Default: 30000ms
+  rollbackOnFailure?: boolean; // Default: true
+  maxFailuresBeforeAbort?: number; // Default: 3
+  healthCheckIntervalMs?: number; // Default: 5000ms
+  // Blue/Green strategy options
+  stagingTimeout?: number; // Default: 60000ms
+  switchTimeout?: number; // Default: 30000ms
+  requireAllSensorsStaged?: boolean; // Default: true
+  minStagedPercentage?: number; // Default: 100
+  cleanupDelayMs?: number; // Default: 300000 (5 min)
+}
+
+/**
+ * Result of a health check on a sensor
+ */
+export interface HealthCheckResult {
+  healthy: boolean;
+  sensorId: string;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'timeout';
+  latencyMs?: number;
+  errorMessage?: string;
+}
+
+/**
+ * State of a rolling deployment in progress
+ */
+export interface RollingDeploymentState {
+  deploymentId: string;
+  totalSensors: number;
+  completedSensors: number;
+  failedSensors: number;
+  currentBatch: string[];
+  status: 'in_progress' | 'completed' | 'aborted' | 'rolling_back';
+  startTime: Date;
+  lastUpdateTime: Date;
+}
+
+/**
+ * Result of a sensor deployment attempt
+ */
+export interface SensorDeployResult {
+  sensorId: string;
+  status: 'success' | 'failed';
+  error?: string;
 }
 
 /**
@@ -200,4 +246,67 @@ export interface SensorHeartbeat {
   rulesHash?: string;
   region?: string;
   metadata?: Record<string, unknown>;
+}
+
+// =============================================================================
+// Blue/Green Deployment Types
+// =============================================================================
+
+/**
+ * State of a Blue/Green deployment
+ */
+export interface BlueGreenDeploymentState {
+  deploymentId: string;
+  status: 'staging' | 'staged' | 'switching' | 'active' | 'retired' | 'failed';
+  rules: Rule[];
+  stagedAt?: Date;
+  activatedAt?: Date;
+  retiredAt?: Date;
+  sensorStatus: Map<string, BlueGreenSensorStatus>;
+}
+
+/**
+ * Status of a single sensor in a Blue/Green deployment
+ */
+export interface BlueGreenSensorStatus {
+  sensorId: string;
+  stagingStatus: 'pending' | 'staged' | 'failed';
+  activeStatus: 'blue' | 'green' | 'unknown';
+  lastUpdated: Date;
+  error?: string;
+}
+
+/**
+ * Configuration options for Blue/Green deployments
+ */
+export interface BlueGreenConfig {
+  /** Timeout for staging phase in milliseconds. Default: 60000ms */
+  stagingTimeout?: number;
+  /** Timeout for switch phase in milliseconds. Default: 30000ms */
+  switchTimeout?: number;
+  /** Whether all sensors must be staged before switch. Default: true */
+  requireAllSensorsStaged?: boolean;
+  /** Minimum percentage of sensors that must be staged (when requireAllSensorsStaged is false). Default: 100 */
+  minStagedPercentage?: number;
+  /** Delay before cleaning up old blue deployment in milliseconds. Default: 300000 (5 min) */
+  cleanupDelayMs?: number;
+}
+
+/**
+ * Extended deployment result for Blue/Green strategy
+ */
+export interface BlueGreenDeploymentResult {
+  strategy: 'blue_green';
+  deploymentId: string;
+  sensors: Array<{
+    sensorId: string;
+    status: 'success' | 'failed';
+    error?: string;
+  }>;
+  status: 'completed' | 'failed';
+  error?: string;
+  metadata?: {
+    stagedAt?: Date;
+    activatedAt?: Date;
+  };
 }
