@@ -63,6 +63,15 @@ pub mod trap;
 // Phase 4: Campaign Correlation
 pub mod correlation;
 
+// Phase 5: Actor State Management
+pub mod actor;
+
+// Phase 5: Session State Management
+pub mod session;
+
+// Phase 6: Interrogator System (Progressive Challenge Escalation)
+pub mod interrogator;
+
 // Dashboard support
 pub mod block_log;
 
@@ -117,3 +126,20 @@ pub use trap::{TrapConfig, TrapMatcher};
 
 // Re-export dashboard support types
 pub use block_log::{BlockLog, BlockEvent};
+
+// Re-export actor management types
+pub use actor::{ActorConfig, ActorManager, ActorState, ActorStats, RuleMatch};
+
+// Re-export session management types
+pub use session::{
+    SessionConfig, SessionManager, SessionState, SessionStats,
+    SessionDecision, HijackAlert, HijackType,
+};
+
+// Re-export interrogator types
+pub use interrogator::{
+    ChallengeResponse, ValidationResult as ChallengeValidationResult, Interrogator,
+    CookieConfig, CookieManager, CookieChallenge, CookieStats,
+    JsChallengeConfig, JsChallengeManager, JsChallenge, JsChallengeStats,
+    ProgressionConfig, ProgressionManager, ChallengeLevel, ActorChallengeState, ProgressionStats,
+};

@@ -22,6 +22,7 @@ libsynapse = { path = "../risk-server/libsynapse" }
 # Async runtime
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"           # For parallel detector execution with join_all
 bytes = "1"
 
 # Admin HTTP API
@@ -76,6 +77,9 @@ sysinfo = "0.32"        # CPU, memory, network, process metrics
 sha2 = "0.10"           # SHA256 for fingerprint hashing
 hex = "0.4"             # Hex encoding for hash output
 urlencoding = "2.1.3"
+
+# Phase 6: Interrogator System - Cookie signing
+hmac = "0.12"           # HMAC-SHA256 for cookie signatures
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

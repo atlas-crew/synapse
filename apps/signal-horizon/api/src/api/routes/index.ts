@@ -19,6 +19,7 @@ import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
 import { createSynapseRoutes } from './synapse.js';
+import { createAPIIntelligenceRoutes } from './api-intelligence.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
@@ -86,6 +87,10 @@ export function createApiRouter(
     router.use('/synapse', createSynapseRoutes(options.synapseProxy, logger));
     logger.info('Synapse routes mounted at /api/v1/synapse');
   }
+
+  // Mount API Intelligence routes for endpoint discovery and schema violations
+  router.use('/api-intelligence', createAPIIntelligenceRoutes(prisma, logger));
+  logger.info('API Intelligence routes mounted at /api/v1/api-intelligence');
 
   return router;
 }
