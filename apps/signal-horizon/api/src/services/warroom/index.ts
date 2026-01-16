@@ -97,6 +97,37 @@ export interface WarRoomStatusMessage {
 }
 
 // =============================================================================
+// Live Metrics Types
+// =============================================================================
+
+export interface LiveMetrics {
+  timeWindow: {
+    start: Date;
+    end: Date;
+    windowMinutes: number;
+  };
+  attackRate: {
+    signalsPerMinute: number;
+    trend: 'increasing' | 'stable' | 'decreasing';
+  };
+  blockRate: {
+    blocksTotal: number;
+    signalsTotal: number;
+    percentage: number;
+  };
+  affectedIPs: {
+    count: number;
+    topIPs: Array<{ ip: string; count: number }>;
+  };
+  severityDistribution: Record<string, number>;
+  typeDistribution: Record<string, number>;
+}
+
+export interface LiveMetricsOptions {
+  windowMinutes?: 5 | 60 | 1440;
+}
+
+// =============================================================================
 // War Room Service
 // =============================================================================
 
@@ -674,6 +705,171 @@ export class WarRoomService {
       activeWarRooms,
       activitiesLast24h,
       blocksCreatedLast24h,
+    };
+  }
+
+  // ===========================================================================
+  // Live Metrics
+  // ===========================================================================
+
+  /**
+   * Get live metrics for a war room
+   * Aggregates real-time attack statistics within a time window
+   */
+  async getLiveMetrics(
+    warRoomId: string,
+    options: LiveMetricsOptions = {}
+  ): Promise<LiveMetrics> {
+    const windowMinutes = options.windowMinutes ?? 5;
+    const end = new Date();
+    const start = new Date(end.getTime() - windowMinutes * 60 * 1000);
+    const previousStart = new Date(start.getTime() - windowMinutes * 60 * 1000);
+
+    // Verify war room exists
+    const warRoom = await this.prisma.warRoom.findUnique({
+      where: { id: warRoomId },
+    });
+
+    if (!warRoom) {
+      throw new Error(`War room ${warRoomId} not found`);
+    }
+
+    const tenantId = warRoom.tenantId;
+
+    // Run all queries in parallel for efficiency
+    const [
+      currentSignals,
+      previousSignals,
+      currentBlocks,
+      ipGroups,
+      severityGroups,
+      typeGroups,
+    ] = await Promise.all([
+      // Current window signals
+      this.prisma.signal.count({
+        where: {
+          tenantId,
+          createdAt: { gte: start, lte: end },
+        },
+      }),
+
+      // Previous window signals (for trend calculation)
+      this.prisma.signal.count({
+        where: {
+          tenantId,
+          createdAt: { gte: previousStart, lt: start },
+        },
+      }),
+
+      // Blocks created in current window
+      this.prisma.blocklistEntry.count({
+        where: {
+          tenantId,
+          createdAt: { gte: start, lte: end },
+          source: 'WAR_ROOM',
+        },
+      }),
+
+      // Affected IPs grouped
+      this.prisma.signal.groupBy({
+        by: ['sourceIp'],
+        where: {
+          tenantId,
+          createdAt: { gte: start, lte: end },
+          sourceIp: { not: null },
+        },
+        _count: { _all: true },
+        orderBy: { _count: { sourceIp: 'desc' } },
+        take: 10,
+      }),
+
+      // Severity distribution
+      this.prisma.signal.groupBy({
+        by: ['severity'],
+        where: {
+          tenantId,
+          createdAt: { gte: start, lte: end },
+        },
+        _count: { _all: true },
+      }),
+
+      // Signal type distribution
+      this.prisma.signal.groupBy({
+        by: ['signalType'],
+        where: {
+          tenantId,
+          createdAt: { gte: start, lte: end },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+
+    // Calculate attack rate (signals per minute)
+    const signalsPerMinute = windowMinutes > 0 ? currentSignals / windowMinutes : 0;
+
+    // Calculate trend
+    let trend: 'increasing' | 'stable' | 'decreasing' = 'stable';
+    if (previousSignals > 0) {
+      const changeRatio = (currentSignals - previousSignals) / previousSignals;
+      if (changeRatio > 0.1) trend = 'increasing';
+      else if (changeRatio < -0.1) trend = 'decreasing';
+    } else if (currentSignals > 0) {
+      trend = 'increasing';
+    }
+
+    // Calculate block rate percentage
+    const blockPercentage = currentSignals > 0
+      ? (currentBlocks / currentSignals) * 100
+      : 0;
+
+    // Process IP groups
+    const topIPs = ipGroups
+      .filter(g => g.sourceIp !== null)
+      .map(g => ({
+        ip: g.sourceIp as string,
+        count: typeof g._count === 'object' && g._count !== null && '_all' in g._count
+          ? (g._count._all as number)
+          : 0,
+      }));
+
+    // Count unique IPs
+    const uniqueIPCount = ipGroups.length;
+
+    return {
+      timeWindow: {
+        start,
+        end,
+        windowMinutes,
+      },
+      attackRate: {
+        signalsPerMinute: Math.round(signalsPerMinute * 100) / 100,
+        trend,
+      },
+      blockRate: {
+        blocksTotal: currentBlocks,
+        signalsTotal: currentSignals,
+        percentage: Math.round(blockPercentage * 100) / 100,
+      },
+      affectedIPs: {
+        count: uniqueIPCount,
+        topIPs,
+      },
+      severityDistribution: Object.fromEntries(
+        severityGroups.map(s => [
+          s.severity,
+          typeof s._count === 'object' && s._count !== null && '_all' in s._count
+            ? (s._count._all as number)
+            : 0
+        ])
+      ),
+      typeDistribution: Object.fromEntries(
+        typeGroups.map(t => [
+          t.signalType,
+          typeof t._count === 'object' && t._count !== null && '_all' in t._count
+            ? (t._count._all as number)
+            : 0
+        ])
+      ),
     };
   }
 }

@@ -23,6 +23,12 @@ const mockTx = {
   },
 };
 
+// Mock signal model for live metrics
+const mockPrismaSignal = {
+  count: vi.fn(),
+  groupBy: vi.fn(),
+};
+
 const mockPrisma = {
   $transaction: vi.fn((callback) => callback(mockTx)),
   warRoom: {
@@ -45,7 +51,9 @@ const mockPrisma = {
   blocklistEntry: {
     create: vi.fn(),
     deleteMany: vi.fn(),
+    count: vi.fn(),
   },
+  signal: mockPrismaSignal,
 } as unknown as PrismaClient;
 
 // Mock Logger
@@ -457,6 +465,144 @@ describe('WarRoomService', () => {
       expect(result.activeWarRooms).toBe(3);
       expect(result.activitiesLast24h).toBe(150);
       expect(result.blocksCreatedLast24h).toBe(25);
+    });
+  });
+
+  describe('getLiveMetrics', () => {
+    it('should get live metrics with 5-minute window', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count).mockResolvedValue(25);
+      vi.mocked(mockPrismaSignal.groupBy).mockResolvedValue([]);
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(5);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123', { windowMinutes: 5 });
+
+      expect(result.timeWindow.windowMinutes).toBe(5);
+      expect(result.attackRate.signalsPerMinute).toBe(5); // 25 signals / 5 minutes
+    });
+
+    it('should get live metrics with 1-hour window', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count).mockResolvedValue(120);
+      vi.mocked(mockPrismaSignal.groupBy).mockResolvedValue([]);
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(10);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123', { windowMinutes: 60 });
+
+      expect(result.timeWindow.windowMinutes).toBe(60);
+      expect(result.attackRate.signalsPerMinute).toBe(2); // 120 signals / 60 minutes
+    });
+
+    it('should get live metrics with 24-hour window', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count).mockResolvedValue(1440);
+      vi.mocked(mockPrismaSignal.groupBy).mockResolvedValue([]);
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(100);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123', { windowMinutes: 1440 });
+
+      expect(result.timeWindow.windowMinutes).toBe(1440);
+      expect(result.attackRate.signalsPerMinute).toBe(1); // 1440 signals / 1440 minutes
+    });
+
+    it('should calculate attack rate correctly', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count)
+        .mockResolvedValueOnce(50)  // current window signals
+        .mockResolvedValueOnce(30); // previous window signals
+      vi.mocked(mockPrismaSignal.groupBy).mockResolvedValue([]);
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(0);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123', { windowMinutes: 5 });
+
+      expect(result.attackRate.signalsPerMinute).toBe(10); // 50 / 5
+      expect(result.attackRate.trend).toBe('increasing'); // 50 > 30 * 1.1
+    });
+
+    it('should calculate block rate percentage', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count)
+        .mockResolvedValueOnce(100) // current signals
+        .mockResolvedValueOnce(100); // previous signals
+      vi.mocked(mockPrismaSignal.groupBy).mockResolvedValue([]);
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(25);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123');
+
+      expect(result.blockRate.blocksTotal).toBe(25);
+      expect(result.blockRate.signalsTotal).toBe(100);
+      expect(result.blockRate.percentage).toBe(25); // 25/100 * 100
+    });
+
+    it('should count affected IPs', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count).mockResolvedValue(50);
+      vi.mocked(mockPrismaSignal.groupBy)
+        .mockResolvedValueOnce([
+          { sourceIp: '10.0.0.1', _count: { _all: 20 } },
+          { sourceIp: '10.0.0.2', _count: { _all: 15 } },
+          { sourceIp: '10.0.0.3', _count: { _all: 10 } },
+        ] as never) // IP groups
+        .mockResolvedValueOnce([]) // severity groups
+        .mockResolvedValueOnce([]); // type groups
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(0);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123');
+
+      expect(result.affectedIPs.count).toBe(3);
+      expect(result.affectedIPs.topIPs).toHaveLength(3);
+      expect(result.affectedIPs.topIPs[0]).toEqual({ ip: '10.0.0.1', count: 20 });
+    });
+
+    it('should group by severity', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count).mockResolvedValue(100);
+      vi.mocked(mockPrismaSignal.groupBy)
+        .mockResolvedValueOnce([]) // IP groups
+        .mockResolvedValueOnce([
+          { severity: 'HIGH', _count: { _all: 40 } },
+          { severity: 'MEDIUM', _count: { _all: 35 } },
+          { severity: 'LOW', _count: { _all: 25 } },
+        ] as never) // severity groups
+        .mockResolvedValueOnce([]); // type groups
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(0);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123');
+
+      expect(result.severityDistribution).toEqual({
+        HIGH: 40,
+        MEDIUM: 35,
+        LOW: 25,
+      });
+    });
+
+    it('should group by signal type', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(createWarRoom());
+      vi.mocked(mockPrismaSignal.count).mockResolvedValue(100);
+      vi.mocked(mockPrismaSignal.groupBy)
+        .mockResolvedValueOnce([]) // IP groups
+        .mockResolvedValueOnce([]) // severity groups
+        .mockResolvedValueOnce([
+          { signalType: 'SQL_INJECTION', _count: { _all: 30 } },
+          { signalType: 'XSS', _count: { _all: 25 } },
+          { signalType: 'BOT', _count: { _all: 45 } },
+        ] as never); // type groups
+      vi.mocked(mockPrisma.blocklistEntry.count).mockResolvedValue(0);
+
+      const result = await warRoomService.getLiveMetrics('warroom-123');
+
+      expect(result.typeDistribution).toEqual({
+        SQL_INJECTION: 30,
+        XSS: 25,
+        BOT: 45,
+      });
+    });
+
+    it('should throw error for non-existent war room', async () => {
+      vi.mocked(mockPrisma.warRoom.findUnique).mockResolvedValue(null);
+
+      await expect(warRoomService.getLiveMetrics('non-existent'))
+        .rejects.toThrow('War room non-existent not found');
     });
   });
 });

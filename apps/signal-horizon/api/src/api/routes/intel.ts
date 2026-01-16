@@ -10,6 +10,7 @@ import { requireScope } from '../middleware/auth.js';
 import { validateQuery } from '../middleware/validation.js';
 import { getErrorMessage } from '../../utils/errors.js';
 import { IntelService, type IntelConfig } from '../../services/intel/index.js';
+import { createActorRoutes } from './intel/actors.js';
 
 // Validation schemas
 const ExportIOCsQuerySchema = z.object({
@@ -41,6 +42,9 @@ const DEFAULT_CONFIG: IntelConfig = {
 export function createIntelRoutes(prisma: PrismaClient, logger: import('pino').Logger): Router {
   const router = Router();
   const intelService = new IntelService(prisma, logger, DEFAULT_CONFIG);
+
+  // Mount actor sub-routes
+  router.use('/actors', createActorRoutes(prisma, logger));
 
   /**
    * GET /api/v1/intel/iocs

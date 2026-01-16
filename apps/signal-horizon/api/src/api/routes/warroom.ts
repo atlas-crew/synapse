@@ -55,6 +55,13 @@ const ActivitiesQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+const LiveMetricsQuerySchema = z.object({
+  windowMinutes: z.coerce.number().refine(
+    (val) => [5, 60, 1440].includes(val),
+    { message: 'windowMinutes must be 5, 60, or 1440' }
+  ).default(5),
+});
+
 // Default config
 const DEFAULT_CONFIG: WarRoomConfig = {
   autoCreateForCrossTenant: true,
@@ -132,6 +139,43 @@ export function createWarRoomRoutes(prisma: PrismaClient, logger: import('pino')
       } catch (error) {
         console.error('Failed to create war room:', error);
         res.status(500).json({ error: 'Failed to create war room', message: getErrorMessage(error) });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/warrooms/:id/metrics
+   * Get live metrics for a war room
+   */
+  router.get(
+    '/:id/metrics',
+    requireScope('dashboard:read'),
+    validateParams(IdParamSchema),
+    validateQuery(LiveMetricsQuerySchema),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { windowMinutes } = req.query as unknown as z.infer<typeof LiveMetricsQuerySchema>;
+        const auth = req.auth!;
+
+        // Verify access
+        const warRoom = await prisma.warRoom.findUnique({ where: { id } });
+        if (!warRoom) {
+          res.status(404).json({ error: 'War room not found' });
+          return;
+        }
+        if (warRoom.tenantId !== auth.tenantId && !auth.isFleetAdmin) {
+          res.status(403).json({ error: 'Access denied' });
+          return;
+        }
+
+        const metrics = await warRoomService.getLiveMetrics(id, {
+          windowMinutes: windowMinutes as 5 | 60 | 1440
+        });
+        res.json(metrics);
+      } catch (error) {
+        console.error('Failed to get live metrics:', error);
+        res.status(500).json({ error: 'Failed to get live metrics', message: getErrorMessage(error) });
       }
     }
   );
