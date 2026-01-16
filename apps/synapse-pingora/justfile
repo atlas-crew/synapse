@@ -496,7 +496,7 @@ demo-9-dlp:
     @echo ""
     @echo "→ 'Were also scanning responses. If your API accidentally leaks"
     @echo "   a SSN, credit card, or API key — we catch it before it leaves"
-    @echo "   the perimeter. Salt charges extra for this.'"
+    @echo "   the perimeter. '"
 
 # Step 10: Signal Horizon Fleet View
 demo-10-fleet:

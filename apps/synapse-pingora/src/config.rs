@@ -468,6 +468,7 @@ impl ConfigLoader {
                 waf_enabled: site.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
                 access_control: site.access_control.clone(),
                 headers: site.headers.clone(),
+                shadow_mirror: None,
             })
             .collect()
     }

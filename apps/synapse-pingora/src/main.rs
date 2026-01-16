@@ -23,6 +23,8 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use synapse::{Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest, Synapse, Verdict as SynapseVerdict};
+// Schema learning and validation (API anomaly detection)
+use synapse::schema::{SchemaLearner, SchemaLearnerConfig, ViolationSeverity, ValidationResult as SchemaValidationResult};
 use log::{debug, info, warn, error};
 use once_cell::sync::Lazy;
 use pingora_core::prelude::*;
@@ -43,7 +45,7 @@ use synapse_pingora::TlsVersion;
 use pingora::listeners::tls::TlsSettings;
 
 // Admin API imports
-use synapse_pingora::admin_server::start_admin_server;
+use synapse_pingora::admin_server::{start_admin_server, register_profiles_getter, register_schemas_getter, register_evaluate_callback, EvaluationResult};
 use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
 use synapse_pingora::metrics::MetricsRegistry;
@@ -535,6 +537,21 @@ static SYNAPSE: Lazy<Arc<parking_lot::RwLock<Synapse>>> = Lazy::new(|| {
     Arc::new(parking_lot::RwLock::new(create_synapse_engine()))
 });
 
+// Global Schema Learner for API anomaly detection
+// Learns request/response JSON schemas per endpoint and validates against them.
+// Thread-safe via DashMap, minimal contention for high-throughput scenarios.
+static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
+    SchemaLearner::with_config(SchemaLearnerConfig {
+        max_schemas: 5000,
+        min_samples_for_validation: 10,
+        max_nesting_depth: 10,
+        max_fields_per_schema: 100,
+        string_length_tolerance: 2.0,
+        number_value_tolerance: 2.0,
+        required_field_threshold: 0.9,
+    })
+});
+
 // Thread-local buffer pool for request body handling (optimization)
 thread_local! {
     static BUFFER_POOL: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::with_capacity(128));
@@ -560,6 +577,39 @@ fn return_buffer(mut buf: Vec<u8>) {
             }
         });
     }
+}
+
+/// Normalize a URL path to a template by replacing numeric/UUID segments with placeholders.
+/// This allows schema learning to group similar endpoints together.
+///
+/// Examples:
+/// - `/api/users/123` -> `/api/users/{id}`
+/// - `/api/orders/abc-def-123/items/456` -> `/api/orders/{id}/items/{id}`
+/// - `/api/v1/products` -> `/api/v1/products` (unchanged)
+fn normalize_path_to_template(path: &str) -> String {
+    path.split('/')
+        .map(|segment| {
+            // Check if segment is purely numeric
+            if !segment.is_empty() && segment.chars().all(|c| c.is_ascii_digit()) {
+                return "{id}";
+            }
+            // Check if segment looks like a UUID (8-4-4-4-12 hex pattern or 32 hex chars)
+            if segment.len() == 36 && segment.chars().filter(|&c| c == '-').count() == 4 {
+                let hex_parts: Vec<&str> = segment.split('-').collect();
+                if hex_parts.len() == 5
+                    && hex_parts.iter().all(|p| p.chars().all(|c| c.is_ascii_hexdigit()))
+                {
+                    return "{id}";
+                }
+            }
+            // Check for MongoDB ObjectId (24 hex chars)
+            if segment.len() == 24 && segment.chars().all(|c| c.is_ascii_hexdigit()) {
+                return "{id}";
+            }
+            segment
+        })
+        .collect::<Vec<&str>>()
+        .join("/")
 }
 
 /// Create a new Synapse engine with rules
@@ -729,6 +779,10 @@ pub struct RequestContext {
     dlp_scan_rx: Option<oneshot::Receiver<DlpScanResult>>,
     /// Phase 5: DLP scan time from async task (for metrics)
     dlp_scan_time_us: u64,
+    /// Response Content-Type header for schema validation
+    response_content_type: Option<String>,
+    /// Request path for schema template mapping (stored for response phase)
+    request_path: Option<String>,
 }
 
 impl Drop for RequestContext {
@@ -901,6 +955,7 @@ impl SynapseProxy {
             block_log,
             actor_manager,
             session_manager,
+            shadow_mirror_manager: None,
         }
     }
 
@@ -927,6 +982,7 @@ impl SynapseProxy {
             block_log: Arc::new(BlockLog::default()),
             actor_manager: Arc::new(ActorManager::new(ActorConfig::default())),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
+            shadow_mirror_manager: None,
         }
     }
 
@@ -974,6 +1030,7 @@ impl SynapseProxy {
             block_log,
             actor_manager,
             session_manager,
+            shadow_mirror_manager: None,
         }
     }
 
@@ -1108,6 +1165,8 @@ impl ProxyHttp for SynapseProxy {
             skip_request_dlp: false,
             dlp_scan_rx: None,
             dlp_scan_time_us: 0,
+            response_content_type: None,
+            request_path: None,
         }
     }
 
@@ -1265,6 +1324,9 @@ impl ProxyHttp for SynapseProxy {
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
+
+        // Store request path for schema validation in response phase
+        ctx.request_path = Some(path.to_string());
 
         // Check if we should skip DLP scanning for this content type
         if let Some(ref ct) = ctx.request_content_type {
@@ -1685,6 +1747,55 @@ impl ProxyHttp for SynapseProxy {
             return Ok(true);
         }
 
+        // ===== Phase 7: Shadow Mirroring =====
+        // Mirror suspicious (but not blocked) traffic to honeypots for threat intelligence
+        // Fire-and-forget pattern: uses tokio::spawn to avoid impacting production latency
+        if let Some(ref shadow_manager) = self.shadow_mirror_manager {
+            // Get site-specific shadow config or skip if not configured
+            let shadow_config = ctx.matched_site.as_ref().and_then(|site| site.shadow_mirror.as_ref());
+
+            if let Some(config) = shadow_config {
+                if config.enabled && shadow_manager.should_mirror(result.risk_score as f32, client_ip) {
+                    // Build mirror payload with request context
+                    let site_name = ctx.matched_site.as_ref()
+                        .map(|s| s.hostname.clone())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
+                        .unwrap_or_else(|_| "synapse-default".to_string());
+
+                    // Generate a simple request ID from timestamp + counter
+                    let request_id = format!("req_{:x}_{}", std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis(), fastrand::u32(..));
+
+                    let payload = MirrorPayload::new(
+                        request_id,
+                        client_ip.to_string(),
+                        result.risk_score as f32,
+                        method.to_string(),
+                        uri.clone(),
+                        site_name,
+                        sensor_id,
+                    )
+                    .with_ja4(ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.clone())))
+                    .with_ja4h(ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.clone()))
+                    .with_rules(result.matched_rules.iter().map(|r| format!("rule_{}", r)).collect())
+                    .with_headers(headers.iter().cloned().collect());
+
+                    // Fire and forget - returns immediately, async delivery in background
+                    shadow_manager.mirror_async(payload);
+
+                    info!(
+                        "Shadow mirror triggered: {} -> risk={}, rules={:?}",
+                        client_ip, result.risk_score, result.matched_rules
+                    );
+                }
+            }
+        }
+        // ===== End Shadow Mirroring =====
+
         ctx.detection = Some(result);
 
         // Return false = continue to upstream
@@ -1805,6 +1916,65 @@ impl ProxyHttp for SynapseProxy {
                 }
             }
 
+            // Schema Learning and Validation (API Anomaly Detection)
+            // Only process JSON content types for schema learning
+            let is_json_content = ctx.request_content_type
+                .as_ref()
+                .map(|ct| ct.contains("json"))
+                .unwrap_or(false);
+
+            if is_json_content {
+                // Try to parse the body as JSON
+                if let Ok(json_body) = serde_json::from_slice::<serde_json::Value>(&ctx.request_body_buffer) {
+                    let req_header = _session.req_header();
+                    let uri = req_header.uri.path();
+
+                    // Normalize path to template (replace numeric IDs with {id})
+                    // e.g., /api/users/123/posts/456 -> /api/users/{id}/posts/{id}
+                    let template_path = normalize_path_to_template(uri);
+
+                    // Learn from this request to build baseline schema
+                    SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
+
+                    // Validate against learned schema if enough samples
+                    let validation_result = SCHEMA_LEARNER.validate_request(&template_path, &json_body);
+                    if !validation_result.is_valid() {
+                        // Calculate schema risk contribution
+                        let schema_risk: u16 = validation_result.violations.iter()
+                            .map(|v| match v.severity {
+                                ViolationSeverity::Critical => 10,
+                                ViolationSeverity::High => 7,
+                                ViolationSeverity::Medium => 4,
+                                ViolationSeverity::Low => 2,
+                                ViolationSeverity::Info => 1,
+                            })
+                            .sum();
+
+                        // Add to entity risk
+                        ctx.entity_risk += schema_risk as f64;
+
+                        // Log schema violations
+                        info!(
+                            "Schema violations for {}: {} violations, +{} risk",
+                            template_path,
+                            validation_result.violations.len(),
+                            schema_risk
+                        );
+
+                        // Record in block log for dashboard visibility
+                        for violation in &validation_result.violations {
+                            debug!(
+                                "  - {}: {:?} (expected: {}, actual: {})",
+                                violation.field,
+                                violation.violation_type,
+                                violation.expected,
+                                violation.actual
+                            );
+                        }
+                    }
+                }
+            }
+
             if self.dlp_scanner.is_enabled() {
                 // Take ownership of the buffer to send to the async task
                 let body_data = ctx.request_body_buffer.clone(); // Clone because we might need it? No, we can take it if we are sure WAF is done.
@@ -1886,6 +2056,9 @@ impl ProxyHttp for SynapseProxy {
         }
 
         if end_of_stream && ctx.body_bytes_seen > 0 {
+            // Record bandwidth metrics for the request body
+            self.metrics_registry.record_request_bandwidth(ctx.body_bytes_seen as u64);
+
             info!(
                 "Request body complete: {} bytes from {:?}, DLP scan spawned",
                 ctx.body_bytes_seen, ctx.client_ip
@@ -2066,6 +2239,13 @@ impl ProxyHttp for SynapseProxy {
         ctx: &mut Self::CTX,
     ) -> Result<()>
     {
+        // Extract Content-Type for response schema validation
+        ctx.response_content_type = upstream_response
+            .headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
         // ===== Header Manipulation (Response) =====
         if let Some(ref site) = ctx.matched_site {
             if let Some(ref header_config) = site.headers {
@@ -2095,6 +2275,11 @@ impl ProxyHttp for SynapseProxy {
             if ctx.response_body_buffer.len() + body_chunk.len() <= 5 * 1024 * 1024 {
                 ctx.response_body_buffer.extend_from_slice(body_chunk);
             }
+        }
+
+        // Record response bandwidth on end of stream
+        if end_of_stream && !ctx.response_body_buffer.is_empty() {
+            self.metrics_registry.record_response_bandwidth(ctx.response_body_buffer.len() as u64);
         }
 
         // Scan on end of stream
@@ -2137,6 +2322,68 @@ impl ProxyHttp for SynapseProxy {
 
             // Clear buffer after scanning
             ctx.response_body_buffer.clear();
+        }
+
+        // Schema Learning and Validation for Responses (API Anomaly Detection)
+        // Learn response schemas to detect anomalous backend responses
+        // that might indicate compromise or data exfiltration
+        if end_of_stream && !ctx.response_body_buffer.is_empty() {
+            // Check if response is JSON
+            let is_json_response = ctx.response_content_type
+                .as_ref()
+                .map(|ct| ct.contains("json"))
+                .unwrap_or(false);
+
+            if is_json_response {
+                // Try to parse the response as JSON
+                if let Ok(json_body) = serde_json::from_slice::<serde_json::Value>(&ctx.response_body_buffer) {
+                    // Get request path from context for template mapping
+                    let template_path = ctx.request_path.as_deref()
+                        .map(normalize_path_to_template)
+                        .unwrap_or_default();
+
+                    if !template_path.is_empty() {
+                        // Learn from this response to build baseline schema
+                        SCHEMA_LEARNER.learn_from_response(&template_path, &json_body);
+
+                        // Validate response against learned schema
+                        let validation_result = SCHEMA_LEARNER.validate_response(&template_path, &json_body);
+                        if !validation_result.is_valid() {
+                            // Response anomalies might indicate backend compromise or data exfiltration
+                            // Use lower risk scores for responses since they're less directly controllable
+                            let schema_risk: u16 = validation_result.violations.iter()
+                                .map(|v| match v.severity {
+                                    ViolationSeverity::Critical => 5, // Lower for responses
+                                    ViolationSeverity::High => 3,
+                                    ViolationSeverity::Medium => 2,
+                                    ViolationSeverity::Low => 1,
+                                    ViolationSeverity::Info => 0,
+                                })
+                                .sum();
+
+                            if schema_risk > 0 {
+                                info!(
+                                    "Response schema anomaly for {}: {} violations, +{} risk",
+                                    template_path,
+                                    validation_result.violations.len(),
+                                    schema_risk
+                                );
+
+                                // Log violations for debugging
+                                for violation in &validation_result.violations {
+                                    debug!(
+                                        "  Response - {}: {:?} (expected: {}, actual: {})",
+                                        violation.field,
+                                        violation.violation_type,
+                                        violation.expected,
+                                        violation.actual
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(None) // No delay
@@ -2595,7 +2842,8 @@ fn main() {
             .block_log(Arc::clone(&shared_block_log))
             .campaign_manager(Arc::clone(&campaign_manager))
             .actor_manager(Arc::clone(&shared_actor_manager))
-            .session_manager(Arc::clone(&shared_session_manager));
+            .session_manager(Arc::clone(&shared_session_manager))
+            .synapse_engine(Arc::clone(&SYNAPSE)); // For dry-run WAF evaluation
 
         if let Some(ref cm) = config_manager {
             builder = builder.config_manager(Arc::clone(cm));
@@ -2637,6 +2885,24 @@ fn main() {
             debug!("  Trusted: {}", cidr);
         }
     }
+
+    // Register data accessors for admin server profiling endpoints
+    // These callbacks allow the admin_server handlers to access real profile/schema data
+    register_profiles_getter(|| DetectionEngine::get_profiles());
+    register_schemas_getter(|| SCHEMA_LEARNER.get_all_schemas());
+
+    // Register WAF evaluation callback for dry-run testing (Phase 2: Lab View)
+    register_evaluate_callback(|method, uri, headers, body, client_ip| {
+        let result = DetectionEngine::analyze(method, uri, headers, body, client_ip);
+        EvaluationResult {
+            blocked: result.blocked,
+            risk_score: result.risk_score,
+            matched_rules: result.matched_rules,
+            block_reason: result.block_reason,
+            detection_time_us: result.detection_time_us,
+        }
+    });
+    info!("Registered profile, schema, and evaluate callbacks for admin API");
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()

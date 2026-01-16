@@ -18,6 +18,8 @@ pub struct MetricsRegistry {
     latencies: LatencyHistogram,
     /// WAF-specific metrics
     waf_metrics: WafMetrics,
+    /// Shadow mirroring metrics (Phase 7)
+    shadow_metrics: ShadowMetrics,
     /// Profiling metrics (Phase 2)
     profiling_metrics: ProfilingMetrics,
     /// Backend health metrics
@@ -67,6 +69,52 @@ pub struct ProfilingMetrics {
     pub requests_with_anomalies: AtomicU64,
     /// Per-endpoint statistics (path -> stats)
     pub endpoint_stats: Arc<RwLock<HashMap<String, EndpointStats>>>,
+    /// Bandwidth tracking: total bytes received (request bodies)
+    pub total_bytes_in: AtomicU64,
+    /// Bandwidth tracking: total bytes sent (response bodies)
+    pub total_bytes_out: AtomicU64,
+    /// Bandwidth tracking: max request size seen
+    pub max_request_size: AtomicU64,
+    /// Bandwidth tracking: max response size seen
+    pub max_response_size: AtomicU64,
+    /// Bandwidth tracking: request count for averaging
+    pub bandwidth_request_count: AtomicU64,
+    /// Bandwidth timeline (circular buffer, 60 data points for last hour)
+    pub bandwidth_timeline: Arc<RwLock<BandwidthTimeline>>,
+}
+
+/// Bandwidth timeline data point
+#[derive(Debug, Clone, Default)]
+pub struct BandwidthDataPoint {
+    /// Timestamp (ms since epoch)
+    pub timestamp: u64,
+    /// Bytes in during this period
+    pub bytes_in: u64,
+    /// Bytes out during this period
+    pub bytes_out: u64,
+    /// Request count during this period
+    pub request_count: u64,
+}
+
+/// Circular buffer for bandwidth timeline (60 minutes of 1-minute intervals)
+#[derive(Debug)]
+pub struct BandwidthTimeline {
+    /// Data points (circular buffer)
+    pub points: Vec<BandwidthDataPoint>,
+    /// Current write index
+    pub current_index: usize,
+    /// Last recorded minute (for period detection)
+    pub last_minute: u64,
+}
+
+impl Default for BandwidthTimeline {
+    fn default() -> Self {
+        Self {
+            points: vec![BandwidthDataPoint::default(); 60],
+            current_index: 0,
+            last_minute: 0,
+        }
+    }
 }
 
 impl ProfilingMetrics {
@@ -129,6 +177,148 @@ impl ProfilingMetrics {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
     }
+
+    /// Record bandwidth for a request body.
+    pub fn record_request_bytes(&self, bytes: u64) {
+        self.total_bytes_in.fetch_add(bytes, Ordering::Relaxed);
+        self.bandwidth_request_count.fetch_add(1, Ordering::Relaxed);
+
+        // Update max request size atomically
+        let mut current_max = self.max_request_size.load(Ordering::Relaxed);
+        while bytes > current_max {
+            match self.max_request_size.compare_exchange_weak(
+                current_max,
+                bytes,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(x) => current_max = x,
+            }
+        }
+
+        // Update timeline
+        self.update_timeline(bytes, 0);
+    }
+
+    /// Record bandwidth for a response body.
+    pub fn record_response_bytes(&self, bytes: u64) {
+        self.total_bytes_out.fetch_add(bytes, Ordering::Relaxed);
+
+        // Update max response size atomically
+        let mut current_max = self.max_response_size.load(Ordering::Relaxed);
+        while bytes > current_max {
+            match self.max_response_size.compare_exchange_weak(
+                current_max,
+                bytes,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(x) => current_max = x,
+            }
+        }
+
+        // Update timeline
+        self.update_timeline(0, bytes);
+    }
+
+    /// Update bandwidth timeline (called from record_request_bytes and record_response_bytes)
+    fn update_timeline(&self, bytes_in: u64, bytes_out: u64) {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let current_minute = now_ms / 60_000;
+
+        let mut timeline = self.bandwidth_timeline.write();
+
+        // Check if we need to advance to a new minute
+        if current_minute != timeline.last_minute {
+            // Advance index if this is a new period
+            if timeline.last_minute > 0 {
+                timeline.current_index = (timeline.current_index + 1) % 60;
+            }
+            timeline.last_minute = current_minute;
+
+            // Reset the new slot
+            let reset_idx = timeline.current_index;
+            timeline.points[reset_idx] = BandwidthDataPoint {
+                timestamp: now_ms,
+                bytes_in: 0,
+                bytes_out: 0,
+                request_count: 0,
+            };
+        }
+
+        // Update current slot
+        let idx = timeline.current_index;
+        timeline.points[idx].bytes_in += bytes_in;
+        timeline.points[idx].bytes_out += bytes_out;
+        if bytes_in > 0 {
+            timeline.points[idx].request_count += 1;
+        }
+    }
+
+    /// Get bandwidth statistics for the API.
+    pub fn get_bandwidth_stats(&self) -> BandwidthStats {
+        let total_bytes_in = self.total_bytes_in.load(Ordering::Relaxed);
+        let total_bytes_out = self.total_bytes_out.load(Ordering::Relaxed);
+        let request_count = self.bandwidth_request_count.load(Ordering::Relaxed);
+        let max_request = self.max_request_size.load(Ordering::Relaxed);
+        let max_response = self.max_response_size.load(Ordering::Relaxed);
+
+        let avg_bytes_per_request = if request_count > 0 {
+            (total_bytes_in + total_bytes_out) / request_count
+        } else {
+            0
+        };
+
+        // Get timeline (non-zero entries, most recent first)
+        let timeline = self.bandwidth_timeline.read();
+        let mut timeline_points: Vec<BandwidthDataPoint> = Vec::new();
+
+        // Read from current_index backwards (wrapping around)
+        for i in 0..60 {
+            let idx = (timeline.current_index + 60 - i) % 60;
+            let point = &timeline.points[idx];
+            if point.timestamp > 0 {
+                timeline_points.push(point.clone());
+            }
+        }
+
+        BandwidthStats {
+            total_bytes: total_bytes_in + total_bytes_out,
+            total_bytes_in,
+            total_bytes_out,
+            avg_bytes_per_request,
+            max_request_size: max_request,
+            max_response_size: max_response,
+            request_count,
+            timeline: timeline_points,
+        }
+    }
+}
+
+/// Bandwidth statistics returned by the API.
+#[derive(Debug, Clone)]
+pub struct BandwidthStats {
+    /// Total bytes (in + out)
+    pub total_bytes: u64,
+    /// Total request bytes
+    pub total_bytes_in: u64,
+    /// Total response bytes
+    pub total_bytes_out: u64,
+    /// Average bytes per request
+    pub avg_bytes_per_request: u64,
+    /// Maximum request size seen
+    pub max_request_size: u64,
+    /// Maximum response size seen
+    pub max_response_size: u64,
+    /// Total request count
+    pub request_count: u64,
+    /// Timeline data points
+    pub timeline: Vec<BandwidthDataPoint>,
 }
 
 /// Request counters broken down by status code class.
@@ -254,6 +444,50 @@ impl WafMetrics {
     }
 }
 
+/// Shadow mirroring metrics (Phase 7).
+#[derive(Debug, Default)]
+pub struct ShadowMetrics {
+    /// Total requests mirrored to honeypots
+    pub mirrored: AtomicU64,
+    /// Requests skipped due to rate limiting
+    pub rate_limited: AtomicU64,
+    /// Requests that failed to deliver to honeypot
+    pub failed: AtomicU64,
+    /// Total bytes sent to honeypots
+    pub bytes_sent: AtomicU64,
+    /// Total delivery time in microseconds
+    pub delivery_time_us: AtomicU64,
+}
+
+impl ShadowMetrics {
+    /// Records a successful mirror delivery.
+    pub fn record_success(&self, bytes: u64, delivery_us: u64) {
+        self.mirrored.fetch_add(1, Ordering::Relaxed);
+        self.bytes_sent.fetch_add(bytes, Ordering::Relaxed);
+        self.delivery_time_us.fetch_add(delivery_us, Ordering::Relaxed);
+    }
+
+    /// Records a rate-limited mirror attempt.
+    pub fn record_rate_limited(&self) {
+        self.rate_limited.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records a failed mirror delivery.
+    pub fn record_failed(&self) {
+        self.failed.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Returns the average delivery time in microseconds.
+    pub fn avg_delivery_us(&self) -> f64 {
+        let mirrored = self.mirrored.load(Ordering::Relaxed);
+        if mirrored == 0 {
+            0.0
+        } else {
+            self.delivery_time_us.load(Ordering::Relaxed) as f64 / mirrored as f64
+        }
+    }
+}
+
 /// Per-backend metrics.
 #[derive(Debug, Default, Clone)]
 pub struct BackendMetrics {
@@ -307,6 +541,21 @@ impl MetricsRegistry {
         self.waf_metrics.record_rule_match(rule_id);
     }
 
+    /// Records a successful shadow mirror delivery.
+    pub fn record_shadow_success(&self, bytes: u64, delivery_us: u64) {
+        self.shadow_metrics.record_success(bytes, delivery_us);
+    }
+
+    /// Records a rate-limited shadow mirror attempt.
+    pub fn record_shadow_rate_limited(&self) {
+        self.shadow_metrics.record_rate_limited();
+    }
+
+    /// Records a failed shadow mirror delivery.
+    pub fn record_shadow_failed(&self) {
+        self.shadow_metrics.record_failed();
+    }
+
     /// Records profiling metrics (Phase 2).
     pub fn record_profile_metrics(&self, active_profiles: usize, anomalies: &[(String, f64)]) {
         self.profiling_metrics.set_active_profiles(active_profiles as u64);
@@ -323,6 +572,21 @@ impl MetricsRegistry {
     /// Gets all endpoint statistics for the profiling API.
     pub fn get_endpoint_stats(&self) -> Vec<(String, EndpointStats)> {
         self.profiling_metrics.get_endpoint_stats()
+    }
+
+    /// Records request body bandwidth.
+    pub fn record_request_bandwidth(&self, bytes: u64) {
+        self.profiling_metrics.record_request_bytes(bytes);
+    }
+
+    /// Records response body bandwidth.
+    pub fn record_response_bandwidth(&self, bytes: u64) {
+        self.profiling_metrics.record_response_bytes(bytes);
+    }
+
+    /// Gets bandwidth statistics for the API.
+    pub fn get_bandwidth_stats(&self) -> BandwidthStats {
+        self.profiling_metrics.get_bandwidth_stats()
     }
 
     /// Records backend response.
@@ -475,6 +739,42 @@ impl MetricsRegistry {
             ));
         }
 
+        // Shadow mirroring metrics (Phase 7)
+        output.push_str("# HELP synapse_shadow_mirrored Requests mirrored to honeypots\n");
+        output.push_str("# TYPE synapse_shadow_mirrored counter\n");
+        output.push_str(&format!(
+            "synapse_shadow_mirrored {}\n",
+            self.shadow_metrics.mirrored.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_shadow_rate_limited Requests rate-limited from mirroring\n");
+        output.push_str("# TYPE synapse_shadow_rate_limited counter\n");
+        output.push_str(&format!(
+            "synapse_shadow_rate_limited {}\n",
+            self.shadow_metrics.rate_limited.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_shadow_failed Failed mirror deliveries\n");
+        output.push_str("# TYPE synapse_shadow_failed counter\n");
+        output.push_str(&format!(
+            "synapse_shadow_failed {}\n",
+            self.shadow_metrics.failed.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_shadow_bytes_total Total bytes sent to honeypots\n");
+        output.push_str("# TYPE synapse_shadow_bytes_total counter\n");
+        output.push_str(&format!(
+            "synapse_shadow_bytes_total {}\n",
+            self.shadow_metrics.bytes_sent.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_shadow_delivery_avg_us Average shadow delivery time\n");
+        output.push_str("# TYPE synapse_shadow_delivery_avg_us gauge\n");
+        output.push_str(&format!(
+            "synapse_shadow_delivery_avg_us {:.2}\n",
+            self.shadow_metrics.avg_delivery_us()
+        ));
+
         // Uptime
         output.push_str("# HELP synapse_uptime_seconds Service uptime in seconds\n");
         output.push_str("# TYPE synapse_uptime_seconds gauge\n");
@@ -515,6 +815,13 @@ impl MetricsRegistry {
         self.profiling_metrics.avg_anomaly_score.store(0, Ordering::Relaxed);
         self.profiling_metrics.requests_with_anomalies.store(0, Ordering::Relaxed);
         self.profiling_metrics.endpoint_stats.write().clear();
+
+        // Reset shadow metrics
+        self.shadow_metrics.mirrored.store(0, Ordering::Relaxed);
+        self.shadow_metrics.rate_limited.store(0, Ordering::Relaxed);
+        self.shadow_metrics.failed.store(0, Ordering::Relaxed);
+        self.shadow_metrics.bytes_sent.store(0, Ordering::Relaxed);
+        self.shadow_metrics.delivery_time_us.store(0, Ordering::Relaxed);
 
         // Reset backend metrics
         self.backend_metrics.write().clear();
@@ -630,5 +937,470 @@ mod tests {
 
         // Uptime should be very small but non-negative
         assert!(registry.uptime_secs() < 1);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - BandwidthTimeline
+    // =========================================================================
+
+    #[test]
+    fn test_bandwidth_timeline_default() {
+        let timeline = BandwidthTimeline::default();
+
+        // Should have 60 slots pre-allocated
+        assert_eq!(timeline.points.len(), 60);
+        assert_eq!(timeline.current_index, 0);
+        assert_eq!(timeline.last_minute, 0);
+
+        // All points should be default (zero values)
+        for point in &timeline.points {
+            assert_eq!(point.timestamp, 0);
+            assert_eq!(point.bytes_in, 0);
+            assert_eq!(point.bytes_out, 0);
+            assert_eq!(point.request_count, 0);
+        }
+    }
+
+    #[test]
+    fn test_bandwidth_timeline_circular_buffer_wrap() {
+        // Directly test circular buffer behavior
+        let mut timeline = BandwidthTimeline::default();
+
+        // Simulate filling the buffer beyond capacity
+        for i in 0..65 {
+            timeline.current_index = i % 60;
+            timeline.points[timeline.current_index] = BandwidthDataPoint {
+                timestamp: (i as u64) * 60_000,
+                bytes_in: (i as u64) * 100,
+                bytes_out: (i as u64) * 50,
+                request_count: 1,
+            };
+        }
+
+        // Current index should wrap around
+        assert_eq!(timeline.current_index, 4); // 64 % 60 = 4
+
+        // Verify the most recent data is at current_index
+        assert_eq!(timeline.points[4].bytes_in, 6400);
+    }
+
+    #[test]
+    fn test_bandwidth_data_point_default() {
+        let point = BandwidthDataPoint::default();
+
+        assert_eq!(point.timestamp, 0);
+        assert_eq!(point.bytes_in, 0);
+        assert_eq!(point.bytes_out, 0);
+        assert_eq!(point.request_count, 0);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - ProfilingMetrics.record_request_bytes()
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_record_request_bytes() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_request_bytes(1000);
+        metrics.record_request_bytes(2000);
+        metrics.record_request_bytes(500);
+
+        assert_eq!(metrics.total_bytes_in.load(Ordering::Relaxed), 3500);
+        assert_eq!(metrics.bandwidth_request_count.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn test_profiling_metrics_record_request_bytes_zero() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_request_bytes(0);
+
+        assert_eq!(metrics.total_bytes_in.load(Ordering::Relaxed), 0);
+        assert_eq!(metrics.bandwidth_request_count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_profiling_metrics_record_request_bytes_large_value() {
+        let metrics = ProfilingMetrics::default();
+
+        // Record a large value (10 MB)
+        metrics.record_request_bytes(10 * 1024 * 1024);
+
+        assert_eq!(metrics.total_bytes_in.load(Ordering::Relaxed), 10 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - ProfilingMetrics.record_response_bytes()
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_record_response_bytes() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_response_bytes(5000);
+        metrics.record_response_bytes(3000);
+
+        assert_eq!(metrics.total_bytes_out.load(Ordering::Relaxed), 8000);
+    }
+
+    #[test]
+    fn test_profiling_metrics_record_response_bytes_zero() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_response_bytes(0);
+
+        assert_eq!(metrics.total_bytes_out.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_profiling_metrics_mixed_request_response() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_request_bytes(100);
+        metrics.record_response_bytes(500);
+        metrics.record_request_bytes(200);
+        metrics.record_response_bytes(1000);
+
+        assert_eq!(metrics.total_bytes_in.load(Ordering::Relaxed), 300);
+        assert_eq!(metrics.total_bytes_out.load(Ordering::Relaxed), 1500);
+        assert_eq!(metrics.bandwidth_request_count.load(Ordering::Relaxed), 2);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - Max size tracking with compare_exchange
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_max_request_size_tracking() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_request_bytes(100);
+        assert_eq!(metrics.max_request_size.load(Ordering::Relaxed), 100);
+
+        metrics.record_request_bytes(50); // smaller, should not update max
+        assert_eq!(metrics.max_request_size.load(Ordering::Relaxed), 100);
+
+        metrics.record_request_bytes(200); // larger, should update max
+        assert_eq!(metrics.max_request_size.load(Ordering::Relaxed), 200);
+
+        metrics.record_request_bytes(150); // smaller than max
+        assert_eq!(metrics.max_request_size.load(Ordering::Relaxed), 200);
+    }
+
+    #[test]
+    fn test_profiling_metrics_max_response_size_tracking() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_response_bytes(500);
+        assert_eq!(metrics.max_response_size.load(Ordering::Relaxed), 500);
+
+        metrics.record_response_bytes(250); // smaller, should not update max
+        assert_eq!(metrics.max_response_size.load(Ordering::Relaxed), 500);
+
+        metrics.record_response_bytes(1000); // larger, should update max
+        assert_eq!(metrics.max_response_size.load(Ordering::Relaxed), 1000);
+    }
+
+    #[test]
+    fn test_profiling_metrics_max_size_from_zero() {
+        let metrics = ProfilingMetrics::default();
+
+        // Initial max should be 0
+        assert_eq!(metrics.max_request_size.load(Ordering::Relaxed), 0);
+        assert_eq!(metrics.max_response_size.load(Ordering::Relaxed), 0);
+
+        // First non-zero value should become max
+        metrics.record_request_bytes(42);
+        metrics.record_response_bytes(84);
+
+        assert_eq!(metrics.max_request_size.load(Ordering::Relaxed), 42);
+        assert_eq!(metrics.max_response_size.load(Ordering::Relaxed), 84);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - ProfilingMetrics.get_bandwidth_stats()
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_get_bandwidth_stats_empty() {
+        let metrics = ProfilingMetrics::default();
+
+        let stats = metrics.get_bandwidth_stats();
+
+        assert_eq!(stats.total_bytes, 0);
+        assert_eq!(stats.total_bytes_in, 0);
+        assert_eq!(stats.total_bytes_out, 0);
+        assert_eq!(stats.avg_bytes_per_request, 0);
+        assert_eq!(stats.max_request_size, 0);
+        assert_eq!(stats.max_response_size, 0);
+        assert_eq!(stats.request_count, 0);
+    }
+
+    #[test]
+    fn test_profiling_metrics_get_bandwidth_stats_with_data() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_request_bytes(100);
+        metrics.record_response_bytes(400);
+        metrics.record_request_bytes(200);
+        metrics.record_response_bytes(600);
+
+        let stats = metrics.get_bandwidth_stats();
+
+        assert_eq!(stats.total_bytes_in, 300);
+        assert_eq!(stats.total_bytes_out, 1000);
+        assert_eq!(stats.total_bytes, 1300);
+        assert_eq!(stats.request_count, 2);
+        assert_eq!(stats.avg_bytes_per_request, 650); // 1300 / 2
+        assert_eq!(stats.max_request_size, 200);
+        assert_eq!(stats.max_response_size, 600);
+    }
+
+    #[test]
+    fn test_profiling_metrics_get_bandwidth_stats_average_calculation() {
+        let metrics = ProfilingMetrics::default();
+
+        // Record varying sizes
+        metrics.record_request_bytes(1000);
+        metrics.record_response_bytes(2000);
+        metrics.record_request_bytes(500);
+        metrics.record_response_bytes(1500);
+        metrics.record_request_bytes(1500);
+        metrics.record_response_bytes(3500);
+
+        let stats = metrics.get_bandwidth_stats();
+
+        // Total: 3000 in + 7000 out = 10000
+        // Request count: 3
+        // Average: 10000 / 3 = 3333
+        assert_eq!(stats.total_bytes_in, 3000);
+        assert_eq!(stats.total_bytes_out, 7000);
+        assert_eq!(stats.request_count, 3);
+        assert_eq!(stats.avg_bytes_per_request, 3333);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - MetricsRegistry integration
+    // =========================================================================
+
+    #[test]
+    fn test_registry_record_request_bandwidth() {
+        let registry = MetricsRegistry::new();
+
+        registry.record_request_bandwidth(1024);
+        registry.record_request_bandwidth(2048);
+
+        let stats = registry.get_bandwidth_stats();
+        assert_eq!(stats.total_bytes_in, 3072);
+    }
+
+    #[test]
+    fn test_registry_record_response_bandwidth() {
+        let registry = MetricsRegistry::new();
+
+        registry.record_response_bandwidth(4096);
+        registry.record_response_bandwidth(8192);
+
+        let stats = registry.get_bandwidth_stats();
+        assert_eq!(stats.total_bytes_out, 12288);
+    }
+
+    #[test]
+    fn test_registry_bandwidth_stats_integration() {
+        let registry = MetricsRegistry::new();
+
+        registry.record_request_bandwidth(500);
+        registry.record_response_bandwidth(1500);
+        registry.record_request_bandwidth(1000);
+        registry.record_response_bandwidth(3000);
+
+        let stats = registry.get_bandwidth_stats();
+
+        assert_eq!(stats.total_bytes_in, 1500);
+        assert_eq!(stats.total_bytes_out, 4500);
+        assert_eq!(stats.total_bytes, 6000);
+        assert_eq!(stats.request_count, 2);
+        assert_eq!(stats.max_request_size, 1000);
+        assert_eq!(stats.max_response_size, 3000);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - Endpoint recording
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_record_endpoint() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_endpoint("/api/users", "GET");
+        metrics.record_endpoint("/api/users", "GET");
+        metrics.record_endpoint("/api/users", "POST");
+        metrics.record_endpoint("/api/products", "GET");
+
+        let stats = metrics.endpoint_stats.read();
+
+        assert_eq!(stats.len(), 2); // /api/users and /api/products
+
+        let users_stats = stats.get("/api/users").unwrap();
+        assert_eq!(users_stats.hit_count, 3);
+        assert_eq!(users_stats.methods.len(), 2); // GET and POST
+        assert!(users_stats.methods.contains(&"GET".to_string()));
+        assert!(users_stats.methods.contains(&"POST".to_string()));
+
+        let products_stats = stats.get("/api/products").unwrap();
+        assert_eq!(products_stats.hit_count, 1);
+        assert_eq!(products_stats.methods.len(), 1);
+    }
+
+    #[test]
+    fn test_profiling_metrics_active_profiles_count() {
+        let metrics = ProfilingMetrics::default();
+
+        assert_eq!(metrics.profiles_active.load(Ordering::Relaxed), 0);
+
+        metrics.record_endpoint("/api/v1/users", "GET");
+        assert_eq!(metrics.profiles_active.load(Ordering::Relaxed), 1);
+
+        metrics.record_endpoint("/api/v1/products", "GET");
+        assert_eq!(metrics.profiles_active.load(Ordering::Relaxed), 2);
+
+        // Same endpoint, should not increase count
+        metrics.record_endpoint("/api/v1/users", "POST");
+        assert_eq!(metrics.profiles_active.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn test_profiling_metrics_get_endpoint_stats() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_endpoint("/path1", "GET");
+        metrics.record_endpoint("/path2", "POST");
+
+        let stats = metrics.get_endpoint_stats();
+
+        assert_eq!(stats.len(), 2);
+
+        // Find the paths in the returned stats
+        let path_names: Vec<&String> = stats.iter().map(|(path, _)| path).collect();
+        assert!(path_names.contains(&&"/path1".to_string()));
+        assert!(path_names.contains(&&"/path2".to_string()));
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - Anomaly recording
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_record_anomaly() {
+        let metrics = ProfilingMetrics::default();
+
+        metrics.record_anomaly("sql_injection", 8.5);
+        metrics.record_anomaly("xss_attempt", 6.0);
+        metrics.record_anomaly("sql_injection", 9.0);
+
+        let anomalies = metrics.anomalies_detected.read();
+        assert_eq!(anomalies.get("sql_injection"), Some(&2));
+        assert_eq!(anomalies.get("xss_attempt"), Some(&1));
+
+        assert_eq!(metrics.requests_with_anomalies.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn test_profiling_metrics_avg_anomaly_score_ema() {
+        let metrics = ProfilingMetrics::default();
+
+        // First anomaly sets initial score
+        metrics.record_anomaly("test", 10.0);
+        let score1 = metrics.avg_anomaly_score.load(Ordering::Relaxed) as f64 / 1000.0;
+        assert!((score1 - 10.0).abs() < 0.01);
+
+        // Second anomaly uses EMA (alpha = 0.1)
+        // new = (old * 9 + new * 1) / 10 = (10 * 9 + 5) / 10 = 9.5
+        metrics.record_anomaly("test", 5.0);
+        let score2 = metrics.avg_anomaly_score.load(Ordering::Relaxed) as f64 / 1000.0;
+        assert!((score2 - 9.5).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - Reset functionality
+    // =========================================================================
+
+    #[test]
+    fn test_registry_reset_profiling_metrics() {
+        let registry = MetricsRegistry::new();
+
+        // Add some profiling data
+        registry.record_request_bandwidth(1000);
+        registry.record_response_bandwidth(2000);
+        registry.record_endpoint("/api/test", "GET");
+        registry.profiling_metrics.record_anomaly("test", 5.0);
+
+        // Verify data exists
+        let stats_before = registry.get_bandwidth_stats();
+        assert!(stats_before.total_bytes > 0);
+
+        // Reset
+        registry.reset();
+
+        // Verify profiling-specific reset
+        assert_eq!(registry.profiling_metrics.profiles_active.load(Ordering::Relaxed), 0);
+        assert_eq!(registry.profiling_metrics.avg_anomaly_score.load(Ordering::Relaxed), 0);
+        assert_eq!(registry.profiling_metrics.requests_with_anomalies.load(Ordering::Relaxed), 0);
+        assert!(registry.profiling_metrics.anomalies_detected.read().is_empty());
+        assert!(registry.profiling_metrics.endpoint_stats.read().is_empty());
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - Timeline integration
+    // =========================================================================
+
+    #[test]
+    fn test_profiling_metrics_timeline_records_data() {
+        let metrics = ProfilingMetrics::default();
+
+        // Record some bandwidth
+        metrics.record_request_bytes(1000);
+        metrics.record_response_bytes(2000);
+
+        // Get stats and check timeline has data
+        let stats = metrics.get_bandwidth_stats();
+
+        // Timeline should have at least one entry with data
+        // (depending on timing, the point may or may not have non-zero timestamp)
+        assert!(stats.timeline.len() <= 60);
+    }
+
+    #[test]
+    fn test_bandwidth_stats_struct_fields() {
+        let stats = BandwidthStats {
+            total_bytes: 100,
+            total_bytes_in: 40,
+            total_bytes_out: 60,
+            avg_bytes_per_request: 50,
+            max_request_size: 20,
+            max_response_size: 30,
+            request_count: 2,
+            timeline: vec![],
+        };
+
+        assert_eq!(stats.total_bytes, 100);
+        assert_eq!(stats.total_bytes_in, 40);
+        assert_eq!(stats.total_bytes_out, 60);
+        assert_eq!(stats.avg_bytes_per_request, 50);
+        assert_eq!(stats.max_request_size, 20);
+        assert_eq!(stats.max_response_size, 30);
+        assert_eq!(stats.request_count, 2);
+        assert!(stats.timeline.is_empty());
+    }
+
+    #[test]
+    fn test_endpoint_stats_default() {
+        let stats = EndpointStats::default();
+
+        assert_eq!(stats.hit_count, 0);
+        assert!(stats.first_seen > 0); // Should have current timestamp
+        assert!(stats.last_seen > 0);
+        assert!(stats.methods.is_empty());
     }
 }

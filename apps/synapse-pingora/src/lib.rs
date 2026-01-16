@@ -90,8 +90,8 @@ pub use vhost::{SiteConfig, VhostMatcher};
 
 // Re-export commonly used types from Phase 2
 pub use access::{AccessList, AccessListManager, AccessDecision};
-pub use api::{ApiHandler, ApiResponse};
-pub use metrics::MetricsRegistry;
+pub use api::{ApiHandler, ApiResponse, EvaluateResult};
+pub use metrics::{MetricsRegistry, BandwidthStats, BandwidthDataPoint, ProfilingMetrics};
 pub use ratelimit::{RateLimitConfig, RateLimitManager, RateLimitDecision};
 pub use reload::{ConfigReloader, ReloadResult};
 

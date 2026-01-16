@@ -18,6 +18,86 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use sysinfo::{System, Networks, Disks};
 
+// Type aliases for profile/schema data accessors
+// These are callbacks that the binary (main.rs) can set to provide real data
+type ProfilesGetter = Box<dyn Fn() -> Vec<synapse::EndpointProfile> + Send + Sync>;
+type SchemasGetter = Box<dyn Fn() -> Vec<synapse::schema::EndpointSchema> + Send + Sync>;
+
+/// Detection result from WAF evaluation (for admin API)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EvaluationResult {
+    pub blocked: bool,
+    pub risk_score: u16,
+    pub matched_rules: Vec<u32>,
+    pub block_reason: Option<String>,
+    pub detection_time_us: u64,
+}
+
+/// Type alias for WAF evaluation callback
+type EvaluateCallback = Box<dyn Fn(&str, &str, &[(String, String)], Option<&[u8]>, &str) -> EvaluationResult + Send + Sync>;
+
+/// Global accessor for endpoint profiles (set by binary at startup)
+static PROFILES_GETTER: Lazy<RwLock<Option<ProfilesGetter>>> = Lazy::new(|| RwLock::new(None));
+
+/// Global accessor for endpoint schemas (set by binary at startup)
+static SCHEMAS_GETTER: Lazy<RwLock<Option<SchemasGetter>>> = Lazy::new(|| RwLock::new(None));
+
+/// Global accessor for WAF evaluation (set by binary at startup)
+static EVALUATE_CALLBACK: Lazy<RwLock<Option<EvaluateCallback>>> = Lazy::new(|| RwLock::new(None));
+
+/// Register a callback to get endpoint profiles from the detection engine.
+/// Called by the binary (main.rs) during startup.
+pub fn register_profiles_getter<F>(getter: F)
+where
+    F: Fn() -> Vec<synapse::EndpointProfile> + Send + Sync + 'static,
+{
+    *PROFILES_GETTER.write() = Some(Box::new(getter));
+}
+
+/// Register a callback to get endpoint schemas from the schema learner.
+/// Called by the binary (main.rs) during startup.
+pub fn register_schemas_getter<F>(getter: F)
+where
+    F: Fn() -> Vec<synapse::schema::EndpointSchema> + Send + Sync + 'static,
+{
+    *SCHEMAS_GETTER.write() = Some(Box::new(getter));
+}
+
+/// Register a callback for WAF evaluation (dry-run detection).
+/// Called by the binary (main.rs) during startup.
+pub fn register_evaluate_callback<F>(callback: F)
+where
+    F: Fn(&str, &str, &[(String, String)], Option<&[u8]>, &str) -> EvaluationResult + Send + Sync + 'static,
+{
+    *EVALUATE_CALLBACK.write() = Some(Box::new(callback));
+}
+
+/// Run WAF evaluation using the registered callback.
+fn run_evaluate(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> Option<EvaluationResult> {
+    EVALUATE_CALLBACK
+        .read()
+        .as_ref()
+        .map(|callback| callback(method, uri, headers, body, client_ip))
+}
+
+/// Get profiles from the registered getter, or empty vec if not registered.
+fn get_profiles() -> Vec<synapse::EndpointProfile> {
+    PROFILES_GETTER
+        .read()
+        .as_ref()
+        .map(|getter| getter())
+        .unwrap_or_default()
+}
+
+/// Get schemas from the registered getter, or empty vec if not registered.
+fn get_schemas() -> Vec<synapse::schema::EndpointSchema> {
+    SCHEMAS_GETTER
+        .read()
+        .as_ref()
+        .map(|getter| getter())
+        .unwrap_or_default()
+}
+
 /// Metrics history point for dashboard charts
 #[derive(Clone, serde::Serialize)]
 struct MetricsPoint {
@@ -191,6 +271,7 @@ pub async fn start_admin_server(
         .route("/sites/{hostname}/waf", put(update_site_waf_handler))
         .route("/sites/{hostname}/rate-limit", put(update_site_rate_limit_handler))
         .route("/sites/{hostname}/access-list", put(update_site_access_list_handler))
+        .route("/sites/{hostname}/shadow", put(update_site_shadow_handler))
         .route("/debug/profiles/save", post(save_profiles_handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
@@ -234,6 +315,11 @@ pub async fn start_admin_server(
         .route("/_sensor/profiling/schemas", get(profiling_schemas_handler))
         .route("/_sensor/profiling/schema/discovery", get(profiling_discovery_handler))
         .route("/_sensor/profiling/anomalies", get(profiling_anomalies_handler))
+        // Shadow mirroring endpoints
+        .route("/_sensor/shadow/status", get(sensor_shadow_status_handler))
+        .route("/sites/{hostname}/shadow", get(get_site_shadow_handler))
+        // Dry-run WAF evaluation endpoint (Phase 2: Lab View)
+        .route("/_sensor/evaluate", post(sensor_evaluate_handler))
         .route("/", get(root_handler));
 
     let app = Router::new()
@@ -387,6 +473,204 @@ async fn update_site_access_list_handler(
 ) -> impl IntoResponse {
     let response = state.handler.handle_update_site_access_list(&hostname, request);
     wrap_response(response)
+}
+
+// =============================================================================
+// Shadow Mirroring Routes
+// =============================================================================
+
+/// Response for shadow mirror status
+#[derive(serde::Serialize)]
+struct ShadowStatusResponse {
+    enabled: bool,
+    sites_with_shadow: usize,
+    total_mirrored: u64,
+    total_rate_limited: u64,
+    total_failed: u64,
+}
+
+/// Request for updating shadow mirror configuration
+#[derive(serde::Deserialize)]
+struct ShadowConfigRequest {
+    enabled: Option<bool>,
+    min_risk_score: Option<f32>,
+    max_risk_score: Option<f32>,
+    honeypot_urls: Option<Vec<String>>,
+    sampling_rate: Option<f32>,
+    per_ip_rate_limit: Option<u32>,
+    timeout_secs: Option<u64>,
+    include_body: Option<bool>,
+    max_body_size: Option<usize>,
+}
+
+/// GET /_sensor/shadow/status - Shadow mirroring status
+async fn sensor_shadow_status_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    // Get count of sites with shadow mirroring enabled
+    let sites_with_shadow = if let Some(ref config_mgr) = state.handler.config_manager() {
+        let hostnames = config_mgr.list_sites();
+        hostnames.iter().filter(|hostname| {
+            config_mgr.get_site(hostname)
+                .ok()
+                .and_then(|site| site.shadow_mirror)
+                .map(|sm| sm.enabled)
+                .unwrap_or(false)
+        }).count()
+    } else {
+        0
+    };
+
+    let response = ShadowStatusResponse {
+        enabled: sites_with_shadow > 0,
+        sites_with_shadow,
+        total_mirrored: 0, // TODO: Track in MetricsRegistry
+        total_rate_limited: 0,
+        total_failed: 0,
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": response
+        }))
+    )
+}
+
+/// GET /sites/:hostname/shadow - Get site shadow mirror config
+async fn get_site_shadow_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+) -> impl IntoResponse {
+    if let Some(ref config_mgr) = state.handler.config_manager() {
+        match config_mgr.get_site(&hostname) {
+            Ok(site) => {
+                let shadow_config = site.shadow_mirror.clone();
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "data": {
+                            "hostname": hostname,
+                            "shadow_mirror": shadow_config
+                        }
+                    }))
+                );
+            }
+            Err(_) => {}
+        }
+    }
+
+    (
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({
+            "success": false,
+            "error": format!("Site {} not found", hostname)
+        }))
+    )
+}
+
+/// PUT /sites/:hostname/shadow - Update site shadow mirror config
+async fn update_site_shadow_handler(
+    State(state): State<AdminState>,
+    Path(hostname): Path<String>,
+    Json(request): Json<ShadowConfigRequest>,
+) -> impl IntoResponse {
+    use crate::config_manager::UpdateSiteRequest;
+
+    if let Some(ref config_mgr) = state.handler.config_manager() {
+        // First check if site exists and get current shadow config
+        let existing_shadow = match config_mgr.get_site(&hostname) {
+            Ok(site) => site.shadow_mirror,
+            Err(_) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "success": false,
+                        "error": format!("Site {} not found", hostname)
+                    }))
+                );
+            }
+        };
+
+        // Get existing or create new config
+        let mut shadow_config = existing_shadow.unwrap_or_default();
+
+        // Apply updates
+        if let Some(enabled) = request.enabled {
+            shadow_config.enabled = enabled;
+        }
+        if let Some(min) = request.min_risk_score {
+            shadow_config.min_risk_score = min;
+        }
+        if let Some(max) = request.max_risk_score {
+            shadow_config.max_risk_score = max;
+        }
+        if let Some(urls) = request.honeypot_urls {
+            shadow_config.honeypot_urls = urls;
+        }
+        if let Some(rate) = request.sampling_rate {
+            shadow_config.sampling_rate = rate;
+        }
+        if let Some(limit) = request.per_ip_rate_limit {
+            shadow_config.per_ip_rate_limit = limit;
+        }
+        if let Some(timeout) = request.timeout_secs {
+            shadow_config.timeout_secs = timeout;
+        }
+        if let Some(include) = request.include_body {
+            shadow_config.include_body = include;
+        }
+        if let Some(max_size) = request.max_body_size {
+            shadow_config.max_body_size = max_size;
+        }
+
+        // Validate the config
+        if let Err(e) = shadow_config.validate() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": format!("Invalid shadow config: {}", e)
+                }))
+            );
+        }
+
+        // Create UpdateSiteRequest with just shadow_mirror
+        let update_request = UpdateSiteRequest {
+            shadow_mirror: Some(shadow_config.clone()),
+            ..Default::default()
+        };
+
+        // Update site in config manager
+        if let Err(e) = config_mgr.update_site(&hostname, update_request) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": format!("Failed to update site: {}", e)
+                }))
+            );
+        }
+
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "hostname": hostname,
+                    "shadow_mirror": shadow_config
+                }
+            }))
+        );
+    }
+
+    (
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({
+            "success": false,
+            "error": "Config manager not available"
+        }))
+    )
 }
 
 /// GET /stats - Runtime statistics
@@ -1063,13 +1347,33 @@ async fn sensor_campaign_timeline_handler(Path(id): Path<String>) -> impl IntoRe
     (StatusCode::OK, Json(serde_json::json!({ "data": events })))
 }
 
-/// GET /_sensor/payload/bandwidth - Returns empty bandwidth data
-async fn sensor_bandwidth_handler() -> impl IntoResponse {
+/// GET /_sensor/payload/bandwidth - Returns bandwidth statistics from profiler
+async fn sensor_bandwidth_handler(
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let metrics = state.handler.metrics();
+    let stats = metrics.get_bandwidth_stats();
+
+    // Convert timeline to JSON-friendly format
+    let timeline: Vec<serde_json::Value> = stats.timeline.iter()
+        .filter(|p| p.timestamp > 0)
+        .map(|p| serde_json::json!({
+            "timestamp": p.timestamp,
+            "bytesIn": p.bytes_in,
+            "bytesOut": p.bytes_out,
+            "requestCount": p.request_count
+        }))
+        .collect();
+
     (StatusCode::OK, Json(serde_json::json!({
-        "totalBytes": 0,
-        "avgBytesPerRequest": 0,
-        "maxRequestSize": 0,
-        "timeline": []
+        "totalBytes": stats.total_bytes,
+        "totalBytesIn": stats.total_bytes_in,
+        "totalBytesOut": stats.total_bytes_out,
+        "avgBytesPerRequest": stats.avg_bytes_per_request,
+        "maxRequestSize": stats.max_request_size,
+        "maxResponseSize": stats.max_response_size,
+        "requestCount": stats.request_count,
+        "timeline": timeline
     })))
 }
 
@@ -1866,7 +2170,45 @@ fn infer_endpoint_tags(path: &str) -> Vec<&'static str> {
 async fn profiling_baselines_handler(State(_state): State<AdminState>) -> impl IntoResponse {
     let now = chrono::Utc::now().timestamp_millis() as u64;
 
-    // Seed data matching EndpointBaseline interface
+    // Try to get real profile data from the detection engine
+    let profiles = get_profiles();
+
+    if !profiles.is_empty() {
+        // Convert real profiles to baseline JSON format
+        let baselines: Vec<serde_json::Value> = profiles.iter().map(|p| {
+            // Get percentiles (p50, p95, p99)
+            let (p50, p95, p99) = p.payload_size.percentiles();
+
+            // Convert status codes HashMap to array of [code, count] pairs
+            let status_codes: Vec<[u32; 2]> = p.status_codes
+                .iter()
+                .map(|(&code, &count)| [code as u32, count])
+                .collect();
+
+            // Calculate requests per minute based on time window
+            let time_window_mins = ((p.last_updated_ms.saturating_sub(p.first_seen_ms)) as f64 / 60000.0).max(1.0);
+            let avg_rpm = p.sample_count as f64 / time_window_mins;
+
+            serde_json::json!({
+                "template": p.template,
+                "totalRequests": p.sample_count,
+                "avgRequestsPerMinute": (avg_rpm * 100.0).round() / 100.0,
+                "p50ResponseTime": p50 as u64,
+                "p95ResponseTime": p95 as u64,
+                "p99ResponseTime": p99 as u64,
+                "statusCodes": status_codes,
+                "firstSeen": p.first_seen_ms,
+                "lastSeen": p.last_updated_ms
+            })
+        }).collect();
+
+        return (StatusCode::OK, Json(serde_json::json!({
+            "baselines": baselines,
+            "count": baselines.len()
+        })));
+    }
+
+    // Fallback: Seed data matching EndpointBaseline interface for dashboard testing
     let baselines = vec![
         serde_json::json!({
             "template": "/api/users",
@@ -1990,7 +2332,29 @@ async fn profiling_baselines_handler(State(_state): State<AdminState>) -> impl I
 async fn profiling_schemas_handler(State(_state): State<AdminState>) -> impl IntoResponse {
     let now = chrono::Utc::now().timestamp_millis() as u64;
 
-    // Seed data matching EndpointSchema interface
+    // Try to get real schema data from the schema learner
+    let real_schemas = get_schemas();
+
+    if !real_schemas.is_empty() {
+        // Convert real schemas to JSON format matching the frontend interface
+        let schemas: Vec<serde_json::Value> = real_schemas.iter().map(|s| {
+            serde_json::json!({
+                "template": s.template,
+                "sampleCount": s.sample_count,
+                "requestFieldCount": s.request_schema.len(),
+                "responseFieldCount": s.response_schema.len(),
+                "lastUpdated": s.last_updated_ms,
+                "version": s.version
+            })
+        }).collect();
+
+        return (StatusCode::OK, Json(serde_json::json!({
+            "schemas": schemas,
+            "count": schemas.len()
+        })));
+    }
+
+    // Fallback: Seed data matching EndpointSchema interface for dashboard testing
     let schemas = vec![
         serde_json::json!({
             "template": "/api/users",
@@ -2359,6 +2723,161 @@ pub struct RestartResult {
     pub message: String,
 }
 
+/// Request payload for dry-run WAF evaluation (Phase 2: Lab View)
+#[derive(Debug, Deserialize)]
+pub struct EvaluateRequest {
+    /// HTTP method (GET, POST, etc.)
+    pub method: String,
+    /// Request URI/path
+    pub uri: String,
+    /// Request headers as key-value pairs
+    #[serde(default)]
+    pub headers: Vec<(String, String)>,
+    /// Request body (optional, base64 encoded if binary)
+    #[serde(default)]
+    pub body: Option<String>,
+    /// Client IP to simulate
+    #[serde(default = "default_client_ip")]
+    pub client_ip: String,
+}
+
+fn default_client_ip() -> String {
+    "127.0.0.1".to_string()
+}
+
+/// POST /_sensor/evaluate - Dry-run WAF evaluation
+///
+/// Evaluates a request against the WAF rules without actually processing it.
+/// Useful for testing rules before deployment or debugging detections.
+///
+/// Request body:
+/// ```json
+/// {
+///     "method": "POST",
+///     "uri": "/api/users?id=1 OR 1=1",
+///     "headers": [["Content-Type", "application/json"]],
+///     "body": "{\"username\": \"admin\"}",
+///     "client_ip": "192.168.1.100"
+/// }
+/// ```
+///
+/// Response:
+/// ```json
+/// {
+///     "blocked": true,
+///     "riskScore": 85,
+///     "matchedRules": [942100, 942190],
+///     "blockReason": "SQL Injection detected",
+///     "detectionTimeUs": 1234,
+///     "verdict": "block"
+/// }
+/// ```
+async fn sensor_evaluate_handler(
+    State(state): State<AdminState>,
+    Json(request): Json<EvaluateRequest>,
+) -> impl IntoResponse {
+    // Parse body if provided
+    let body_bytes: Option<Vec<u8>> = request.body.as_ref().map(|b| {
+        // Try to decode as base64, fall back to raw UTF-8 bytes
+        match base64_decode(b) {
+            Ok(decoded) => decoded,
+            Err(_) => b.as_bytes().to_vec(),
+        }
+    });
+
+    // Run detection using the ApiHandler's synapse engine
+    match state.handler.evaluate_request(
+        &request.method,
+        &request.uri,
+        &request.headers,
+        body_bytes.as_deref(),
+        &request.client_ip,
+    ) {
+        Some(result) => {
+            // Determine verdict string
+            let verdict = if result.blocked {
+                "block"
+            } else if result.risk_score > 50 {
+                "warn"
+            } else {
+                "pass"
+            };
+
+            (StatusCode::OK, Json(serde_json::json!({
+                "blocked": result.blocked,
+                "riskScore": result.risk_score,
+                "matchedRules": result.matched_rules,
+                "blockReason": result.block_reason,
+                "detectionTimeUs": result.detection_time_us,
+                "verdict": verdict,
+                "input": {
+                    "method": request.method,
+                    "uri": request.uri,
+                    "headerCount": request.headers.len(),
+                    "bodyLength": body_bytes.as_ref().map(|b| b.len()).unwrap_or(0),
+                    "clientIp": request.client_ip
+                }
+            })))
+        }
+        None => {
+            // Synapse engine not configured
+            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+                "error": "WAF evaluation not available",
+                "message": "Synapse detection engine not configured"
+            })))
+        }
+    }
+}
+
+/// Simple base64 decode helper (uses standard base64)
+fn base64_decode(input: &str) -> Result<Vec<u8>, ()> {
+    // Simple base64 decoding - just check if it looks like base64
+    // and try to decode, falling back to raw bytes on error
+    const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+
+    // Check if input looks like base64 (only base64 chars and length is multiple of 4 with padding)
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // If it doesn't look like base64, return error to fall back to raw bytes
+    if !trimmed.bytes().all(|b| BASE64_CHARS.contains(&b)) {
+        return Err(());
+    }
+
+    // Manual base64 decode (avoiding external deps)
+    let mut output = Vec::with_capacity(trimmed.len() * 3 / 4);
+    let mut buffer: u32 = 0;
+    let mut bits_collected: u32 = 0;
+
+    for byte in trimmed.bytes() {
+        if byte == b'=' {
+            break;
+        }
+
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return Err(()),
+        };
+
+        buffer = (buffer << 6) | (value as u32);
+        bits_collected += 6;
+
+        if bits_collected >= 8 {
+            bits_collected -= 8;
+            output.push((buffer >> bits_collected) as u8);
+            buffer &= (1 << bits_collected) - 1;
+        }
+    }
+
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2496,5 +3015,321 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - base64_decode helper function
+    // =========================================================================
+
+    #[test]
+    fn test_base64_decode_valid_input() {
+        // "Hello" in base64 is "SGVsbG8="
+        let result = base64_decode("SGVsbG8=");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn test_base64_decode_empty_input() {
+        let result = base64_decode("");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn test_base64_decode_whitespace_only() {
+        let result = base64_decode("   ");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn test_base64_decode_with_padding() {
+        // "Hi" in base64 is "SGk=" (2 chars = 1 pad)
+        let result = base64_decode("SGk=");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"Hi");
+    }
+
+    #[test]
+    fn test_base64_decode_no_padding() {
+        // "Man" in base64 is "TWFu" (no padding needed)
+        let result = base64_decode("TWFu");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"Man");
+    }
+
+    #[test]
+    fn test_base64_decode_double_padding() {
+        // "M" in base64 is "TQ==" (1 char = 2 pads)
+        let result = base64_decode("TQ==");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"M");
+    }
+
+    #[test]
+    fn test_base64_decode_with_plus_and_slash() {
+        // Test string that includes + and / characters
+        // "/+/+" encodes to "LysvKw=="
+        let result = base64_decode("LysvKw==");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"/+/+");
+    }
+
+    #[test]
+    fn test_base64_decode_invalid_characters() {
+        // Contains invalid base64 character (!)
+        let result = base64_decode("SGVsbG8h!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_base64_decode_non_base64_string() {
+        // Plain text with spaces is not valid base64
+        let result = base64_decode("Hello World");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_base64_decode_json_body() {
+        // {"key": "value"} base64 encoded
+        // eyJrZXkiOiAidmFsdWUifQ==
+        let result = base64_decode("eyJrZXkiOiAidmFsdWUifQ==");
+        assert!(result.is_ok());
+        let decoded = String::from_utf8(result.unwrap()).unwrap();
+        assert_eq!(decoded, "{\"key\": \"value\"}");
+    }
+
+    #[test]
+    fn test_base64_decode_binary_data() {
+        // Binary data: [0x00, 0x01, 0x02, 0xFF] = "AAEC/w=="
+        let result = base64_decode("AAEC/w==");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![0x00, 0x01, 0x02, 0xFF]);
+    }
+
+    #[test]
+    fn test_base64_decode_longer_string() {
+        // "The quick brown fox jumps over the lazy dog" base64
+        let encoded = "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZw==";
+        let result = base64_decode(encoded);
+        assert!(result.is_ok());
+        let decoded = String::from_utf8(result.unwrap()).unwrap();
+        assert_eq!(decoded, "The quick brown fox jumps over the lazy dog");
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - EvaluateRequest deserialization
+    // =========================================================================
+
+    #[test]
+    fn test_evaluate_request_full_deserialization() {
+        let json = r#"{
+            "method": "POST",
+            "uri": "/api/users?id=1",
+            "headers": [["Content-Type", "application/json"], ["Authorization", "Bearer token"]],
+            "body": "eyJ1c2VybmFtZSI6ICJ0ZXN0In0=",
+            "client_ip": "192.168.1.100"
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.uri, "/api/users?id=1");
+        assert_eq!(request.headers.len(), 2);
+        assert_eq!(request.headers[0].0, "Content-Type");
+        assert_eq!(request.headers[0].1, "application/json");
+        assert_eq!(request.headers[1].0, "Authorization");
+        assert_eq!(request.headers[1].1, "Bearer token");
+        assert_eq!(request.body, Some("eyJ1c2VybmFtZSI6ICJ0ZXN0In0=".to_string()));
+        assert_eq!(request.client_ip, "192.168.1.100");
+    }
+
+    #[test]
+    fn test_evaluate_request_minimal() {
+        let json = r#"{
+            "method": "GET",
+            "uri": "/api/health"
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.uri, "/api/health");
+        assert!(request.headers.is_empty()); // default
+        assert!(request.body.is_none()); // default
+        assert_eq!(request.client_ip, "127.0.0.1"); // default_client_ip()
+    }
+
+    #[test]
+    fn test_evaluate_request_with_empty_headers() {
+        let json = r#"{
+            "method": "DELETE",
+            "uri": "/api/resource/123",
+            "headers": []
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.method, "DELETE");
+        assert_eq!(request.uri, "/api/resource/123");
+        assert!(request.headers.is_empty());
+    }
+
+    #[test]
+    fn test_evaluate_request_with_null_body() {
+        let json = r#"{
+            "method": "PUT",
+            "uri": "/api/update",
+            "body": null
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.method, "PUT");
+        assert!(request.body.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_request_sql_injection_payload() {
+        let json = r#"{
+            "method": "GET",
+            "uri": "/api/users?id=1' OR '1'='1",
+            "client_ip": "10.0.0.42"
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.uri, "/api/users?id=1' OR '1'='1");
+        assert_eq!(request.client_ip, "10.0.0.42");
+    }
+
+    #[test]
+    fn test_evaluate_request_xss_payload() {
+        let json = r#"{
+            "method": "POST",
+            "uri": "/api/comment",
+            "body": "PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=",
+            "headers": [["Content-Type", "text/html"]]
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.uri, "/api/comment");
+        // Decode the body to verify it's XSS payload
+        let body = request.body.unwrap();
+        let decoded = base64_decode(&body).unwrap();
+        let decoded_str = String::from_utf8(decoded).unwrap();
+        assert_eq!(decoded_str, "<script>alert('XSS')</script>");
+    }
+
+    #[test]
+    fn test_evaluate_request_path_traversal() {
+        let json = r#"{
+            "method": "GET",
+            "uri": "/api/files/../../../etc/passwd"
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.uri, "/api/files/../../../etc/passwd");
+    }
+
+    #[test]
+    fn test_evaluate_request_many_headers() {
+        let json = r#"{
+            "method": "GET",
+            "uri": "/api/test",
+            "headers": [
+                ["Accept", "application/json"],
+                ["Accept-Encoding", "gzip, deflate"],
+                ["Accept-Language", "en-US,en;q=0.9"],
+                ["Cache-Control", "no-cache"],
+                ["Connection", "keep-alive"],
+                ["Host", "example.com"],
+                ["User-Agent", "Mozilla/5.0"],
+                ["X-Custom-Header", "custom-value"]
+            ]
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.headers.len(), 8);
+        assert_eq!(request.headers[0].0, "Accept");
+        assert_eq!(request.headers[7].0, "X-Custom-Header");
+    }
+
+    #[test]
+    fn test_evaluate_request_ipv6_client() {
+        let json = r#"{
+            "method": "GET",
+            "uri": "/api/test",
+            "client_ip": "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.client_ip, "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+    }
+
+    #[test]
+    fn test_evaluate_request_unicode_uri() {
+        let json = r#"{
+            "method": "GET",
+            "uri": "/api/search?q=%E4%B8%AD%E6%96%87"
+        }"#;
+
+        let request: EvaluateRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.uri, "/api/search?q=%E4%B8%AD%E6%96%87");
+    }
+
+    #[test]
+    fn test_default_client_ip() {
+        assert_eq!(default_client_ip(), "127.0.0.1");
+    }
+
+    // =========================================================================
+    // Phase 1 Profiler Integration Tests - EvaluationResult
+    // =========================================================================
+
+    #[test]
+    fn test_evaluation_result_serialization() {
+        let result = EvaluationResult {
+            blocked: true,
+            risk_score: 85,
+            matched_rules: vec![942100, 942190],
+            block_reason: Some("SQL Injection detected".to_string()),
+            detection_time_us: 1234,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+
+        assert!(json.contains("\"blocked\":true"));
+        assert!(json.contains("\"risk_score\":85"));
+        assert!(json.contains("942100"));
+        assert!(json.contains("942190"));
+        assert!(json.contains("SQL Injection detected"));
+        assert!(json.contains("\"detection_time_us\":1234"));
+    }
+
+    #[test]
+    fn test_evaluation_result_no_block_reason() {
+        let result = EvaluationResult {
+            blocked: false,
+            risk_score: 20,
+            matched_rules: vec![],
+            block_reason: None,
+            detection_time_us: 500,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+
+        assert!(json.contains("\"blocked\":false"));
+        assert!(json.contains("\"risk_score\":20"));
+        assert!(json.contains("\"matched_rules\":[]"));
+        assert!(json.contains("\"block_reason\":null"));
     }
 }

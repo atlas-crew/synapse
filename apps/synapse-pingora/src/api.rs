@@ -24,6 +24,9 @@ use crate::config_manager::{
 use crate::block_log::{BlockLog, BlockEvent};
 use crate::entity::{EntityManager, EntitySnapshot};
 use crate::correlation::CampaignManager;
+use crate::actor::{ActorManager, ActorState, ActorStatsSnapshot};
+use crate::session::{SessionManager, SessionState, SessionStatsSnapshot};
+use synapse::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Verdict};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +83,12 @@ pub struct ApiHandler {
     block_log: Option<Arc<BlockLog>>,
     /// Campaign manager for threat correlation (dashboard feature)
     campaign_manager: Option<Arc<CampaignManager>>,
+    /// Actor manager for behavioral tracking (Phase 5)
+    actor_manager: Option<Arc<ActorManager>>,
+    /// Session manager for session validation and hijack detection (Phase 5)
+    session_manager: Option<Arc<SessionManager>>,
+    /// Synapse detection engine for dry-run evaluation (Phase 2)
+    synapse_engine: Option<Arc<RwLock<Synapse>>>,
 }
 
 impl ApiHandler {
@@ -282,9 +291,98 @@ impl ApiHandler {
         self.block_log.as_ref().map(Arc::clone)
     }
 
+    /// Returns the config manager (if configured).
+    pub fn config_manager(&self) -> Option<&Arc<ConfigManager>> {
+        self.config_manager.as_ref()
+    }
+
     /// Returns the campaign manager (if configured).
     pub fn campaign_manager(&self) -> Option<&Arc<CampaignManager>> {
         self.campaign_manager.as_ref()
+    }
+
+    /// Returns the actor manager (if configured).
+    pub fn actor_manager(&self) -> Option<Arc<ActorManager>> {
+        self.actor_manager.as_ref().map(Arc::clone)
+    }
+
+    /// Returns the session manager (if configured).
+    pub fn session_manager(&self) -> Option<Arc<SessionManager>> {
+        self.session_manager.as_ref().map(Arc::clone)
+    }
+
+    /// Returns the synapse engine (if configured).
+    pub fn synapse_engine(&self) -> Option<Arc<RwLock<Synapse>>> {
+        self.synapse_engine.as_ref().map(Arc::clone)
+    }
+
+    /// Evaluates a request against the WAF rules (dry-run mode).
+    /// Returns the detection result without actually blocking.
+    pub fn evaluate_request(
+        &self,
+        method: &str,
+        uri: &str,
+        headers: &[(String, String)],
+        body: Option<&[u8]>,
+        client_ip: &str,
+    ) -> Option<EvaluateResult> {
+        let engine = self.synapse_engine.as_ref()?;
+
+        let start = std::time::Instant::now();
+
+        // Build libsynapse Request
+        let synapse_headers: Vec<SynapseHeader> = headers
+            .iter()
+            .map(|(name, value)| SynapseHeader::new(name, value))
+            .collect();
+
+        let request = SynapseRequest {
+            method,
+            path: uri,
+            query: None,
+            headers: synapse_headers,
+            body,
+            client_ip,
+            is_static: false,
+        };
+
+        // Run detection
+        let verdict = engine.read().analyze(&request);
+        let elapsed = start.elapsed();
+
+        Some(EvaluateResult {
+            blocked: matches!(verdict.action, synapse::Action::Block),
+            risk_score: verdict.risk_score,
+            matched_rules: verdict.matched_rules.clone(),
+            block_reason: verdict.block_reason.clone(),
+            detection_time_us: elapsed.as_micros() as u64,
+        })
+    }
+
+    /// Handles GET /_sensor/actors request - returns actors (most recently seen first).
+    pub fn handle_list_actors(&self, limit: usize) -> Vec<ActorState> {
+        match &self.actor_manager {
+            Some(manager) => manager.list_actors(limit, 0),
+            None => Vec::new(),
+        }
+    }
+
+    /// Handles GET /_sensor/actors/stats request - returns actor statistics.
+    pub fn handle_actor_stats(&self) -> Option<ActorStatsSnapshot> {
+        self.actor_manager.as_ref().map(|manager| manager.stats().snapshot())
+    }
+
+    /// Handles GET /_sensor/sessions request - returns active sessions.
+    pub fn handle_list_sessions(&self, limit: usize) -> Vec<SessionState> {
+        match &self.session_manager {
+            Some(manager) => manager.list_sessions(limit, 0),
+            None => Vec::new(),
+        }
+    }
+
+    /// Handles GET /_sensor/sessions/stats request - returns session statistics.
+    pub fn handle_session_stats(&self) -> Option<SessionStatsSnapshot> {
+        self.session_manager.as_ref().map(|manager| manager.stats().snapshot())
     }
 
     /// Handles GET /_sensor/entities request - returns top entities by risk.
@@ -317,6 +415,9 @@ pub struct ApiHandlerBuilder {
     entity_manager: Option<Arc<EntityManager>>,
     block_log: Option<Arc<BlockLog>>,
     campaign_manager: Option<Arc<CampaignManager>>,
+    actor_manager: Option<Arc<ActorManager>>,
+    session_manager: Option<Arc<SessionManager>>,
+    synapse_engine: Option<Arc<RwLock<Synapse>>>,
 }
 
 impl ApiHandlerBuilder {
@@ -380,6 +481,24 @@ impl ApiHandlerBuilder {
         self
     }
 
+    /// Sets the actor manager for behavioral tracking.
+    pub fn actor_manager(mut self, manager: Arc<ActorManager>) -> Self {
+        self.actor_manager = Some(manager);
+        self
+    }
+
+    /// Sets the session manager for session validation and hijack detection.
+    pub fn session_manager(mut self, manager: Arc<SessionManager>) -> Self {
+        self.session_manager = Some(manager);
+        self
+    }
+
+    /// Sets the synapse detection engine for dry-run evaluation.
+    pub fn synapse_engine(mut self, engine: Arc<RwLock<Synapse>>) -> Self {
+        self.synapse_engine = Some(engine);
+        self
+    }
+
     /// Builds the API handler.
     pub fn build(self) -> ApiHandler {
         ApiHandler {
@@ -397,6 +516,9 @@ impl ApiHandlerBuilder {
             entity_manager: self.entity_manager,
             block_log: self.block_log,
             campaign_manager: self.campaign_manager,
+            actor_manager: self.actor_manager,
+            session_manager: self.session_manager,
+            synapse_engine: self.synapse_engine,
         }
     }
 }
@@ -410,6 +532,21 @@ pub struct ReloadResultResponse {
     pub sites_loaded: usize,
     pub certs_loaded: usize,
     pub duration_ms: u64,
+}
+
+/// Result of a dry-run WAF evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvaluateResult {
+    /// Whether the request would have been blocked
+    pub blocked: bool,
+    /// Calculated risk score
+    pub risk_score: u16,
+    /// Rules that matched
+    pub matched_rules: Vec<u32>,
+    /// Reason for blocking (if blocked)
+    pub block_reason: Option<String>,
+    /// Time taken for detection in microseconds
+    pub detection_time_us: u64,
 }
 
 impl From<ReloadResult> for ReloadResultResponse {

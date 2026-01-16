@@ -46,6 +46,8 @@ pub struct UpdateSiteRequest {
     pub rate_limit: Option<RateLimitRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_list: Option<AccessListRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shadow_mirror: Option<crate::shadow::ShadowMirrorConfig>,
 }
 
 /// WAF configuration request.
@@ -127,6 +129,7 @@ pub struct SiteDetailResponse {
     pub waf: Option<SiteWafResponse>,
     pub rate_limit: Option<RateLimitResponse>,
     pub access_list: Option<AccessListResponse>,
+    pub shadow_mirror: Option<crate::shadow::ShadowMirrorConfig>,
 }
 
 /// WAF configuration response.
@@ -280,6 +283,7 @@ impl ConfigManager {
                 default_action: "allow".to_string(),
             }),
             headers: None,
+            shadow_mirror: None,
         };
 
         // Apply changes
@@ -392,6 +396,7 @@ impl ConfigManager {
             waf: waf_response,
             rate_limit: None,
             access_list: None,
+            shadow_mirror: site.shadow_mirror.clone(),
         })
     }
 
@@ -532,6 +537,12 @@ impl ConfigManager {
 
                 self.access_lists.write().add_site(hostname, access_list);
                 debug!(hostname = %hostname, "updated access list config");
+            }
+
+            // Update shadow mirror config
+            if let Some(shadow_mirror_config) = req.shadow_mirror {
+                site.shadow_mirror = Some(shadow_mirror_config);
+                debug!(hostname = %hostname, "updated shadow mirror config");
             }
 
             info!(hostname = %hostname, "updated site configuration");
@@ -711,6 +722,7 @@ mod tests {
                 burst: 200,
             }),
             access_list: None,
+            shadow_mirror: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();

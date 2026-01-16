@@ -13,6 +13,7 @@ use tracing::{debug, warn};
 use unicase::Ascii;
 use ahash::RandomState;
 use crate::config::{AccessControlConfig, HeaderConfig};
+use crate::shadow::ShadowMirrorConfig;
 
 /// Configuration for a single virtual host site.
 #[derive(Debug, Clone)]
@@ -35,6 +36,8 @@ pub struct SiteConfig {
     pub access_control: Option<AccessControlConfig>,
     /// Header manipulation configuration (optional)
     pub headers: Option<HeaderConfig>,
+    /// Shadow mirroring configuration for honeypot delivery
+    pub shadow_mirror: Option<ShadowMirrorConfig>,
 }
 
 impl Default for SiteConfig {
@@ -49,6 +52,7 @@ impl Default for SiteConfig {
             waf_enabled: true,
             access_control: None,
             headers: None,
+            shadow_mirror: None,
         }
     }
 }
