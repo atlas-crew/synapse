@@ -1155,6 +1155,16 @@ export class TunnelBroker extends EventEmitter {
       }
     }
 
+    // Clean up any pending requests for this sensor to prevent memory leaks
+    // Requests would otherwise remain orphaned with their timeouts still firing
+    for (const [requestId, pending] of this.pendingRequests.entries()) {
+      if (pending.sensorId === sensorId) {
+        clearTimeout(pending.timeout);
+        this.pendingRequests.delete(requestId);
+        pending.reject(new Error(`Sensor disconnected: ${reason}`));
+      }
+    }
+
     if (tunnel.socket.readyState === WebSocket.OPEN) {
       tunnel.socket.close(1000, reason);
     }
