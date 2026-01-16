@@ -24,7 +24,8 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use synapse::{Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest, Synapse, Verdict as SynapseVerdict};
 // Schema learning and validation (API anomaly detection)
-use synapse::schema::{SchemaLearner, SchemaLearnerConfig, ViolationSeverity, ValidationResult as SchemaValidationResult};
+// Note: Using synapse_pingora::profiler instead of synapse::schema to avoid serde_json version conflicts
+use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig, ViolationSeverity, ValidationResult as SchemaValidationResult};
 use log::{debug, info, warn, error};
 use once_cell::sync::Lazy;
 use pingora_core::prelude::*;
@@ -1933,42 +1934,31 @@ impl ProxyHttp for SynapseProxy {
                     // e.g., /api/users/123/posts/456 -> /api/users/{id}/posts/{id}
                     let template_path = normalize_path_to_template(uri);
 
-                    // Learn from this request to build baseline schema
+                    // Schema learning: train the learner with this request
                     SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
 
-                    // Validate against learned schema if enough samples
+                    // Schema validation: check for anomalies against learned baseline
                     let validation_result = SCHEMA_LEARNER.validate_request(&template_path, &json_body);
                     if !validation_result.is_valid() {
-                        // Calculate schema risk contribution
-                        let schema_risk: u16 = validation_result.violations.iter()
-                            .map(|v| match v.severity {
-                                ViolationSeverity::Critical => 10,
-                                ViolationSeverity::High => 7,
-                                ViolationSeverity::Medium => 4,
-                                ViolationSeverity::Low => 2,
-                                ViolationSeverity::Info => 1,
-                            })
-                            .sum();
+                        // Calculate risk contribution from schema violations
+                        let severity_score = validation_result.total_score.min(25) as f32;
 
-                        // Add to entity risk
-                        ctx.entity_risk += schema_risk as f64;
-
-                        // Log schema violations
-                        info!(
-                            "Schema violations for {}: {} violations, +{} risk",
+                        // Log schema violations for observability
+                        debug!(
+                            "Schema violations detected for {}: {} violations, score={}, max_severity={:?}",
                             template_path,
                             validation_result.violations.len(),
-                            schema_risk
+                            validation_result.total_score,
+                            validation_result.max_severity()
                         );
 
-                        // Record in block log for dashboard visibility
-                        for violation in &validation_result.violations {
-                            debug!(
-                                "  - {}: {:?} (expected: {}, actual: {})",
-                                violation.field,
-                                violation.violation_type,
-                                violation.expected,
-                                violation.actual
+                        // Add schema violation risk to entity
+                        ctx.entity_risk += severity_score as f64;
+                        if let Some(ref ip) = ctx.client_ip {
+                            self.entity_manager.apply_external_risk(
+                                ip,
+                                severity_score as f64,
+                                "schema_violation",
                             );
                         }
                     }
@@ -2342,45 +2332,22 @@ impl ProxyHttp for SynapseProxy {
                         .map(normalize_path_to_template)
                         .unwrap_or_default();
 
-                    if !template_path.is_empty() {
-                        // Learn from this response to build baseline schema
-                        SCHEMA_LEARNER.learn_from_response(&template_path, &json_body);
+                    // Schema learning: train the learner with this response
+                    SCHEMA_LEARNER.learn_from_response(&template_path, &json_body);
 
-                        // Validate response against learned schema
-                        let validation_result = SCHEMA_LEARNER.validate_response(&template_path, &json_body);
-                        if !validation_result.is_valid() {
-                            // Response anomalies might indicate backend compromise or data exfiltration
-                            // Use lower risk scores for responses since they're less directly controllable
-                            let schema_risk: u16 = validation_result.violations.iter()
-                                .map(|v| match v.severity {
-                                    ViolationSeverity::Critical => 5, // Lower for responses
-                                    ViolationSeverity::High => 3,
-                                    ViolationSeverity::Medium => 2,
-                                    ViolationSeverity::Low => 1,
-                                    ViolationSeverity::Info => 0,
-                                })
-                                .sum();
-
-                            if schema_risk > 0 {
-                                info!(
-                                    "Response schema anomaly for {}: {} violations, +{} risk",
-                                    template_path,
-                                    validation_result.violations.len(),
-                                    schema_risk
-                                );
-
-                                // Log violations for debugging
-                                for violation in &validation_result.violations {
-                                    debug!(
-                                        "  Response - {}: {:?} (expected: {}, actual: {})",
-                                        violation.field,
-                                        violation.violation_type,
-                                        violation.expected,
-                                        violation.actual
-                                    );
-                                }
-                            }
-                        }
+                    // Schema validation: check for anomalies in backend responses
+                    // This helps detect backend compromise or data exfiltration
+                    let validation_result = SCHEMA_LEARNER.validate_response(&template_path, &json_body);
+                    if !validation_result.is_valid() {
+                        // Response schema violations are logged but not added to risk score
+                        // since the entity has already received the response
+                        warn!(
+                            "Response schema violations detected for {}: {} violations, score={}, max_severity={:?}",
+                            template_path,
+                            validation_result.violations.len(),
+                            validation_result.total_score,
+                            validation_result.max_severity()
+                        );
                     }
                 }
             }
@@ -3012,25 +2979,12 @@ fn main() {
 
     // Phase 7: Persistence - Start background snapshotting
     let persistence_config = synapse_pingora::persistence::PersistenceConfig::default();
-    let snapshot_manager = Arc::new(SnapshotManager::new(persistence_config));
-    
-    // Start background saver in a dedicated thread with its own runtime
-    // This avoids "no reactor running" errors when called from the main thread
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create persistence runtime");
-        rt.block_on(async {
-            snapshot_manager.start_background_saver(|| {
-                DetectionEngine::get_profiles()
-            });
-            // Keep the task alive
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-            }
-        });
-    });
+    // NOTE: Background profile saver disabled until new profiler module integration
+    // The old DetectionEngine::get_profiles() returns synapse::EndpointProfile
+    // The new persistence module expects synapse_pingora::EndpointProfile
+    // TODO: Integrate crate::profiler::Profiler with this persistence workflow
+    let _snapshot_manager = Arc::new(SnapshotManager::new(persistence_config));
+    info!("Profile persistence configured but background saver disabled pending profiler integration");
 
     server.run_forever();
 }

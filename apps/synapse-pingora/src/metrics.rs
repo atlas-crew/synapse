@@ -61,6 +61,14 @@ impl Default for EndpointStats {
 pub struct ProfilingMetrics {
     /// Active endpoint profiles
     pub profiles_active: AtomicU64,
+    /// Total profiles created (gauge)
+    pub profiles_total: AtomicU64,
+    /// Total schemas learned (gauge)
+    pub schemas_total: AtomicU64,
+    /// Total profile updates (counter)
+    pub profile_updates_total: AtomicU64,
+    /// Schema violations by endpoint (counter vec)
+    pub schema_violations_total: Arc<RwLock<HashMap<String, u64>>>,
     /// Anomalies detected by type
     pub anomalies_detected: Arc<RwLock<HashMap<String, u64>>>,
     /// Average anomaly score
@@ -121,6 +129,35 @@ impl ProfilingMetrics {
     /// Update active profiles count.
     pub fn set_active_profiles(&self, count: u64) {
         self.profiles_active.store(count, Ordering::Relaxed);
+    }
+
+    /// Update total profiles count (gauge).
+    pub fn set_profiles_total(&self, count: u64) {
+        self.profiles_total.store(count, Ordering::Relaxed);
+    }
+
+    /// Update total schemas count (gauge).
+    pub fn set_schemas_total(&self, count: u64) {
+        self.schemas_total.store(count, Ordering::Relaxed);
+    }
+
+    /// Increment profile updates counter.
+    pub fn record_profile_update(&self) {
+        self.profile_updates_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a schema violation for a specific endpoint.
+    pub fn record_schema_violation(&self, endpoint: &str) {
+        let mut violations = self.schema_violations_total.write();
+        *violations.entry(endpoint.to_string()).or_insert(0) += 1;
+    }
+
+    /// Get all schema violations by endpoint.
+    pub fn get_schema_violations(&self) -> Vec<(String, u64)> {
+        let violations = self.schema_violations_total.read();
+        violations.iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect()
     }
 
     /// Record an anomaly detection.
@@ -297,6 +334,32 @@ impl ProfilingMetrics {
             request_count,
             timeline: timeline_points,
         }
+    }
+
+    /// Reset all profiling metrics to initial state.
+    pub fn reset(&self) {
+        self.profiles_active.store(0, Ordering::Relaxed);
+        self.profiles_total.store(0, Ordering::Relaxed);
+        self.schemas_total.store(0, Ordering::Relaxed);
+        self.profile_updates_total.store(0, Ordering::Relaxed);
+        self.avg_anomaly_score.store(0, Ordering::Relaxed);
+        self.requests_with_anomalies.store(0, Ordering::Relaxed);
+        self.total_bytes_in.store(0, Ordering::Relaxed);
+        self.total_bytes_out.store(0, Ordering::Relaxed);
+        self.bandwidth_request_count.store(0, Ordering::Relaxed);
+        self.max_request_size.store(0, Ordering::Relaxed);
+        self.max_response_size.store(0, Ordering::Relaxed);
+
+        // Clear maps
+        self.anomalies_detected.write().clear();
+        self.endpoint_stats.write().clear();
+        self.schema_violations_total.write().clear();
+
+        // Reset timeline
+        let mut timeline = self.bandwidth_timeline.write();
+        *timeline = BandwidthTimeline::default();
+
+        tracing::info!("ProfilingMetrics reset complete");
     }
 }
 
@@ -589,6 +652,20 @@ impl MetricsRegistry {
         self.profiling_metrics.get_bandwidth_stats()
     }
 
+    /// Resets all endpoint profile metrics.
+    pub fn reset_profiles(&self) {
+        self.profiling_metrics.profiles_active.store(0, Ordering::Relaxed);
+        self.profiling_metrics.profiles_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics.profile_updates_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics.endpoint_stats.write().clear();
+    }
+
+    /// Resets all schema metrics.
+    pub fn reset_schemas(&self) {
+        self.profiling_metrics.schemas_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics.schema_violations_total.write().clear();
+    }
+
     /// Records backend response.
     pub fn record_backend(&self, backend: &str, success: bool, response_time_us: u64) {
         let mut backends = self.backend_metrics.write();
@@ -704,6 +781,37 @@ impl MetricsRegistry {
             self.profiling_metrics.profiles_active.load(Ordering::Relaxed)
         ));
 
+        output.push_str("# HELP synapse_profiles_total Total number of endpoint profiles\n");
+        output.push_str("# TYPE synapse_profiles_total gauge\n");
+        output.push_str(&format!(
+            "synapse_profiles_total {}\n",
+            self.profiling_metrics.profiles_total.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_schemas_total Total number of learned schemas\n");
+        output.push_str("# TYPE synapse_schemas_total gauge\n");
+        output.push_str(&format!(
+            "synapse_schemas_total {}\n",
+            self.profiling_metrics.schemas_total.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_profile_updates_total Total profile update operations\n");
+        output.push_str("# TYPE synapse_profile_updates_total counter\n");
+        output.push_str(&format!(
+            "synapse_profile_updates_total {}\n",
+            self.profiling_metrics.profile_updates_total.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_schema_violations_total Schema violations by endpoint\n");
+        output.push_str("# TYPE synapse_schema_violations_total counter\n");
+        let violations = self.profiling_metrics.schema_violations_total.read();
+        for (endpoint, count) in violations.iter() {
+            output.push_str(&format!(
+                "synapse_schema_violations_total{{endpoint=\"{}\"}} {}\n",
+                endpoint, count
+            ));
+        }
+
         output.push_str("# HELP synapse_anomalies_detected_total Anomalies detected by type\n");
         output.push_str("# TYPE synapse_anomalies_detected_total counter\n");
         let anomalies = self.profiling_metrics.anomalies_detected.read();
@@ -811,6 +919,10 @@ impl MetricsRegistry {
 
         // Reset profiling metrics
         self.profiling_metrics.profiles_active.store(0, Ordering::Relaxed);
+        self.profiling_metrics.profiles_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics.schemas_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics.profile_updates_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics.schema_violations_total.write().clear();
         self.profiling_metrics.anomalies_detected.write().clear();
         self.profiling_metrics.avg_anomaly_score.store(0, Ordering::Relaxed);
         self.profiling_metrics.requests_with_anomalies.store(0, Ordering::Relaxed);

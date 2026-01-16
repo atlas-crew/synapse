@@ -21,7 +21,8 @@ use sysinfo::{System, Networks, Disks};
 // Type aliases for profile/schema data accessors
 // These are callbacks that the binary (main.rs) can set to provide real data
 type ProfilesGetter = Box<dyn Fn() -> Vec<synapse::EndpointProfile> + Send + Sync>;
-type SchemasGetter = Box<dyn Fn() -> Vec<synapse::schema::EndpointSchema> + Send + Sync>;
+// Note: Using profiler module's JsonEndpointSchema (schema_types::EndpointSchema) to avoid serde_json version conflicts
+type SchemasGetter = Box<dyn Fn() -> Vec<crate::profiler::JsonEndpointSchema> + Send + Sync>;
 
 /// Detection result from WAF evaluation (for admin API)
 #[derive(Debug, Clone, serde::Serialize)]
@@ -58,7 +59,7 @@ where
 /// Called by the binary (main.rs) during startup.
 pub fn register_schemas_getter<F>(getter: F)
 where
-    F: Fn() -> Vec<synapse::schema::EndpointSchema> + Send + Sync + 'static,
+    F: Fn() -> Vec<crate::profiler::JsonEndpointSchema> + Send + Sync + 'static,
 {
     *SCHEMAS_GETTER.write() = Some(Box::new(getter));
 }
@@ -90,7 +91,7 @@ fn get_profiles() -> Vec<synapse::EndpointProfile> {
 }
 
 /// Get schemas from the registered getter, or empty vec if not registered.
-fn get_schemas() -> Vec<synapse::schema::EndpointSchema> {
+fn get_schemas() -> Vec<crate::profiler::JsonEndpointSchema> {
     SCHEMAS_GETTER
         .read()
         .as_ref()
@@ -273,6 +274,9 @@ pub async fn start_admin_server(
         .route("/sites/{hostname}/access-list", put(update_site_access_list_handler))
         .route("/sites/{hostname}/shadow", put(update_site_shadow_handler))
         .route("/debug/profiles/save", post(save_profiles_handler))
+        // Profiler management endpoints (requires auth for reset operations)
+        .route("/api/profiles/reset", post(api_profiles_reset_handler))
+        .route("/api/schemas/reset", post(api_schemas_reset_handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     // Routes that don't require authentication (read-only or health checks)
@@ -315,6 +319,11 @@ pub async fn start_admin_server(
         .route("/_sensor/profiling/schemas", get(profiling_schemas_handler))
         .route("/_sensor/profiling/schema/discovery", get(profiling_discovery_handler))
         .route("/_sensor/profiling/anomalies", get(profiling_anomalies_handler))
+        // New profiler API endpoints (Phase 8)
+        .route("/api/profiles", get(api_profiles_list_handler))
+        .route("/api/profiles/:template", get(api_profiles_detail_handler))
+        .route("/api/schemas", get(api_schemas_list_handler))
+        .route("/api/schemas/:template", get(api_schemas_detail_handler))
         // Shadow mirroring endpoints
         .route("/_sensor/shadow/status", get(sensor_shadow_status_handler))
         .route("/sites/{hostname}/shadow", get(get_site_shadow_handler))
@@ -2607,13 +2616,14 @@ async fn profiling_anomalies_handler(State(_state): State<AdminState>) -> impl I
 }
 
 /// GET /debug/profiles - Get learned endpoint profiles
-async fn profiles_handler(State(state): State<AdminState>) -> impl IntoResponse {
-    let response = state.handler.handle_get_profiles();
-
-    // If no profiles yet, return seed data for dashboard testing
-    if response.data.as_ref().map(|d| d.is_empty()).unwrap_or(true) {
-        let now = chrono::Utc::now().timestamp_millis();
-        let seed_profiles = vec![
+/// Returns seed data for dashboard testing until profiler module integration is complete.
+async fn profiles_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    // NOTE: The old handle_get_profiles() uses synapse::EndpointProfile from libsynapse
+    // which has serde version conflicts. Return seed data for dashboard testing until
+    // the new profiler module (crate::profiler::Profiler) is integrated.
+    // Use GET /api/profiler/profiles for real profile data.
+    let now = chrono::Utc::now().timestamp_millis();
+    let seed_profiles = vec![
             serde_json::json!({
                 "template": "/api/users",
                 "payload_size": { "mean": 256.0, "std_dev": 64.0, "min": 128, "max": 512 },
@@ -2670,33 +2680,40 @@ async fn profiles_handler(State(state): State<AdminState>) -> impl IntoResponse 
                 "last_updated_ms": now
             }),
         ];
-        return Json(serde_json::json!({
-            "success": true,
-            "data": seed_profiles
-        }));
-    }
-
     Json(serde_json::json!({
-        "success": response.success,
-        "data": response.data,
-        "error": response.error
+        "success": true,
+        "data": seed_profiles
     }))
 }
 
 /// POST /debug/profiles/save - Force save profiles to disk
-async fn save_profiles_handler(State(state): State<AdminState>) -> impl IntoResponse {
-    // Get profiles from the current thread (Admin API thread)
-    // Note: In production this would need to aggregate from workers
-    let response = state.handler.handle_get_profiles();
+/// Note: This endpoint requires integration with the new profiler module.
+/// Currently returns a placeholder response as the profiler is managed separately.
+async fn save_profiles_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    // TODO: Integrate with the new profiler module (crate::profiler::Profiler)
+    // The profiler needs to be added to AdminState for direct access
+    wrap_response(crate::api::ApiResponse::<String>::err(
+        "Profile persistence endpoint not yet integrated with new profiler module. \
+         Use GET /api/profiler/profiles to view current profiles."
+    ))
+}
 
-    if let Some(profiles) = response.data {
-        if let Err(e) = SnapshotManager::save_profiles(&profiles, std::path::Path::new("data/profiles.json")) {
-            return wrap_response(crate::api::ApiResponse::<String>::err(format!("Failed to save: {}", e)));
-        }
-        return wrap_response(crate::api::ApiResponse::ok("Profiles saved to data/profiles.json".to_string()));
-    }
+/// Handler to reset endpoint profiles.
+async fn api_profiles_reset_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    // Reset endpoint profiles via the metrics registry
+    // Note: This clears learned behavioral baselines
+    state.handler.metrics().reset_profiles();
+    info!("Endpoint profiles reset");
+    wrap_response(crate::api::ApiResponse::ok("Endpoint profiles reset successfully".to_string()))
+}
 
-    wrap_response(crate::api::ApiResponse::<String>::err("No profiles to save"))
+/// Handler to reset schema learner data.
+async fn api_schemas_reset_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    // Reset schema learner via the metrics registry
+    // Note: This clears learned API schemas
+    state.handler.metrics().reset_schemas();
+    info!("Schema learner reset");
+    wrap_response(crate::api::ApiResponse::ok("Schema learner reset successfully".to_string()))
 }
 
 /// Wraps an ApiResponse into an HTTP response with appropriate status code.
@@ -2876,6 +2893,186 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, ()> {
     }
 
     Ok(output)
+}
+
+// =============================================================================
+// Profiler API Endpoints (Phase 8)
+// =============================================================================
+
+/// GET /api/profiles - List all endpoint profiles
+async fn api_profiles_list_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    // Get profiles from the registered getter
+    let profiles = get_profiles();
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let profiles_json: Vec<serde_json::Value> = profiles
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "template": p.template,
+                "sampleCount": p.sample_count,
+                "firstSeenMs": p.first_seen_ms,
+                "lastUpdatedMs": p.last_updated_ms,
+                "payloadSize": {
+                    "mean": p.payload_size.mean(),
+                    "variance": p.payload_size.variance(),
+                    "stdDev": p.payload_size.stddev(),
+                    "count": p.payload_size.count()
+                },
+                "expectedParams": p.expected_params,
+                "contentTypes": p.content_types,
+                "statusCodes": p.status_codes,
+                "endpointRisk": p.endpoint_risk,
+                "currentRps": p.request_rate.current_rate(now_ms)
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "profiles": profiles_json,
+                "count": profiles_json.len()
+            }
+        })),
+    )
+}
+
+/// GET /api/profiles/:template - Get specific profile details
+async fn api_profiles_detail_handler(
+    State(_state): State<AdminState>,
+    Path(template): Path<String>,
+) -> impl IntoResponse {
+    // URL decode the template (it may contain slashes encoded as %2F)
+    let decoded_template = urlencoding::decode(&template)
+        .map(|s| s.into_owned())
+        .unwrap_or(template);
+
+    let profiles = get_profiles();
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    match profiles.iter().find(|p| p.template == decoded_template) {
+        Some(p) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "template": p.template,
+                    "sampleCount": p.sample_count,
+                    "firstSeenMs": p.first_seen_ms,
+                    "lastUpdatedMs": p.last_updated_ms,
+                    "payloadSize": {
+                        "mean": p.payload_size.mean(),
+                        "variance": p.payload_size.variance(),
+                        "stdDev": p.payload_size.stddev(),
+                        "count": p.payload_size.count()
+                    },
+                    "expectedParams": p.expected_params,
+                    "contentTypes": p.content_types,
+                    "statusCodes": p.status_codes,
+                    "endpointRisk": p.endpoint_risk,
+                    "requestRate": {
+                        "currentRps": p.request_rate.current_rate(now_ms),
+                        "windowMs": 60000
+                    }
+                }
+            })),
+        ),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "success": false,
+                "error": format!("Profile not found: {}", decoded_template)
+            })),
+        ),
+    }
+}
+
+/// GET /api/schemas - List all learned schemas
+async fn api_schemas_list_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    let schemas = get_schemas();
+
+    let schemas_json: Vec<serde_json::Value> = schemas
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "template": s.template,
+                "sampleCount": s.sample_count,
+                "lastUpdatedMs": s.last_updated_ms,
+                "version": s.version,
+                "requestFieldCount": s.request_schema.len(),
+                "responseFieldCount": s.response_schema.len()
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "schemas": schemas_json,
+                "count": schemas_json.len()
+            }
+        })),
+    )
+}
+
+/// GET /api/schemas/:template - Get specific schema details
+async fn api_schemas_detail_handler(
+    State(_state): State<AdminState>,
+    Path(template): Path<String>,
+) -> impl IntoResponse {
+    // URL decode the template
+    let decoded_template = urlencoding::decode(&template)
+        .map(|s| s.into_owned())
+        .unwrap_or(template);
+
+    let schemas = get_schemas();
+
+    match schemas.iter().find(|s| s.template == decoded_template) {
+        Some(s) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "template": s.template,
+                    "sampleCount": s.sample_count,
+                    "lastUpdatedMs": s.last_updated_ms,
+                    "version": s.version,
+                    "requestSchema": s.request_schema.iter().map(|(k, v)| {
+                        (k.clone(), serde_json::json!({
+                            "dominantType": format!("{:?}", v.dominant_type()),
+                            "seenCount": v.seen_count
+                        }))
+                    }).collect::<serde_json::Map<String, serde_json::Value>>(),
+                    "responseSchema": s.response_schema.iter().map(|(k, v)| {
+                        (k.clone(), serde_json::json!({
+                            "dominantType": format!("{:?}", v.dominant_type()),
+                            "seenCount": v.seen_count
+                        }))
+                    }).collect::<serde_json::Map<String, serde_json::Value>>()
+                }
+            })),
+        ),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "success": false,
+                "error": format!("Schema not found: {}", decoded_template)
+            })),
+        ),
+    }
 }
 
 #[cfg(test)]

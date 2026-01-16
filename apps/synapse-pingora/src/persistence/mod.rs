@@ -8,10 +8,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use log::{error, info, warn};
-use synapse::Synapse;
+use std::time::Duration;
+use log::{error, info};
 use tokio::time;
+
+use crate::profiler::EndpointProfile;
 
 /// Configuration for persistence.
 #[derive(Debug, Clone)]
@@ -50,7 +51,7 @@ impl SnapshotManager {
     /// * `fetch_profiles` - A closure that returns the current profiles snapshot.
     pub fn start_background_saver<F>(self: Arc<Self>, fetch_profiles: F)
     where
-        F: Fn() -> Vec<synapse::EndpointProfile> + Send + Sync + 'static,
+        F: Fn() -> Vec<EndpointProfile> + Send + Sync + 'static,
     {
         let config = self.config.clone();
         
@@ -95,7 +96,7 @@ impl SnapshotManager {
     /// Save profiles to disk (Synchronous/Blocking).
     ///
     /// Use this within `spawn_blocking` to avoid stalling the async runtime.
-    pub fn save_profiles(profiles: &[synapse::EndpointProfile], path: &Path) -> std::io::Result<()> {
+    pub fn save_profiles(profiles: &[EndpointProfile], path: &Path) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(profiles)?;
         
         // Write to temp file then rename for atomic write (prevents corruption on crash)
@@ -106,12 +107,12 @@ impl SnapshotManager {
     }
 
     /// Load profiles from disk (Synchronous/Blocking).
-    pub fn load_profiles(path: &Path) -> std::io::Result<Vec<synapse::EndpointProfile>> {
+    pub fn load_profiles(path: &Path) -> std::io::Result<Vec<EndpointProfile>> {
         if !path.exists() {
             return Ok(Vec::new());
         }
         let json = fs::read_to_string(path)?;
-        let profiles: Vec<synapse::EndpointProfile> = serde_json::from_str(&json)?;
+        let profiles: Vec<EndpointProfile> = serde_json::from_str(&json)?;
         Ok(profiles)
     }
 }

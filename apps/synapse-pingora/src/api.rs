@@ -181,6 +181,24 @@ impl ApiHandler {
         ApiResponse::ok(Vec::new())
     }
 
+    /// Handles POST /api/profiles/reset request.
+    /// Clears all learned endpoint behavioral baselines.
+    pub fn handle_reset_profiles(&self) {
+        // Reset profiling metrics in the registry
+        // The actual profile store reset will be handled by the Profiler in pipeline context
+        self.metrics.reset_profiles();
+        tracing::info!("Endpoint profiles reset via API");
+    }
+
+    /// Handles POST /api/schemas/reset request.
+    /// Clears all learned API schemas from the schema learner.
+    pub fn handle_reset_schemas(&self) {
+        // Reset schema metrics in the registry
+        // Full schema learner reset requires pipeline access
+        self.metrics.reset_schemas();
+        tracing::info!("Schema learner reset via API");
+    }
+
     // =========================================================================
     // CRUD Mutation Handlers (Phase 5)
     // =========================================================================

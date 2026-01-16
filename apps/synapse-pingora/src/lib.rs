@@ -75,6 +75,9 @@ pub mod interrogator;
 // Phase 7: Shadow Mirroring (Honeypot Integration)
 pub mod shadow;
 
+// Phase 8: API Profiler (Behavioral Learning)
+pub mod profiler;
+
 // Dashboard support
 pub mod block_log;
 
@@ -153,6 +156,26 @@ pub use shadow::{
     ShadowMirrorClient, ShadowMirrorError, ShadowClientStats,
     MirrorPayload, RateLimiter as ShadowRateLimiter, RateLimiterStats as ShadowRateLimiterStats,
 };
+
+// Re-export profiler types
+pub use profiler::{
+    Profiler, EndpointProfile, EndpointSchema,
+    Distribution, PercentilesTracker, RateTracker,
+    AnomalyResult, AnomalySignal, AnomalySignalType,
+    // Schema learning types (ported from libsynapse)
+    SchemaLearner, SchemaLearnerConfig, SchemaLearnerStats,
+    ProfileStore, ProfileStoreConfig, ProfileStoreMetrics, SegmentCardinality,
+    JsonEndpointSchema, FieldSchema, FieldType, PatternType,
+    SchemaViolation, ViolationSeverity, ViolationType,
+    detect_pattern, matches_pattern,
+    // Header profiling types (W4.1 HeaderProfiler)
+    HeaderProfiler, HeaderProfilerStats,
+    HeaderAnomaly, HeaderAnomalyResult, HeaderBaseline, ValueStats,
+    shannon_entropy, normalized_entropy, is_entropy_anomaly, entropy_z_score,
+};
+
+// Re-export profiler config
+pub use config::ProfilerConfig;
 
 // ============================================================================
 // Integration Tests: ActorManager + SessionManager Integration

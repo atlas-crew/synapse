@@ -220,6 +220,46 @@ pub struct SiteYamlConfig {
     pub headers: Option<HeaderConfig>,
 }
 
+/// Profiler configuration for endpoint behavior learning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfilerConfig {
+    /// Whether profiling is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Maximum number of endpoint profiles to maintain
+    #[serde(default = "default_max_profiles")]
+    pub max_profiles: usize,
+    /// Maximum number of learned schemas to maintain
+    #[serde(default = "default_max_schemas")]
+    pub max_schemas: usize,
+    /// Minimum samples required before validating against profile
+    #[serde(default = "default_min_samples")]
+    pub min_samples_for_validation: u32,
+}
+
+fn default_max_profiles() -> usize {
+    1000
+}
+
+fn default_max_schemas() -> usize {
+    500
+}
+
+fn default_min_samples() -> u32 {
+    100
+}
+
+impl Default for ProfilerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_profiles: default_max_profiles(),
+            max_schemas: default_max_schemas(),
+            min_samples_for_validation: default_min_samples(),
+        }
+    }
+}
+
 /// Complete configuration file structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigFile {
@@ -231,6 +271,9 @@ pub struct ConfigFile {
     /// Global rate limiting
     #[serde(default)]
     pub rate_limit: RateLimitConfig,
+    /// Profiler configuration
+    #[serde(default)]
+    pub profiler: ProfilerConfig,
 }
 
 /// Errors that can occur during configuration loading.
