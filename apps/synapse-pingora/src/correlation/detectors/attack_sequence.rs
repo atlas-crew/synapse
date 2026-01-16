@@ -3,15 +3,16 @@
 //! Identifies coordinated attacks where multiple IPs send identical
 //! or highly similar attack payloads. Weight: 50 (highest signal).
 
-use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+use dashmap::DashSet;
 
 use crate::correlation::{
     FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
 };
 use super::{Detector, DetectorResult};
+use super::common::TimeWindowedIndex;
 
 /// Configuration for attack sequence detection
 #[derive(Debug, Clone)]
@@ -22,6 +23,12 @@ pub struct AttackSequenceConfig {
     pub window: Duration,
     /// Minimum payload similarity threshold (0.0 to 1.0)
     pub similarity_threshold: f64,
+    /// Base confidence multiplier for confidence calculation (0.0 to 1.0)
+    pub base_confidence: f64,
+    /// Divisor for scaling confidence by IP count
+    pub confidence_scale_divisor: f64,
+    /// Maximum entries per payload hash (0 = unlimited)
+    pub max_entries_per_hash: usize,
 }
 
 impl Default for AttackSequenceConfig {
@@ -30,6 +37,9 @@ impl Default for AttackSequenceConfig {
             min_ips: 2,
             window: Duration::from_secs(300), // 5 minutes
             similarity_threshold: 0.95,
+            base_confidence: 0.9,
+            confidence_scale_divisor: 10.0,
+            max_entries_per_hash: 1000,
         }
     }
 }
@@ -50,60 +60,38 @@ pub struct AttackPayload {
 /// Detects campaigns based on shared attack payloads
 pub struct AttackSequenceDetector {
     config: AttackSequenceConfig,
-    /// Payload hash -> (IPs, timestamp)
-    payload_index: RwLock<HashMap<String, Vec<(IpAddr, Instant)>>>,
+    /// Payload hash -> IPs (using common TimeWindowedIndex)
+    payload_index: TimeWindowedIndex<String, IpAddr>,
     /// Already detected payload groups
-    detected: RwLock<HashSet<String>>,
+    detected: DashSet<String>,
 }
 
 impl AttackSequenceDetector {
     pub fn new(config: AttackSequenceConfig) -> Self {
+        let payload_index = TimeWindowedIndex::new(config.window, config.max_entries_per_hash);
         Self {
             config,
-            payload_index: RwLock::new(HashMap::new()),
-            detected: RwLock::new(HashSet::new()),
+            payload_index,
+            detected: DashSet::new(),
         }
     }
 
     /// Record an attack payload observation
     pub fn record_attack(&self, ip: IpAddr, payload: AttackPayload) {
-        let mut index = self.payload_index.write().unwrap();
-        let entry = index.entry(payload.payload_hash).or_default();
-        entry.push((ip, payload.timestamp));
-
-        // Cleanup old entries
-        let cutoff = Instant::now() - self.config.window;
-        entry.retain(|(_, ts)| *ts > cutoff);
+        self.payload_index.insert_with_timestamp(payload.payload_hash, ip, payload.timestamp);
     }
 
     /// Get IPs sharing a specific payload
     pub fn get_ips_for_payload(&self, payload_hash: &str) -> Vec<IpAddr> {
-        let index = self.payload_index.read().unwrap();
-        index.get(payload_hash)
-            .map(|entries| entries.iter().map(|(ip, _)| *ip).collect::<HashSet<_>>().into_iter().collect())
-            .unwrap_or_default()
+        self.payload_index.get_unique(&payload_hash.to_string())
     }
 
     /// Get groups of IPs sharing payloads above threshold
     fn get_correlated_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
-        let index = self.payload_index.read().unwrap();
-        let detected = self.detected.read().unwrap();
-        let cutoff = Instant::now() - self.config.window;
-
-        index.iter()
-            .filter(|(hash, _)| !detected.contains(*hash))
-            .filter_map(|(hash, entries)| {
-                let recent_ips: HashSet<IpAddr> = entries.iter()
-                    .filter(|(_, ts)| *ts > cutoff)
-                    .map(|(ip, _)| *ip)
-                    .collect();
-
-                if recent_ips.len() >= self.config.min_ips {
-                    Some((hash.clone(), recent_ips.into_iter().collect()))
-                } else {
-                    None
-                }
-            })
+        self.payload_index
+            .get_groups_with_min_unique_count(self.config.min_ips)
+            .into_iter()
+            .filter(|(hash, _)| !self.detected.contains(hash))
             .collect()
     }
 }
@@ -116,7 +104,7 @@ impl Detector for AttackSequenceDetector {
         let mut updates = Vec::new();
 
         for (payload_hash, ips) in groups {
-            let confidence = (ips.len() as f64 / 10.0).min(1.0) * 0.9;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!("attack-seq-{}", &payload_hash[..8.min(payload_hash.len())])),
@@ -134,18 +122,18 @@ impl Detector for AttackSequenceDetector {
             });
 
             // Mark as detected
-            self.detected.write().unwrap().insert(payload_hash);
+            self.detected.insert(payload_hash);
         }
 
         Ok(updates)
     }
 
     fn should_trigger(&self, ip: &IpAddr, _index: &FingerprintIndex) -> bool {
-        let index = self.payload_index.read().unwrap();
-        index.values().any(|entries| {
-            entries.iter().filter(|(entry_ip, _)| entry_ip == ip).count() > 0
-                && entries.len() >= self.config.min_ips - 1
-        })
+        // Check if this IP is part of any payload group that's close to threshold
+        self.payload_index.any_key_has_value_with_min_count(
+            |entry_ip| entry_ip == ip,
+            self.config.min_ips.saturating_sub(1).max(1),
+        )
     }
 
     fn scan_interval_ms(&self) -> u64 { 3000 } // 3 seconds

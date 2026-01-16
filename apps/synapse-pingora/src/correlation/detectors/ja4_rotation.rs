@@ -77,6 +77,38 @@ pub struct RotationConfig {
     /// When true, combined fingerprint changes also count toward rotation.
     /// Default: true
     pub track_combined: bool,
+
+    /// Cleanup interval in seconds for automatic history cleanup.
+    /// Default: 30 seconds
+    pub cleanup_interval_secs: u64,
+
+    /// Time window for grouping IPs with similar rotation timing.
+    /// Default: 10 seconds
+    pub grouping_window: Duration,
+
+    /// Minimum group size for timing-based grouping.
+    /// Default: 2 IPs
+    pub min_group_size: usize,
+
+    /// Divisor for normalizing unique fingerprint count in confidence calculation.
+    /// Default: 5.0
+    pub confidence_divisor: f64,
+
+    /// Base confidence offset added to normalized value.
+    /// Default: 0.7
+    pub confidence_base: f64,
+
+    /// Minimum confidence value for clamp.
+    /// Default: 0.5
+    pub confidence_min: f64,
+
+    /// Maximum confidence value for clamp.
+    /// Default: 0.95
+    pub confidence_max: f64,
+
+    /// Scan interval in milliseconds.
+    /// Default: 10000 (10 seconds)
+    pub scan_interval_ms: u64,
 }
 
 impl Default for RotationConfig {
@@ -85,6 +117,14 @@ impl Default for RotationConfig {
             min_fingerprints: 3,
             window: Duration::from_secs(60),
             track_combined: true,
+            cleanup_interval_secs: 30,
+            grouping_window: Duration::from_secs(10),
+            min_group_size: 2,
+            confidence_divisor: 5.0,
+            confidence_base: 0.7,
+            confidence_min: 0.5,
+            confidence_max: 0.95,
+            scan_interval_ms: 10000,
         }
     }
 }
@@ -188,8 +228,6 @@ pub struct Ja4RotationDetector {
     history: RwLock<HashMap<IpAddr, FingerprintHistory>>,
     /// IPs already flagged as rotating.
     flagged: RwLock<HashSet<IpAddr>>,
-    /// Cleanup interval in seconds.
-    cleanup_interval_secs: u64,
 }
 
 impl Ja4RotationDetector {
@@ -199,7 +237,6 @@ impl Ja4RotationDetector {
             config,
             history: RwLock::new(HashMap::new()),
             flagged: RwLock::new(HashSet::new()),
-            cleanup_interval_secs: 30,
         }
     }
 
@@ -232,7 +269,7 @@ impl Ja4RotationDetector {
         entry.add(fingerprint);
 
         // Periodic cleanup for this IP
-        if entry.needs_cleanup(self.cleanup_interval_secs) {
+        if entry.needs_cleanup(self.config.cleanup_interval_secs) {
             entry.cleanup(self.config.window);
         }
 
@@ -401,8 +438,7 @@ impl Ja4RotationDetector {
         // Sort by first seen time
         ip_first_seen.sort_by_key(|(_, ts)| *ts);
 
-        // Group IPs that started within 10 seconds of each other
-        let grouping_window = Duration::from_secs(10);
+        // Group IPs that started within the configured grouping window
         let mut groups: Vec<Vec<IpAddr>> = Vec::new();
         let mut current_group: Vec<IpAddr> = Vec::new();
         let mut group_start: Option<Instant> = None;
@@ -414,10 +450,10 @@ impl Ja4RotationDetector {
                     current_group.push(ip);
                 }
                 Some(start) => {
-                    if first_seen.duration_since(start) <= grouping_window {
+                    if first_seen.duration_since(start) <= self.config.grouping_window {
                         current_group.push(ip);
                     } else {
-                        if current_group.len() >= 2 {
+                        if current_group.len() >= self.config.min_group_size {
                             groups.push(std::mem::take(&mut current_group));
                         } else {
                             current_group.clear();
@@ -430,7 +466,7 @@ impl Ja4RotationDetector {
         }
 
         // Don't forget the last group
-        if current_group.len() >= 2 {
+        if current_group.len() >= self.config.min_group_size {
             groups.push(current_group);
         }
 
@@ -483,8 +519,8 @@ impl Detector for Ja4RotationDetector {
                     .sum::<f64>()
                     / ip_count as f64;
 
-                let confidence = ((avg_unique - self.config.min_fingerprints as f64) / 5.0 + 0.7)
-                    .clamp(0.5, 0.95);
+                let confidence = ((avg_unique - self.config.min_fingerprints as f64) / self.config.confidence_divisor + self.config.confidence_base)
+                    .clamp(self.config.confidence_min, self.config.confidence_max);
 
                 CampaignUpdate {
                     campaign_id: None,
@@ -519,7 +555,7 @@ impl Detector for Ja4RotationDetector {
     }
 
     fn scan_interval_ms(&self) -> u64 {
-        10000 // 10 seconds - rotation is a slower pattern
+        self.config.scan_interval_ms
     }
 }
 

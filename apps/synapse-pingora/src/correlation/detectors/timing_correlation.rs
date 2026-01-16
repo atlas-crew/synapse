@@ -3,10 +3,11 @@
 //! Identifies botnets and coordinated attacks by detecting
 //! synchronized request timing patterns. Weight: 25.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::IpAddr;
-use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+use dashmap::{DashMap, DashSet};
 
 use crate::correlation::{
     FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
@@ -24,6 +25,10 @@ pub struct TimingConfig {
     pub min_bucket_hits: usize,
     /// Time window for analysis
     pub window: Duration,
+    /// Base confidence multiplier for confidence calculation (0.0 to 1.0)
+    pub base_confidence: f64,
+    /// Divisor for scaling confidence by IP count
+    pub confidence_scale_divisor: f64,
 }
 
 impl Default for TimingConfig {
@@ -33,6 +38,8 @@ impl Default for TimingConfig {
             bucket_size: Duration::from_millis(100), // 100ms buckets
             min_bucket_hits: 5,
             window: Duration::from_secs(60),
+            base_confidence: 0.7,
+            confidence_scale_divisor: 10.0,
         }
     }
 }
@@ -41,8 +48,8 @@ impl Default for TimingConfig {
 pub struct TimingCorrelationDetector {
     config: TimingConfig,
     /// Time bucket -> IPs that made requests in that bucket
-    timing_buckets: RwLock<HashMap<u64, Vec<(IpAddr, Instant)>>>,
-    detected: RwLock<HashSet<u64>>,
+    timing_buckets: DashMap<u64, Vec<(IpAddr, Instant)>>,
+    detected: DashSet<u64>,
     start_time: Instant,
 }
 
@@ -50,8 +57,8 @@ impl TimingCorrelationDetector {
     pub fn new(config: TimingConfig) -> Self {
         Self {
             config,
-            timing_buckets: RwLock::new(HashMap::new()),
-            detected: RwLock::new(HashSet::new()),
+            timing_buckets: DashMap::new(),
+            detected: DashSet::new(),
             start_time: Instant::now(),
         }
     }
@@ -66,22 +73,24 @@ impl TimingCorrelationDetector {
     pub fn record_request(&self, ip: IpAddr) {
         let now = Instant::now();
         let bucket = self.bucket_id(now);
-
-        let mut buckets = self.timing_buckets.write().unwrap();
-        buckets.entry(bucket).or_default().push((ip, now));
-
-        // Cleanup old buckets
         let cutoff_bucket = self.bucket_id(now - self.config.window);
-        buckets.retain(|&b, _| b >= cutoff_bucket);
+
+        self.timing_buckets
+            .entry(bucket)
+            .and_modify(|entry| entry.push((ip, now)))
+            .or_insert_with(|| vec![(ip, now)]);
+
+        // Cleanup old buckets - iterate and remove stale entries
+        self.timing_buckets.retain(|&b, _| b >= cutoff_bucket);
     }
 
     fn get_correlated_groups(&self) -> Vec<(u64, Vec<IpAddr>)> {
-        let buckets = self.timing_buckets.read().unwrap();
-        let detected = self.detected.read().unwrap();
+        self.timing_buckets.iter()
+            .filter(|entry| !self.detected.contains(entry.key()))
+            .filter_map(|entry| {
+                let bucket = *entry.key();
+                let entries = entry.value();
 
-        buckets.iter()
-            .filter(|(bucket, _)| !detected.contains(bucket))
-            .filter_map(|(&bucket, entries)| {
                 let unique_ips: HashSet<IpAddr> = entries.iter().map(|(ip, _)| *ip).collect();
 
                 if unique_ips.len() >= self.config.min_ips
@@ -103,7 +112,7 @@ impl Detector for TimingCorrelationDetector {
         let mut updates = Vec::new();
 
         for (bucket, ips) in groups {
-            let confidence = (ips.len() as f64 / 10.0).min(1.0) * 0.7;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!("timing-{}", bucket)),
@@ -120,7 +129,7 @@ impl Detector for TimingCorrelationDetector {
                 ..Default::default()
             });
 
-            self.detected.write().unwrap().insert(bucket);
+            self.detected.insert(bucket);
         }
 
         Ok(updates)
@@ -130,9 +139,8 @@ impl Detector for TimingCorrelationDetector {
         // Check if current bucket has enough activity
         let now = Instant::now();
         let bucket = self.bucket_id(now);
-        let buckets = self.timing_buckets.read().unwrap();
 
-        buckets.get(&bucket)
+        self.timing_buckets.get(&bucket)
             .map(|entries| entries.len() >= self.config.min_bucket_hits - 1)
             .unwrap_or(false)
     }

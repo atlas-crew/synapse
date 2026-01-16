@@ -29,6 +29,9 @@ pub mod fingerprint_index;
 pub mod detectors;
 pub mod manager;
 
+#[cfg(test)]
+mod integration_tests;
+
 pub use campaign_state::{
     Campaign, CampaignError, CampaignStatus, CampaignStore, CampaignStoreStats,
     CampaignUpdate, CorrelationReason, CorrelationType,

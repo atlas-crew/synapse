@@ -3,10 +3,11 @@
 //! Identifies campaigns where multiple IPs use JWTs with identical
 //! structure or issuer claims. Weight: 45.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::IpAddr;
-use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+use dashmap::{DashMap, DashSet};
 
 use crate::correlation::{
     FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
@@ -54,6 +55,10 @@ pub struct AuthTokenConfig {
     pub min_ips: usize,
     /// Time window for correlation
     pub window: Duration,
+    /// Base confidence multiplier for confidence calculation (0.0 to 1.0)
+    pub base_confidence: f64,
+    /// Divisor for scaling confidence by IP count
+    pub confidence_scale_divisor: f64,
 }
 
 impl Default for AuthTokenConfig {
@@ -61,6 +66,8 @@ impl Default for AuthTokenConfig {
         Self {
             min_ips: 2,
             window: Duration::from_secs(600), // 10 minutes
+            base_confidence: 0.85,
+            confidence_scale_divisor: 8.0,
         }
     }
 }
@@ -69,30 +76,34 @@ impl Default for AuthTokenConfig {
 pub struct AuthTokenDetector {
     config: AuthTokenConfig,
     /// Token fingerprint hash -> (IP, timestamp)
-    token_index: RwLock<HashMap<String, Vec<(IpAddr, Instant)>>>,
+    token_index: DashMap<String, Vec<(IpAddr, Instant)>>,
     /// Already detected fingerprints
-    detected: RwLock<HashSet<String>>,
+    detected: DashSet<String>,
 }
 
 impl AuthTokenDetector {
     pub fn new(config: AuthTokenConfig) -> Self {
         Self {
             config,
-            token_index: RwLock::new(HashMap::new()),
-            detected: RwLock::new(HashSet::new()),
+            token_index: DashMap::new(),
+            detected: DashSet::new(),
         }
     }
 
     /// Record a token observation
     pub fn record_token(&self, ip: IpAddr, fingerprint: TokenFingerprint) {
         let hash = fingerprint.fingerprint_hash();
-        let mut index = self.token_index.write().unwrap();
-        let entry = index.entry(hash).or_default();
-        entry.push((ip, Instant::now()));
+        let now = Instant::now();
+        let cutoff = now - self.config.window;
 
-        // Cleanup old
-        let cutoff = Instant::now() - self.config.window;
-        entry.retain(|(_, ts)| *ts > cutoff);
+        self.token_index
+            .entry(hash)
+            .and_modify(|entry| {
+                entry.push((ip, now));
+                // Cleanup old
+                entry.retain(|(_, ts)| *ts > cutoff);
+            })
+            .or_insert_with(|| vec![(ip, now)]);
     }
 
     /// Record from raw JWT
@@ -106,20 +117,21 @@ impl AuthTokenDetector {
     }
 
     fn get_correlated_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
-        let index = self.token_index.read().unwrap();
-        let detected = self.detected.read().unwrap();
         let cutoff = Instant::now() - self.config.window;
 
-        index.iter()
-            .filter(|(hash, _)| !detected.contains(*hash))
-            .filter_map(|(hash, entries)| {
+        self.token_index.iter()
+            .filter(|entry| !self.detected.contains(entry.key()))
+            .filter_map(|entry| {
+                let hash = entry.key().clone();
+                let entries = entry.value();
+
                 let recent_ips: HashSet<IpAddr> = entries.iter()
                     .filter(|(_, ts)| *ts > cutoff)
                     .map(|(ip, _)| *ip)
                     .collect();
 
                 if recent_ips.len() >= self.config.min_ips {
-                    Some((hash.clone(), recent_ips.into_iter().collect()))
+                    Some((hash, recent_ips.into_iter().collect()))
                 } else {
                     None
                 }
@@ -136,7 +148,7 @@ impl Detector for AuthTokenDetector {
         let mut updates = Vec::new();
 
         for (token_hash, ips) in groups {
-            let confidence = (ips.len() as f64 / 8.0).min(1.0) * 0.85;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!("auth-token-{}", &token_hash[..8.min(token_hash.len())])),
@@ -153,15 +165,15 @@ impl Detector for AuthTokenDetector {
                 ..Default::default()
             });
 
-            self.detected.write().unwrap().insert(token_hash);
+            self.detected.insert(token_hash);
         }
 
         Ok(updates)
     }
 
     fn should_trigger(&self, ip: &IpAddr, _index: &FingerprintIndex) -> bool {
-        let index = self.token_index.read().unwrap();
-        index.values().any(|entries| {
+        self.token_index.iter().any(|entry| {
+            let entries = entry.value();
             entries.iter().any(|(entry_ip, _)| entry_ip == ip)
                 && entries.len() >= self.config.min_ips - 1
         })

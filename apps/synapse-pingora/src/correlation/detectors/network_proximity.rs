@@ -3,9 +3,10 @@
 //! Identifies IPs from the same ASN or /24 subnet.
 //! Weak signal alone but strengthens other correlations. Weight: 15.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::IpAddr;
-use std::sync::RwLock;
+
+use dashmap::{DashMap, DashSet};
 
 use crate::correlation::{
     FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
@@ -21,6 +22,12 @@ pub struct NetworkProximityConfig {
     pub check_subnet: bool,
     /// Consider same ASN (requires external lookup)
     pub check_asn: bool,
+    /// Base confidence multiplier for confidence calculation (0.0 to 1.0)
+    pub base_confidence: f64,
+    /// Divisor for scaling confidence by IP count
+    pub confidence_scale_divisor: f64,
+    /// Maximum confidence cap (network proximity is a weak signal)
+    pub max_confidence: f64,
 }
 
 impl Default for NetworkProximityConfig {
@@ -29,6 +36,9 @@ impl Default for NetworkProximityConfig {
             min_ips: 3,
             check_subnet: true,
             check_asn: false, // Disabled by default - requires external data
+            base_confidence: 0.6,
+            confidence_scale_divisor: 20.0,
+            max_confidence: 0.5,
         }
     }
 }
@@ -37,19 +47,19 @@ impl Default for NetworkProximityConfig {
 pub struct NetworkProximityDetector {
     config: NetworkProximityConfig,
     /// /24 subnet -> IPs in that subnet
-    subnet_index: RwLock<HashMap<String, HashSet<IpAddr>>>,
+    subnet_index: DashMap<String, HashSet<IpAddr>>,
     /// ASN -> IPs in that ASN
-    asn_index: RwLock<HashMap<u32, HashSet<IpAddr>>>,
-    detected_subnets: RwLock<HashSet<String>>,
+    asn_index: DashMap<u32, HashSet<IpAddr>>,
+    detected_subnets: DashSet<String>,
 }
 
 impl NetworkProximityDetector {
     pub fn new(config: NetworkProximityConfig) -> Self {
         Self {
             config,
-            subnet_index: RwLock::new(HashMap::new()),
-            asn_index: RwLock::new(HashMap::new()),
-            detected_subnets: RwLock::new(HashSet::new()),
+            subnet_index: DashMap::new(),
+            asn_index: DashMap::new(),
+            detected_subnets: DashSet::new(),
         }
     }
 
@@ -67,8 +77,14 @@ impl NetworkProximityDetector {
     /// Register an IP for proximity tracking
     pub fn register_ip(&self, ip: IpAddr) {
         if let Some(subnet) = Self::subnet_key(&ip) {
-            let mut index = self.subnet_index.write().unwrap();
-            index.entry(subnet).or_default().insert(ip);
+            self.subnet_index
+                .entry(subnet)
+                .and_modify(|ips| { ips.insert(ip); })
+                .or_insert_with(|| {
+                    let mut set = HashSet::new();
+                    set.insert(ip);
+                    set
+                });
         }
     }
 
@@ -77,27 +93,29 @@ impl NetworkProximityDetector {
         self.register_ip(ip);
 
         if self.config.check_asn {
-            let mut index = self.asn_index.write().unwrap();
-            index.entry(asn).or_default().insert(ip);
+            self.asn_index
+                .entry(asn)
+                .and_modify(|ips| { ips.insert(ip); })
+                .or_insert_with(|| {
+                    let mut set = HashSet::new();
+                    set.insert(ip);
+                    set
+                });
         }
     }
 
     fn get_subnet_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
-        let index = self.subnet_index.read().unwrap();
-        let detected = self.detected_subnets.read().unwrap();
-
-        index.iter()
-            .filter(|(subnet, _)| !detected.contains(*subnet))
-            .filter(|(_, ips)| ips.len() >= self.config.min_ips)
-            .map(|(subnet, ips)| (subnet.clone(), ips.iter().copied().collect()))
+        self.subnet_index.iter()
+            .filter(|entry| !self.detected_subnets.contains(entry.key()))
+            .filter(|entry| entry.value().len() >= self.config.min_ips)
+            .map(|entry| (entry.key().clone(), entry.value().iter().copied().collect()))
             .collect()
     }
 
     /// Get IPs in the same subnet as the given IP
     pub fn get_subnet_peers(&self, ip: &IpAddr) -> Vec<IpAddr> {
         if let Some(subnet) = Self::subnet_key(ip) {
-            let index = self.subnet_index.read().unwrap();
-            index.get(&subnet)
+            self.subnet_index.get(&subnet)
                 .map(|ips| ips.iter().filter(|&i| i != ip).copied().collect())
                 .unwrap_or_default()
         } else {
@@ -119,7 +137,7 @@ impl Detector for NetworkProximityDetector {
 
         for (subnet, ips) in groups {
             // Network proximity alone is weak - use lower confidence
-            let confidence = (ips.len() as f64 / 20.0).min(0.5) * 0.6;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(self.config.max_confidence) * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!("network-{}", subnet.replace('/', "-").replace('.', "-"))),
@@ -136,7 +154,7 @@ impl Detector for NetworkProximityDetector {
                 ..Default::default()
             });
 
-            self.detected_subnets.write().unwrap().insert(subnet);
+            self.detected_subnets.insert(subnet);
         }
 
         Ok(updates)

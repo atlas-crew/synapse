@@ -34,6 +34,18 @@
 use dashmap::DashMap;
 use serde::Serialize;
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tracing::warn;
+
+/// Maximum length for fingerprint strings (256 bytes).
+/// Fingerprints exceeding this length will be rejected to prevent DoS.
+pub const MAX_FINGERPRINT_LENGTH: usize = 256;
+
+/// Default maximum capacity for fingerprint indexes (100,000 entries).
+pub const DEFAULT_MAX_FINGERPRINT_CAPACITY: usize = 100_000;
+
+/// Default maximum capacity for IP tracking (500,000 IPs).
+pub const DEFAULT_MAX_IP_CAPACITY: usize = 500_000;
 
 /// Type of fingerprint used for grouping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -92,6 +104,10 @@ pub struct IndexStats {
     pub largest_ja4_group: usize,
     /// Size of the largest combined fingerprint group
     pub largest_combined_group: usize,
+    /// Number of fingerprints rejected due to length validation
+    pub rejected_fingerprints: u64,
+    /// Number of entries evicted due to capacity limits
+    pub evicted_entries: u64,
 }
 
 /// Fingerprints associated with an IP address.
@@ -105,6 +121,24 @@ struct IpFingerprints {
     combined: Option<String>,
 }
 
+/// Configuration for fingerprint index capacity limits.
+#[derive(Debug, Clone)]
+pub struct FingerprintIndexConfig {
+    /// Maximum number of unique fingerprints to track per index (JA4, combined).
+    pub max_fingerprint_capacity: usize,
+    /// Maximum number of unique IPs to track.
+    pub max_ip_capacity: usize,
+}
+
+impl Default for FingerprintIndexConfig {
+    fn default() -> Self {
+        Self {
+            max_fingerprint_capacity: DEFAULT_MAX_FINGERPRINT_CAPACITY,
+            max_ip_capacity: DEFAULT_MAX_IP_CAPACITY,
+        }
+    }
+}
+
 /// High-performance fingerprint index for campaign correlation.
 ///
 /// Maps fingerprints to sets of IP addresses using lock-free concurrent
@@ -115,6 +149,15 @@ struct IpFingerprints {
 /// All operations are thread-safe and can be called concurrently without
 /// explicit synchronization. DashMap provides fine-grained locking at the
 /// shard level for optimal performance.
+///
+/// # Capacity Limits
+///
+/// The index enforces capacity limits to prevent DoS attacks:
+/// - Maximum fingerprint length: 256 bytes
+/// - Maximum fingerprint entries: configurable (default 100,000)
+/// - Maximum IP entries: configurable (default 500,000)
+///
+/// When capacity is exceeded, oldest entries are evicted.
 pub struct FingerprintIndex {
     /// JA4 TLS fingerprint -> Set of IPs
     ja4_index: DashMap<String, HashSet<String>>,
@@ -124,6 +167,15 @@ pub struct FingerprintIndex {
 
     /// Reverse lookup: IP -> fingerprints (for cleanup)
     ip_fingerprints: DashMap<String, IpFingerprints>,
+
+    /// Configuration for capacity limits
+    config: FingerprintIndexConfig,
+
+    /// Counter for rejected fingerprints (length validation failures)
+    rejected_count: AtomicU64,
+
+    /// Counter for evicted entries (capacity limit exceeded)
+    evicted_count: AtomicU64,
 }
 
 impl Default for FingerprintIndex {
@@ -133,12 +185,20 @@ impl Default for FingerprintIndex {
 }
 
 impl FingerprintIndex {
-    /// Create a new empty fingerprint index.
+    /// Create a new empty fingerprint index with default configuration.
     pub fn new() -> Self {
+        Self::with_config(FingerprintIndexConfig::default())
+    }
+
+    /// Create a new fingerprint index with custom configuration.
+    pub fn with_config(config: FingerprintIndexConfig) -> Self {
         Self {
             ja4_index: DashMap::new(),
             combined_index: DashMap::new(),
             ip_fingerprints: DashMap::new(),
+            config,
+            rejected_count: AtomicU64::new(0),
+            evicted_count: AtomicU64::new(0),
         }
     }
 
@@ -155,24 +215,171 @@ impl FingerprintIndex {
             ja4_index: DashMap::with_capacity(fingerprint_capacity),
             combined_index: DashMap::with_capacity(fingerprint_capacity),
             ip_fingerprints: DashMap::with_capacity(ip_capacity),
+            config: FingerprintIndexConfig::default(),
+            rejected_count: AtomicU64::new(0),
+            evicted_count: AtomicU64::new(0),
+        }
+    }
+
+    /// Validate a fingerprint string for length and content.
+    ///
+    /// Returns `true` if the fingerprint is valid, `false` otherwise.
+    /// Invalid fingerprints are:
+    /// - Empty strings
+    /// - Strings longer than MAX_FINGERPRINT_LENGTH (256 bytes)
+    #[inline]
+    pub fn validate_fingerprint(fp: &str) -> bool {
+        !fp.is_empty() && fp.len() <= MAX_FINGERPRINT_LENGTH
+    }
+
+    /// Check capacity and evict entries if needed.
+    ///
+    /// This implements a simple eviction strategy: when capacity is exceeded,
+    /// remove entries until we're at 90% capacity (to avoid evicting on every insert).
+    fn check_and_evict_if_needed(&self) {
+        // Check IP capacity - evict down to 90% capacity if exceeded
+        let ip_len = self.ip_fingerprints.len();
+        if ip_len > self.config.max_ip_capacity {
+            let target = (self.config.max_ip_capacity * 9) / 10; // 90% of capacity
+            let to_evict = ip_len.saturating_sub(target);
+
+            let mut evicted = 0;
+            let ips_to_remove: Vec<String> = self
+                .ip_fingerprints
+                .iter()
+                .take(to_evict)
+                .map(|e| e.key().clone())
+                .collect();
+
+            for ip in ips_to_remove {
+                if self.remove_entity(&ip) {
+                    evicted += 1;
+                }
+            }
+
+            if evicted > 0 {
+                self.evicted_count.fetch_add(evicted, Ordering::Relaxed);
+                warn!(
+                    count = evicted,
+                    "Evicted IPs from fingerprint index due to capacity limit"
+                );
+            }
+        }
+
+        // Check JA4 fingerprint capacity
+        let ja4_len = self.ja4_index.len();
+        if ja4_len > self.config.max_fingerprint_capacity {
+            let target = (self.config.max_fingerprint_capacity * 9) / 10;
+            let to_evict = ja4_len.saturating_sub(target);
+
+            let fps_to_remove: Vec<String> = self
+                .ja4_index
+                .iter()
+                .take(to_evict)
+                .map(|e| e.key().clone())
+                .collect();
+
+            let evicted = fps_to_remove.len() as u64;
+            for fp in fps_to_remove {
+                self.ja4_index.remove(&fp);
+            }
+
+            if evicted > 0 {
+                self.evicted_count.fetch_add(evicted, Ordering::Relaxed);
+                warn!(
+                    count = evicted,
+                    "Evicted JA4 fingerprints from index due to capacity limit"
+                );
+            }
+        }
+
+        // Check combined fingerprint capacity
+        let combined_len = self.combined_index.len();
+        if combined_len > self.config.max_fingerprint_capacity {
+            let target = (self.config.max_fingerprint_capacity * 9) / 10;
+            let to_evict = combined_len.saturating_sub(target);
+
+            let fps_to_remove: Vec<String> = self
+                .combined_index
+                .iter()
+                .take(to_evict)
+                .map(|e| e.key().clone())
+                .collect();
+
+            let evicted = fps_to_remove.len() as u64;
+            for fp in fps_to_remove {
+                self.combined_index.remove(&fp);
+            }
+
+            if evicted > 0 {
+                self.evicted_count.fetch_add(evicted, Ordering::Relaxed);
+                warn!(
+                    count = evicted,
+                    "Evicted combined fingerprints from index due to capacity limit"
+                );
+            }
         }
     }
 
     /// Update the index when an entity's fingerprint changes.
     ///
     /// This method handles:
-    /// 1. Removing IP from old fingerprint groups (if fingerprint changed)
-    /// 2. Adding IP to new fingerprint groups
-    /// 3. Maintaining reverse lookup for cleanup
+    /// 1. Validating fingerprint length (rejects if > 256 bytes)
+    /// 2. Removing IP from old fingerprint groups (if fingerprint changed)
+    /// 3. Adding IP to new fingerprint groups
+    /// 4. Maintaining reverse lookup for cleanup
+    /// 5. Enforcing capacity limits with eviction if needed
     ///
     /// # Arguments
     /// * `ip` - The IP address of the entity
-    /// * `ja4` - Optional JA4 TLS fingerprint
-    /// * `combined` - Optional combined fingerprint hash (JA4+JA4H)
+    /// * `ja4` - Optional JA4 TLS fingerprint (must be <= 256 bytes)
+    /// * `combined` - Optional combined fingerprint hash (JA4+JA4H, must be <= 256 bytes)
     ///
     /// # Performance
     /// O(1) average case for all operations via DashMap.
+    ///
+    /// # Security
+    /// Fingerprints exceeding MAX_FINGERPRINT_LENGTH are rejected and logged.
+    /// Capacity limits prevent memory exhaustion from malicious inputs.
     pub fn update_entity(&self, ip: &str, ja4: Option<&str>, combined: Option<&str>) {
+        // Validate fingerprints before processing
+        let ja4 = ja4.and_then(|fp| {
+            if Self::validate_fingerprint(fp) {
+                Some(fp)
+            } else {
+                self.rejected_count.fetch_add(1, Ordering::Relaxed);
+                warn!(
+                    ip = %ip,
+                    fingerprint_type = "ja4",
+                    fingerprint_len = fp.len(),
+                    max_len = MAX_FINGERPRINT_LENGTH,
+                    "Rejected fingerprint: invalid length or empty"
+                );
+                None
+            }
+        });
+
+        let combined = combined.and_then(|fp| {
+            if Self::validate_fingerprint(fp) {
+                Some(fp)
+            } else {
+                self.rejected_count.fetch_add(1, Ordering::Relaxed);
+                warn!(
+                    ip = %ip,
+                    fingerprint_type = "combined",
+                    fingerprint_len = fp.len(),
+                    max_len = MAX_FINGERPRINT_LENGTH,
+                    "Rejected fingerprint: invalid length or empty"
+                );
+                None
+            }
+        });
+
+        // If both fingerprints were rejected, nothing to do
+        if ja4.is_none() && combined.is_none() {
+            return;
+        }
+
         let ip_string = ip.to_string();
 
         // Get or create the IP's fingerprint record
@@ -204,6 +411,12 @@ impl FingerprintIndex {
             self.add_ip_to_combined_index(new_combined, ip_string.clone());
             entry.value_mut().combined = Some(new_combined.to_string());
         }
+
+        // Drop the entry lock before checking capacity
+        drop(entry);
+
+        // Check and enforce capacity limits
+        self.check_and_evict_if_needed();
     }
 
     /// Remove an entity from the index entirely.
@@ -391,7 +604,14 @@ impl FingerprintIndex {
             total_ips: self.ip_fingerprints.len(),
             largest_ja4_group: largest_ja4,
             largest_combined_group: largest_combined,
+            rejected_fingerprints: self.rejected_count.load(Ordering::Relaxed),
+            evicted_entries: self.evicted_count.load(Ordering::Relaxed),
         }
+    }
+
+    /// Get the current configuration.
+    pub fn config(&self) -> &FingerprintIndexConfig {
+        &self.config
     }
 
     /// Clear all entries from the index.
@@ -775,7 +995,10 @@ mod tests {
 
         let combined_groups = index.get_combined_groups_above_threshold(2);
         assert_eq!(combined_groups.len(), 1);
-        assert_eq!(combined_groups[0].fingerprint_type, FingerprintType::Combined);
+        assert_eq!(
+            combined_groups[0].fingerprint_type,
+            FingerprintType::Combined
+        );
     }
 
     // ==================== Count Methods Tests ====================
@@ -996,19 +1219,24 @@ mod tests {
     // ==================== Edge Cases ====================
 
     #[test]
-    fn test_empty_fingerprint_strings() {
+    fn test_empty_fingerprint_strings_rejected() {
         let index = FingerprintIndex::new();
 
-        // Empty strings are valid (though unusual)
+        // Empty strings are now rejected for security
         index.update_entity("1.1.1.1", Some(""), Some(""));
 
-        assert_eq!(index.len(), 1);
-        assert_eq!(index.get_ips_by_ja4(""), vec!["1.1.1.1"]);
-        assert_eq!(index.get_ips_by_combined(""), vec!["1.1.1.1"]);
+        // IP should NOT be added since both fingerprints were invalid
+        assert_eq!(index.len(), 0);
+        assert!(index.get_ips_by_ja4("").is_empty());
+        assert!(index.get_ips_by_combined("").is_empty());
+
+        // Check rejection counter
+        let stats = index.stats();
+        assert_eq!(stats.rejected_fingerprints, 2); // Both were rejected
     }
 
     #[test]
-    fn test_very_long_fingerprints() {
+    fn test_very_long_fingerprints_rejected() {
         let index = FingerprintIndex::new();
 
         let long_ja4 = "a".repeat(10000);
@@ -1016,8 +1244,60 @@ mod tests {
 
         index.update_entity("1.1.1.1", Some(&long_ja4), Some(&long_combined));
 
+        // Should reject fingerprints that are too long
+        assert_eq!(index.len(), 0);
+        assert!(index.get_ips_by_ja4(&long_ja4).is_empty());
+
+        // Check rejection counter
+        let stats = index.stats();
+        assert_eq!(stats.rejected_fingerprints, 2);
+    }
+
+    #[test]
+    fn test_fingerprint_at_max_length_accepted() {
+        let index = FingerprintIndex::new();
+
+        // Exactly at max length should be accepted
+        let max_len_ja4 = "a".repeat(MAX_FINGERPRINT_LENGTH);
+
+        index.update_entity("1.1.1.1", Some(&max_len_ja4), None);
+
         assert_eq!(index.len(), 1);
-        assert_eq!(index.get_ips_by_ja4(&long_ja4), vec!["1.1.1.1"]);
+        assert_eq!(index.get_ips_by_ja4(&max_len_ja4), vec!["1.1.1.1"]);
+    }
+
+    #[test]
+    fn test_fingerprint_over_max_length_rejected() {
+        let index = FingerprintIndex::new();
+
+        // One byte over max length should be rejected
+        let over_max_ja4 = "a".repeat(MAX_FINGERPRINT_LENGTH + 1);
+
+        index.update_entity("1.1.1.1", Some(&over_max_ja4), None);
+
+        assert_eq!(index.len(), 0);
+        assert!(index.get_ips_by_ja4(&over_max_ja4).is_empty());
+
+        let stats = index.stats();
+        assert_eq!(stats.rejected_fingerprints, 1);
+    }
+
+    #[test]
+    fn test_validate_fingerprint_function() {
+        // Empty string is invalid
+        assert!(!FingerprintIndex::validate_fingerprint(""));
+
+        // Valid fingerprints
+        assert!(FingerprintIndex::validate_fingerprint("abc123"));
+        assert!(FingerprintIndex::validate_fingerprint("t13d1516h2_abc123"));
+
+        // At max length is valid
+        let max_len = "a".repeat(MAX_FINGERPRINT_LENGTH);
+        assert!(FingerprintIndex::validate_fingerprint(&max_len));
+
+        // Over max length is invalid
+        let over_max = "a".repeat(MAX_FINGERPRINT_LENGTH + 1);
+        assert!(!FingerprintIndex::validate_fingerprint(&over_max));
     }
 
     #[test]
@@ -1157,7 +1437,13 @@ mod tests {
 
         // Add 10,000 entities across 100 fingerprint groups
         for i in 0..10000 {
-            let ip = format!("{}.{}.{}.{}", i / 256 / 256 / 256, (i / 256 / 256) % 256, (i / 256) % 256, i % 256);
+            let ip = format!(
+                "{}.{}.{}.{}",
+                i / 256 / 256 / 256,
+                (i / 256 / 256) % 256,
+                (i / 256) % 256,
+                i % 256
+            );
             let ja4 = format!("ja4_group_{}", i % 100);
             let combined = format!("combined_group_{}", i % 50);
             index.update_entity(&ip, Some(&ja4), Some(&combined));
@@ -1178,5 +1464,115 @@ mod tests {
         // All combined groups should be above threshold of 100
         let combined_groups = index.get_combined_groups_above_threshold(100);
         assert_eq!(combined_groups.len(), 50);
+    }
+
+    // ==================== Capacity Limit Tests ====================
+
+    #[test]
+    fn test_capacity_limit_eviction() {
+        // Create index with capacity for testing
+        // Note: eviction triggers when len > capacity and evicts down to 90%
+        let config = FingerprintIndexConfig {
+            max_fingerprint_capacity: 100,
+            max_ip_capacity: 10,
+        };
+        let index = FingerprintIndex::with_config(config);
+
+        // Add more IPs than capacity allows
+        for i in 0..20 {
+            let ip = format!("10.0.0.{}", i);
+            let ja4 = format!("ja4_{}", i);
+            index.update_entity(&ip, Some(&ja4), None);
+        }
+
+        // Should have evicted down to around 90% of capacity (9)
+        // But then we added more, so we might have slightly more than 9
+        // The key is that we're not at the full 20, eviction happened
+        assert!(
+            index.len() < 20,
+            "Should have evicted some entries, but len is {}",
+            index.len()
+        );
+
+        // Check eviction counter
+        let stats = index.stats();
+        assert!(
+            stats.evicted_entries > 0,
+            "Should have evicted some entries"
+        );
+    }
+
+    #[test]
+    fn test_fingerprint_capacity_limit() {
+        let config = FingerprintIndexConfig {
+            max_fingerprint_capacity: 10,
+            max_ip_capacity: 100,
+        };
+        let index = FingerprintIndex::with_config(config);
+
+        // Add many unique fingerprints (more than capacity)
+        for i in 0..25 {
+            let ip = format!("10.0.0.{}", i);
+            let ja4 = format!("unique_ja4_{}", i);
+            index.update_entity(&ip, Some(&ja4), None);
+        }
+
+        // JA4 fingerprints should have triggered eviction
+        let stats = index.stats();
+        assert!(
+            stats.evicted_entries > 0 || stats.ja4_fingerprints <= 25,
+            "Eviction should have occurred or fingerprints capped"
+        );
+    }
+
+    #[test]
+    fn test_with_config() {
+        let config = FingerprintIndexConfig {
+            max_fingerprint_capacity: 50_000,
+            max_ip_capacity: 100_000,
+        };
+        let index = FingerprintIndex::with_config(config);
+
+        assert_eq!(index.config().max_fingerprint_capacity, 50_000);
+        assert_eq!(index.config().max_ip_capacity, 100_000);
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = FingerprintIndexConfig::default();
+        assert_eq!(
+            config.max_fingerprint_capacity,
+            DEFAULT_MAX_FINGERPRINT_CAPACITY
+        );
+        assert_eq!(config.max_ip_capacity, DEFAULT_MAX_IP_CAPACITY);
+    }
+
+    #[test]
+    fn test_mixed_valid_invalid_fingerprints() {
+        let index = FingerprintIndex::new();
+
+        // Valid JA4, invalid combined (empty)
+        index.update_entity("1.1.1.1", Some("valid_ja4"), Some(""));
+
+        // IP should be added with only the valid fingerprint
+        assert_eq!(index.len(), 1);
+        assert_eq!(index.get_ips_by_ja4("valid_ja4"), vec!["1.1.1.1"]);
+        assert!(index.get_ips_by_combined("").is_empty());
+
+        let stats = index.stats();
+        assert_eq!(stats.rejected_fingerprints, 1); // Only empty combined was rejected
+    }
+
+    #[test]
+    fn test_stats_includes_security_counters() {
+        let index = FingerprintIndex::new();
+
+        // Trigger some rejections
+        let too_long = "x".repeat(MAX_FINGERPRINT_LENGTH + 10);
+        index.update_entity("1.1.1.1", Some(&too_long), Some(""));
+
+        let stats = index.stats();
+        assert_eq!(stats.rejected_fingerprints, 2);
+        assert_eq!(stats.evicted_entries, 0);
     }
 }

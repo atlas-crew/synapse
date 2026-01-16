@@ -42,24 +42,47 @@ use crate::correlation::{
 
 use super::{Detector, DetectorError, DetectorResult};
 
+/// Configuration for shared fingerprint detection
+#[derive(Debug, Clone)]
+pub struct SharedFingerprintConfig {
+    /// Minimum number of IPs required to form a campaign
+    pub threshold: usize,
+    /// Base confidence score for detections (0.0-1.0)
+    pub base_confidence: f64,
+    /// Confidence bonus for combined fingerprints (JA4+JA4H)
+    pub combined_type_bonus: f64,
+    /// Confidence bonus per IP above threshold
+    pub size_bonus_per_ip: f64,
+    /// Maximum size bonus
+    pub max_size_bonus: f64,
+    /// Scan interval in milliseconds
+    pub scan_interval_ms: u64,
+}
+
+impl Default for SharedFingerprintConfig {
+    fn default() -> Self {
+        Self {
+            threshold: 3,
+            base_confidence: 0.85,
+            combined_type_bonus: 0.1,
+            size_bonus_per_ip: 0.02,
+            max_size_bonus: 0.05,
+            scan_interval_ms: 5000,
+        }
+    }
+}
+
 /// Detector for campaigns based on shared fingerprints.
 ///
 /// Identifies groups of IPs that share the same JA4 or combined fingerprint,
 /// which indicates coordinated attack tooling.
 pub struct SharedFingerprintDetector {
-    /// Minimum number of IPs required to form a campaign
-    threshold: usize,
+    /// Configuration for detection
+    config: SharedFingerprintConfig,
 
     /// Fingerprints that have already been processed into campaigns
     /// Prevents duplicate campaign creation for the same fingerprint group
     processed_fingerprints: RwLock<HashSet<String>>,
-
-    /// Confidence score assigned to shared fingerprint correlations
-    /// Higher for combined fingerprints (JA4+JA4H) than JA4 alone
-    base_confidence: f64,
-
-    /// Scan interval in milliseconds
-    scan_interval: u64,
 }
 
 impl SharedFingerprintDetector {
@@ -73,10 +96,11 @@ impl SharedFingerprintDetector {
     pub fn new(threshold: usize) -> Self {
         assert!(threshold >= 2, "Threshold must be at least 2 for correlation");
         Self {
-            threshold,
+            config: SharedFingerprintConfig {
+                threshold,
+                ..Default::default()
+            },
             processed_fingerprints: RwLock::new(HashSet::new()),
-            base_confidence: 0.85,
-            scan_interval: 5000,
         }
     }
 
@@ -89,10 +113,22 @@ impl SharedFingerprintDetector {
     pub fn with_config(threshold: usize, base_confidence: f64, scan_interval_ms: u64) -> Self {
         assert!(threshold >= 2, "Threshold must be at least 2 for correlation");
         Self {
-            threshold,
+            config: SharedFingerprintConfig {
+                threshold,
+                base_confidence: base_confidence.clamp(0.0, 1.0),
+                scan_interval_ms,
+                ..Default::default()
+            },
             processed_fingerprints: RwLock::new(HashSet::new()),
-            base_confidence: base_confidence.clamp(0.0, 1.0),
-            scan_interval: scan_interval_ms,
+        }
+    }
+
+    /// Create a detector with full configuration.
+    pub fn from_config(config: SharedFingerprintConfig) -> Self {
+        assert!(config.threshold >= 2, "Threshold must be at least 2 for correlation");
+        Self {
+            config,
+            processed_fingerprints: RwLock::new(HashSet::new()),
         }
     }
 
@@ -133,13 +169,14 @@ impl SharedFingerprintDetector {
     fn calculate_confidence(&self, fp_type: FingerprintType, group_size: usize) -> f64 {
         let type_bonus = match fp_type {
             FingerprintType::Ja4 => 0.0,
-            FingerprintType::Combined => 0.1, // Combined fingerprints are more specific
+            FingerprintType::Combined => self.config.combined_type_bonus,
         };
 
-        // Size bonus: +0.02 per IP above threshold, capped at +0.05
-        let size_bonus = ((group_size.saturating_sub(self.threshold)) as f64 * 0.02).min(0.05);
+        // Size bonus: configurable per IP above threshold, capped at configurable max
+        let size_bonus = ((group_size.saturating_sub(self.config.threshold)) as f64
+            * self.config.size_bonus_per_ip).min(self.config.max_size_bonus);
 
-        (self.base_confidence + type_bonus + size_bonus).min(1.0)
+        (self.config.base_confidence + type_bonus + size_bonus).min(1.0)
     }
 
     /// Create a campaign update for a new fingerprint group.
@@ -188,7 +225,7 @@ impl SharedFingerprintDetector {
         }
 
         // Skip if below threshold
-        if group.size < self.threshold {
+        if group.size < self.config.threshold {
             return None;
         }
 
@@ -205,7 +242,7 @@ impl Detector for SharedFingerprintDetector {
 
     fn analyze(&self, index: &FingerprintIndex) -> DetectorResult<Vec<CampaignUpdate>> {
         // Get all groups above threshold
-        let groups = index.get_groups_above_threshold(self.threshold);
+        let groups = index.get_groups_above_threshold(self.config.threshold);
 
         if groups.is_empty() {
             return Ok(Vec::new());
@@ -233,7 +270,7 @@ impl Detector for SharedFingerprintDetector {
         if let Some(ref ja4) = fingerprints.0 {
             if !self.is_processed(ja4) {
                 let count = index.count_ips_by_ja4(ja4);
-                if count >= self.threshold {
+                if count >= self.config.threshold {
                     return true;
                 }
             }
@@ -243,7 +280,7 @@ impl Detector for SharedFingerprintDetector {
         if let Some(ref combined) = fingerprints.1 {
             if !self.is_processed(combined) {
                 let count = index.count_ips_by_combined(combined);
-                if count >= self.threshold {
+                if count >= self.config.threshold {
                     return true;
                 }
             }
@@ -253,7 +290,7 @@ impl Detector for SharedFingerprintDetector {
     }
 
     fn scan_interval_ms(&self) -> u64 {
-        self.scan_interval
+        self.config.scan_interval_ms
     }
 }
 
@@ -320,27 +357,27 @@ mod tests {
     #[test]
     fn test_new_detector() {
         let detector = SharedFingerprintDetector::new(3);
-        assert_eq!(detector.threshold, 3);
-        assert!((detector.base_confidence - 0.85).abs() < 0.001);
-        assert_eq!(detector.scan_interval, 5000);
+        assert_eq!(detector.config.threshold, 3);
+        assert!((detector.config.base_confidence - 0.85).abs() < 0.001);
+        assert_eq!(detector.config.scan_interval_ms, 5000);
         assert_eq!(detector.processed_count(), 0);
     }
 
     #[test]
     fn test_detector_with_config() {
         let detector = SharedFingerprintDetector::with_config(5, 0.9, 10000);
-        assert_eq!(detector.threshold, 5);
-        assert!((detector.base_confidence - 0.9).abs() < 0.001);
-        assert_eq!(detector.scan_interval, 10000);
+        assert_eq!(detector.config.threshold, 5);
+        assert!((detector.config.base_confidence - 0.9).abs() < 0.001);
+        assert_eq!(detector.config.scan_interval_ms, 10000);
     }
 
     #[test]
     fn test_confidence_clamping() {
         let detector = SharedFingerprintDetector::with_config(2, 1.5, 1000);
-        assert!((detector.base_confidence - 1.0).abs() < 0.001);
+        assert!((detector.config.base_confidence - 1.0).abs() < 0.001);
 
         let detector = SharedFingerprintDetector::with_config(2, -0.5, 1000);
-        assert!(detector.base_confidence >= 0.0);
+        assert!(detector.config.base_confidence >= 0.0);
     }
 
     #[test]

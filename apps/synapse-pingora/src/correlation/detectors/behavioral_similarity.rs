@@ -3,10 +3,11 @@
 //! Identifies IPs with identical navigation patterns, page sequences,
 //! or request timing patterns. Weight: 30.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::IpAddr;
-use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+use dashmap::{DashMap, DashSet};
 
 use crate::correlation::{
     FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
@@ -40,6 +41,10 @@ pub struct BehavioralConfig {
     pub min_sequence_length: usize,
     /// Time window for pattern observation
     pub window: Duration,
+    /// Base confidence multiplier for confidence calculation (0.0 to 1.0)
+    pub base_confidence: f64,
+    /// Divisor for scaling confidence by IP count
+    pub confidence_scale_divisor: f64,
 }
 
 impl Default for BehavioralConfig {
@@ -48,6 +53,8 @@ impl Default for BehavioralConfig {
             min_ips: 2,
             min_sequence_length: 3,
             window: Duration::from_secs(300),
+            base_confidence: 0.75,
+            confidence_scale_divisor: 6.0,
         }
     }
 }
@@ -56,66 +63,79 @@ impl Default for BehavioralConfig {
 pub struct BehavioralSimilarityDetector {
     config: BehavioralConfig,
     /// Pattern hash -> (IP, timestamp)
-    pattern_index: RwLock<HashMap<String, Vec<(IpAddr, Instant)>>>,
+    pattern_index: DashMap<String, Vec<(IpAddr, Instant)>>,
     /// Per-IP recent path history for pattern building
-    ip_history: RwLock<HashMap<IpAddr, Vec<(String, String, Instant)>>>,
-    detected: RwLock<HashSet<String>>,
+    ip_history: DashMap<IpAddr, Vec<(String, String, Instant)>>,
+    detected: DashSet<String>,
 }
 
 impl BehavioralSimilarityDetector {
     pub fn new(config: BehavioralConfig) -> Self {
         Self {
             config,
-            pattern_index: RwLock::new(HashMap::new()),
-            ip_history: RwLock::new(HashMap::new()),
-            detected: RwLock::new(HashSet::new()),
+            pattern_index: DashMap::new(),
+            ip_history: DashMap::new(),
+            detected: DashSet::new(),
         }
     }
 
     /// Record a request for an IP
     pub fn record_request(&self, ip: IpAddr, method: &str, path: &str) {
         let now = Instant::now();
-        let mut history = self.ip_history.write().unwrap();
-        let entry = history.entry(ip).or_default();
-        entry.push((method.to_string(), path.to_string(), now));
-
-        // Keep only recent
         let cutoff = now - self.config.window;
-        entry.retain(|(_, _, ts)| *ts > cutoff);
+        let min_seq_len = self.config.min_sequence_length;
+
+        // Update IP history and check if we should index a pattern
+        let should_index_pattern = {
+            let mut history_entry = self.ip_history.entry(ip).or_default();
+            history_entry.push((method.to_string(), path.to_string(), now));
+
+            // Keep only recent
+            history_entry.retain(|(_, _, ts)| *ts > cutoff);
+
+            // Check if we have enough for a pattern
+            history_entry.len() >= min_seq_len
+        };
 
         // If we have enough for a pattern, index it
-        if entry.len() >= self.config.min_sequence_length {
-            let pattern = BehaviorPattern {
-                path_sequence: entry.iter().map(|(_, p, _)| p.clone()).collect(),
-                method_sequence: entry.iter().map(|(m, _, _)| m.clone()).collect(),
-            };
+        if should_index_pattern {
+            if let Some(history_ref) = self.ip_history.get(&ip) {
+                let pattern = BehaviorPattern {
+                    path_sequence: history_ref.iter().map(|(_, p, _)| p.clone()).collect(),
+                    method_sequence: history_ref.iter().map(|(m, _, _)| m.clone()).collect(),
+                };
 
-            let hash = pattern.compute_hash();
-            let mut index = self.pattern_index.write().unwrap();
-            let idx_entry = index.entry(hash).or_default();
+                let hash = pattern.compute_hash();
 
-            // Only add if not already present for this IP
-            if !idx_entry.iter().any(|(existing_ip, _)| *existing_ip == ip) {
-                idx_entry.push((ip, now));
+                self.pattern_index
+                    .entry(hash)
+                    .and_modify(|idx_entry| {
+                        // Only add if not already present for this IP
+                        if !idx_entry.iter().any(|(existing_ip, _)| *existing_ip == ip) {
+                            idx_entry.push((ip, now));
+                        }
+                    })
+                    .or_insert_with(|| vec![(ip, now)]);
             }
         }
     }
 
     fn get_correlated_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
-        let index = self.pattern_index.read().unwrap();
-        let detected = self.detected.read().unwrap();
         let cutoff = Instant::now() - self.config.window;
 
-        index.iter()
-            .filter(|(hash, _)| !detected.contains(*hash))
-            .filter_map(|(hash, entries)| {
+        self.pattern_index.iter()
+            .filter(|entry| !self.detected.contains(entry.key()))
+            .filter_map(|entry| {
+                let hash = entry.key().clone();
+                let entries = entry.value();
+
                 let recent_ips: HashSet<IpAddr> = entries.iter()
                     .filter(|(_, ts)| *ts > cutoff)
                     .map(|(ip, _)| *ip)
                     .collect();
 
                 if recent_ips.len() >= self.config.min_ips {
-                    Some((hash.clone(), recent_ips.into_iter().collect()))
+                    Some((hash, recent_ips.into_iter().collect()))
                 } else {
                     None
                 }
@@ -132,7 +152,7 @@ impl Detector for BehavioralSimilarityDetector {
         let mut updates = Vec::new();
 
         for (pattern_hash, ips) in groups {
-            let confidence = (ips.len() as f64 / 6.0).min(1.0) * 0.75;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!("behavioral-{}", &pattern_hash[..8.min(pattern_hash.len())])),
@@ -149,15 +169,16 @@ impl Detector for BehavioralSimilarityDetector {
                 ..Default::default()
             });
 
-            self.detected.write().unwrap().insert(pattern_hash);
+            self.detected.insert(pattern_hash);
         }
 
         Ok(updates)
     }
 
     fn should_trigger(&self, ip: &IpAddr, _index: &FingerprintIndex) -> bool {
-        let history = self.ip_history.read().unwrap();
-        history.get(ip).map(|h| h.len() >= self.config.min_sequence_length - 1).unwrap_or(false)
+        self.ip_history.get(ip)
+            .map(|h| h.len() >= self.config.min_sequence_length - 1)
+            .unwrap_or(false)
     }
 
     fn scan_interval_ms(&self) -> u64 { 5000 }

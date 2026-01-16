@@ -51,8 +51,16 @@
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use tracing::warn;
+
+/// Default maximum capacity for campaigns (10,000 campaigns).
+pub const DEFAULT_MAX_CAMPAIGN_CAPACITY: usize = 10_000;
+
+/// Default maximum capacity for IP-to-campaign mapping (500,000 IPs).
+pub const DEFAULT_MAX_IP_MAPPING_CAPACITY: usize = 500_000;
 
 // ============================================================================
 // Error Types
@@ -496,6 +504,27 @@ pub struct CampaignStoreStats {
 
     /// Total number of actors across all campaigns.
     pub total_actors: usize,
+
+    /// Number of campaigns evicted due to capacity limits.
+    pub evicted_campaigns: u64,
+}
+
+/// Configuration for campaign store capacity limits.
+#[derive(Debug, Clone)]
+pub struct CampaignStoreConfig {
+    /// Maximum number of campaigns to store.
+    pub max_campaign_capacity: usize,
+    /// Maximum number of IP-to-campaign mappings.
+    pub max_ip_mapping_capacity: usize,
+}
+
+impl Default for CampaignStoreConfig {
+    fn default() -> Self {
+        Self {
+            max_campaign_capacity: DEFAULT_MAX_CAMPAIGN_CAPACITY,
+            max_ip_mapping_capacity: DEFAULT_MAX_IP_MAPPING_CAPACITY,
+        }
+    }
 }
 
 // ============================================================================
@@ -507,6 +536,15 @@ pub struct CampaignStoreStats {
 /// Provides concurrent access to campaigns with atomic operations.
 /// Maintains a reverse index from IP addresses to campaign IDs for
 /// efficient lookups.
+///
+/// # Capacity Limits
+///
+/// The store enforces capacity limits to prevent DoS attacks:
+/// - Maximum campaigns: configurable (default 10,000)
+/// - Maximum IP mappings: configurable (default 500,000)
+///
+/// When capacity is exceeded, oldest resolved campaigns are evicted first,
+/// followed by dormant campaigns, then detected campaigns.
 pub struct CampaignStore {
     /// Primary storage: campaign_id -> Campaign.
     campaigns: DashMap<String, Campaign>,
@@ -514,6 +552,12 @@ pub struct CampaignStore {
     /// Reverse index: IP address -> campaign_id.
     /// Allows quick lookup of which campaign an IP belongs to.
     ip_to_campaign: DashMap<String, String>,
+
+    /// Configuration for capacity limits.
+    config: CampaignStoreConfig,
+
+    /// Counter for evicted campaigns.
+    evicted_count: AtomicU64,
 }
 
 impl Default for CampaignStore {
@@ -523,11 +567,18 @@ impl Default for CampaignStore {
 }
 
 impl CampaignStore {
-    /// Create a new empty campaign store.
+    /// Create a new empty campaign store with default configuration.
     pub fn new() -> Self {
+        Self::with_config(CampaignStoreConfig::default())
+    }
+
+    /// Create a new campaign store with custom configuration.
+    pub fn with_config(config: CampaignStoreConfig) -> Self {
         Self {
             campaigns: DashMap::new(),
             ip_to_campaign: DashMap::new(),
+            config,
+            evicted_count: AtomicU64::new(0),
         }
     }
 
@@ -536,7 +587,69 @@ impl CampaignStore {
         Self {
             campaigns: DashMap::with_capacity(campaigns),
             ip_to_campaign: DashMap::with_capacity(actors),
+            config: CampaignStoreConfig::default(),
+            evicted_count: AtomicU64::new(0),
         }
+    }
+
+    /// Check capacity and evict campaigns if needed.
+    ///
+    /// Eviction priority (lowest priority first):
+    /// 1. Resolved campaigns (oldest first)
+    /// 2. Dormant campaigns (oldest first)
+    /// 3. Detected campaigns (oldest first)
+    /// 4. Active campaigns (oldest first, last resort)
+    fn check_and_evict_if_needed(&self) {
+        while self.campaigns.len() > self.config.max_campaign_capacity {
+            // Try to evict in priority order: resolved -> dormant -> detected -> active
+            let evicted = self
+                .evict_one_by_status(CampaignStatus::Resolved)
+                .or_else(|| self.evict_one_by_status(CampaignStatus::Dormant))
+                .or_else(|| self.evict_one_by_status(CampaignStatus::Detected))
+                .or_else(|| self.evict_one_by_status(CampaignStatus::Active));
+
+            if evicted.is_none() {
+                // No campaigns to evict (shouldn't happen if len > 0)
+                break;
+            }
+        }
+    }
+
+    /// Evict one campaign with the given status (oldest first).
+    fn evict_one_by_status(&self, status: CampaignStatus) -> Option<Campaign> {
+        // Find the oldest campaign with the given status
+        let mut oldest_id: Option<String> = None;
+        let mut oldest_time: Option<DateTime<Utc>> = None;
+
+        for entry in self.campaigns.iter() {
+            let campaign = entry.value();
+            if campaign.status == status {
+                if oldest_time.is_none() || campaign.last_activity < oldest_time.unwrap() {
+                    oldest_id = Some(entry.key().clone());
+                    oldest_time = Some(campaign.last_activity);
+                }
+            }
+        }
+
+        if let Some(id) = oldest_id {
+            if let Some(campaign) = self.remove_campaign(&id) {
+                self.evicted_count.fetch_add(1, Ordering::Relaxed);
+                warn!(
+                    campaign_id = %campaign.id,
+                    status = %campaign.status,
+                    actor_count = campaign.actor_count,
+                    "Evicted campaign due to capacity limit"
+                );
+                return Some(campaign);
+            }
+        }
+
+        None
+    }
+
+    /// Get the current configuration.
+    pub fn config(&self) -> &CampaignStoreConfig {
+        &self.config
     }
 
     // ========================================================================
@@ -547,6 +660,9 @@ impl CampaignStore {
     ///
     /// Returns an error if a campaign with the same ID already exists.
     /// Also populates the IP-to-campaign reverse index.
+    ///
+    /// If capacity limits are exceeded, older campaigns will be evicted
+    /// (resolved first, then dormant, then detected, then active).
     pub fn create_campaign(&self, campaign: Campaign) -> Result<(), CampaignError> {
         let id = campaign.id.clone();
 
@@ -563,6 +679,9 @@ impl CampaignStore {
         // Insert campaign
         self.campaigns.insert(id, campaign);
 
+        // Check and enforce capacity limits
+        self.check_and_evict_if_needed();
+
         Ok(())
     }
 
@@ -577,7 +696,9 @@ impl CampaignStore {
     ///
     /// Uses the reverse index for O(1) lookup.
     pub fn get_campaign_for_ip(&self, ip: &str) -> Option<String> {
-        self.ip_to_campaign.get(ip).map(|entry| entry.value().clone())
+        self.ip_to_campaign
+            .get(ip)
+            .map(|entry| entry.value().clone())
     }
 
     /// Update an existing campaign with the given update parameters.
@@ -815,6 +936,7 @@ impl CampaignStore {
             detected_campaigns: detected,
             resolved_campaigns: resolved,
             total_actors,
+            evicted_campaigns: self.evicted_count.load(Ordering::Relaxed),
         }
     }
 
@@ -926,11 +1048,7 @@ mod tests {
     #[test]
     fn test_store_create_campaign() {
         let store = CampaignStore::new();
-        let campaign = Campaign::new(
-            "camp-1".to_string(),
-            vec!["192.168.1.1".to_string()],
-            0.9,
-        );
+        let campaign = Campaign::new("camp-1".to_string(), vec!["192.168.1.1".to_string()], 0.9);
 
         let result = store.create_campaign(campaign);
         assert!(result.is_ok());
@@ -1183,7 +1301,10 @@ mod tests {
         let resolved = store.get_campaign("camp-1").unwrap();
         assert_eq!(resolved.status, CampaignStatus::Resolved);
         assert!(resolved.resolved_at.is_some());
-        assert_eq!(resolved.resolved_reason, Some("Threat mitigated".to_string()));
+        assert_eq!(
+            resolved.resolved_reason,
+            Some("Threat mitigated".to_string())
+        );
     }
 
     #[test]
@@ -1192,7 +1313,9 @@ mod tests {
         let campaign = Campaign::new("camp-1".to_string(), vec![], 0.9);
         store.create_campaign(campaign).unwrap();
 
-        store.resolve_campaign("camp-1", "First resolution").unwrap();
+        store
+            .resolve_campaign("camp-1", "First resolution")
+            .unwrap();
 
         let result = store.resolve_campaign("camp-1", "Second resolution");
         assert!(matches!(result, Err(CampaignError::InvalidState(_))));
@@ -1249,11 +1372,7 @@ mod tests {
         );
         c1.status = CampaignStatus::Detected;
 
-        let mut c2 = Campaign::new(
-            "camp-2".to_string(),
-            vec!["10.0.0.3".to_string()],
-            0.8,
-        );
+        let mut c2 = Campaign::new("camp-2".to_string(), vec!["10.0.0.3".to_string()], 0.8);
         c2.status = CampaignStatus::Active;
 
         let mut c3 = Campaign::new(
@@ -1343,13 +1462,31 @@ mod tests {
 
     #[test]
     fn test_correlation_type_display() {
-        assert_eq!(format!("{}", CorrelationType::AttackSequence), "attack_sequence");
+        assert_eq!(
+            format!("{}", CorrelationType::AttackSequence),
+            "attack_sequence"
+        );
         assert_eq!(format!("{}", CorrelationType::AuthToken), "auth_token");
-        assert_eq!(format!("{}", CorrelationType::HttpFingerprint), "http_fingerprint");
-        assert_eq!(format!("{}", CorrelationType::TlsFingerprint), "tls_fingerprint");
-        assert_eq!(format!("{}", CorrelationType::BehavioralSimilarity), "behavioral_similarity");
-        assert_eq!(format!("{}", CorrelationType::TimingCorrelation), "timing_correlation");
-        assert_eq!(format!("{}", CorrelationType::NetworkProximity), "network_proximity");
+        assert_eq!(
+            format!("{}", CorrelationType::HttpFingerprint),
+            "http_fingerprint"
+        );
+        assert_eq!(
+            format!("{}", CorrelationType::TlsFingerprint),
+            "tls_fingerprint"
+        );
+        assert_eq!(
+            format!("{}", CorrelationType::BehavioralSimilarity),
+            "behavioral_similarity"
+        );
+        assert_eq!(
+            format!("{}", CorrelationType::TimingCorrelation),
+            "timing_correlation"
+        );
+        assert_eq!(
+            format!("{}", CorrelationType::NetworkProximity),
+            "network_proximity"
+        );
     }
 
     #[test]
@@ -1376,13 +1513,31 @@ mod tests {
 
     #[test]
     fn test_correlation_type_display_name() {
-        assert_eq!(CorrelationType::AttackSequence.display_name(), "Attack Sequence");
+        assert_eq!(
+            CorrelationType::AttackSequence.display_name(),
+            "Attack Sequence"
+        );
         assert_eq!(CorrelationType::AuthToken.display_name(), "Auth Token");
-        assert_eq!(CorrelationType::HttpFingerprint.display_name(), "HTTP Fingerprint");
-        assert_eq!(CorrelationType::TlsFingerprint.display_name(), "TLS Fingerprint");
-        assert_eq!(CorrelationType::BehavioralSimilarity.display_name(), "Behavioral Similarity");
-        assert_eq!(CorrelationType::TimingCorrelation.display_name(), "Timing Correlation");
-        assert_eq!(CorrelationType::NetworkProximity.display_name(), "Network Proximity");
+        assert_eq!(
+            CorrelationType::HttpFingerprint.display_name(),
+            "HTTP Fingerprint"
+        );
+        assert_eq!(
+            CorrelationType::TlsFingerprint.display_name(),
+            "TLS Fingerprint"
+        );
+        assert_eq!(
+            CorrelationType::BehavioralSimilarity.display_name(),
+            "Behavioral Similarity"
+        );
+        assert_eq!(
+            CorrelationType::TimingCorrelation.display_name(),
+            "Timing Correlation"
+        );
+        assert_eq!(
+            CorrelationType::NetworkProximity.display_name(),
+            "Network Proximity"
+        );
     }
 
     #[test]
@@ -1455,11 +1610,7 @@ mod tests {
         let store = CampaignStore::new();
 
         for i in 0..5 {
-            let campaign = Campaign::new(
-                format!("camp-{}", i),
-                vec![format!("10.0.0.{}", i)],
-                0.9,
-            );
+            let campaign = Campaign::new(format!("camp-{}", i), vec![format!("10.0.0.{}", i)], 0.9);
             store.create_campaign(campaign).unwrap();
         }
 
@@ -1483,16 +1634,16 @@ mod tests {
         for i in 0..10 {
             let store = Arc::clone(&store);
             handles.push(thread::spawn(move || {
-                let campaign = Campaign::new(
-                    format!("camp-{}", i),
-                    vec![format!("10.0.{}.1", i)],
-                    0.9,
-                );
+                let campaign =
+                    Campaign::new(format!("camp-{}", i), vec![format!("10.0.{}.1", i)], 0.9);
                 let _ = store.create_campaign(campaign);
 
                 // Add some actors
                 for j in 2..5 {
-                    let _ = store.add_actor_to_campaign(&format!("camp-{}", i), &format!("10.0.{}.{}", i, j));
+                    let _ = store.add_actor_to_campaign(
+                        &format!("camp-{}", i),
+                        &format!("10.0.{}.{}", i, j),
+                    );
                 }
             }));
         }
@@ -1577,5 +1728,169 @@ mod tests {
         // resolved_at and resolved_reason should be omitted when None
         assert!(!json.contains("resolved_at"));
         assert!(!json.contains("resolved_reason"));
+    }
+
+    // ========================================================================
+    // Capacity Limit Tests
+    // ========================================================================
+
+    #[test]
+    fn test_store_capacity_limit_evicts_resolved_first() {
+        // Create store with very small capacity for testing
+        let config = CampaignStoreConfig {
+            max_campaign_capacity: 3,
+            max_ip_mapping_capacity: 100,
+        };
+        let store = CampaignStore::with_config(config);
+
+        // Create 3 campaigns: 1 resolved, 1 dormant, 1 active
+        let mut resolved = Campaign::new(
+            "camp-resolved".to_string(),
+            vec!["10.0.0.1".to_string()],
+            0.9,
+        );
+        resolved.status = CampaignStatus::Resolved;
+        resolved.last_activity = Utc::now() - Duration::hours(2);
+
+        let mut dormant = Campaign::new(
+            "camp-dormant".to_string(),
+            vec!["10.0.0.2".to_string()],
+            0.8,
+        );
+        dormant.status = CampaignStatus::Dormant;
+        dormant.last_activity = Utc::now() - Duration::hours(1);
+
+        let active = Campaign::new("camp-active".to_string(), vec!["10.0.0.3".to_string()], 0.7);
+
+        store.create_campaign(resolved).unwrap();
+        store.create_campaign(dormant).unwrap();
+        store.create_campaign(active).unwrap();
+
+        assert_eq!(store.len(), 3);
+
+        // Add a 4th campaign, should evict the resolved one
+        let new_campaign = Campaign::new("camp-new".to_string(), vec!["10.0.0.4".to_string()], 0.6);
+        store.create_campaign(new_campaign).unwrap();
+
+        // Should have evicted one campaign
+        assert!(store.len() <= 3);
+
+        // Resolved should be evicted first
+        assert!(store.get_campaign("camp-resolved").is_none());
+
+        // Active and dormant should still exist
+        assert!(store.get_campaign("camp-active").is_some());
+        assert!(store.get_campaign("camp-dormant").is_some());
+
+        // Check eviction counter
+        let stats = store.stats();
+        assert!(stats.evicted_campaigns >= 1);
+    }
+
+    #[test]
+    fn test_store_capacity_limit_evicts_oldest() {
+        let config = CampaignStoreConfig {
+            max_campaign_capacity: 2,
+            max_ip_mapping_capacity: 100,
+        };
+        let store = CampaignStore::with_config(config);
+
+        // Create 2 resolved campaigns with different ages
+        let mut old_resolved =
+            Campaign::new("camp-old".to_string(), vec!["10.0.0.1".to_string()], 0.9);
+        old_resolved.status = CampaignStatus::Resolved;
+        old_resolved.last_activity = Utc::now() - Duration::hours(3);
+
+        let mut new_resolved =
+            Campaign::new("camp-newer".to_string(), vec!["10.0.0.2".to_string()], 0.8);
+        new_resolved.status = CampaignStatus::Resolved;
+        new_resolved.last_activity = Utc::now() - Duration::hours(1);
+
+        store.create_campaign(old_resolved).unwrap();
+        store.create_campaign(new_resolved).unwrap();
+
+        // Add a 3rd campaign, should evict the oldest resolved
+        let active = Campaign::new("camp-active".to_string(), vec!["10.0.0.3".to_string()], 0.7);
+        store.create_campaign(active).unwrap();
+
+        // Oldest resolved should be gone
+        assert!(store.get_campaign("camp-old").is_none());
+
+        // Newer resolved should still exist
+        assert!(store.get_campaign("camp-newer").is_some());
+    }
+
+    #[test]
+    fn test_store_with_config() {
+        let config = CampaignStoreConfig {
+            max_campaign_capacity: 5_000,
+            max_ip_mapping_capacity: 250_000,
+        };
+        let store = CampaignStore::with_config(config);
+
+        assert_eq!(store.config().max_campaign_capacity, 5_000);
+        assert_eq!(store.config().max_ip_mapping_capacity, 250_000);
+    }
+
+    #[test]
+    fn test_store_default_config() {
+        let config = CampaignStoreConfig::default();
+        assert_eq!(config.max_campaign_capacity, DEFAULT_MAX_CAMPAIGN_CAPACITY);
+        assert_eq!(
+            config.max_ip_mapping_capacity,
+            DEFAULT_MAX_IP_MAPPING_CAPACITY
+        );
+    }
+
+    #[test]
+    fn test_store_stats_includes_eviction_counter() {
+        let config = CampaignStoreConfig {
+            max_campaign_capacity: 2,
+            max_ip_mapping_capacity: 100,
+        };
+        let store = CampaignStore::with_config(config);
+
+        // Fill to capacity
+        for i in 0..3 {
+            let mut campaign =
+                Campaign::new(format!("camp-{}", i), vec![format!("10.0.0.{}", i)], 0.9);
+            campaign.status = CampaignStatus::Resolved;
+            store.create_campaign(campaign).unwrap();
+        }
+
+        let stats = store.stats();
+        assert!(stats.evicted_campaigns > 0);
+    }
+
+    #[test]
+    fn test_store_eviction_cleans_ip_mappings() {
+        let config = CampaignStoreConfig {
+            max_campaign_capacity: 1,
+            max_ip_mapping_capacity: 100,
+        };
+        let store = CampaignStore::with_config(config);
+
+        // Create first campaign
+        let campaign1 = Campaign::new(
+            "camp-1".to_string(),
+            vec!["10.0.0.1".to_string(), "10.0.0.2".to_string()],
+            0.9,
+        );
+        store.create_campaign(campaign1).unwrap();
+
+        // Verify IP mappings exist
+        assert!(store.get_campaign_for_ip("10.0.0.1").is_some());
+        assert!(store.get_campaign_for_ip("10.0.0.2").is_some());
+
+        // Add second campaign, which should evict the first
+        let campaign2 = Campaign::new("camp-2".to_string(), vec!["10.0.0.3".to_string()], 0.8);
+        store.create_campaign(campaign2).unwrap();
+
+        // First campaign's IP mappings should be cleaned up
+        assert!(store.get_campaign_for_ip("10.0.0.1").is_none());
+        assert!(store.get_campaign_for_ip("10.0.0.2").is_none());
+
+        // New campaign's mappings should exist
+        assert!(store.get_campaign_for_ip("10.0.0.3").is_some());
     }
 }

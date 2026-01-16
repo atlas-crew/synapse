@@ -54,6 +54,7 @@ pub trait Detector: Send + Sync {
     }
 }
 
+pub mod common;
 pub mod shared_fingerprint;
 pub mod ja4_rotation;
 pub mod attack_sequence;
@@ -62,6 +63,7 @@ pub mod behavioral_similarity;
 pub mod timing_correlation;
 pub mod network_proximity;
 
+pub use common::TimeWindowedIndex;
 pub use shared_fingerprint::SharedFingerprintDetector;
 pub use ja4_rotation::{Ja4RotationDetector, RotationConfig, Ja4RotationStats};
 pub use attack_sequence::{AttackSequenceDetector, AttackSequenceConfig, AttackPayload};
