@@ -12,7 +12,6 @@ import { validateBody, validateParams, validateQuery } from '../middleware/valid
 import { getErrorMessage } from '../../utils/errors.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import {
-  SessionSearchQuerySchema,
   SessionRevokeRequestSchema,
   GlobalSessionRevokeRequestSchema,
   ActorBanRequestSchema,
@@ -64,7 +63,7 @@ export interface FleetSessionsRoutesOptions {
  * Create fleet sessions routes
  */
 export function createFleetSessionsRoutes(
-  prisma: PrismaClient,
+  _prisma: PrismaClient,
   logger: Logger,
   options: FleetSessionsRoutesOptions = {}
 ): Router {

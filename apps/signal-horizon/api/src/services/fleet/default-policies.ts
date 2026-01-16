@@ -242,8 +242,6 @@ export const DEV_POLICY_CONFIG: PolicyConfig = {
  * Create default policy templates for a tenant
  */
 export function createDefaultTemplates(tenantId: string): Omit<PolicyTemplate, 'id' | 'createdAt' | 'updatedAt'>[] {
-  const now = new Date();
-
   return [
     {
       tenantId,

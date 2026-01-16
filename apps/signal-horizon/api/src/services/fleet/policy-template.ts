@@ -5,7 +5,7 @@
 
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import type {
   PolicyTemplate,
   PolicyConfig,
@@ -152,7 +152,7 @@ export class PolicyTemplateService {
     tenantId: string,
     input: CreatePolicyTemplateInput
   ): Promise<PolicyTemplate> {
-    const id = uuidv4();
+    const id = randomUUID();
     const now = new Date();
 
     const metadata: PolicyTemplateMetadata = input.metadata ?? {
@@ -228,10 +228,10 @@ export class PolicyTemplateService {
         severity: input.severity ?? existing.severity,
         config: input.config
           ? (input.config as unknown as Prisma.InputJsonValue)
-          : existing.config,
+          : (existing.config as Prisma.InputJsonValue),
         metadata: input.metadata
           ? (input.metadata as unknown as Prisma.InputJsonValue)
-          : existing.metadata,
+          : (existing.metadata as Prisma.InputJsonValue ?? undefined),
         version: newVersion,
         updatedAt: new Date(),
       },
@@ -435,7 +435,7 @@ export class PolicyTemplateService {
     if (rolloutConfig.strategy === 'immediate') {
       for (const sensorId of sensorIds) {
         try {
-          const command = await this.fleetCommander.sendCommand(sensorId, {
+          const commandId = await this.fleetCommander.sendCommand(sensorId, {
             type: 'push_config',
             payload: {
               policyTemplateId: template.id,
@@ -449,7 +449,7 @@ export class PolicyTemplateService {
           results.push({
             sensorId,
             success: true,
-            commandId: command?.id,
+            commandId,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
@@ -470,7 +470,7 @@ export class PolicyTemplateService {
 
       for (const sensorId of sensorIds) {
         try {
-          const command = await this.fleetCommander.sendCommand(sensorId, {
+          const commandId = await this.fleetCommander.sendCommand(sensorId, {
             type: 'push_config',
             payload: {
               policyTemplateId: template.id,
@@ -485,7 +485,7 @@ export class PolicyTemplateService {
           results.push({
             sensorId,
             success: true,
-            commandId: command?.id,
+            commandId,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
@@ -519,7 +519,7 @@ export class PolicyTemplateService {
     const now = new Date();
 
     for (const template of defaults) {
-      const id = uuidv4();
+      const id = randomUUID();
       await this.prisma.policyTemplate.create({
         data: {
           id,

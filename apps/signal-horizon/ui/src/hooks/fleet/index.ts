@@ -50,3 +50,16 @@ export type {
   UseReleasesOptions,
   UseReleasesResult,
 } from './useReleases';
+export { useSessionSearch } from './useSessionSearch';
+export type {
+  TimeRange,
+  SessionSearchQuery,
+  SensorSession,
+  SessionSearchResult,
+  GlobalSessionSearchResult,
+  FleetSessionStats,
+  GlobalRevokeResult,
+  GlobalBanResult,
+  UseSessionSearchOptions,
+  UseSessionSearchReturn,
+} from './useSessionSearch';
