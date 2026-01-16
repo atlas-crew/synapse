@@ -39,7 +39,7 @@ pub mod cookie_manager;
 pub mod js_challenge_manager;
 pub mod progression_manager;
 
-pub use cookie_manager::{CookieChallenge, CookieConfig, CookieManager, CookieStats};
+pub use cookie_manager::{CookieChallenge, CookieConfig, CookieError, CookieManager, CookieStats};
 pub use js_challenge_manager::{JsChallenge, JsChallengeConfig, JsChallengeManager, JsChallengeStats};
 pub use progression_manager::{
     ActorChallengeState, ChallengeLevel, ProgressionConfig, ProgressionManager, ProgressionStats,

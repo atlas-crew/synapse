@@ -404,33 +404,48 @@ export class APIIntelligenceService extends EventEmitter {
 
   /**
    * Get discovery trend by day
+   * Uses a single grouped query instead of N sequential queries (N+1 fix)
    */
   private async getDiscoveryTrend(
     tenantId: string,
     days: number
   ): Promise<Array<{ date: string; count: number }>> {
-    const trend: Array<{ date: string; count: number }> = [];
     const now = new Date();
+    const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
+    // Single query with groupBy instead of N sequential count queries
+    const endpoints = await this.prisma.endpoint.findMany({
+      where: {
+        tenantId,
+        firstSeenAt: { gte: since },
+      },
+      select: {
+        firstSeenAt: true,
+      },
+    });
+
+    // Aggregate counts by date in memory
+    const countsByDate = new Map<string, number>();
+
+    // Initialize all dates in range with 0
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const dateStr = date.toISOString().split('T')[0];
-      const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-
-      const count = await this.prisma.endpoint.count({
-        where: {
-          tenantId,
-          firstSeenAt: {
-            gte: new Date(dateStr),
-            lt: nextDate,
-          },
-        },
-      });
-
-      trend.push({ date: dateStr, count });
+      countsByDate.set(dateStr, 0);
     }
 
-    return trend;
+    // Count endpoints by date
+    for (const endpoint of endpoints) {
+      const dateStr = endpoint.firstSeenAt.toISOString().split('T')[0];
+      if (countsByDate.has(dateStr)) {
+        countsByDate.set(dateStr, (countsByDate.get(dateStr) ?? 0) + 1);
+      }
+    }
+
+    // Convert to sorted array
+    return Array.from(countsByDate.entries())
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   // ===========================================================================

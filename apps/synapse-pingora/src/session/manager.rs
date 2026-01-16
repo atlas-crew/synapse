@@ -687,11 +687,12 @@ impl SessionManager {
         if self.config.enable_ip_binding {
             if let Some(bound_ip) = session.bound_ip {
                 if bound_ip != ip {
-                    // Allow some IP change within window (for mobile users)
+                    // Allow IP changes within the grace window (for mobile users)
+                    // Only alert if the change happens OUTSIDE the allowed window
                     let time_since_last = now.saturating_sub(session.last_activity);
                     let window_ms = self.config.ip_change_window_secs * 1000;
 
-                    if time_since_last < window_ms {
+                    if time_since_last >= window_ms {
                         return Some(HijackAlert {
                             session_id: session.session_id.clone(),
                             alert_type: HijackType::IpChange,
@@ -843,18 +844,23 @@ impl Default for SessionManager {
 // Helper Functions
 // ============================================================================
 
-/// Generate a unique session ID using UUID v4.
+/// Generate a unique session ID using cryptographically secure random bytes.
 fn generate_session_id() -> String {
-    // Use fastrand for fast random number generation
-    let a = fastrand::u64(..);
-    let b = fastrand::u64(..);
+    // Use getrandom for cryptographically secure random bytes
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("Failed to get random bytes");
+
+    // Format as UUID v4 with proper version and variant bits
+    bytes[6] = (bytes[6] & 0x0F) | 0x40; // Version 4
+    bytes[8] = (bytes[8] & 0x3F) | 0x80; // Variant 1
+
     format!(
-        "sess-{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
-        (a >> 32) as u32,
-        (a >> 16) as u16 & 0xFFFF,
-        a as u16 & 0x0FFF,
-        ((b >> 48) as u16 & 0x3FFF) | 0x8000,
-        b & 0xFFFF_FFFF_FFFF
+        "sess-{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+        u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        u16::from_be_bytes([bytes[4], bytes[5]]),
+        u16::from_be_bytes([bytes[6], bytes[7]]),
+        u16::from_be_bytes([bytes[8], bytes[9]]),
+        u64::from_be_bytes([0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]])
     )
 }
 
@@ -1058,7 +1064,7 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_ip_binding_strict_mode() {
+    fn test_ip_binding_strict_mode_within_window() {
         let config = SessionConfig {
             enable_ip_binding: true,
             ip_change_window_secs: 60,
@@ -1071,7 +1077,31 @@ mod tests {
         // Create session with IP1
         manager.create_session("token_hash_1", ip1, None);
 
-        // Validate with different IP immediately (within window)
+        // Validate with different IP immediately (within window) - should be allowed
+        let decision = manager.validate_request("token_hash_1", ip2, None);
+
+        // IP changes within the grace window should be allowed (no alert)
+        assert_eq!(decision, SessionDecision::Valid);
+    }
+
+    #[test]
+    fn test_ip_binding_strict_mode_outside_window() {
+        let config = SessionConfig {
+            enable_ip_binding: true,
+            ip_change_window_secs: 0, // No grace window - immediate alert on IP change
+            ..Default::default()
+        };
+        let manager = SessionManager::new(config);
+        let ip1 = create_test_ip(1);
+        let ip2 = create_test_ip(2);
+
+        // Create session with IP1
+        manager.create_session("token_hash_1", ip1, None);
+
+        // Small sleep to ensure time passes beyond the 0-second window
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // Validate with different IP - should trigger alert (outside window)
         let decision = manager.validate_request("token_hash_1", ip2, None);
 
         match decision {

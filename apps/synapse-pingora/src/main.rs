@@ -2585,10 +2585,16 @@ fn main() {
 // ============================================================================
 // Tests - Using REAL libsynapse engine with production rules
 // ============================================================================
+//
+// IMPORTANT: These tests use a global SYNAPSE engine with shared mutable state.
+// To avoid race conditions, run with: cargo test --bin synapse-pingora -- --test-threads=1
+// The #[serial] attribute is used for documentation purposes but test-threads=1 is required.
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     const TEST_IP: &str = "192.168.1.100";
 
@@ -2597,6 +2603,7 @@ mod tests {
     // ────────────────────────────────────────────────────────────────────────
 
     #[test]
+    #[serial]
     fn test_engine_rule_count() {
         // Verify we have rules loaded
         let count = DetectionEngine::rule_count();
@@ -2610,6 +2617,7 @@ mod tests {
     // ────────────────────────────────────────────────────────────────────────
 
     #[test]
+    #[serial]
     fn test_clean_simple_get() {
         let result = DetectionEngine::analyze("GET", "/api/users/123", &[], None, TEST_IP);
         assert!(!result.blocked, "Clean GET should not be blocked");
@@ -2617,6 +2625,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_clean_with_query() {
         let result = DetectionEngine::analyze(
             "GET",
@@ -2629,6 +2638,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_clean_post_json() {
         let result = DetectionEngine::analyze(
             "POST",
@@ -2641,6 +2651,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_clean_with_user_agent() {
         let result = DetectionEngine::analyze(
             "GET",
@@ -2658,6 +2669,7 @@ mod tests {
     // ────────────────────────────────────────────────────────────────────────
 
     #[test]
+    #[serial]
     fn test_sqli_union_select() {
         // UNION SELECT is a classic SQLi pattern that production engines catch
         let result = DetectionEngine::analyze(
@@ -2674,6 +2686,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_path_traversal_dotdot() {
         // Path traversal is commonly caught by production WAFs
         let result = DetectionEngine::analyze(
@@ -2693,6 +2706,7 @@ mod tests {
     // ────────────────────────────────────────────────────────────────────────
 
     #[test]
+    #[serial]
     fn test_detection_timing() {
         // Warm up the engine
         let _ = DetectionEngine::analyze("GET", "/warmup", &[], None, TEST_IP);
@@ -2729,6 +2743,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_real_engine_performance_benchmark() {
         // THE HONEST BENCHMARK
         // Run 1000 iterations with a pattern the engine catches
@@ -2776,6 +2791,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_clean_traffic_performance() {
         // Benchmark clean traffic (most of production workload)
         let iterations = 1000;
@@ -2807,6 +2823,7 @@ mod tests {
     // ────────────────────────────────────────────────────────────────────────
 
     #[test]
+    #[serial]
     fn test_health_checker_default_status() {
         // Test that HealthChecker provides a default status
         let checker = HealthChecker::default();
@@ -2818,6 +2835,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_health_status_http_codes() {
         // Test HTTP status codes for different health states
         assert_eq!(
@@ -2840,6 +2858,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tls_config_default() {
         // Test that TLS config has sensible defaults
         let config = TlsConfig::default();
@@ -2852,6 +2871,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_loads_with_tls() {
         // Test that Config can be deserialized with TLS settings
         let yaml = r#"
@@ -2881,6 +2901,7 @@ tls:
     }
 
     #[test]
+    #[serial]
     fn test_synapse_proxy_health_integration() {
         // Test that SynapseProxy can be instantiated with health checker
         let backends = vec![("127.0.0.1".to_string(), 8080)];
@@ -2916,6 +2937,7 @@ tls:
     }
 
     #[test]
+    #[serial]
     fn test_per_domain_cert_structure() {
         // Test that PerDomainCert can be deserialized from YAML
         let yaml = r#"

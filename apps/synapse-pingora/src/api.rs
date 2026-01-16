@@ -651,8 +651,10 @@ mod tests {
         let handler = ApiHandler::builder().build();
         let response = handler.handle_list_sites();
 
-        assert!(!response.success);
-        assert!(response.error.is_some());
+        // Returns success with empty sites for legacy single-backend mode
+        assert!(response.success);
+        assert!(response.error.is_none());
+        assert!(response.data.unwrap().sites.is_empty());
     }
 
     #[test]

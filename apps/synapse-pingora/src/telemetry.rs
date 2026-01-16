@@ -346,6 +346,9 @@ pub struct TelemetryConfig {
     #[serde(default)]
     pub enabled_events: HashSet<EventType>,
     pub instance_id: Option<String>,
+    /// When true, skips actual HTTP sending (for testing)
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 impl Default for TelemetryConfig {
@@ -364,6 +367,7 @@ impl Default for TelemetryConfig {
             circuit_breaker_timeout: Duration::from_secs(60),
             enabled_events: HashSet::new(),
             instance_id: None,
+            dry_run: false,
         }
     }
 }
@@ -516,6 +520,13 @@ impl TelemetryClient {
     }
 
     async fn send_batch_with_retry(&self, batch: &TelemetryBatch) -> TelemetryResult<()> {
+        // In dry_run mode, skip actual HTTP sending but still update stats
+        if self.config.dry_run {
+            self.stats.events_sent.fetch_add(batch.len() as u64, Ordering::SeqCst);
+            self.stats.batches_sent.fetch_add(1, Ordering::SeqCst);
+            return Ok(());
+        }
+
         let mut backoff = self.config.initial_backoff;
 
         for attempt in 0..=self.config.max_retries {
@@ -708,6 +719,7 @@ mod tests {
             batch_size: 10,
             flush_interval: Duration::from_millis(100),
             max_buffer_size: 100,
+            dry_run: true, // Skip actual HTTP for tests
             ..Default::default()
         }
     }

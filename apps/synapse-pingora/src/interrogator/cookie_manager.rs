@@ -24,6 +24,7 @@ use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use subtle::ConstantTimeEq;
 
 use super::{ChallengeResponse, Interrogator, ValidationResult};
 
@@ -61,18 +62,24 @@ pub struct CookieConfig {
     pub same_site: String,
 }
 
-impl Default for CookieConfig {
-    fn default() -> Self {
-        Self {
-            cookie_name: "__tx_verify".to_string(),
-            cookie_max_age_secs: 86400, // 1 day
-            secret_key: [0u8; 32],      // MUST be overridden!
-            secure_only: true,
-            http_only: true,
-            same_site: "Strict".to_string(),
+/// Error returned when CookieManager construction fails
+#[derive(Debug, Clone, PartialEq)]
+pub enum CookieError {
+    /// Secret key is all zeros (insecure)
+    InvalidSecretKey,
+}
+
+impl std::fmt::Display for CookieError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CookieError::InvalidSecretKey => {
+                write!(f, "Secret key must not be all zeros")
+            }
         }
     }
 }
+
+impl std::error::Error for CookieError {}
 
 /// Statistics for cookie challenge operations
 #[derive(Debug, Default)]
@@ -113,6 +120,7 @@ pub struct CookieStatsSnapshot {
 }
 
 /// Thread-safe cookie challenge manager
+#[derive(Debug)]
 pub struct CookieManager {
     /// Active challenges by actor ID
     challenges: DashMap<String, CookieChallenge>,
@@ -124,7 +132,31 @@ pub struct CookieManager {
 
 impl CookieManager {
     /// Create a new cookie manager with the given configuration
-    pub fn new(config: CookieConfig) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `CookieError::InvalidSecretKey` if the secret key is all zeros.
+    pub fn new(config: CookieConfig) -> Result<Self, CookieError> {
+        // Validate secret key is not all zeros
+        if config.secret_key == [0u8; 32] {
+            return Err(CookieError::InvalidSecretKey);
+        }
+
+        Ok(Self {
+            challenges: DashMap::new(),
+            config,
+            stats: CookieStats::default(),
+        })
+    }
+
+    /// Create a new cookie manager without validating the secret key.
+    ///
+    /// # Safety
+    ///
+    /// This should only be used in tests. Using a weak secret key in production
+    /// allows attackers to forge valid cookies.
+    #[cfg(test)]
+    pub fn new_unchecked(config: CookieConfig) -> Self {
         Self {
             challenges: DashMap::new(),
             config,
@@ -193,17 +225,17 @@ impl CookieManager {
             return ValidationResult::Expired;
         }
 
-        // Verify actor hash matches
+        // Verify actor hash matches (constant-time to prevent timing attacks)
         let expected_hash = self.hash_actor_id(actor_id);
-        if actor_hash != expected_hash {
+        if !constant_time_eq(actor_hash.as_bytes(), expected_hash.as_bytes()) {
             self.stats.cookies_invalid.fetch_add(1, Ordering::Relaxed);
             return ValidationResult::Invalid("Actor mismatch".to_string());
         }
 
-        // Verify signature
+        // Verify signature (constant-time to prevent timing attacks)
         let data_to_verify = format!("{}.{}", timestamp, actor_hash);
         let expected_sig = self.sign_data(&data_to_verify);
-        if signature != expected_sig {
+        if !constant_time_eq(signature.as_bytes(), expected_sig.as_bytes()) {
             self.stats.cookies_invalid.fetch_add(1, Ordering::Relaxed);
             return ValidationResult::Invalid("Invalid signature".to_string());
         }
@@ -234,16 +266,16 @@ impl CookieManager {
             return None;
         }
 
-        // Search for actor with matching hash
+        // Search for actor with matching hash (constant-time comparison)
         for entry in self.challenges.iter() {
             let challenge = entry.value();
             let expected_hash = self.hash_actor_id(&challenge.actor_id);
 
-            if actor_hash == expected_hash {
-                // Verify signature
+            if constant_time_eq(actor_hash.as_bytes(), expected_hash.as_bytes()) {
+                // Verify signature (constant-time)
                 let data_to_verify = format!("{}.{}", timestamp, actor_hash);
                 let expected_sig = self.sign_data(&data_to_verify);
-                if signature == expected_sig {
+                if constant_time_eq(signature.as_bytes(), expected_sig.as_bytes()) {
                     self.stats.actors_correlated.fetch_add(1, Ordering::Relaxed);
                     return Some(challenge.actor_id.clone());
                 }
@@ -349,6 +381,15 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// Constant-time equality comparison to prevent timing attacks
+#[inline]
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.ct_eq(b).into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,8 +410,18 @@ mod tests {
     }
 
     #[test]
+    fn test_reject_zero_secret_key() {
+        let config = CookieConfig {
+            secret_key: [0u8; 32],
+            ..test_config()
+        };
+        let result = CookieManager::new(config);
+        assert_eq!(result.unwrap_err(), CookieError::InvalidSecretKey);
+    }
+
+    #[test]
     fn test_cookie_generation() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
         let challenge = manager.generate_tracking_cookie("actor_123");
 
         assert_eq!(challenge.cookie_name, "__test_cookie");
@@ -387,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_cookie_validation_success() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
         let challenge = manager.generate_tracking_cookie("actor_123");
 
         let result = manager.validate_cookie("actor_123", &challenge.cookie_value);
@@ -396,7 +447,7 @@ mod tests {
 
     #[test]
     fn test_cookie_validation_wrong_actor() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
         let challenge = manager.generate_tracking_cookie("actor_123");
 
         // Try to validate with different actor
@@ -406,7 +457,7 @@ mod tests {
 
     #[test]
     fn test_cookie_validation_tampered_signature() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
         let challenge = manager.generate_tracking_cookie("actor_123");
 
         // Tamper with the signature
@@ -419,7 +470,7 @@ mod tests {
 
     #[test]
     fn test_cookie_validation_invalid_format() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
 
         let result = manager.validate_cookie("actor_123", "invalid_cookie");
         assert!(matches!(result, ValidationResult::Invalid(_)));
@@ -435,7 +486,7 @@ mod tests {
             cookie_max_age_secs: 0, // Immediate expiration
             ..test_config()
         };
-        let manager = CookieManager::new(config);
+        let manager = CookieManager::new(config).unwrap();
         let challenge = manager.generate_tracking_cookie("actor_123");
 
         // Sleep at least 1 second to ensure expiration (cookies use second precision)
@@ -447,7 +498,7 @@ mod tests {
 
     #[test]
     fn test_actor_correlation() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
         let challenge = manager.generate_tracking_cookie("actor_123");
 
         // Should correlate back to original actor
@@ -461,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_hmac_consistency() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
 
         // Same actor should get same hash
         let hash1 = manager.hash_actor_id("actor_123");
@@ -475,7 +526,7 @@ mod tests {
 
     #[test]
     fn test_interrogator_trait() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
 
         assert_eq!(manager.name(), "cookie");
         assert_eq!(manager.challenge_level(), 1);
@@ -503,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_stats_tracking() {
-        let manager = CookieManager::new(test_config());
+        let manager = CookieManager::new(test_config()).unwrap();
 
         // Generate cookies
         manager.generate_tracking_cookie("actor_1");
@@ -530,7 +581,7 @@ mod tests {
             cookie_max_age_secs: 0, // Immediate expiration
             ..test_config()
         };
-        let manager = CookieManager::new(config);
+        let manager = CookieManager::new(config).unwrap();
 
         manager.generate_tracking_cookie("actor_1");
         manager.generate_tracking_cookie("actor_2");
@@ -555,8 +606,8 @@ mod tests {
             ..test_config()
         };
 
-        let manager1 = CookieManager::new(config1);
-        let manager2 = CookieManager::new(config2);
+        let manager1 = CookieManager::new(config1).unwrap();
+        let manager2 = CookieManager::new(config2).unwrap();
 
         let challenge1 = manager1.generate_tracking_cookie("actor_123");
         let challenge2 = manager2.generate_tracking_cookie("actor_123");

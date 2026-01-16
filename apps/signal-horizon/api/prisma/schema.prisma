@@ -618,6 +618,43 @@ model RuleSyncState {
   @@map("rule_sync_state")
 }
 
+// Scheduled rule deployments - persisted for restart recovery
+model ScheduledDeployment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  sensorIds   String[] // Target sensor IDs
+  rules       Json     // Serialized Rule[] payload
+  scheduledAt DateTime // When to execute the deployment
+
+  status      ScheduledDeploymentStatus @default(PENDING)
+  executedAt  DateTime?
+  cancelledAt DateTime?
+  error       String?
+
+  // Deployment result tracking
+  resultSuccess     Boolean?
+  resultTotalTargets Int?
+  resultSuccessCount Int?
+  resultFailureCount Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([tenantId])
+  @@index([status, scheduledAt]) // Query pending deployments by time
+  @@map("scheduled_deployments")
+}
+
+enum ScheduledDeploymentStatus {
+  PENDING    // Waiting to be executed
+  EXECUTING  // Currently running
+  COMPLETED  // Successfully executed
+  FAILED     // Execution failed
+  CANCELLED  // Manually cancelled
+}
+
 // =============================================================================
 // Signal Array - Fleet Operations
 // =============================================================================

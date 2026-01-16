@@ -43,6 +43,11 @@ pub struct ActorConfig {
     /// Default: 100
     pub max_rule_matches: usize,
 
+    /// Maximum number of session IDs to track per actor.
+    /// Prevents memory exhaustion from session hijacking attacks.
+    /// Default: 50
+    pub max_session_ids: usize,
+
     /// Whether actor tracking is enabled.
     /// Default: true
     pub enabled: bool,
@@ -60,6 +65,7 @@ impl Default for ActorConfig {
             correlation_threshold: 0.7,
             risk_decay_factor: 0.9,
             max_rule_matches: 100,
+            max_session_ids: 50, // Prevents memory exhaustion
             enabled: true,
             max_risk: 100.0,
         }
@@ -511,9 +517,15 @@ impl ActorManager {
     }
 
     /// Associate a session with an actor.
+    /// Session IDs are bounded by max_session_ids to prevent memory exhaustion.
     pub fn bind_session(&self, actor_id: &str, session_id: &str) {
         if let Some(mut entry) = self.actors.get_mut(actor_id) {
             if !entry.session_ids.contains(&session_id.to_string()) {
+                // SECURITY: Enforce max session_ids to prevent memory exhaustion
+                if entry.session_ids.len() >= self.config.max_session_ids {
+                    // Remove oldest session (FIFO)
+                    entry.session_ids.remove(0);
+                }
                 entry.session_ids.push(session_id.to_string());
                 entry.touch();
             }
@@ -753,18 +765,23 @@ impl Default for ActorManager {
 // Helper Functions
 // ============================================================================
 
-/// Generate a unique actor ID using UUID v4.
+/// Generate a unique actor ID using cryptographically secure random bytes.
 fn generate_actor_id() -> String {
-    // Use fastrand for fast random number generation
-    let a = fastrand::u64(..);
-    let b = fastrand::u64(..);
+    // Use getrandom for cryptographically secure random bytes
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("Failed to get random bytes");
+
+    // Format as UUID v4 with proper version and variant bits
+    bytes[6] = (bytes[6] & 0x0F) | 0x40; // Version 4
+    bytes[8] = (bytes[8] & 0x3F) | 0x80; // Variant 1
+
     format!(
-        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
-        (a >> 32) as u32,
-        (a >> 16) as u16 & 0xFFFF,
-        a as u16 & 0x0FFF,
-        ((b >> 48) as u16 & 0x3FFF) | 0x8000,
-        b & 0xFFFF_FFFF_FFFF
+        "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+        u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        u16::from_be_bytes([bytes[4], bytes[5]]),
+        u16::from_be_bytes([bytes[6], bytes[7]]),
+        u16::from_be_bytes([bytes[8], bytes[9]]),
+        u64::from_be_bytes([0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]])
     )
 }
 

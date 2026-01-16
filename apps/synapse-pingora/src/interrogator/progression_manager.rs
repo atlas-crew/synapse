@@ -35,9 +35,10 @@
 //! - TarpitManager: For level 4 challenges (from src/tarpit/)
 
 use dashmap::DashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::Notify;
 
 use super::{ChallengeResponse, CookieManager, JsChallengeManager, ValidationResult};
 use crate::tarpit::TarpitManager;
@@ -157,6 +158,9 @@ pub struct ProgressionConfig {
     pub cleanup_interval_secs: u64,
     /// Max states to track (default: 100_000)
     pub max_states: usize,
+    /// Max escalation history entries per actor (default: 100)
+    /// Prevents unbounded memory growth from malicious actors
+    pub max_escalation_history: usize,
 }
 
 impl Default for ProgressionConfig {
@@ -179,6 +183,7 @@ impl Default for ProgressionConfig {
             captcha_page_html: DEFAULT_CAPTCHA_PAGE.to_string(),
             cleanup_interval_secs: 300,
             max_states: 100_000,
+            max_escalation_history: 100, // Prevents memory exhaustion
         }
     }
 }
@@ -243,6 +248,10 @@ pub struct ProgressionManager {
     config: ProgressionConfig,
     /// Statistics
     stats: ProgressionStats,
+    /// Shutdown signal for background tasks
+    shutdown: Arc<Notify>,
+    /// Shutdown flag to check if shutdown was requested
+    shutdown_flag: Arc<AtomicBool>,
 }
 
 impl ProgressionManager {
@@ -260,12 +269,30 @@ impl ProgressionManager {
             tarpit_manager,
             config,
             stats: ProgressionStats::default(),
+            shutdown: Arc::new(Notify::new()),
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
     /// Get configuration
     pub fn config(&self) -> &ProgressionConfig {
         &self.config
+    }
+
+    /// Push an entry to escalation history with bounds checking.
+    /// If at capacity, removes oldest entry before adding new one.
+    /// This prevents memory exhaustion from malicious actors.
+    fn push_escalation_history(
+        &self,
+        state: &mut ActorChallengeState,
+        level: ChallengeLevel,
+        timestamp: u64,
+    ) {
+        // Remove oldest if at capacity
+        if state.escalation_history.len() >= self.config.max_escalation_history {
+            state.escalation_history.remove(0);
+        }
+        state.escalation_history.push((level, timestamp));
     }
 
     /// Get appropriate challenge for actor based on risk score and history
@@ -309,7 +336,7 @@ impl ProgressionManager {
         if state.total_failures >= self.config.skip_to_block_threshold {
             // Skip directly to block
             if state.current_level != ChallengeLevel::Block {
-                state.escalation_history.push((ChallengeLevel::Block, now));
+                self.push_escalation_history(&mut state, ChallengeLevel::Block, now);
                 state.current_level = ChallengeLevel::Block;
                 state.failures_at_level = 0;
                 self.stats.direct_blocks.fetch_add(1, Ordering::Relaxed);
@@ -318,7 +345,7 @@ impl ProgressionManager {
             // Normal escalation
             let next_level = self.next_level(state.current_level);
             if next_level != state.current_level {
-                state.escalation_history.push((next_level, now));
+                self.push_escalation_history(&mut state, next_level, now);
                 state.current_level = next_level;
                 state.failures_at_level = 0;
                 self.stats.escalations.fetch_add(1, Ordering::Relaxed);
@@ -347,7 +374,7 @@ impl ProgressionManager {
         let next_level = self.next_level(state.current_level);
 
         if next_level != state.current_level {
-            state.escalation_history.push((next_level, now));
+            self.push_escalation_history(&mut state, next_level, now);
             state.current_level = next_level;
             state.failures_at_level = 0;
             self.stats.escalations.fetch_add(1, Ordering::Relaxed);
@@ -366,7 +393,7 @@ impl ProgressionManager {
         let prev_level = self.prev_level(state.current_level);
 
         if prev_level != state.current_level {
-            state.escalation_history.push((prev_level, now));
+            self.push_escalation_history(&mut state, prev_level, now);
             state.current_level = prev_level;
             state.failures_at_level = 0;
             self.stats.de_escalations.fetch_add(1, Ordering::Relaxed);
@@ -410,16 +437,44 @@ impl ProgressionManager {
     }
 
     /// Start background tasks (de-escalation, cleanup)
+    ///
+    /// Spawns a background task that periodically runs maintenance.
+    /// The task will exit cleanly when `shutdown()` is called.
     pub fn start_background_tasks(self: Arc<Self>) {
         let manager = self.clone();
         let interval = Duration::from_secs(self.config.cleanup_interval_secs);
+        let shutdown = self.shutdown.clone();
+        let shutdown_flag = self.shutdown_flag.clone();
 
         tokio::spawn(async move {
+            let mut interval_timer = tokio::time::interval(interval);
+
             loop {
-                tokio::time::sleep(interval).await;
-                manager.run_maintenance();
+                tokio::select! {
+                    _ = interval_timer.tick() => {
+                        // Check shutdown flag before running maintenance
+                        if shutdown_flag.load(Ordering::Relaxed) {
+                            log::info!("Progression manager background tasks shutting down (flag)");
+                            break;
+                        }
+                        manager.run_maintenance();
+                    }
+                    _ = shutdown.notified() => {
+                        log::info!("Progression manager background tasks shutting down");
+                        break;
+                    }
+                }
             }
         });
+    }
+
+    /// Signal shutdown for background tasks.
+    ///
+    /// This method signals the background maintenance task to stop.
+    /// The task will exit after completing any in-progress work.
+    pub fn shutdown(&self) {
+        self.shutdown_flag.store(true, Ordering::Relaxed);
+        self.shutdown.notify_one();
     }
 
     /// Run maintenance tasks (de-escalation, cleanup)
@@ -507,13 +562,20 @@ impl ProgressionManager {
 
     // --- Private helpers ---
 
-    /// Get or create actor state
+    /// Get or create actor state atomically.
+    ///
+    /// Uses DashMap's entry API to avoid race conditions between checking
+    /// for existence and creating a new state.
     fn get_or_create_state(&self, actor_id: &str) -> ActorChallengeState {
-        match self.actor_states.get(actor_id) {
-            Some(state) => state.clone(),
-            None => {
+        // Use entry API for atomic get-or-insert to prevent race conditions
+        let entry = self.actor_states.entry(actor_id.to_string());
+        match entry {
+            dashmap::mapref::entry::Entry::Occupied(occupied) => occupied.get().clone(),
+            dashmap::mapref::entry::Entry::Vacant(vacant) => {
                 self.stats.actors_tracked.fetch_add(1, Ordering::Relaxed);
-                ActorChallengeState::new(actor_id.to_string())
+                let state = ActorChallengeState::new(actor_id.to_string());
+                vacant.insert(state.clone());
+                state
             }
         }
     }
@@ -530,7 +592,7 @@ impl ProgressionManager {
         if idle_time > de_escalate_threshold_ms {
             let prev_level = self.prev_level(state.current_level);
             if prev_level != state.current_level {
-                state.escalation_history.push((prev_level, now));
+                self.push_escalation_history(state, prev_level, now);
                 state.current_level = prev_level;
                 state.failures_at_level = 0;
                 self.stats.de_escalations.fetch_add(1, Ordering::Relaxed);
@@ -844,7 +906,9 @@ mod tests {
             cookie_name: "__test".to_string(),
             cookie_max_age_secs: 3600,
             secret_key: [0x01; 32],
-            ..Default::default()
+            secure_only: true,
+            http_only: true,
+            same_site: "Strict".to_string(),
         };
         let js_config = JsChallengeConfig {
             difficulty: 1, // Low for fast tests
@@ -856,7 +920,7 @@ mod tests {
         };
 
         (
-            Arc::new(CookieManager::new(cookie_config)),
+            Arc::new(CookieManager::new(cookie_config).expect("valid test config")),
             Arc::new(JsChallengeManager::new(js_config)),
             Arc::new(TarpitManager::new(tarpit_config)),
         )

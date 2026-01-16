@@ -27,9 +27,10 @@
 
 use dashmap::DashMap;
 use sha2::{Digest, Sha256};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::Notify;
 
 use super::{ChallengeResponse, Interrogator, ValidationResult};
 
@@ -131,6 +132,10 @@ pub struct JsChallengeManager {
     config: JsChallengeConfig,
     /// Statistics
     stats: JsChallengeStats,
+    /// Shutdown signal for background tasks
+    shutdown: Arc<Notify>,
+    /// Shutdown flag to check if shutdown was requested
+    shutdown_flag: Arc<AtomicBool>,
 }
 
 impl JsChallengeManager {
@@ -141,6 +146,8 @@ impl JsChallengeManager {
             attempt_counts: DashMap::new(),
             config,
             stats: JsChallengeStats::default(),
+            shutdown: Arc::new(Notify::new()),
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -182,6 +189,23 @@ impl JsChallengeManager {
 
     /// Validate a PoW solution
     pub fn validate_pow(&self, actor_id: &str, nonce: &str) -> ValidationResult {
+        // SECURITY: Validate nonce length to prevent memory exhaustion attacks.
+        // Valid nonces are numeric strings; even 2^64 is only 20 digits.
+        // Allow up to 32 chars to be safe with potential future formats.
+        const MAX_NONCE_LENGTH: usize = 32;
+        if nonce.len() > MAX_NONCE_LENGTH {
+            return ValidationResult::Invalid(format!(
+                "Nonce too long ({} > {} chars)",
+                nonce.len(),
+                MAX_NONCE_LENGTH
+            ));
+        }
+
+        // Validate nonce is numeric (expected from JS client)
+        if !nonce.chars().all(|c| c.is_ascii_digit()) {
+            return ValidationResult::Invalid("Nonce must be numeric".to_string());
+        }
+
         // Get challenge for actor
         let challenge = match self.challenges.get(actor_id) {
             Some(c) => c.clone(),
@@ -389,17 +413,45 @@ impl JsChallengeManager {
         self.challenges.get(actor_id).map(|c| c.clone())
     }
 
-    /// Start background cleanup task
+    /// Start background cleanup task.
+    ///
+    /// Spawns a background task that periodically removes expired challenges.
+    /// The task will exit cleanly when `shutdown()` is called.
     pub fn start_cleanup(self: Arc<Self>) {
         let manager = self.clone();
         let interval = Duration::from_secs(self.config.cleanup_interval_secs);
+        let shutdown = self.shutdown.clone();
+        let shutdown_flag = self.shutdown_flag.clone();
 
         tokio::spawn(async move {
+            let mut interval_timer = tokio::time::interval(interval);
+
             loop {
-                tokio::time::sleep(interval).await;
-                manager.cleanup_expired();
+                tokio::select! {
+                    _ = interval_timer.tick() => {
+                        // Check shutdown flag before running cleanup
+                        if shutdown_flag.load(Ordering::Relaxed) {
+                            log::info!("JS challenge manager cleanup task shutting down (flag)");
+                            break;
+                        }
+                        manager.cleanup_expired();
+                    }
+                    _ = shutdown.notified() => {
+                        log::info!("JS challenge manager cleanup task shutting down");
+                        break;
+                    }
+                }
             }
         });
+    }
+
+    /// Signal shutdown for background tasks.
+    ///
+    /// This method signals the background cleanup task to stop.
+    /// The task will exit after completing any in-progress work.
+    pub fn shutdown(&self) {
+        self.shutdown_flag.store(true, Ordering::Relaxed);
+        self.shutdown.notify_one();
     }
 
     /// Remove expired challenges
@@ -494,22 +546,14 @@ fn compute_sha256_hex(data: &str) -> String {
     hex::encode(result)
 }
 
-/// Generate random hex string of given length
+/// Generate random hex string of given length using cryptographically secure random
 fn generate_random_hex(len: usize) -> String {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
+    // Calculate number of bytes needed (2 hex chars per byte)
+    let byte_len = (len + 1) / 2;
+    let mut bytes = vec![0u8; byte_len];
+    getrandom::getrandom(&mut bytes).expect("Failed to get random bytes");
 
-    let mut result = String::with_capacity(len);
-    let state = RandomState::new();
-
-    while result.len() < len {
-        let mut hasher = state.build_hasher();
-        hasher.write_u64(now_ms());
-        hasher.write_usize(result.len());
-        let hash = hasher.finish();
-        result.push_str(&format!("{:016x}", hash));
-    }
-
+    let mut result = hex::encode(&bytes);
     result.truncate(len);
     result
 }
@@ -607,11 +651,11 @@ mod tests {
 
         // Make 3 attempts (max)
         for _ in 0..3 {
-            let _ = manager.validate_pow("actor_123", "wrong");
+            let _ = manager.validate_pow("actor_123", "99999999");
         }
 
         // 4th attempt should fail with max attempts
-        let result = manager.validate_pow("actor_123", "wrong");
+        let result = manager.validate_pow("actor_123", "99999999");
         assert!(matches!(result, ValidationResult::Invalid(msg) if msg.contains("Max attempts")));
     }
 
@@ -622,10 +666,10 @@ mod tests {
 
         assert_eq!(manager.get_attempts("actor_123"), 0);
 
-        manager.validate_pow("actor_123", "wrong");
+        manager.validate_pow("actor_123", "99999999");
         assert_eq!(manager.get_attempts("actor_123"), 1);
 
-        manager.validate_pow("actor_123", "wrong");
+        manager.validate_pow("actor_123", "99999999");
         assert_eq!(manager.get_attempts("actor_123"), 2);
     }
 
@@ -638,7 +682,7 @@ mod tests {
 
         // Make max attempts
         for _ in 0..3 {
-            let _ = manager.validate_pow("actor_123", "wrong");
+            let _ = manager.validate_pow("actor_123", "99999999");
         }
 
         assert!(manager.should_escalate("actor_123"));
@@ -720,8 +764,8 @@ mod tests {
         let stats = manager.stats().snapshot();
         assert_eq!(stats.challenges_issued, 2);
 
-        // Failed validation
-        manager.validate_pow("actor_1", "wrong");
+        // Failed validation (numeric nonce that won't solve PoW)
+        manager.validate_pow("actor_1", "99999999");
         let stats = manager.stats().snapshot();
         assert_eq!(stats.challenges_failed, 1);
     }
@@ -756,24 +800,26 @@ mod tests {
     #[test]
     fn test_successful_validation_clears_state() {
         let config = JsChallengeConfig {
-            difficulty: 1, // Very low for fast test
+            difficulty: 4, // Higher difficulty to ensure "99999999" won't accidentally pass
             ..test_config()
         };
         let manager = JsChallengeManager::new(config);
         let challenge = manager.generate_pow_challenge("actor_123");
 
-        // Make some failed attempts
-        manager.validate_pow("actor_123", "wrong");
-        manager.validate_pow("actor_123", "wrong");
+        // Make some failed attempts - verify they actually fail
+        let result1 = manager.validate_pow("actor_123", "99999999");
+        assert!(matches!(result1, ValidationResult::Invalid(_)));
+        let result2 = manager.validate_pow("actor_123", "99999998");
+        assert!(matches!(result2, ValidationResult::Invalid(_)));
         assert_eq!(manager.get_attempts("actor_123"), 2);
         assert!(manager.has_challenge("actor_123"));
 
-        // Find valid solution
+        // Find valid solution (need 4 leading zeros)
         let mut nonce = 0u64;
         loop {
             let data = format!("{}{}", challenge.prefix, nonce);
             let hash = compute_sha256_hex(&data);
-            if hash.starts_with("0") {
+            if hash.starts_with("0000") {
                 break;
             }
             nonce += 1;

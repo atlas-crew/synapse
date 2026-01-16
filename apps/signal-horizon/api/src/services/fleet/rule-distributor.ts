@@ -18,16 +18,86 @@ import type {
 } from './types.js';
 import type { FleetCommander } from './fleet-commander.js';
 
+/**
+ * Error thrown when a tenant attempts to access sensors they don't own
+ */
+export class TenantIsolationError extends Error {
+  constructor(
+    public readonly tenantId: string,
+    public readonly unauthorizedSensorIds: string[]
+  ) {
+    super(
+      `Tenant ${tenantId} does not have access to sensors: ${unauthorizedSensorIds.join(', ')}`
+    );
+    this.name = 'TenantIsolationError';
+  }
+}
+
 export class RuleDistributor {
   private prisma: PrismaClient;
   private logger: Logger;
   private fleetCommander: FleetCommander | null = null;
   /** Track active Blue/Green deployments */
   private activeDeployments: Map<string, BlueGreenDeploymentState> = new Map();
+  /** Track scheduled deployment timers for cancellation (deploymentId -> timer) */
+  private scheduledTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(prisma: PrismaClient, logger: Logger) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'rule-distributor' });
+  }
+
+  // =============================================================================
+  // Tenant Isolation (Security)
+  // =============================================================================
+
+  /**
+   * Validate that all sensor IDs belong to the specified tenant.
+   * CRITICAL: This MUST be called before any operation that modifies sensor state.
+   * @throws {TenantIsolationError} if any sensor does not belong to the tenant
+   */
+  private async validateSensorOwnership(
+    tenantId: string,
+    sensorIds: string[]
+  ): Promise<void> {
+    if (sensorIds.length === 0) return;
+
+    // Query all sensors and verify ownership
+    const sensors = await this.prisma.sensor.findMany({
+      where: {
+        id: { in: sensorIds },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+      },
+    });
+
+    const sensorMap = new Map(sensors.map((s) => [s.id, s.tenantId]));
+    const unauthorizedSensorIds: string[] = [];
+
+    for (const sensorId of sensorIds) {
+      const ownerTenantId = sensorMap.get(sensorId);
+      if (!ownerTenantId) {
+        // Sensor not found - treat as unauthorized (don't leak info about non-existent sensors)
+        unauthorizedSensorIds.push(sensorId);
+      } else if (ownerTenantId !== tenantId) {
+        // Sensor belongs to different tenant
+        unauthorizedSensorIds.push(sensorId);
+      }
+    }
+
+    if (unauthorizedSensorIds.length > 0) {
+      this.logger.warn(
+        {
+          tenantId,
+          unauthorizedSensorIds,
+          totalRequested: sensorIds.length,
+        },
+        'Tenant isolation violation attempted'
+      );
+      throw new TenantIsolationError(tenantId, unauthorizedSensorIds);
+    }
   }
 
   /**
@@ -109,22 +179,40 @@ export class RuleDistributor {
 
   /**
    * Push rules to sensors immediately
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param sensorIds - Target sensor IDs (must belong to tenantId)
+   * @param rules - Rules to deploy
+   * @throws {TenantIsolationError} if any sensor does not belong to the tenant
    */
-  async pushRules(sensorIds: string[], rules: Rule[]): Promise<DeploymentResult> {
-    return this.pushRulesWithStrategy(sensorIds, rules, {
+  async pushRules(
+    tenantId: string,
+    sensorIds: string[],
+    rules: Rule[]
+  ): Promise<DeploymentResult> {
+    await this.validateSensorOwnership(tenantId, sensorIds);
+    return this.pushRulesWithStrategyInternal(sensorIds, rules, {
       strategy: 'immediate',
-    });
+    }, tenantId);
   }
 
   /**
    * Distribute rules by ID to sensors with optional rollout strategy
    * Fetches rule definitions from database and delegates to pushRulesWithStrategy
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param ruleIds - IDs of rules to distribute
+   * @param sensorIds - Target sensor IDs (must belong to tenantId)
+   * @param options - Rollout strategy options
+   * @throws {TenantIsolationError} if any sensor does not belong to the tenant
    */
   async distributeRules(
+    tenantId: string,
     ruleIds: string[],
     sensorIds: string[],
     options: { strategy: RolloutConfig['strategy']; canaryPercentage?: number }
   ): Promise<DeploymentResult> {
+    // SECURITY: Validate tenant owns all target sensors BEFORE any operation
+    await this.validateSensorOwnership(tenantId, sensorIds);
+
     // For now, create minimal rule objects with just the IDs
     // In a full implementation, rules would be fetched from a rules table
     const rules: Rule[] = ruleIds.map((id, index) => ({
@@ -141,16 +229,39 @@ export class RuleDistributor {
       canaryPercentages: options.canaryPercentage ? [options.canaryPercentage, 50, 100] : undefined,
     };
 
-    return this.pushRulesWithStrategy(sensorIds, rules, config);
+    return this.pushRulesWithStrategyInternal(sensorIds, rules, config, tenantId);
   }
 
   /**
    * Push rules with a rollout strategy
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param sensorIds - Target sensor IDs (must belong to tenantId)
+   * @param rules - Rules to deploy
+   * @param config - Rollout configuration
+   * @throws {TenantIsolationError} if any sensor does not belong to the tenant
    */
   async pushRulesWithStrategy(
+    tenantId: string,
     sensorIds: string[],
     rules: Rule[],
     config: RolloutConfig
+  ): Promise<DeploymentResult> {
+    // SECURITY: Validate tenant owns all target sensors BEFORE any operation
+    await this.validateSensorOwnership(tenantId, sensorIds);
+    return this.pushRulesWithStrategyInternal(sensorIds, rules, config, tenantId);
+  }
+
+  /**
+   * Internal method for pushing rules with a rollout strategy.
+   * SECURITY NOTE: This method does NOT validate tenant ownership.
+   * Callers MUST validate ownership via validateSensorOwnership() first.
+   * @param tenantId - Required for scheduled deployments (persistence)
+   */
+  private async pushRulesWithStrategyInternal(
+    sensorIds: string[],
+    rules: Rule[],
+    config: RolloutConfig,
+    tenantId?: string
   ): Promise<DeploymentResult> {
     if (!this.fleetCommander) {
       throw new Error('FleetCommander not initialized');
@@ -173,7 +284,7 @@ export class RuleDistributor {
         break;
 
       case 'scheduled':
-        deploymentResult = await this.deployScheduled(sensorIds, rules, config);
+        deploymentResult = await this.deployScheduled(sensorIds, rules, config, tenantId);
         break;
 
       case 'rolling':
@@ -206,29 +317,32 @@ export class RuleDistributor {
     // Compute rules hash
     const rulesHash = await this.computeRulesHash(rules);
 
-    // Create pending sync state for all sensors
-    for (const sensorId of sensorIds) {
-      for (const rule of rules) {
-        await this.prisma.ruleSyncState.upsert({
-          where: {
-            sensorId_ruleId: {
+    // Create pending sync state for all sensors using batch transaction
+    // Batched upserts: O(1) transaction instead of O(sensors × rules) sequential operations
+    await this.prisma.$transaction(
+      sensorIds.flatMap((sensorId) =>
+        rules.map((rule) =>
+          this.prisma.ruleSyncState.upsert({
+            where: {
+              sensorId_ruleId: {
+                sensorId,
+                ruleId: rule.id,
+              },
+            },
+            create: {
               sensorId,
               ruleId: rule.id,
+              status: 'pending',
             },
-          },
-          create: {
-            sensorId,
-            ruleId: rule.id,
-            status: 'pending',
-          },
-          update: {
-            status: 'pending',
-            syncedAt: null,
-            error: null,
-          },
-        });
-      }
-    }
+            update: {
+              status: 'pending',
+              syncedAt: null,
+              error: null,
+            },
+          })
+        )
+      )
+    );
 
     // Send push_rules command to all sensors
     const commandIds = await this.fleetCommander.sendCommandToMultiple(sensorIds, {
@@ -314,14 +428,20 @@ export class RuleDistributor {
 
   /**
    * Scheduled deployment: Push at a specific time
+   * Persists the scheduled deployment to the database for restart recovery
    */
   private async deployScheduled(
     sensorIds: string[],
     rules: Rule[],
-    config: RolloutConfig
+    config: RolloutConfig,
+    tenantId?: string
   ): Promise<DeploymentResult> {
     if (!config.scheduledTime) {
       throw new Error('Scheduled deployment requires scheduledTime');
+    }
+
+    if (!tenantId) {
+      throw new Error('Scheduled deployment requires tenantId for persistence');
     }
 
     const now = new Date();
@@ -332,19 +452,28 @@ export class RuleDistributor {
       return this.deployImmediate(sensorIds, rules);
     }
 
+    // Persist scheduled deployment to database for restart recovery
+    const scheduledDeployment = await this.prisma.scheduledDeployment.create({
+      data: {
+        tenantId,
+        sensorIds,
+        rules: rules as unknown as object,
+        scheduledAt: scheduledTime,
+        status: 'PENDING',
+      },
+    });
+
     const delayMs = scheduledTime.getTime() - now.getTime();
 
     this.logger.info(
-      { scheduledTime, delayMs },
-      'Scheduling rule deployment'
+      { deploymentId: scheduledDeployment.id, scheduledTime, delayMs, sensorCount: sensorIds.length },
+      'Scheduling rule deployment (persisted)'
     );
 
-    // Schedule deployment
-    setTimeout(() => {
-      void this.deployImmediate(sensorIds, rules);
-    }, delayMs);
+    // Schedule in-memory timer and track it for cancellation
+    this.scheduleDeploymentTimer(scheduledDeployment.id, sensorIds, rules, delayMs);
 
-    // Return pending result
+    // Return pending result with deployment ID
     const results: DeploymentResult['results'] = sensorIds.map((sensorId) => ({
       sensorId,
       success: true,
@@ -357,7 +486,228 @@ export class RuleDistributor {
       failureCount: 0,
       pendingCount: sensorIds.length,
       results,
+      scheduledDeploymentId: scheduledDeployment.id,
     };
+  }
+
+  /**
+   * Schedule the in-memory timer for a deployment and track it
+   */
+  private scheduleDeploymentTimer(
+    deploymentId: string,
+    sensorIds: string[],
+    rules: Rule[],
+    delayMs: number
+  ): void {
+    const timer = setTimeout(() => {
+      void this.executeScheduledDeployment(deploymentId, sensorIds, rules);
+    }, delayMs);
+
+    this.scheduledTimers.set(deploymentId, timer);
+  }
+
+  /**
+   * Execute a scheduled deployment and update database status
+   */
+  private async executeScheduledDeployment(
+    deploymentId: string,
+    sensorIds: string[],
+    rules: Rule[]
+  ): Promise<void> {
+    // Remove timer from tracking
+    this.scheduledTimers.delete(deploymentId);
+
+    try {
+      // Mark as executing
+      await this.prisma.scheduledDeployment.update({
+        where: { id: deploymentId },
+        data: { status: 'EXECUTING' },
+      });
+
+      this.logger.info(
+        { deploymentId, sensorCount: sensorIds.length },
+        'Executing scheduled deployment'
+      );
+
+      // Execute the actual deployment
+      const result = await this.deployImmediate(sensorIds, rules);
+
+      // Update with result
+      await this.prisma.scheduledDeployment.update({
+        where: { id: deploymentId },
+        data: {
+          status: 'COMPLETED',
+          executedAt: new Date(),
+          resultSuccess: result.success,
+          resultTotalTargets: result.totalTargets,
+          resultSuccessCount: result.successCount,
+          resultFailureCount: result.failureCount,
+        },
+      });
+
+      this.logger.info(
+        { deploymentId, success: result.success },
+        'Scheduled deployment completed'
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      await this.prisma.scheduledDeployment.update({
+        where: { id: deploymentId },
+        data: {
+          status: 'FAILED',
+          executedAt: new Date(),
+          error: errorMessage,
+        },
+      });
+
+      this.logger.error(
+        { deploymentId, error: errorMessage },
+        'Scheduled deployment failed'
+      );
+    }
+  }
+
+  /**
+   * Cancel a scheduled deployment
+   * @param tenantId - The tenant making the request
+   * @param deploymentId - The scheduled deployment ID to cancel
+   * @returns true if cancelled, false if not found or already executed
+   */
+  async cancelScheduledDeployment(tenantId: string, deploymentId: string): Promise<boolean> {
+    // Find the deployment and verify tenant ownership
+    const deployment = await this.prisma.scheduledDeployment.findUnique({
+      where: { id: deploymentId },
+    });
+
+    if (!deployment) {
+      this.logger.warn({ deploymentId }, 'Scheduled deployment not found');
+      return false;
+    }
+
+    if (deployment.tenantId !== tenantId) {
+      this.logger.warn(
+        { deploymentId, tenantId, ownerTenantId: deployment.tenantId },
+        'Tenant does not own scheduled deployment'
+      );
+      return false;
+    }
+
+    if (deployment.status !== 'PENDING') {
+      this.logger.warn(
+        { deploymentId, status: deployment.status },
+        'Cannot cancel deployment - not in PENDING status'
+      );
+      return false;
+    }
+
+    // Clear the in-memory timer if it exists
+    const timer = this.scheduledTimers.get(deploymentId);
+    if (timer) {
+      clearTimeout(timer);
+      this.scheduledTimers.delete(deploymentId);
+    }
+
+    // Update database status
+    await this.prisma.scheduledDeployment.update({
+      where: { id: deploymentId },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+      },
+    });
+
+    this.logger.info({ deploymentId }, 'Scheduled deployment cancelled');
+    return true;
+  }
+
+  /**
+   * Get scheduled deployments for a tenant
+   */
+  async getScheduledDeployments(
+    tenantId: string,
+    options?: { status?: 'PENDING' | 'EXECUTING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' }
+  ): Promise<Array<{
+    id: string;
+    sensorIds: string[];
+    scheduledAt: Date;
+    status: string;
+    createdAt: Date;
+  }>> {
+    const deployments = await this.prisma.scheduledDeployment.findMany({
+      where: {
+        tenantId,
+        ...(options?.status && { status: options.status }),
+      },
+      orderBy: { scheduledAt: 'asc' },
+      select: {
+        id: true,
+        sensorIds: true,
+        scheduledAt: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return deployments;
+  }
+
+  /**
+   * Recover pending scheduled deployments on service startup
+   * Call this method during service initialization to reschedule any
+   * deployments that were pending when the service was restarted
+   */
+  async recoverScheduledDeployments(): Promise<number> {
+    const now = new Date();
+
+    // Find all pending scheduled deployments
+    const pendingDeployments = await this.prisma.scheduledDeployment.findMany({
+      where: {
+        status: 'PENDING',
+      },
+      orderBy: { scheduledAt: 'asc' },
+    });
+
+    let rescheduledCount = 0;
+    let expiredCount = 0;
+
+    for (const deployment of pendingDeployments) {
+      const rules = deployment.rules as unknown as Rule[];
+      const scheduledTime = deployment.scheduledAt;
+      const delayMs = scheduledTime.getTime() - now.getTime();
+
+      if (delayMs <= 0) {
+        // Scheduled time has passed - execute immediately
+        this.logger.info(
+          { deploymentId: deployment.id, scheduledAt: scheduledTime },
+          'Recovering expired scheduled deployment - executing now'
+        );
+
+        // Execute immediately in background
+        void this.executeScheduledDeployment(deployment.id, deployment.sensorIds, rules);
+        expiredCount++;
+      } else {
+        // Reschedule for the future
+        this.logger.info(
+          { deploymentId: deployment.id, scheduledAt: scheduledTime, delayMs },
+          'Rescheduling pending deployment after restart'
+        );
+
+        this.scheduleDeploymentTimer(deployment.id, deployment.sensorIds, rules, delayMs);
+        rescheduledCount++;
+      }
+    }
+
+    this.logger.info(
+      {
+        totalPending: pendingDeployments.length,
+        rescheduled: rescheduledCount,
+        executedImmediately: expiredCount,
+      },
+      'Scheduled deployment recovery complete'
+    );
+
+    return pendingDeployments.length;
   }
 
   /**
@@ -1079,12 +1429,60 @@ export class RuleDistributor {
 
   /**
    * Get previous rule version for rollback
+   * Queries the FleetCommand history to find the last successful push_rules command
+   * and returns those rules for rollback
    */
   private async getPreviousRuleVersion(_currentRules: Rule[]): Promise<Rule[]> {
-    // Query for previous rule deployment
-    // For now, return empty array (effectively disabling rules)
-    // In production, this would fetch from rule history table
-    return [];
+    // Get the most recent successful push_rules commands to find what rules
+    // were deployed before the current deployment
+    // We look for the second-to-last successful deployment (since the last one is current)
+    const previousCommands = await this.prisma.fleetCommand.findMany({
+      where: {
+        commandType: 'push_rules',
+        status: 'success',
+      },
+      orderBy: {
+        completedAt: 'desc',
+      },
+      take: 2, // Get the two most recent successful deployments
+      select: {
+        id: true,
+        payload: true,
+        completedAt: true,
+      },
+    });
+
+    // If we have at least 2 successful deployments, use the second one (previous)
+    // If only 1, there's no previous state to rollback to
+    if (previousCommands.length < 2) {
+      this.logger.warn(
+        { commandsFound: previousCommands.length },
+        'No previous rule deployment found for rollback - returning empty rules'
+      );
+      return [];
+    }
+
+    const previousCommand = previousCommands[1]; // Second-to-last (previous deployment)
+    const payload = previousCommand.payload as { rules?: Rule[] } | null;
+
+    if (!payload?.rules || !Array.isArray(payload.rules)) {
+      this.logger.warn(
+        { commandId: previousCommand.id },
+        'Previous command payload does not contain valid rules array'
+      );
+      return [];
+    }
+
+    this.logger.info(
+      {
+        commandId: previousCommand.id,
+        ruleCount: payload.rules.length,
+        completedAt: previousCommand.completedAt,
+      },
+      'Found previous rule version for rollback'
+    );
+
+    return payload.rules;
   }
 
   /**
@@ -1174,17 +1572,51 @@ export class RuleDistributor {
 
   /**
    * Bulk update rule sync states
+   * Uses batch transaction instead of sequential operations
    */
   async bulkUpdateRuleSync(
     sensorId: string,
     updates: Array<{ ruleId: string; status: 'synced' | 'failed'; error?: string }>
   ): Promise<void> {
-    for (const update of updates) {
-      if (update.status === 'synced') {
-        await this.markRuleSynced(sensorId, update.ruleId);
-      } else {
-        await this.markRuleFailed(sensorId, update.ruleId, update.error ?? 'Unknown error');
-      }
+    if (updates.length === 0) return;
+
+    const now = new Date();
+
+    // Batch all upserts in a single transaction
+    await this.prisma.$transaction(
+      updates.map((update) =>
+        this.prisma.ruleSyncState.upsert({
+          where: {
+            sensorId_ruleId: {
+              sensorId,
+              ruleId: update.ruleId,
+            },
+          },
+          create: {
+            sensorId,
+            ruleId: update.ruleId,
+            status: update.status,
+            syncedAt: update.status === 'synced' ? now : null,
+            error: update.status === 'failed' ? (update.error ?? 'Unknown error') : null,
+          },
+          update: {
+            status: update.status,
+            syncedAt: update.status === 'synced' ? now : null,
+            error: update.status === 'failed' ? (update.error ?? 'Unknown error') : null,
+          },
+        })
+      )
+    );
+
+    // Log summary instead of individual operations
+    const syncedCount = updates.filter((u) => u.status === 'synced').length;
+    const failedCount = updates.filter((u) => u.status === 'failed').length;
+
+    if (syncedCount > 0) {
+      this.logger.info({ sensorId, syncedCount }, 'Rules synced in bulk');
+    }
+    if (failedCount > 0) {
+      this.logger.warn({ sensorId, failedCount }, 'Rules failed in bulk');
     }
   }
 
@@ -1231,8 +1663,14 @@ export class RuleDistributor {
 
   /**
    * Retry failed rule syncs for a sensor
+   * @param tenantId - The tenant making the request (required for authorization)
+   * @param sensorId - Target sensor ID (must belong to tenantId)
+   * @throws {TenantIsolationError} if sensor does not belong to the tenant
    */
-  async retryFailedRules(sensorId: string): Promise<DeploymentResult> {
+  async retryFailedRules(tenantId: string, sensorId: string): Promise<DeploymentResult> {
+    // SECURITY: Validate tenant owns the sensor BEFORE any operation
+    await this.validateSensorOwnership(tenantId, [sensorId]);
+
     if (!this.fleetCommander) {
       throw new Error('FleetCommander not initialized');
     }

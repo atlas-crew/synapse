@@ -69,6 +69,7 @@ unicase = "2.7"         # Zero-allocation case-insensitive strings (PERF-P0-1)
 zeroize = "1.7"         # Secure memory clearing (SEC-010)
 governor = "0.6"        # Rate limiting (SEC-009)
 fastrand = "2.0"        # Fast random number generation for sampling
+getrandom = "0.2"       # Cryptographically secure random (SEC-PRNG)
 
 # System monitoring
 sysinfo = "0.32"        # CPU, memory, network, process metrics
@@ -85,6 +86,7 @@ subtle = "2.5"          # Constant-time comparison for crypto
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
+serial_test = "3"
 
 # [[bench]]
 # name = "detection"

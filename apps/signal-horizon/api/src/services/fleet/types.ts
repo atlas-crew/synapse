@@ -107,6 +107,8 @@ export interface DeploymentResult {
     error?: string;
     commandId?: string;
   }>;
+  /** ID of the persisted scheduled deployment (only for scheduled strategy) */
+  scheduledDeploymentId?: string;
 }
 
 export interface SensorCommand {
