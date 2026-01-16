@@ -1,0 +1,617 @@
+/**
+ * Bandwidth Dashboard Page
+ * Fleet-wide bandwidth metrics, timeline visualization, and billing breakdown
+ */
+
+import { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  Activity,
+  DollarSign,
+  Server,
+  Clock,
+  TrendingUp,
+  Download,
+  type LucideIcon,
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
+import {
+  useBandwidthDashboard,
+  type BandwidthDataPoint,
+  type EndpointBandwidthStats,
+} from '../../hooks/fleet/useBandwidth';
+import { CardSkeleton, TableSkeleton } from '../../components/LoadingStates';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const COLORS = {
+  ingress: '#0057B7', // Atlas Crew Blue
+  egress: '#00B140', // Atlas Crew Green
+  primary: '#0057B7',
+  secondary: '#529EEC',
+  accent: '#EF3340',
+};
+
+const PIE_COLORS = ['#0057B7', '#00B140', '#E35205', '#529EEC', '#440099'];
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function formatNumber(num: number): string {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toLocaleString();
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(amount);
+}
+
+// ============================================================================
+// Stat Card Component
+// ============================================================================
+
+interface StatCardProps {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  subValue?: string;
+  trend?: { value: number; label: string };
+  color: string;
+  bgColor: string;
+}
+
+function StatCard({ icon: Icon, label, value, subValue, trend, color, bgColor }: StatCardProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-surface-card border border-border-subtle p-5"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-ink-secondary">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-ink-primary">{value}</p>
+          {subValue && <p className="text-sm text-ink-muted mt-1">{subValue}</p>}
+          {trend && (
+            <div className={clsx('mt-2 flex items-center gap-1 text-sm', trend.value >= 0 ? 'text-green-400' : 'text-red-400')}>
+              <TrendingUp className={clsx('w-4 h-4', trend.value < 0 && 'rotate-180')} />
+              <span>{Math.abs(trend.value)}% {trend.label}</span>
+            </div>
+          )}
+        </div>
+        <div className={clsx('p-3', bgColor)}>
+          <Icon className={clsx('w-6 h-6', color)} />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// Timeline Chart Component
+// ============================================================================
+
+interface TimelineChartProps {
+  data: BandwidthDataPoint[];
+  granularity: '1m' | '5m' | '1h';
+}
+
+function TimelineChart({ data, granularity }: TimelineChartProps) {
+  const formattedData = useMemo(
+    () =>
+      data.map((d) => ({
+        ...d,
+        time: new Date(d.timestamp).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        ingressMB: d.bytesIn / (1024 * 1024),
+        egressMB: d.bytesOut / (1024 * 1024),
+      })),
+    [data]
+  );
+
+  return (
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-ink-primary">Bandwidth Timeline</h3>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.ingress }} />
+            <span className="text-ink-secondary">Ingress</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.egress }} />
+            <span className="text-ink-secondary">Egress</span>
+          </div>
+          <span className="text-ink-muted text-xs">({granularity} intervals)</span>
+        </div>
+      </div>
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={formattedData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+            <defs>
+              <linearGradient id="ingressGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={COLORS.ingress} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={COLORS.ingress} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="egressGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={COLORS.egress} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={COLORS.egress} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="time"
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
+              axisLine={{ stroke: '#374151' }}
+              tickLine={false}
+              tickFormatter={(v) => `${v.toFixed(0)} MB`}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                border: '1px solid #374151',
+                borderRadius: '0',
+                color: '#fff',
+              }}
+              labelStyle={{ color: '#9ca3af' }}
+              formatter={(value: number, name: string) => [
+                `${value.toFixed(2)} MB`,
+                name === 'ingressMB' ? 'Ingress' : 'Egress',
+              ]}
+            />
+            <Area
+              type="monotone"
+              dataKey="ingressMB"
+              stroke={COLORS.ingress}
+              fill="url(#ingressGradient)"
+              strokeWidth={2}
+            />
+            <Area
+              type="monotone"
+              dataKey="egressMB"
+              stroke={COLORS.egress}
+              fill="url(#egressGradient)"
+              strokeWidth={2}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Top Endpoints Table
+// ============================================================================
+
+interface TopEndpointsTableProps {
+  endpoints: EndpointBandwidthStats[];
+}
+
+function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
+  return (
+    <div className="bg-surface-card border border-border-subtle">
+      <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-ink-primary">Top Endpoints by Bandwidth</h3>
+        <span className="text-sm text-ink-secondary">{endpoints.length} endpoints</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
+              <th className="px-5 py-3 font-medium">Endpoint</th>
+              <th className="px-5 py-3 font-medium text-right">Ingress</th>
+              <th className="px-5 py-3 font-medium text-right">Egress</th>
+              <th className="px-5 py-3 font-medium text-right">Requests</th>
+              <th className="px-5 py-3 font-medium text-right">Avg Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {endpoints.slice(0, 10).map((ep) => (
+              <tr
+                key={ep.endpoint}
+                className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
+              >
+                <td className="px-5 py-3 text-sm">
+                  <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5">{ep.endpoint}</code>
+                  <div className="mt-1 flex gap-1">
+                    {ep.methods.map((m) => (
+                      <span key={m} className="text-xs text-ink-muted bg-surface-subtle px-1.5 py-0.5">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-sm text-ink-secondary text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <ArrowDownLeft className="w-3 h-3 text-blue-400" />
+                    {formatBytes(ep.bytesIn)}
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-sm text-ink-secondary text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <ArrowUpRight className="w-3 h-3 text-green-400" />
+                    {formatBytes(ep.bytesOut)}
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-sm text-ink-primary text-right font-medium">
+                  {formatNumber(ep.requestCount)}
+                </td>
+                <td className="px-5 py-3 text-sm text-ink-secondary text-right">
+                  {formatBytes(ep.avgResponseSize)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Billing Panel
+// ============================================================================
+
+interface BillingPanelProps {
+  totalTransfer: number;
+  ingressBytes: number;
+  egressBytes: number;
+  estimatedCost: number;
+  costPerGb: number;
+  periodStart: string;
+  periodEnd: string;
+}
+
+function BillingPanel({
+  totalTransfer,
+  ingressBytes,
+  egressBytes,
+  estimatedCost,
+  costPerGb,
+  periodStart,
+  periodEnd,
+}: BillingPanelProps) {
+  const pieData = [
+    { name: 'Ingress', value: ingressBytes },
+    { name: 'Egress', value: egressBytes },
+  ];
+
+  const startDate = new Date(periodStart).toLocaleDateString();
+  const endDate = new Date(periodEnd).toLocaleDateString();
+
+  return (
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-ink-primary">Billing Summary</h3>
+        <span className="text-xs text-ink-muted">
+          {startDate} - {endDate}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-surface-subtle p-3">
+          <div className="flex items-center gap-2 text-ink-secondary text-sm">
+            <Download className="w-4 h-4" />
+            Total Transfer
+          </div>
+          <div className="text-2xl font-bold text-ink-primary mt-1">{formatBytes(totalTransfer)}</div>
+        </div>
+        <div className="bg-surface-subtle p-3">
+          <div className="flex items-center gap-2 text-ink-secondary text-sm">
+            <DollarSign className="w-4 h-4" />
+            Estimated Cost
+          </div>
+          <div className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(estimatedCost)}</div>
+          <div className="text-xs text-ink-muted mt-1">@ {formatCurrency(costPerGb)}/GB</div>
+        </div>
+      </div>
+
+      <div className="h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={pieData}
+              cx="50%"
+              cy="50%"
+              innerRadius={40}
+              outerRadius={60}
+              paddingAngle={2}
+              dataKey="value"
+              nameKey="name"
+            >
+              {pieData.map((_, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={index === 0 ? COLORS.ingress : COLORS.egress}
+                />
+              ))}
+            </Pie>
+            <Legend
+              formatter={(value, entry) => (
+                <span className="text-ink-secondary text-sm">
+                  {value}: {formatBytes(entry.payload?.value || 0)}
+                </span>
+              )}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                border: '1px solid #374151',
+                borderRadius: '0',
+                color: '#fff',
+              }}
+              formatter={(value: number) => formatBytes(value)}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Sensor Breakdown Chart
+// ============================================================================
+
+interface SensorBreakdownProps {
+  sensors: Array<{
+    sensorId: string;
+    sensorName: string;
+    bytes: number;
+    percentage: number;
+    requestCount: number;
+  }>;
+}
+
+function SensorBreakdown({ sensors }: SensorBreakdownProps) {
+  const chartData = useMemo(
+    () =>
+      sensors.map((s) => ({
+        name: s.sensorName,
+        bytes: s.bytes / (1024 * 1024 * 1024), // Convert to GB
+        requests: s.requestCount,
+      })),
+    [sensors]
+  );
+
+  return (
+    <div className="bg-surface-card border border-border-subtle p-5">
+      <h3 className="text-lg font-semibold text-ink-primary mb-4">Bandwidth by Sensor</h3>
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} layout="vertical" margin={{ left: 100 }}>
+            <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} tickFormatter={(v) => `${v.toFixed(0)} GB`} />
+            <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} width={100} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                border: '1px solid #374151',
+                borderRadius: '0',
+                color: '#fff',
+              }}
+              formatter={(value: number) => [`${value.toFixed(2)} GB`, 'Bandwidth']}
+            />
+            <Bar dataKey="bytes" fill={COLORS.primary} radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-4 space-y-2">
+        {sensors.map((sensor, index) => (
+          <div key={sensor.sensorId} className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+              />
+              <span className="text-ink-secondary">{sensor.sensorName}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-ink-muted">{formatNumber(sensor.requestCount)} req</span>
+              <span className="text-ink-primary font-medium">{sensor.percentage}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Page Component
+// ============================================================================
+
+export default function BandwidthDashboardPage() {
+  const [timelineGranularity, setTimelineGranularity] = useState<'1m' | '5m' | '1h'>('5m');
+  const [timelineDuration, setTimelineDuration] = useState(60);
+
+  const { fleetStats, timeline, endpoints, billing, isLoading, isError, error } = useBandwidthDashboard({
+    timelineGranularity,
+    timelineDuration,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading bandwidth dashboard">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-ink-primary">Bandwidth Dashboard</h1>
+            <p className="text-ink-secondary mt-1">Loading bandwidth metrics...</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+        <CardSkeleton />
+        <div className="grid grid-cols-3 gap-6">
+          <div className="col-span-2">
+            <TableSkeleton rows={5} />
+          </div>
+          <CardSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-500/10 border border-red-500/50 p-4">
+          <h2 className="text-lg font-semibold text-red-400">Error Loading Dashboard</h2>
+          <p className="text-ink-secondary mt-1">{error instanceof Error ? error.message : 'Unknown error'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = fleetStats.data;
+  const timelineData = timeline.data;
+  const endpointData = endpoints.data;
+  const billingData = billing.data;
+
+  return (
+    <div className="p-6 space-y-6" role="main" aria-label="Bandwidth dashboard">
+      {/* Header */}
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-primary">Bandwidth Dashboard</h1>
+          <p className="text-ink-secondary mt-1">Fleet-wide bandwidth metrics and billing analysis</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <select
+            value={timelineGranularity}
+            onChange={(e) => setTimelineGranularity(e.target.value as '1m' | '5m' | '1h')}
+            className="bg-surface-card border border-border-subtle px-3 py-2 text-sm text-ink-primary"
+          >
+            <option value="1m">1 minute intervals</option>
+            <option value="5m">5 minute intervals</option>
+            <option value="1h">1 hour intervals</option>
+          </select>
+          <select
+            value={timelineDuration}
+            onChange={(e) => setTimelineDuration(Number(e.target.value))}
+            className="bg-surface-card border border-border-subtle px-3 py-2 text-sm text-ink-primary"
+          >
+            <option value={30}>Last 30 minutes</option>
+            <option value={60}>Last 1 hour</option>
+            <option value={180}>Last 3 hours</option>
+            <option value={360}>Last 6 hours</option>
+            <option value={1440}>Last 24 hours</option>
+          </select>
+          <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
+            <span className="text-green-400">Live</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Stats Grid */}
+      {stats && (
+        <section aria-label="Key metrics" className="grid grid-cols-4 gap-4">
+          <StatCard
+            icon={ArrowDownLeft}
+            label="Total Ingress"
+            value={formatBytes(stats.totalBytesIn)}
+            color="text-blue-400"
+            bgColor="bg-blue-500/10"
+          />
+          <StatCard
+            icon={ArrowUpRight}
+            label="Total Egress"
+            value={formatBytes(stats.totalBytesOut)}
+            color="text-green-400"
+            bgColor="bg-green-500/10"
+          />
+          <StatCard
+            icon={Activity}
+            label="Total Requests"
+            value={formatNumber(stats.totalRequests)}
+            subValue={`Avg ${formatBytes(stats.avgBytesPerRequest)}/req`}
+            color="text-purple-400"
+            bgColor="bg-purple-500/10"
+          />
+          <StatCard
+            icon={Server}
+            label="Fleet Coverage"
+            value={`${stats.respondedSensors}/${stats.sensorCount}`}
+            subValue="Sensors responding"
+            color="text-orange-400"
+            bgColor="bg-orange-500/10"
+          />
+        </section>
+      )}
+
+      {/* Timeline Chart */}
+      {timelineData && (
+        <section>
+          <TimelineChart data={timelineData.points} granularity={timelineData.granularity} />
+        </section>
+      )}
+
+      {/* Endpoints Table + Billing Panel */}
+      <section className="grid grid-cols-3 gap-6">
+        <div className="col-span-2">
+          {endpointData && <TopEndpointsTable endpoints={endpointData} />}
+        </div>
+        {billingData && (
+          <BillingPanel
+            totalTransfer={billingData.totalDataTransfer}
+            ingressBytes={billingData.ingressBytes}
+            egressBytes={billingData.egressBytes}
+            estimatedCost={billingData.estimatedCost}
+            costPerGb={billingData.costPerGb}
+            periodStart={billingData.period.start}
+            periodEnd={billingData.period.end}
+          />
+        )}
+      </section>
+
+      {/* Sensor Breakdown */}
+      {billingData && billingData.sensorBreakdown.length > 0 && (
+        <section>
+          <SensorBreakdown sensors={billingData.sensorBreakdown} />
+        </section>
+      )}
+    </div>
+  );
+}

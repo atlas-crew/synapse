@@ -12,3 +12,5 @@ export { PolicyTemplateService } from './policy-template.js';
 export * from './types.js';
 export * from './policy-template-types.js';
 export * from './default-policies.js';
+export * from './bandwidth-types.js';
+export { BandwidthAggregatorService, type BandwidthAggregatorConfig } from './bandwidth-aggregator.js';

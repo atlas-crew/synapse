@@ -25,6 +25,7 @@ import { createFleetFilesRoutes } from './fleet-files.js';
 import { createFleetReleasesRoutes } from './fleet-releases.js';
 import { createFleetPolicyRoutes } from './fleet-policy.js';
 import { createFleetSessionsRoutes } from './fleet-sessions.js';
+import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
@@ -130,6 +131,12 @@ export function createApiRouter(
     sessionQueryService: options.sessionQueryService,
   }));
   logger.info('Fleet Sessions routes mounted at /api/v1/fleet/sessions');
+
+  // Mount Fleet Bandwidth routes for bandwidth metrics and billing
+  router.use('/fleet/bandwidth', createFleetBandwidthRoutes(prisma, logger, {
+    tunnelBroker: options.tunnelBroker,
+  }));
+  logger.info('Fleet Bandwidth routes mounted at /api/v1/fleet/bandwidth');
 
   return router;
 }
