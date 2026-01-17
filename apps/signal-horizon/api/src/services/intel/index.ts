@@ -577,6 +577,108 @@ export class IntelService {
   }
 
   // ===========================================================================
+  // Attack Map
+  // ===========================================================================
+
+  /**
+   * Get attack map data (aggregated geo-points)
+   */
+  async getAttackMap(
+    tenantId: string | null,
+    windowHours = 1
+  ): Promise<{ points: any[]; routes: any[] }> {
+    const to = new Date();
+    const from = new Date(to.getTime() - windowHours * 60 * 60 * 1000);
+    const tenantFilter = tenantId ? { tenantId } : {};
+
+    // Get signals with geo metadata
+    const signals = await this.prisma.signal.findMany({
+      where: {
+        ...tenantFilter,
+        createdAt: { gte: from, lte: to },
+        sourceIp: { not: null },
+      },
+      select: {
+        sourceIp: true,
+        severity: true,
+        metadata: true,
+      },
+      take: 5000, // Limit to prevent overload
+    });
+
+    // Aggregate by location
+    const locationMap = new Map<string, {
+      lat: number;
+      lon: number;
+      label: string;
+      count: number;
+      severities: Record<string, number>;
+    }>();
+
+    for (const signal of signals) {
+      const meta = signal.metadata as { latitude?: number; longitude?: number; city?: string; countryCode?: string } | null;
+      
+      if (meta?.latitude && meta?.longitude) {
+        // Round lat/lon to group nearby points (approx 11km)
+        const lat = Math.round(meta.latitude * 10) / 10;
+        const lon = Math.round(meta.longitude * 10) / 10;
+        const key = `${lat},${lon}`;
+
+        const existing = locationMap.get(key);
+        if (existing) {
+          existing.count++;
+          existing.severities[signal.severity] = (existing.severities[signal.severity] || 0) + 1;
+        } else {
+          locationMap.set(key, {
+            lat,
+            lon,
+            label: meta.city ? `${meta.city}, ${meta.countryCode}` : meta.countryCode || 'Unknown',
+            count: 1,
+            severities: { [signal.severity]: 1 },
+          });
+        }
+      }
+    }
+
+    // Convert to points array
+    const points = Array.from(locationMap.entries()).map(([_key, data], index) => {
+      // Determine max severity for this point
+      const severities = data.severities;
+      let maxSeverity = 'LOW';
+      if (severities.CRITICAL) maxSeverity = 'CRITICAL';
+      else if (severities.HIGH) maxSeverity = 'HIGH';
+      else if (severities.MEDIUM) maxSeverity = 'MEDIUM';
+
+      return {
+        id: index,
+        lat: data.lat,
+        lon: data.lon,
+        severity: maxSeverity,
+        label: data.label,
+        count: data.count,
+        scope: tenantId ? 'local' : 'fleet',
+        category: 'attack', // Default, could be refined by signal type
+      };
+    });
+
+    // Generate routes (simplified: linking high-volume sources to a central "target")
+    // In a real multi-region deployment, this would link source -> sensor region
+    // For now, we simulate routes from top sources to a "central" point (e.g. US East)
+    const routes = points
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((point, index) => ({
+        id: `route-${index}`,
+        from: point.id,
+        to: -1, // Special ID for "Target" (center)
+        severity: point.severity,
+        category: 'attack',
+      }));
+
+    return { points, routes };
+  }
+
+  // ===========================================================================
   // Fleet Intelligence Summary
   // ===========================================================================
 

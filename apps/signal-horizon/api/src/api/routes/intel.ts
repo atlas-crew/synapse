@@ -89,6 +89,30 @@ export function createIntelRoutes(prisma: PrismaClient, logger: import('pino').L
   );
 
   /**
+   * GET /api/v1/intel/map
+   * Get live attack map data
+   */
+  router.get(
+    '/map',
+    requireScope('dashboard:read'),
+    validateQuery(TrendsQuerySchema),
+    async (req, res) => {
+      try {
+        const { windowHours } = req.query as unknown as z.infer<typeof TrendsQuerySchema>;
+        const auth = req.auth!;
+
+        const tenantId = auth.isFleetAdmin ? null : auth.tenantId;
+        const mapData = await intelService.getAttackMap(tenantId, windowHours);
+
+        res.json(mapData);
+      } catch (error) {
+        console.error('Failed to get attack map:', error);
+        res.status(500).json({ error: 'Failed to get attack map', message: getErrorMessage(error) });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/intel/trends
    * Get attack volume trends
    */
