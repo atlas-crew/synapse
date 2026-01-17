@@ -20,6 +20,10 @@ function resetStore() {
       activeCampaigns: 0,
       blockedIndicators: 0,
       sensorsOnline: 0,
+      apiStats: {
+        discoveryEvents: 0,
+        schemaViolations: 0,
+      },
     },
     connectionState: 'disconnected',
     sessionId: null,
@@ -111,6 +115,10 @@ describe('horizonStore', () => {
         activeCampaigns: [mockCampaign],
         recentThreats: [mockThreat],
         sensorStats: { CONNECTED: 5 },
+        apiStats: {
+          discoveryEvents: 0,
+          schemaViolations: 0,
+        },
       });
 
       const state = useHorizonStore.getState();

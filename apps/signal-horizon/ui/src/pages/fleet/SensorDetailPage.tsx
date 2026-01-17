@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
+import { RemoteShell } from '../../components/fleet/RemoteShell';
+import { FileBrowser } from '../../components/fleet/FileBrowser';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -11,7 +13,7 @@ const authHeaders = {
   'Content-Type': 'application/json',
 };
 
-type TabType = 'overview' | 'performance' | 'network' | 'processes' | 'logs' | 'configuration';
+type TabType = 'overview' | 'performance' | 'network' | 'processes' | 'logs' | 'configuration' | 'remote-shell' | 'files';
 
 // ======================== API Functions ========================
 
@@ -150,6 +152,8 @@ export function SensorDetailPage() {
     { key: 'processes', label: 'Processes' },
     { key: 'logs', label: 'Logs' },
     { key: 'configuration', label: 'Configuration' },
+    { key: 'remote-shell', label: 'Remote Shell' },
+    { key: 'files', label: 'Files' },
   ];
 
   return (
@@ -215,6 +219,16 @@ export function SensorDetailPage() {
       {activeTab === 'processes' && <ProcessesTab data={processes} />}
       {activeTab === 'logs' && <LogsTab data={logs} logType={logType} setLogType={setLogType} />}
       {activeTab === 'configuration' && <ConfigurationTab sensor={sensor} />}
+      {activeTab === 'remote-shell' && (
+        <div className="h-[600px]">
+          <RemoteShell sensorId={id!} sensorName={sensor.name} />
+        </div>
+      )}
+      {activeTab === 'files' && (
+        <div className="h-[600px]">
+          <FileBrowser sensorId={id!} sensorName={sensor.name} height="100%" />
+        </div>
+      )}
     </div>
   );
 }

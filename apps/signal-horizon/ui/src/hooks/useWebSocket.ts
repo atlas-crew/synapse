@@ -51,6 +51,10 @@ const SnapshotDataSchema = z.object({
   activeCampaigns: z.array(CampaignSchema),
   recentThreats: z.array(ThreatSchema),
   sensorStats: z.record(z.string(), z.number()),
+  apiStats: z.object({
+    discoveryEvents: z.number(),
+    schemaViolations: z.number(),
+  }).optional().default({ discoveryEvents: 0, schemaViolations: 0 }),
 });
 
 const CampaignAlertSchema = z.object({
@@ -138,6 +142,7 @@ export function useWebSocket() {
           activeCampaigns: signalHorizon.campaigns,
           recentThreats: signalHorizon.threats,
           sensorStats: sensorStatsRecord,
+          apiStats: { discoveryEvents: 0, schemaViolations: 0 },
         });
 
         // Clear existing alerts and add demo alerts
