@@ -135,7 +135,8 @@ describe('Fleet Routes - Strategy Validation', () => {
     beforeEach(() => {
       // Mock sensor lookup for tenant validation
       // Returns sensors that match the requested IDs
-      vi.mocked(mockPrisma.sensor!.findMany).mockImplementation(async (args: any) => {
+      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
+        .mockImplementation(async (args: any) => {
         const requestedIds = args?.where?.id?.in || [];
         const allSensors = [
           createMockSensor({ id: 'sensor-1' }),
@@ -188,7 +189,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should accept immediate strategy', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -208,7 +209,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should accept canary strategy', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -231,7 +232,7 @@ describe('Fleet Routes - Strategy Validation', () => {
 
     it('should accept scheduled strategy with scheduledTime', async () => {
       const futureTime = new Date(Date.now() + 3600000).toISOString();
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -253,7 +254,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should use immediate as default strategy when not specified', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -274,7 +275,8 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Rolling Strategy Options Validation', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany).mockImplementation(async (args: any) => {
+      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
+        .mockImplementation(async (args: any) => {
         const requestedIds = args?.where?.id?.in || [];
         const allSensors = [createMockSensor({ id: 'sensor-1' })];
         return allSensors.filter(s => requestedIds.includes(s.id));
@@ -282,7 +284,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate rollingBatchSize within bounds (1-100)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -304,7 +306,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate healthCheckTimeout within bounds (5000-300000)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -325,7 +327,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate maxFailuresBeforeAbort within bounds (1-100)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -346,7 +348,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should accept rollbackOnFailure boolean option', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -367,7 +369,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate healthCheckIntervalMs within bounds (1000-60000)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -388,7 +390,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should pass all rolling options together', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -420,7 +422,8 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Blue/Green Strategy Options Validation', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany).mockImplementation(async (args: any) => {
+      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
+        .mockImplementation(async (args: any) => {
         const requestedIds = args?.where?.id?.in || [];
         const allSensors = [createMockSensor({ id: 'sensor-1' })];
         return allSensors.filter(s => requestedIds.includes(s.id));
@@ -428,7 +431,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate stagingTimeout within bounds (10000-600000)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -449,7 +452,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate switchTimeout within bounds (5000-300000)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -470,7 +473,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should accept requireAllSensorsStaged boolean option', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -491,7 +494,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate minStagedPercentage within bounds (1-100)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -512,7 +515,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should validate cleanupDelayMs within bounds (60000-3600000)', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -533,7 +536,7 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should pass all blue_green options together', async () => {
-      const res = await request(app)
+      await request(app)
         .post('/fleet/rules/push')
         .send({
           ruleIds: ['rule-1'],
@@ -565,7 +568,8 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Invalid Strategy Options Rejection', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany).mockImplementation(async (args: any) => {
+      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
+        .mockImplementation(async (args: any) => {
         const requestedIds = args?.where?.id?.in || [];
         const allSensors = [createMockSensor({ id: 'sensor-1' })];
         return allSensors.filter(s => requestedIds.includes(s.id));
@@ -796,7 +800,8 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Strategy Options Passed to RuleDistributor', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany).mockImplementation(async (args: any) => {
+      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
+        .mockImplementation(async (args: any) => {
         const requestedIds = args?.where?.id?.in || [];
         const allSensors = [
           createMockSensor({ id: 'sensor-1' }),
@@ -954,7 +959,8 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should return 400 when some sensors do not belong to tenant', async () => {
-      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue([
+      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
+        .mockResolvedValue([
         createMockSensor({ id: 'sensor-1' }),
         // sensor-2 missing - simulates not belonging to tenant
       ]);

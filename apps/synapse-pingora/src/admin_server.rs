@@ -11,7 +11,7 @@
 //! - GET /waf/stats - WAF statistics
 
 use std::collections::VecDeque;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use once_cell::sync::Lazy;
@@ -305,7 +305,10 @@ pub async fn start_admin_server(
         .route("/_sensor/campaigns/:id/timeline", get(sensor_campaign_timeline_handler))
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
+        .route("/_sensor/actors/:actor_id", get(sensor_actor_detail_handler))
+        .route("/_sensor/actors/:actor_id/timeline", get(sensor_actor_timeline_handler))
         .route("/_sensor/sessions", get(sensor_sessions_handler))
+        .route("/_sensor/sessions/:session_id", get(sensor_session_detail_handler))
         .route("/_sensor/stuffing", get(sensor_stuffing_handler))
         .route("/_sensor/system/config", get(sensor_system_config_handler))
         .route("/_sensor/system/overview", get(sensor_system_overview_handler))
@@ -1390,6 +1393,74 @@ async fn sensor_bandwidth_handler(
 #[derive(Debug, Deserialize)]
 struct ActorsQuery {
     limit: Option<usize>,
+    ip: Option<String>,
+    fingerprint: Option<String>,
+    min_risk: Option<f64>,
+}
+
+/// Query parameters for actor timeline endpoint
+#[derive(Debug, Deserialize)]
+struct ActorTimelineQuery {
+    limit: Option<usize>,
+}
+
+fn actor_to_json(actor: &crate::actor::ActorState) -> serde_json::Value {
+    let mut ips: Vec<String> = actor.ips.iter().map(|ip| ip.to_string()).collect();
+    ips.sort();
+    let mut fingerprints: Vec<String> = actor.fingerprints.iter().cloned().collect();
+    fingerprints.sort();
+
+    serde_json::json!({
+        "actorId": actor.actor_id.clone(),
+        "riskScore": actor.risk_score,
+        "ruleMatches": actor.rule_matches.iter().map(|rm| {
+            serde_json::json!({
+                "ruleId": rm.rule_id.clone(),
+                "timestamp": rm.timestamp,
+                "riskContribution": rm.risk_contribution,
+                "category": rm.category.clone()
+            })
+        }).collect::<Vec<_>>(),
+        "anomalyCount": actor.anomaly_count,
+        "sessionIds": actor.session_ids.clone(),
+        "firstSeen": actor.first_seen,
+        "lastSeen": actor.last_seen,
+        "ips": ips,
+        "fingerprints": fingerprints,
+        "isBlocked": actor.is_blocked,
+        "blockReason": actor.block_reason.clone(),
+        "blockedSince": actor.blocked_since
+    })
+}
+
+fn session_to_json(session: &crate::session::SessionState, full_token_hash: bool) -> serde_json::Value {
+    let token_hash = if full_token_hash {
+        session.token_hash.clone()
+    } else {
+        session.token_hash.chars().take(8).collect::<String>()
+    };
+
+    serde_json::json!({
+        "sessionId": session.session_id.clone(),
+        "tokenHash": token_hash,
+        "actorId": session.actor_id.clone(),
+        "creationTime": session.creation_time,
+        "lastActivity": session.last_activity,
+        "requestCount": session.request_count,
+        "boundJa4": session.bound_ja4.clone(),
+        "boundIp": session.bound_ip.map(|ip| ip.to_string()),
+        "isSuspicious": session.is_suspicious,
+        "hijackAlerts": session.hijack_alerts.iter().map(|alert| {
+            serde_json::json!({
+                "sessionId": alert.session_id.clone(),
+                "alertType": format!("{:?}", alert.alert_type),
+                "originalValue": alert.original_value.clone(),
+                "newValue": alert.new_value.clone(),
+                "timestamp": alert.timestamp,
+                "confidence": alert.confidence
+            })
+        }).collect::<Vec<_>>()
+    })
 }
 
 /// GET /_sensor/actors - Returns actors from ActorManager with behavioral tracking data
@@ -1401,32 +1472,26 @@ async fn sensor_actors_handler(
 
     match state.handler.actor_manager() {
         Some(manager) => {
-            let actors = manager.list_actors(limit, 0);
+            let actors = if let Some(ip_str) = params.ip.as_deref() {
+                match ip_str.parse::<IpAddr>() {
+                    Ok(ip) => manager.get_actor_by_ip(ip).into_iter().collect(),
+                    Err(_) => {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(serde_json::json!({ "error": "Invalid IP address" })),
+                        );
+                    }
+                }
+            } else if let Some(fp) = params.fingerprint.as_deref() {
+                manager.get_actor_by_fingerprint(fp).into_iter().collect()
+            } else if let Some(min_risk) = params.min_risk {
+                manager.list_by_min_risk(min_risk, limit, 0)
+            } else {
+                manager.list_actors(limit, 0)
+            };
             let actor_data: Vec<serde_json::Value> = actors
                 .into_iter()
-                .map(|actor| {
-                    serde_json::json!({
-                        "actorId": actor.actor_id,
-                        "riskScore": actor.risk_score,
-                        "ruleMatches": actor.rule_matches.iter().map(|rm| {
-                            serde_json::json!({
-                                "ruleId": rm.rule_id,
-                                "timestamp": rm.timestamp,
-                                "riskContribution": rm.risk_contribution,
-                                "category": rm.category
-                            })
-                        }).collect::<Vec<_>>(),
-                        "anomalyCount": actor.anomaly_count,
-                        "sessionIds": actor.session_ids,
-                        "firstSeen": actor.first_seen,
-                        "lastSeen": actor.last_seen,
-                        "ips": actor.ips.iter().map(|ip| ip.to_string()).collect::<Vec<_>>(),
-                        "fingerprints": actor.fingerprints.iter().cloned().collect::<Vec<_>>(),
-                        "isBlocked": actor.is_blocked,
-                        "blockReason": actor.block_reason,
-                        "blockedSince": actor.blocked_since
-                    })
-                })
+                .map(|actor| actor_to_json(&actor))
                 .collect();
 
             // Also include stats if available
@@ -1447,10 +1512,145 @@ async fn sensor_actors_handler(
     }
 }
 
+/// GET /_sensor/actors/:actor_id - Returns actor detail
+async fn sensor_actor_detail_handler(
+    State(state): State<AdminState>,
+    Path(actor_id): Path<String>,
+) -> impl IntoResponse {
+    match state.handler.actor_manager() {
+        Some(manager) => match manager.get_actor(&actor_id) {
+            Some(actor) => (StatusCode::OK, Json(serde_json::json!({ "actor": actor_to_json(&actor) }))),
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": format!("Actor {} not found", actor_id) })),
+            ),
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Actor tracking not enabled" })),
+        ),
+    }
+}
+
+/// GET /_sensor/actors/:actor_id/timeline - Returns actor timeline events
+async fn sensor_actor_timeline_handler(
+    Query(params): Query<ActorTimelineQuery>,
+    State(state): State<AdminState>,
+    Path(actor_id): Path<String>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(100);
+
+    let Some(manager) = state.handler.actor_manager() else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Actor tracking not enabled" })),
+        );
+    };
+
+    let Some(actor) = manager.get_actor(&actor_id) else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": format!("Actor {} not found", actor_id) })),
+        );
+    };
+
+    let mut events: Vec<serde_json::Value> = Vec::new();
+
+    for rule in &actor.rule_matches {
+        events.push(serde_json::json!({
+            "timestamp": rule.timestamp,
+            "eventType": "rule_match",
+            "ruleId": rule.rule_id.clone(),
+            "category": rule.category.clone(),
+            "riskDelta": rule.risk_contribution
+        }));
+    }
+
+    if let Some(blocked_since) = actor.blocked_since {
+        events.push(serde_json::json!({
+            "timestamp": blocked_since,
+            "eventType": "actor_blocked",
+            "reason": actor.block_reason.clone(),
+            "riskScore": actor.risk_score
+        }));
+    }
+
+    if let Some(session_manager) = state.handler.session_manager() {
+        for session_id in &actor.session_ids {
+            if let Some(session) = session_manager.get_session_by_id(session_id) {
+                events.push(serde_json::json!({
+                    "timestamp": session.creation_time,
+                    "eventType": "session_bind",
+                    "sessionId": session.session_id.clone(),
+                    "actorId": session.actor_id.clone(),
+                    "boundJa4": session.bound_ja4.clone(),
+                    "boundIp": session.bound_ip.map(|ip| ip.to_string())
+                }));
+
+                if session.is_suspicious {
+                    for alert in &session.hijack_alerts {
+                        events.push(serde_json::json!({
+                            "timestamp": alert.timestamp,
+                            "eventType": "session_alert",
+                            "sessionId": alert.session_id.clone(),
+                            "alertType": format!("{:?}", alert.alert_type),
+                            "confidence": alert.confidence
+                        }));
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(block_log) = state.handler.block_log() {
+        let actor_ips: Vec<String> = actor.ips.iter().map(|ip| ip.to_string()).collect();
+        let actor_fps: Vec<String> = actor.fingerprints.iter().cloned().collect();
+        for event in block_log.recent(1000) {
+            let ip_match = actor_ips.iter().any(|ip| ip == &event.client_ip);
+            let fp_match = event
+                .fingerprint
+                .as_ref()
+                .map(|fp| actor_fps.contains(fp))
+                .unwrap_or(false);
+
+            if ip_match || fp_match {
+                events.push(serde_json::json!({
+                    "timestamp": event.timestamp,
+                    "eventType": "block",
+                    "clientIp": event.client_ip.clone(),
+                    "method": event.method.clone(),
+                    "path": event.path.clone(),
+                    "riskScore": event.risk_score,
+                    "matchedRules": event.matched_rules.clone(),
+                    "blockReason": event.block_reason.clone(),
+                    "fingerprint": event.fingerprint.clone()
+                }));
+            }
+        }
+    }
+
+    events.sort_by(|a, b| {
+        let a_ts = a.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0);
+        let b_ts = b.get("timestamp").and_then(|v| v.as_u64()).unwrap_or(0);
+        b_ts.cmp(&a_ts)
+    });
+
+    if events.len() > limit {
+        events.truncate(limit);
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "actorId": actor_id,
+        "events": events
+    })))
+}
+
 /// Query parameters for sessions endpoint
 #[derive(Debug, Deserialize)]
 struct SessionsQuery {
     limit: Option<usize>,
+    actor_id: Option<String>,
+    suspicious: Option<bool>,
 }
 
 /// GET /_sensor/sessions - Returns sessions from SessionManager with hijack detection data
@@ -1462,32 +1662,26 @@ async fn sensor_sessions_handler(
 
     match state.handler.session_manager() {
         Some(manager) => {
-            let sessions = manager.list_sessions(limit, 0);
+            let mut sessions = if let Some(actor_id) = params.actor_id.as_deref() {
+                let mut actor_sessions = manager.get_actor_sessions(actor_id);
+                if params.suspicious.unwrap_or(false) {
+                    actor_sessions.retain(|session| session.is_suspicious);
+                }
+                actor_sessions
+            } else if params.suspicious.unwrap_or(false) {
+                manager.list_suspicious_sessions()
+            } else {
+                manager.list_sessions(limit, 0)
+            };
+
+            if params.actor_id.is_some() || params.suspicious.unwrap_or(false) {
+                sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+                sessions.truncate(limit);
+            }
+
             let session_data: Vec<serde_json::Value> = sessions
                 .into_iter()
-                .map(|session| {
-                    serde_json::json!({
-                        "sessionId": session.session_id,
-                        "tokenHash": &session.token_hash[..8], // Only show first 8 chars for security
-                        "actorId": session.actor_id,
-                        "creationTime": session.creation_time,
-                        "lastActivity": session.last_activity,
-                        "requestCount": session.request_count,
-                        "boundJa4": session.bound_ja4,
-                        "boundIp": session.bound_ip.map(|ip| ip.to_string()),
-                        "isSuspicious": session.is_suspicious,
-                        "hijackAlerts": session.hijack_alerts.iter().map(|alert| {
-                            serde_json::json!({
-                                "sessionId": alert.session_id,
-                                "alertType": format!("{:?}", alert.alert_type),
-                                "originalValue": alert.original_value,
-                                "newValue": alert.new_value,
-                                "timestamp": alert.timestamp,
-                                "confidence": alert.confidence
-                            })
-                        }).collect::<Vec<_>>()
-                    })
-                })
+                .map(|session| session_to_json(&session, false))
                 .collect();
 
             // Also include stats if available
@@ -1507,6 +1701,29 @@ async fn sensor_sessions_handler(
             })))
         }
         None => (StatusCode::OK, Json(serde_json::json!({ "sessions": [], "stats": null })))
+    }
+}
+
+/// GET /_sensor/sessions/:session_id - Returns session detail
+async fn sensor_session_detail_handler(
+    State(state): State<AdminState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    match state.handler.session_manager() {
+        Some(manager) => match manager.get_session_by_id(&session_id) {
+            Some(session) => (
+                StatusCode::OK,
+                Json(serde_json::json!({ "session": session_to_json(&session, true) })),
+            ),
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": format!("Session {} not found", session_id) })),
+            ),
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Session tracking not enabled" })),
+        ),
     }
 }
 

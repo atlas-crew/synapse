@@ -514,6 +514,15 @@ impl SessionManager {
             .unwrap_or_default()
     }
 
+    /// List sessions for an actor with pagination.
+    ///
+    /// Results are sorted by last_activity (most recent first).
+    pub fn list_sessions_by_actor(&self, actor_id: &str, limit: usize, offset: usize) -> Vec<SessionState> {
+        let mut sessions = self.get_actor_sessions(actor_id);
+        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.into_iter().skip(offset).take(limit).collect()
+    }
+
     /// Invalidate a session.
     ///
     /// # Arguments
@@ -588,6 +597,15 @@ impl SessionManager {
             .filter(|entry| entry.value().is_suspicious)
             .map(|entry| entry.value().clone())
             .collect()
+    }
+
+    /// List suspicious sessions with pagination.
+    ///
+    /// Results are sorted by last_activity (most recent first).
+    pub fn list_suspicious_sessions_paginated(&self, limit: usize, offset: usize) -> Vec<SessionState> {
+        let mut sessions = self.list_suspicious_sessions();
+        sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
+        sessions.into_iter().skip(offset).take(limit).collect()
     }
 
     /// Start background cleanup tasks.

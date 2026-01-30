@@ -88,23 +88,113 @@ export interface RuleAction {
   params?: Record<string, unknown>;
 }
 
+export interface ActorRuleMatch {
+  ruleId: string;
+  timestamp: number;
+  riskContribution: number;
+  category: string;
+}
+
 export interface Actor {
-  id: string;
-  identifier: string;
-  type: 'human' | 'bot' | 'crawler' | 'suspicious' | 'attacker';
-  score: number;
-  requestCount: number;
-  blockedCount: number;
-  challengesPassed: number;
-  challengesFailed: number;
-  lastRequest: string;
-  geoLocation?: {
-    country: string;
-    region: string;
-    city: string;
-  };
+  actorId: string;
+  riskScore: number;
+  ruleMatches: ActorRuleMatch[];
+  anomalyCount: number;
+  sessionIds: string[];
+  firstSeen: number;
+  lastSeen: number;
+  ips: string[];
   fingerprints: string[];
-  tags: string[];
+  isBlocked: boolean;
+  blockReason?: string | null;
+  blockedSince?: number | null;
+}
+
+export interface ActorStats {
+  totalActors: number;
+  blockedActors: number;
+  correlationsMade: number;
+  evictions: number;
+  totalCreated: number;
+  totalRuleMatches: number;
+}
+
+export interface ActorListResponse {
+  actors: Actor[];
+  stats?: ActorStats | null;
+}
+
+export interface ActorDetailResponse {
+  actor: Actor;
+}
+
+export interface ActorTimelineEvent {
+  timestamp: number;
+  eventType: string;
+  ruleId?: string;
+  category?: string;
+  riskDelta?: number;
+  riskScore?: number;
+  sessionId?: string;
+  actorId?: string | null;
+  boundJa4?: string | null;
+  boundIp?: string | null;
+  clientIp?: string;
+  method?: string;
+  path?: string;
+  matchedRules?: number[];
+  blockReason?: string;
+  fingerprint?: string | null;
+  alertType?: string;
+  confidence?: number;
+  reason?: string | null;
+}
+
+export interface ActorTimelineResponse {
+  actorId: string;
+  events: ActorTimelineEvent[];
+}
+
+export interface HijackAlert {
+  sessionId: string;
+  alertType: string;
+  originalValue: string;
+  newValue: string;
+  timestamp: number;
+  confidence: number;
+}
+
+export interface Session {
+  sessionId: string;
+  tokenHash: string;
+  actorId?: string | null;
+  creationTime: number;
+  lastActivity: number;
+  requestCount: number;
+  boundJa4?: string | null;
+  boundIp?: string | null;
+  isSuspicious: boolean;
+  hijackAlerts: HijackAlert[];
+}
+
+export interface SessionStats {
+  totalSessions: number;
+  activeSessions: number;
+  suspiciousSessions: number;
+  expiredSessions: number;
+  hijackAlerts: number;
+  evictions: number;
+  totalCreated: number;
+  totalInvalidated: number;
+}
+
+export interface SessionListResponse {
+  sessions: Session[];
+  stats?: SessionStats | null;
+}
+
+export interface SessionDetailResponse {
+  session: Session;
 }
 
 export interface EvalRequest {
@@ -162,6 +252,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/blocks',
   '/_sensor/rules',
   '/_sensor/actors',
+  '/_sensor/sessions',
   '/_sensor/evaluate',
   '/_sensor/profiling',
   '/_sensor/payload',
@@ -669,19 +760,32 @@ export class SynapseProxyService extends EventEmitter {
   async listActors(
     sensorId: string,
     tenantId: string,
-    options?: { type?: Actor['type']; minScore?: number; limit?: number; offset?: number }
-  ): Promise<{ actors: Actor[]; total: number }> {
+    options?: {
+      ip?: string;
+      fingerprint?: string;
+      minRisk?: number;
+      minScore?: number;
+      type?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<ActorListResponse> {
     const cacheKey = `actors:${sensorId}:${JSON.stringify(options ?? {})}`;
-    const cached = this.getFromCache<{ actors: Actor[]; total: number }>(cacheKey);
+    const cached = this.getFromCache<ActorListResponse>(cacheKey);
     if (cached) return cached;
 
     const query = new URLSearchParams();
-    if (options?.type) query.set('type', options.type);
-    if (options?.minScore !== undefined) query.set('minScore', String(options.minScore));
+    if (options?.ip) query.set('ip', options.ip);
+    if (options?.fingerprint) query.set('fingerprint', options.fingerprint);
+    if (options?.minRisk !== undefined) {
+      query.set('min_risk', String(options.minRisk));
+    } else if (options?.minScore !== undefined) {
+      query.set('min_risk', String(options.minScore));
+    }
     if (options?.limit) query.set('limit', String(options.limit));
     if (options?.offset) query.set('offset', String(options.offset));
 
-    const result = await this.proxyRequest<{ actors: Actor[]; total: number }>(
+    const result = await this.proxyRequest<ActorListResponse>(
       sensorId,
       tenantId,
       `/_sensor/actors?${query.toString()}`,
@@ -695,11 +799,77 @@ export class SynapseProxyService extends EventEmitter {
   /**
    * Get details for a specific actor
    */
-  async getActor(sensorId: string, tenantId: string, actorId: string): Promise<Actor> {
-    return this.proxyRequest<Actor>(
+  async getActor(sensorId: string, tenantId: string, actorId: string): Promise<ActorDetailResponse> {
+    return this.proxyRequest<ActorDetailResponse>(
       sensorId,
       tenantId,
       `/_sensor/actors/${actorId}`,
+      'GET'
+    );
+  }
+
+  /**
+   * Get actor timeline events
+   */
+  async getActorTimeline(
+    sensorId: string,
+    tenantId: string,
+    actorId: string,
+    options?: { limit?: number }
+  ): Promise<ActorTimelineResponse> {
+    const query = new URLSearchParams();
+    if (options?.limit) query.set('limit', String(options.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+
+    return this.proxyRequest<ActorTimelineResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/actors/${actorId}/timeline${suffix}`,
+      'GET'
+    );
+  }
+
+  /**
+   * List tracked sessions
+   */
+  async listSessions(
+    sensorId: string,
+    tenantId: string,
+    options?: { actorId?: string; suspicious?: boolean; limit?: number; offset?: number }
+  ): Promise<SessionListResponse> {
+    const cacheKey = `sessions:${sensorId}:${JSON.stringify(options ?? {})}`;
+    const cached = this.getFromCache<SessionListResponse>(cacheKey);
+    if (cached) return cached;
+
+    const query = new URLSearchParams();
+    if (options?.actorId) query.set('actor_id', options.actorId);
+    if (options?.suspicious !== undefined) query.set('suspicious', String(options.suspicious));
+    if (options?.limit) query.set('limit', String(options.limit));
+    if (options?.offset) query.set('offset', String(options.offset));
+
+    const result = await this.proxyRequest<SessionListResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/sessions?${query.toString()}`,
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get session detail by ID
+   */
+  async getSession(
+    sensorId: string,
+    tenantId: string,
+    sessionId: string
+  ): Promise<SessionDetailResponse> {
+    return this.proxyRequest<SessionDetailResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/sessions/${sessionId}`,
       'GET'
     );
   }
@@ -797,7 +967,7 @@ export class SynapseProxyService extends EventEmitter {
    */
   clearSensorCache(sensorId: string): void {
     const sanitizedSensorId = sensorId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors'];
+    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions'];
     for (const prefix of prefixes) {
       this.invalidateCache(`${prefix}:${sanitizedSensorId}`);
     }

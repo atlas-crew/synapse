@@ -2,6 +2,7 @@
 //!
 //! Implements per-actor state tracking with LRU eviction and background cleanup.
 
+use std::cmp::Ordering as CmpOrdering;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -551,6 +552,27 @@ impl ActorManager {
         actors.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
 
         // Apply pagination
+        actors.into_iter().skip(offset).take(limit).collect()
+    }
+
+    /// List actors above a minimum risk score.
+    ///
+    /// Results are sorted by risk score (desc), then last_seen (desc).
+    pub fn list_by_min_risk(&self, min_risk: f64, limit: usize, offset: usize) -> Vec<ActorState> {
+        let mut actors: Vec<ActorState> = self
+            .actors
+            .iter()
+            .filter(|entry| entry.value().risk_score >= min_risk)
+            .map(|entry| entry.value().clone())
+            .collect();
+
+        actors.sort_by(|a, b| {
+            b.risk_score
+                .partial_cmp(&a.risk_score)
+                .unwrap_or(CmpOrdering::Equal)
+                .then_with(|| b.last_seen.cmp(&a.last_seen))
+        });
+
         actors.into_iter().skip(offset).take(limit).collect()
     }
 

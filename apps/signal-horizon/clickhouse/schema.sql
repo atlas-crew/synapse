@@ -160,3 +160,176 @@ AS SELECT
 FROM signal_events
 WHERE source_ip != toIPv4('0.0.0.0')
 GROUP BY day, source_ip;
+
+
+-- =============================================================================
+-- SOC Session Surfacing Tables
+-- =============================================================================
+
+-- Actor events (high velocity)
+CREATE TABLE IF NOT EXISTS actor_events (
+    timestamp DateTime64(3),
+    sensor_id String,
+    actor_id String,
+    event_type Enum('rule_match', 'risk_change', 'block', 'unblock', 'session_bind'),
+    risk_score UInt16,
+    risk_delta Int16,
+    rule_id Nullable(String),
+    rule_category Nullable(String),
+    ip String,
+    fingerprint Nullable(String)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (sensor_id, actor_id, timestamp);
+
+-- Session events
+CREATE TABLE IF NOT EXISTS session_events (
+    timestamp DateTime64(3),
+    sensor_id String,
+    session_id String,
+    actor_id String,
+    event_type Enum('created', 'request', 'suspicious', 'hijack_alert', 'expired'),
+    request_count UInt32,
+    ja4_hash Nullable(String),
+    bound_ip Nullable(String)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (sensor_id, session_id, timestamp);
+
+-- Campaign events
+CREATE TABLE IF NOT EXISTS campaign_events (
+    timestamp DateTime64(3),
+    campaign_id String,
+    sensor_id String,
+    actor_id String,
+    event_type Enum('actor_added', 'correlation_signal', 'status_change'),
+    correlation_type Nullable(String),
+    confidence Nullable(Float32)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (campaign_id, timestamp);
+
+-- Blocks (denormalized for fast queries)
+CREATE TABLE IF NOT EXISTS blocks (
+    timestamp DateTime64(3),
+    sensor_id String,
+    actor_id String,
+    session_id Nullable(String),
+    reason String,
+    rule_id Nullable(String),
+    ip String,
+    country Nullable(String)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (sensor_id, timestamp);
+
+-- =============================================================================
+-- Materialized Views for SOC Widgets
+-- =============================================================================
+
+-- Top actors by hour
+CREATE MATERIALIZED VIEW IF NOT EXISTS top_actors_hourly
+ENGINE = SummingMergeTree()
+ORDER BY (sensor_id, hour, actor_id)
+AS SELECT
+    sensor_id,
+    toStartOfHour(timestamp) AS hour,
+    actor_id,
+    max(risk_score) AS risk_score,
+    count() AS event_count
+FROM actor_events
+GROUP BY sensor_id, hour, actor_id;
+
+-- Attack trends by day
+CREATE MATERIALIZED VIEW IF NOT EXISTS attack_trends_daily
+ENGINE = SummingMergeTree()
+ORDER BY (sensor_id, day, rule_category)
+AS SELECT
+    sensor_id,
+    toDate(timestamp) AS day,
+    rule_category,
+    count() AS hit_count
+FROM actor_events
+WHERE rule_category IS NOT NULL
+GROUP BY sensor_id, day, rule_category;
+
+-- Blocks by sensor (fleet health)
+CREATE MATERIALIZED VIEW IF NOT EXISTS blocks_by_sensor_hourly
+ENGINE = SummingMergeTree()
+ORDER BY (sensor_id, hour)
+AS SELECT
+    sensor_id,
+    toStartOfHour(timestamp) AS hour,
+    count() AS block_count,
+    max(timestamp) AS last_block
+FROM blocks
+GROUP BY sensor_id, hour;
+
+-- Campaign velocity
+CREATE MATERIALIZED VIEW IF NOT EXISTS campaign_velocity_hourly
+ENGINE = SummingMergeTree()
+ORDER BY (campaign_id, hour)
+AS SELECT
+    campaign_id,
+    toStartOfHour(timestamp) AS hour,
+    uniqExact(actor_id) AS new_actors,
+    count() AS event_count
+FROM campaign_events
+GROUP BY campaign_id, hour;
+
+-- Geo distribution
+CREATE MATERIALIZED VIEW IF NOT EXISTS geo_distribution_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, country)
+AS SELECT
+    toDate(timestamp) AS day,
+    country,
+    count() AS block_count
+FROM blocks
+WHERE country IS NOT NULL
+GROUP BY day, country;
+
+-- =============================================================================
+-- Cross-sensor correlation
+-- =============================================================================
+
+-- Actor seen across multiple sensors
+CREATE MATERIALIZED VIEW IF NOT EXISTS actor_sensor_matrix
+ENGINE = AggregatingMergeTree()
+ORDER BY (actor_id)
+AS SELECT
+    actor_id,
+    groupArrayState(DISTINCT sensor_id) AS sensors,
+    minState(timestamp) AS first_seen
+FROM actor_events
+GROUP BY actor_id;
+
+-- Fingerprint spread (botnet detection)
+CREATE MATERIALIZED VIEW IF NOT EXISTS fingerprint_spread_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, fingerprint)
+AS SELECT
+    toDate(timestamp) AS day,
+    fingerprint,
+    uniqExact(actor_id) AS actor_count,
+    uniqExact(sensor_id) AS sensor_count
+FROM actor_events
+WHERE fingerprint IS NOT NULL
+GROUP BY day, fingerprint;
+
+-- =============================================================================
+-- Reporting / compliance
+-- =============================================================================
+
+-- Daily summary
+CREATE MATERIALIZED VIEW IF NOT EXISTS daily_summary
+ENGINE = SummingMergeTree()
+ORDER BY (sensor_id, day)
+AS SELECT
+    sensor_id,
+    toDate(timestamp) AS day,
+    count() AS total_events,
+    uniqExact(actor_id) AS unique_actors,
+    countIf(event_type = 'block') AS blocks
+FROM actor_events
+GROUP BY sensor_id, day;

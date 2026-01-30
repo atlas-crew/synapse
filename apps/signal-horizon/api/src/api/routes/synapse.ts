@@ -42,6 +42,23 @@ const RuleFilterSchema = PaginationSchema.extend({
 const ActorFilterSchema = PaginationSchema.extend({
   type: z.enum(['human', 'bot', 'crawler', 'suspicious', 'attacker']).optional(),
   minScore: z.coerce.number().min(0).max(100).optional(),
+  minRisk: z.coerce.number().min(0).max(100).optional(),
+  min_risk: z.coerce.number().min(0).max(100).optional(),
+  ip: z.string().optional(),
+  fingerprint: z.string().optional(),
+});
+
+const TimelineQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+
+const SessionFilterSchema = PaginationSchema.extend({
+  actorId: z.string().optional(),
+  actor_id: z.string().optional(),
+  suspicious: z.preprocess(
+    (val) => val === 'true' || val === '1',
+    z.boolean().optional()
+  ),
 });
 
 const AddBlockSchema = z.object({
@@ -459,7 +476,15 @@ export function createSynapseRoutes(
       }
 
       try {
-        const result = await synapseProxy.listActors(sensorId, tenantId, parsed.data);
+        const result = await synapseProxy.listActors(sensorId, tenantId, {
+          ip: parsed.data.ip,
+          fingerprint: parsed.data.fingerprint,
+          minRisk: parsed.data.minRisk ?? parsed.data.min_risk ?? parsed.data.minScore,
+          minScore: parsed.data.minScore,
+          type: parsed.data.type,
+          limit: parsed.data.limit,
+          offset: parsed.data.offset,
+        });
         res.json(result);
       } catch (error) {
         handleError(res, error, 'listActors');
@@ -483,6 +508,99 @@ export function createSynapseRoutes(
         res.json(actor);
       } catch (error) {
         handleError(res, error, 'getActor');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/actors/:actorId/timeline
+   * Get actor timeline events
+   */
+  router.get(
+    '/:sensorId/actors/:actorId/timeline',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, actorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = TimelineQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const timeline = await synapseProxy.getActorTimeline(
+          sensorId,
+          tenantId,
+          actorId,
+          parsed.data
+        );
+        res.json(timeline);
+      } catch (error) {
+        handleError(res, error, 'getActorTimeline');
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Sessions Endpoints
+  // ==========================================================================
+
+  /**
+   * GET /synapse/:sensorId/sessions
+   * List tracked sessions
+   */
+  router.get(
+    '/:sensorId/sessions',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = SessionFilterSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const actorId = parsed.data.actorId ?? parsed.data.actor_id;
+        const result = await synapseProxy.listSessions(sensorId, tenantId, {
+          actorId,
+          suspicious: parsed.data.suspicious,
+          limit: parsed.data.limit,
+          offset: parsed.data.offset,
+        });
+        res.json(result);
+      } catch (error) {
+        handleError(res, error, 'listSessions');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/sessions/:sessionId
+   * Get session detail
+   */
+  router.get(
+    '/:sensorId/sessions/:sessionId',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, sessionId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const session = await synapseProxy.getSession(sensorId, tenantId, sessionId);
+        res.json(session);
+      } catch (error) {
+        handleError(res, error, 'getSession');
       }
     }
   );
