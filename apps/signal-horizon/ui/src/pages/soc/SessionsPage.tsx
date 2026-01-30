@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchSessions } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import { downloadCsv } from '../../lib/csv';
 import type { SocSession, SocSessionListResponse } from '../../types/soc';
 
 function buildDemoSessions(scenario: string): SocSessionListResponse {
@@ -81,6 +82,25 @@ export default function SessionsPage() {
 
   const sessions = data?.sessions ?? [];
   const stats = data?.stats;
+  const canExport = sessions.length > 0;
+
+  const handleExport = () => {
+    if (!canExport) return;
+    downloadCsv(
+      `soc-sessions-${sensorId}-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Session ID', 'Actor ID', 'Last Activity', 'Requests', 'Suspicious', 'Hijack Alerts', 'Bound IP', 'JA4'],
+      sessions.map((session) => [
+        session.sessionId,
+        session.actorId ?? '',
+        new Date(session.lastActivity).toISOString(),
+        session.requestCount,
+        session.isSuspicious ? 'YES' : 'NO',
+        session.hijackAlerts.length,
+        session.boundIp ?? '',
+        session.boundJa4 ?? '',
+      ])
+    );
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -98,7 +118,13 @@ export default function SessionsPage() {
             className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
             placeholder="synapse-pingora-1"
           />
-          <button className="btn-outline h-10 px-4 text-xs">Export CSV</button>
+          <button
+            className="btn-outline h-10 px-4 text-xs"
+            onClick={handleExport}
+            disabled={!canExport}
+          >
+            Export CSV
+          </button>
         </div>
       </header>
 

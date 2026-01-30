@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchCampaigns } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import { downloadCsv } from '../../lib/csv';
 import type { SocCampaign, SocCampaignListResponse } from '../../types/soc';
 
 const statusTabs = [
@@ -62,6 +63,7 @@ export default function CampaignsPage() {
   });
 
   const campaigns = data?.campaigns ?? [];
+  const canExport = campaigns.length > 0;
 
   const filteredCampaigns = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -90,6 +92,23 @@ export default function CampaignsPage() {
     };
   }, [campaigns]);
 
+  const handleExport = () => {
+    if (!canExport) return;
+    downloadCsv(
+      `soc-campaigns-${sensorId}-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Campaign ID', 'Name', 'Status', 'Severity', 'Actors', 'Confidence', 'Last Seen'],
+      campaigns.map((campaign) => [
+        campaign.campaignId,
+        campaign.name,
+        campaign.status,
+        campaign.severity,
+        campaign.actorCount,
+        Math.round(campaign.confidence * 100),
+        new Date(campaign.lastSeen).toISOString(),
+      ])
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -106,7 +125,13 @@ export default function CampaignsPage() {
             className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
             placeholder="synapse-pingora-1"
           />
-          <button className="btn-outline h-10 px-4 text-xs">Export CSV</button>
+          <button
+            className="btn-outline h-10 px-4 text-xs"
+            onClick={handleExport}
+            disabled={!canExport}
+          >
+            Export CSV
+          </button>
         </div>
       </header>
 

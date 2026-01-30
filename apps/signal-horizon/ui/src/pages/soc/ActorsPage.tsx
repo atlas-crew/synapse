@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchActors } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import { downloadCsv } from '../../lib/csv';
 import type { SocActor, SocActorListResponse } from '../../types/soc';
 
 function buildDemoActors(scenario: string): SocActorListResponse {
@@ -71,6 +72,23 @@ export default function ActorsPage() {
 
   const actors = data?.actors ?? [];
   const stats = data?.stats;
+  const canExport = actors.length > 0;
+
+  const handleExport = () => {
+    if (!canExport) return;
+    downloadCsv(
+      `soc-actors-${sensorId}-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Actor ID', 'Risk Score', 'Last Seen', 'IPs', 'Fingerprints', 'Status'],
+      actors.map((actor) => [
+        actor.actorId,
+        Math.round(actor.riskScore),
+        new Date(actor.lastSeen).toISOString(),
+        actor.ips.join('; '),
+        actor.fingerprints.join('; '),
+        actor.isBlocked ? 'BLOCKED' : 'ACTIVE',
+      ])
+    );
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -88,7 +106,13 @@ export default function ActorsPage() {
             className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
             placeholder="synapse-pingora-1"
           />
-          <button className="btn-outline h-10 px-4 text-xs">Export CSV</button>
+          <button
+            className="btn-outline h-10 px-4 text-xs"
+            onClick={handleExport}
+            disabled={!canExport}
+          >
+            Export CSV
+          </button>
         </div>
       </header>
 

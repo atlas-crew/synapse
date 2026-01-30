@@ -36,6 +36,7 @@ import ActorsPage from './pages/soc/ActorsPage';
 import ActorDetailPage from './pages/soc/ActorDetailPage';
 import SessionsPage from './pages/soc/SessionsPage';
 import SessionDetailPage from './pages/soc/SessionDetailPage';
+import SocSearchPage from './pages/soc/SocSearchPage';
 import WarRoomPage from './pages/WarRoomPage';
 import HuntingPage from './pages/HuntingPage';
 import IntelPage from './pages/IntelPage';
@@ -50,6 +51,7 @@ const primaryNavItems = [
   { path: '/campaigns', icon: Target, label: 'Campaigns' },
   { path: '/actors', icon: UserPlus, label: 'Actors' },
   { path: '/sessions', icon: Activity, label: 'Sessions' },
+  { path: '/search', icon: Search, label: 'Global Search' },
   { path: '/hunting', icon: Search, label: 'Threat Hunting' },
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
@@ -330,6 +332,7 @@ function App() {
                 <Route path="/actors/:id" element={<SignalHorizonPageWrapper><ActorDetailPage /></SignalHorizonPageWrapper>} />
                 <Route path="/sessions" element={<SignalHorizonPageWrapper><SessionsPage /></SignalHorizonPageWrapper>} />
                 <Route path="/sessions/:id" element={<SignalHorizonPageWrapper><SessionDetailPage /></SignalHorizonPageWrapper>} />
+                <Route path="/search" element={<SignalHorizonPageWrapper><SocSearchPage /></SignalHorizonPageWrapper>} />
                 <Route path="/warroom" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
