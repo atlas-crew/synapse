@@ -29,6 +29,7 @@ import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStat
 import { GeoTrafficMap } from '../../../components/beam/analytics/GeoTrafficMap';
 import { LatencyHistogram } from '../../../components/beam/analytics/LatencyHistogram';
 import { ErrorRateChart } from '../../../components/beam/analytics/ErrorRateChart';
+import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -151,6 +152,10 @@ function StatCard({
 
 // Traffic Timeline Chart
 function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const gridStroke = useMemo(() => getGridStroke(), []);
+
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
@@ -186,28 +191,23 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
                 <stop offset="95%" stopColor={CHART_COLORS.allowed} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
             />
             <Area
               type="monotone"
@@ -242,6 +242,10 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
 
 // Method Breakdown Chart
 function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const gridStroke = useMemo(() => getGridStroke(), []);
+
   const colors: Record<string, string> = {
     GET: CHART_COLORS.get,
     POST: CHART_COLORS.post,
@@ -255,31 +259,26 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" horizontal={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} horizontal={false} />
             <XAxis
               type="number"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <YAxis
               type="category"
               dataKey="method"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               width={60}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar

@@ -7,11 +7,8 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Users,
-  Shield,
-  Ban,
-  AlertTriangle,
-  Send,
   Clock,
+  Send,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PlaybookSelector, type Playbook } from '../components/warroom/PlaybookSelector';
@@ -61,12 +58,7 @@ const mockActivities: Activity[] = [
   },
 ];
 
-const quickActions = [
-  { icon: Ban, label: 'Block IP', color: 'text-ac-red' },
-  { icon: Shield, label: 'Block Fingerprint', color: 'text-ac-orange' },
-  { icon: AlertTriangle, label: 'Block ASN', color: 'text-ac-orange' },
-];
-
+// ======================== Main Component ========================
 export default function WarRoomPage() {
   const { id } = useParams();
   const [message, setMessage] = useState('');

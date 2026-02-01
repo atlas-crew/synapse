@@ -50,6 +50,18 @@
     --ac-navy-lighter: #2A4A8E;
 
     /* =========================================
+       LIGHT MODE NAVY SCALE
+       Crisp, professional light tones with navy hints
+       ========================================= */
+    --light-surface-base: #FFFFFF;
+    --light-surface-elevated: #F8FAFC;
+    --light-surface-subtle: #F0F4F8;
+    --light-surface-muted: #E8EEF4;
+    --light-surface-card: #FFFFFF;
+    --light-navy-tint: rgba(0, 30, 98, 0.03);
+    --light-navy-wash: rgba(0, 30, 98, 0.06);
+
+    /* =========================================
        TINTS & SHADES
        ========================================= */
     --ac-blue-light: #7CBAFF;
@@ -73,39 +85,77 @@
 
     /* =========================================
        THEME TOKENS - LIGHT
+       War room aesthetic: Crisp, precise, operational
+       Enhanced depth with layered surfaces and shadows
        ========================================= */
-    --surface-base: #FFFFFF;
+    --surface-base: #FAFCFD;
     --surface-subtle: #F0F4F8;
-    --surface-card: #DFE8F0;
-    --surface-inset: #FFFFFF;
+    --surface-card: #FFFFFF;
+    --surface-inset: #F4F7FA;
     --surface-overlay: #FFFFFF;
-    --surface-hero: #FFFFFF;
+    --surface-hero: #EDF2F7;
+    --surface-header: #001E62;
+    --surface-elevated: #FFFFFF;
+    --surface-recessed: #E8EEF4;
 
     --text-primary: #001E62;
-    --text-secondary: #404040;
-    --text-muted: #7F7F7F;
+    --text-secondary: #334E68;
+    --text-muted: #627D98;
     --text-inverse: #FFFFFF;
 
     --link: #0057B7;
     --link-hover: #003EC8;
 
-    --border-subtle: #DFE8F0;
+    --border-subtle: #D6E1EB;
+    --border-medium: #B8C9DA;
     --border-strong: #001E62;
-    --border-inset: #F0F4F8;
+    --border-inset: #E2EAF2;
+    --border-card: rgba(0, 30, 98, 0.08);
 
     --accent: #0057B7;
     --accent-hover: #004189;
     --focus-ring: #0057B7;
 
-    --shadow-color: rgba(0, 30, 98, 0.1);
-    --shadow-color-strong: rgba(0, 30, 98, 0.2);
+    /* Enhanced shadow system - more depth layers */
+    --shadow-xs: 0 1px 2px rgba(0, 30, 98, 0.04);
+    --shadow-sm: 0 1px 3px rgba(0, 30, 98, 0.06), 0 1px 2px rgba(0, 30, 98, 0.04);
+    --shadow-md: 0 4px 6px rgba(0, 30, 98, 0.07), 0 2px 4px rgba(0, 30, 98, 0.05);
+    --shadow-lg: 0 10px 15px rgba(0, 30, 98, 0.08), 0 4px 6px rgba(0, 30, 98, 0.05);
+    --shadow-xl: 0 20px 25px rgba(0, 30, 98, 0.10), 0 8px 10px rgba(0, 30, 98, 0.06);
+    --shadow-color: rgba(0, 30, 98, 0.08);
+    --shadow-color-strong: rgba(0, 30, 98, 0.14);
 
-    /* Depth effects */
-    --glow-magenta: rgba(214, 37, 152, 0.4);
-    --glow-blue: rgba(0, 87, 183, 0.4);
-    --card-highlight: rgba(255, 255, 255, 0.08);
-    --card-shadow: rgba(0, 30, 98, 0.15);
-    --inset-shadow: inset 0 1px 2px rgba(0, 30, 98, 0.1);
+    /* Card elevation shadows - distinct layers */
+    --shadow-card: 0 1px 3px rgba(0, 30, 98, 0.08), 0 4px 12px rgba(0, 30, 98, 0.06), 0 0 0 1px rgba(0, 30, 98, 0.04);
+    --shadow-card-hover: 0 4px 8px rgba(0, 30, 98, 0.10), 0 12px 24px rgba(0, 30, 98, 0.08), 0 0 0 1px rgba(0, 87, 183, 0.12);
+    --shadow-card-raised: 0 8px 16px rgba(0, 30, 98, 0.12), 0 20px 40px rgba(0, 30, 98, 0.08);
+
+    /* Depth effects - Light mode */
+    --glow-magenta: rgba(214, 37, 152, 0.20);
+    --glow-blue: rgba(0, 87, 183, 0.20);
+    --card-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, transparent 50%);
+    --card-shadow: rgba(0, 30, 98, 0.12);
+    --inset-shadow: inset 0 2px 4px rgba(0, 30, 98, 0.06), inset 0 0 0 1px rgba(0, 30, 98, 0.04);
+    --top-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+    /* Light mode gradient surfaces - more pronounced */
+    --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #FAFCFD 100%);
+    --gradient-card-hover: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+    --gradient-surface: linear-gradient(180deg, rgba(0, 87, 183, 0.04) 0%, transparent 100%);
+    --gradient-surface-subtle: linear-gradient(180deg, rgba(0, 30, 98, 0.02) 0%, transparent 60%);
+    --gradient-inset: linear-gradient(180deg, rgba(0, 30, 98, 0.05) 0%, rgba(0, 30, 98, 0.02) 30%, transparent 100%);
+    --gradient-hero: linear-gradient(180deg, #EDF2F7 0%, #FAFCFD 50%, #FFFFFF 100%);
+    --gradient-header: linear-gradient(180deg, #001E62 0%, #001544 100%);
+    --gradient-sidebar: linear-gradient(90deg, rgba(0, 30, 98, 0.02) 0%, transparent 100%);
+    --border-glow: 0 0 0 1px rgba(0, 87, 183, 0.12);
+
+    /* Light mode inner depth */
+    --inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+    --inner-shadow-top: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 30, 98, 0.04);
+
+    /* Light mode table header */
+    --table-header-bg: linear-gradient(180deg, #001E62 0%, #001544 100%);
+    --table-header-text: #FFFFFF;
   }
 
   .dark {
@@ -159,7 +209,35 @@
     @apply bg-surface-base text-ink-primary font-sans antialiased;
   }
 
-  /* War room atmosphere - tactical command center */
+  /* Light mode atmosphere - precision command center
+     Clean, clinical with depth and visual hierarchy */
+  body,
+  .app-shell {
+    background:
+      /* Subtle tactical grid - precision feel */
+      linear-gradient(rgba(0, 30, 98, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 30, 98, 0.02) 1px, transparent 1px),
+      /* Top gradient for depth */
+      linear-gradient(180deg, rgba(0, 30, 98, 0.03) 0%, transparent 20%),
+      /* Subtle corner accents for atmosphere */
+      radial-gradient(ellipse at 0% 0%, rgba(0, 87, 183, 0.06) 0%, transparent 40%),
+      radial-gradient(ellipse at 100% 100%, rgba(214, 37, 152, 0.02) 0%, transparent 50%),
+      /* Subtle center vignette for focus */
+      radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0, 30, 98, 0.015) 100%),
+      /* Base - slightly warm white */
+      linear-gradient(180deg, #FAFCFD 0%, #F8FAFC 100%);
+    background-size:
+      40px 40px,
+      40px 40px,
+      100% 100%,
+      100% 100%,
+      100% 100%,
+      100% 100%,
+      100% 100%;
+    background-attachment: fixed;
+  }
+
+  /* War room atmosphere - tactical command center (dark mode) */
   .dark body,
   .dark .app-shell {
     background:
@@ -207,6 +285,16 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
   }
+
+  /* ===========================================
+     SHADER DEBUG OUTPUT SUPPRESSION
+     luma.gl/deck.gl can leak shader source code into the DOM
+     in development mode. Hide elements outside the React root.
+     =========================================== */
+  body > *:not(#root):not(script):not(link):not(style):not(noscript):not(meta) {
+    display: none !important;
+    visibility: hidden !important;
+  }
 }
 
 @layer components {
@@ -214,15 +302,45 @@
     @apply bg-surface-base text-ink-primary;
   }
 
-  /* Card styles with gradient depth */
+  /* Card styles with gradient depth - Light mode
+     Enhanced with layered shadows and subtle highlights */
   .card {
-    @apply shadow-card;
-    background: var(--surface-card);
+    background: var(--gradient-card);
     border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-card);
     position: relative;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   }
 
-  /* Dark mode cards get gradient treatment */
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--inner-highlight);
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  .card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: var(--inner-shadow-top);
+    pointer-events: none;
+  }
+
+  .card:hover {
+    border-color: var(--border-medium);
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+
+  /* Raised card variant for more emphasis */
+  .card-raised {
+    box-shadow: var(--shadow-card-raised);
+  }
+
+  /* Dark mode cards get navy gradient treatment */
   .dark .card {
     background: var(--gradient-card);
     border: 1px solid rgba(0, 87, 183, 0.25);
@@ -233,24 +351,41 @@
   }
 
   .dark .card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 40%);
-    pointer-events: none;
+    opacity: 1;
   }
 
-  /* Glass panel - semi-transparent with blur */
+  .dark .card::after {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* Glass panel - Light mode with enhanced depth */
   .card-glass {
     @apply backdrop-blur-md;
-    background: rgba(10, 42, 110, 0.6);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
+    border: 1px solid rgba(0, 30, 98, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.95);
+    border-left-color: rgba(255, 255, 255, 0.6);
+    box-shadow:
+      0 4px 16px rgba(0, 30, 98, 0.08),
+      0 1px 3px rgba(0, 30, 98, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0 rgba(0, 30, 98, 0.03);
+  }
+
+  .card-glass:hover {
+    box-shadow:
+      0 8px 24px rgba(0, 30, 98, 0.10),
+      0 2px 4px rgba(0, 30, 98, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+
+  /* Glass panel - Dark mode */
+  .dark .card-glass {
+    background: linear-gradient(165deg, rgba(0, 30, 98, 0.85) 0%, rgba(0, 21, 68, 0.9) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-top-color: rgba(255, 255, 255, 0.12);
     border-left-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .dark .card-glass {
-    background: linear-gradient(165deg, rgba(0, 30, 98, 0.85) 0%, rgba(0, 21, 68, 0.9) 100%);
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.5),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -258,6 +393,11 @@
 
   .card-header {
     @apply px-4 py-3 border-b text-ink-primary;
+    border-color: var(--border-subtle);
+    background: linear-gradient(180deg, rgba(0, 87, 183, 0.03) 0%, transparent 100%);
+  }
+
+  .dark .card-header {
     border-color: rgba(0, 87, 183, 0.2);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
   }
@@ -344,18 +484,54 @@
   }
 
   /* Stat cards (Signal Horizon Design System)
-     Large numbers in Rubik Light (300), eyebrow labels */
+     Large numbers in Rubik Light (300), eyebrow labels
+     Enhanced with deeper shadows and highlight effects */
   .stat-card {
-    @apply card p-4;
+    @apply p-4 relative;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FAFCFD 100%);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-card);
   }
 
-  .dark .stat-card {
-    background: linear-gradient(165deg, rgba(26, 58, 126, 0.9) 0%, rgba(10, 42, 110, 0.95) 100%);
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.9) 20%, rgba(255, 255, 255, 0.9) 80%, transparent 100%);
   }
 
   .stat-card:hover {
     transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: var(--border-medium);
+  }
+
+  .dark .stat-card {
+    background: linear-gradient(165deg, rgba(26, 58, 126, 0.9) 0%, rgba(10, 42, 110, 0.95) 100%);
+    border: 1px solid rgba(0, 87, 183, 0.25);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.4),
+      0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .stat-card::before {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%);
+  }
+
+  .dark .stat-card::after {
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 20%, rgba(255, 255, 255, 0.08) 80%, transparent 100%);
   }
 
   .dark .stat-card:hover {
@@ -366,16 +542,25 @@
 
   .stat-value {
     @apply text-3xl font-light text-ink-primary;
+  }
+
+  .dark .stat-value {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   .stat-value-primary {
     @apply text-3xl font-light text-ac-magenta;
+  }
+
+  .dark .stat-value-primary {
     text-shadow: 0 0 20px rgba(214, 37, 152, 0.4);
   }
 
   .stat-value-secondary {
     @apply text-3xl font-light text-ac-blue;
+  }
+
+  .dark .stat-value-secondary {
     text-shadow: 0 0 20px rgba(0, 87, 183, 0.4);
   }
 
@@ -411,11 +596,12 @@
 
   /* =========================================
      CTRLX DESIGN SYSTEM COMPONENTS
+     Theme-aware styling for both light and dark modes
      ========================================= */
 
-  /* CtrlX Card - Light themed with subtle shadow */
+  /* CtrlX Card - Theme-aware with subtle shadow */
   .ctrlx-card {
-    @apply bg-white border border-gray-200 shadow-sm;
+    @apply bg-white dark:bg-surface-card border border-border-subtle shadow-sm;
   }
 
   /* CtrlX Metric Card - Large number display with colored top border */
@@ -543,33 +729,33 @@
 
   /* Tag Badges */
   .tag-badge {
-    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600;
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium bg-surface-subtle dark:bg-surface-card text-ink-secondary border border-border-subtle;
   }
 
   /* Trend Indicators */
   .trend-up {
-    @apply text-ctrlx-success;
+    @apply text-ac-green;
   }
 
   .trend-down {
-    @apply text-ctrlx-danger;
+    @apply text-ac-red;
   }
 
   .trend-neutral {
-    @apply text-gray-400;
+    @apply text-ink-muted;
   }
 
   /* CtrlX Time Range Selector */
   .ctrlx-time-range {
-    @apply inline-flex bg-gray-100;
+    @apply inline-flex bg-surface-subtle dark:bg-surface-card border border-border-subtle;
   }
 
   .ctrlx-time-range button {
-    @apply px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-navy-900 hover:bg-gray-200 transition-colors;
+    @apply px-3 py-1.5 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-card dark:hover:bg-surface-subtle transition-colors;
   }
 
   .ctrlx-time-range button.active {
-    @apply bg-white text-navy-900 shadow-sm;
+    @apply bg-white dark:bg-surface-hero text-ac-navy dark:text-white shadow-sm;
   }
 
   /* CtrlX Page Header (Signal Horizon Design System)
@@ -639,11 +825,11 @@
   }
 
   .ctrlx-filter-pill {
-    @apply px-3 py-1 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer;
+    @apply px-3 py-1 text-sm font-medium text-ink-secondary bg-surface-subtle dark:bg-surface-card hover:bg-surface-card dark:hover:bg-surface-subtle border border-border-subtle transition-colors cursor-pointer;
   }
 
   .ctrlx-filter-pill.active {
-    @apply bg-ctrlx-primary text-white;
+    @apply bg-ac-navy dark:bg-ac-blue text-white border-ac-navy dark:border-ac-blue;
   }
 
   /* CtrlX Search Input */
@@ -652,11 +838,11 @@
   }
 
   .ctrlx-search input {
-    @apply w-full pl-10 pr-4 py-2 text-sm border border-gray-300 bg-white text-navy-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ctrlx-primary focus:border-transparent;
+    @apply w-full pl-10 pr-4 py-2 text-sm border border-border-subtle bg-white dark:bg-surface-inset text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue focus:border-ac-blue;
   }
 
   .ctrlx-search-icon {
-    @apply absolute left-3 top-1/2 -translate-y-1/2 text-gray-400;
+    @apply absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted;
   }
 
   /* Input fields with inner shadow for depth */
@@ -676,6 +862,111 @@
 }
 
 @layer utilities {
+  /* =========================================
+     LIGHT MODE ELEVATION SYSTEM
+     Layered surfaces with shadow depth
+     ========================================= */
+
+  /* Surface elevation levels - light mode */
+  .surface-level-0 {
+    background: var(--surface-base);
+    box-shadow: none;
+  }
+
+  .surface-level-1 {
+    background: var(--surface-card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .surface-level-2 {
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-md);
+  }
+
+  .surface-level-3 {
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Recessed surface - for inset areas */
+  .surface-recessed {
+    background: var(--surface-inset);
+    box-shadow: var(--inset-shadow);
+  }
+
+  /* Panel with inner highlight */
+  .panel-highlight {
+    position: relative;
+  }
+
+  .panel-highlight::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, transparent 30%);
+    pointer-events: none;
+  }
+
+  /* Light mode depth border effect */
+  .border-depth {
+    border: 1px solid var(--border-subtle);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0 rgba(0, 30, 98, 0.03),
+      0 1px 2px rgba(0, 30, 98, 0.04);
+  }
+
+  /* Elevated card with full depth treatment */
+  .card-elevated {
+    background: var(--gradient-card);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-card);
+    position: relative;
+  }
+
+  .card-elevated::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--inner-highlight);
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .card-elevated:hover {
+    box-shadow: var(--shadow-card-hover);
+    border-color: var(--border-medium);
+  }
+
+  /* Dark mode overrides for elevation */
+  .dark .surface-level-1,
+  .dark .surface-level-2,
+  .dark .surface-level-3 {
+    background: var(--surface-card);
+  }
+
+  .dark .surface-recessed {
+    background: var(--surface-inset);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .border-depth {
+    border-color: rgba(0, 87, 183, 0.2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .card-elevated {
+    background: var(--gradient-card);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .dark .card-elevated::before {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 30%);
+    opacity: 1;
+  }
+
   /* =========================================
      TACTICAL ATMOSPHERE - War Room Effects
      ========================================= */
@@ -915,26 +1206,63 @@
   }
 
   /* Hero gradient - for headers and hero sections */
+  /* Light mode: Navy header bar maintains brand identity */
   .surface-hero-gradient {
     background: linear-gradient(180deg,
       rgba(0, 30, 98, 1) 0%,
       rgba(0, 21, 68, 1) 100%);
   }
 
-  /* Sidebar gradient */
+  /* Sidebar gradient - Light mode */
   .surface-sidebar {
+    background: linear-gradient(180deg,
+      #F8FAFC 0%,
+      #F0F4F8 100%);
+    border-right: 1px solid var(--border-subtle);
+  }
+
+  /* Sidebar gradient - Dark mode */
+  .dark .surface-sidebar {
     background: linear-gradient(180deg,
       rgba(0, 21, 68, 0.98) 0%,
       rgba(0, 16, 46, 1) 100%);
+    border-right: 1px solid rgba(0, 87, 183, 0.2);
   }
 
-  /* Frosted glass effect */
+  /* Frosted glass effect - Light mode */
   .surface-frosted {
     backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 30, 98, 0.08);
+  }
+
+  /* Frosted glass effect - Dark mode */
+  .dark .surface-frosted {
     background: linear-gradient(165deg,
       rgba(0, 30, 98, 0.7) 0%,
       rgba(0, 21, 68, 0.8) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Light mode header bar - maintains navy for brand identity */
+  .light-header {
+    background: var(--gradient-header);
+    color: #FFFFFF;
+  }
+
+  /* Light mode elevated surface */
+  .surface-elevated {
+    background: #FFFFFF;
+    box-shadow:
+      0 1px 3px var(--shadow-color),
+      0 4px 12px var(--shadow-color);
+  }
+
+  .dark .surface-elevated {
+    background: var(--gradient-card);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   /* Ambient glow behind elements */

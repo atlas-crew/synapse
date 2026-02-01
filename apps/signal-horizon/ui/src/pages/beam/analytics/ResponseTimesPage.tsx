@@ -25,6 +25,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -160,6 +161,10 @@ function StatCard({
 
 // Latency Percentile Chart
 function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }) {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const gridStroke = useMemo(() => getGridStroke(), []);
+
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
@@ -185,28 +190,23 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               tickFormatter={(v) => `${v}ms`}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
               formatter={(value: number, name: string) => [
                 `${value}ms`,
                 name.toUpperCase(),
@@ -245,34 +245,33 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
 
 // Latency Distribution Chart
 function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBUTION }) {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const gridStroke = useMemo(() => getGridStroke(), []);
+
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <h3 className="text-lg font-semibold text-ink-primary mb-4">Latency Distribution</h3>
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ left: 10, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
             <XAxis
               dataKey="range"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
             <Bar

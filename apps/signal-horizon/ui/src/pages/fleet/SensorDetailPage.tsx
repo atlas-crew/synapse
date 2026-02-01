@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Settings } from 'lucide-react';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
 import { FileBrowser } from '../../components/fleet/FileBrowser';
@@ -715,6 +716,7 @@ function LogsTab({ data, logType, setLogType }: { data: any; logType: string; se
 
 function ConfigurationTab({ sensor }: { sensor: any }) {
   const id = sensor.id;
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
 
@@ -826,15 +828,24 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
           ))}
         </div>
         
-        {configTab === 'pingora' && (
-          <button 
-            onClick={handleSaveAll}
-            disabled={updateMutation.isPending}
-            className="btn-primary h-10 px-6 text-sm"
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate(`/fleet/sensors/${id}/config`)}
+            className="px-4 py-2 text-sm border border-border-subtle rounded-lg hover:bg-surface-subtle flex items-center gap-2"
           >
-            {updateMutation.isPending ? 'Saving...' : 'Save & Push Changes'}
+            <Settings className="w-4 h-4" />
+            Advanced JSON Editor
           </button>
-        )}
+          {configTab === 'pingora' && (
+            <button 
+              onClick={handleSaveAll}
+              disabled={updateMutation.isPending}
+              className="btn-primary h-10 px-6 text-sm"
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save & Push Changes'}
+            </button>
+          )}
+        </div>
       </div>
 
       {configTab === 'drift' && (

@@ -26,6 +26,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
@@ -170,6 +171,10 @@ function StatCard({
 
 // Error Timeline Chart
 function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const gridStroke = useMemo(() => getGridStroke(), []);
+
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-6">
@@ -209,27 +214,22 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
                 <stop offset="95%" stopColor={CHART_COLORS.blocked} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
             <XAxis
               dataKey="time"
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-              axisLine={{ stroke: 'var(--border-subtle)' }}
+              tick={{ fill: tickColor, fontSize: 12 }}
+              axisLine={false}
               tickLine={false}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
             />
             <Area
               type="monotone"
@@ -265,6 +265,7 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
 // Error Category Pie Chart
 function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
 
   return (
     <div className="bg-surface-card border border-border-subtle p-5">
@@ -286,14 +287,9 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#001544',
-                border: '1px solid rgba(0, 87, 183, 0.4)',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0',
-              }}
-              labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-              itemStyle={{ color: '#B0C4DE' }}
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
               formatter={(value: number) => [
                 `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
                 'Errors',

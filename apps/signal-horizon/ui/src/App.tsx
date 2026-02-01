@@ -70,6 +70,8 @@ const supportNavItems = [
 
 const fleetNavItems = [
   { path: '/fleet', icon: Server, label: 'Fleet Overview' },
+  { path: '/fleet/config', icon: Settings, label: 'Fleet Configuration' },
+  { path: '/fleet/dlp', icon: Shield, label: 'DLP Dashboard' },
   { path: '/fleet/forecast', icon: BarChart3, label: 'Capacity Forecast' },
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
@@ -130,66 +132,67 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-base text-ink-primary radar-sweep">
-      {/* Top Header - Command Bar with gradient depth */}
-      <header className="h-14 border-b border-border-subtle bg-surface-hero relative z-10 surface-hero-gradient edge-highlight">
+      {/* Top Header - Command Bar with gradient depth
+           Navy header maintains brand identity in both light and dark modes */}
+      <header className="h-14 border-b border-ac-navy-light bg-ac-navy relative z-10 surface-hero-gradient edge-highlight">
         <div className="h-full px-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
-              <span className="tracking-[0.2em] text-xs text-ink-muted">Atlas Crew</span>
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <span className="tracking-[0.2em] text-xs text-white/60">Atlas Crew</span>
             </div>
             {/* Status Indicators - Tactical Display */}
             <div className="hidden lg:flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
-                  <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-ink-muted')} />
+                  <Target className={clsx('w-4 h-4', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/40')} />
                 </span>
-                <span className="text-xs text-ink-secondary font-mono">
-                  <span className={clsx('font-semibold', activeCampaigns > 0 && 'text-ac-magenta')}>{activeCampaigns}</span> ACTIVE
+                <span className="text-xs text-white/70 font-mono">
+                  <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className={clsx('relative', criticalThreats > 0 && 'status-blink')}>
-                  <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-ink-muted')} />
+                  <AlertTriangle className={clsx('w-4 h-4', criticalThreats > 0 ? 'text-ac-orange' : 'text-white/40')} />
                 </span>
-                <span className="text-xs text-ink-secondary font-mono">
-                  <span className={clsx('font-semibold', criticalThreats > 0 && 'text-ac-orange')}>{criticalThreats}</span> CRITICAL
+                <span className="text-xs text-white/70 font-mono">
+                  <span className={clsx('font-semibold', criticalThreats > 0 ? 'text-ac-orange' : 'text-white')}>{criticalThreats}</span> CRITICAL
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-blue' : 'text-ink-muted')} />
-                <span className="text-xs text-ink-secondary font-mono">
-                  <span className={clsx('font-semibold', unreadAlerts > 0 && 'text-ac-blue')}>{unreadAlerts}</span> ALERTS
+                <Bell className={clsx('w-4 h-4', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white/40')} />
+                <span className="text-xs text-white/70 font-mono">
+                  <span className={clsx('font-semibold', unreadAlerts > 0 ? 'text-ac-blue-tint' : 'text-white')}>{unreadAlerts}</span> ALERTS
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className={clsx(sensorCount > 0 && 'status-blink')}>
-                  <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-ink-muted')} />
+                  <Server className={clsx('w-4 h-4', sensorCount > 0 ? 'text-ac-green' : 'text-white/40')} />
                 </span>
-                <span className="text-xs text-ink-secondary font-mono">
-                  <span className={clsx('font-semibold', sensorCount > 0 && 'text-ac-green')}>{sensorCount}</span> ONLINE
+                <span className="text-xs text-white/70 font-mono">
+                  <span className={clsx('font-semibold', sensorCount > 0 ? 'text-ac-green' : 'text-white')}>{sensorCount}</span> ONLINE
                 </span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <DemoModeControls />
-            <div className="hidden md:flex items-center gap-2 border border-border-subtle px-2 h-8 text-xs text-ink-secondary">
+            <div className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 text-xs text-white/70">
               acme-corp
               <ChevronDown className="w-3 h-3" />
             </div>
-            <div className="hidden md:flex items-center gap-2 border border-border-subtle px-2 h-8 text-xs text-ink-secondary">
+            <div className="hidden md:flex items-center gap-2 border border-white/20 px-2 h-8 text-xs text-white/70">
               Last 7 days
               <ChevronDown className="w-3 h-3" />
             </div>
             <button
               type="button"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="btn-ghost h-8 px-2 text-ink-secondary"
+              className="h-8 px-2 text-white/70 hover:text-white transition-colors"
               aria-label="Toggle theme"
             >
               <ThemeIcon className="w-4 h-4" />
             </button>
-            <button type="button" className="btn-ghost h-8 px-2 text-ink-secondary">
+            <button type="button" className="h-8 px-2 text-white/70 hover:text-white transition-colors">
               <Settings className="w-4 h-4" />
             </button>
           </div>

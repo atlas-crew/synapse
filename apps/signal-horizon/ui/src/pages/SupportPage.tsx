@@ -55,7 +55,7 @@ export function SupportPage() {
   ];
 
   // Fetch doc index
-  const { data: docs = demoDocs, isError: docsError } = useQuery<DocItem[]>({
+  const { data: docs = demoDocs } = useQuery<DocItem[]>({
     queryKey: ['docs', 'index'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/docs`, { headers: authHeaders });
@@ -72,9 +72,10 @@ export function SupportPage() {
 
     <div className="flex flex-col h-full bg-surface-base font-sans selection:bg-ac-blue/20 text-ink-primary">
 
-      {/* Header - Atlas Crew Brand Hub Navigation */}
+      {/* Header - Atlas Crew Brand Hub Navigation
+           Navy header maintains brand identity in both light and dark modes */}
 
-      <div className="flex-shrink-0 bg-ac-navy border-b border-white/10">
+      <div className="flex-shrink-0 bg-ac-navy border-b border-ac-navy-light">
 
         <div className="flex items-center justify-between px-8 h-16">
 
@@ -434,7 +435,7 @@ Track these metrics:
   };
 
   // Fetch doc content
-  const { data: docContent, isLoading, isError } = useQuery({
+  const { data: docContent, isLoading } = useQuery({
     queryKey: ['docs', 'content', selectedDocId],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/docs/${selectedDocId}`, { headers: authHeaders });
@@ -490,10 +491,10 @@ Track these metrics:
   return (
     <div className="flex h-full overflow-hidden">
       {/* Doc Navigation - Secondary Sidebar */}
-      <div className="w-72 flex-shrink-0 border-r border-border-subtle bg-surface-subtle p-6 overflow-y-auto">
+      <div className="w-72 flex-shrink-0 border-r border-border-subtle bg-surface-subtle dark:bg-surface-subtle p-6 overflow-y-auto">
         {Object.entries(categories).map(([category, items]) => (
           <div key={category} className="mb-8">
-            <h3 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.15em] mb-4 pb-2 border-b border-ac-blue/10">
+            <h3 className="text-[11px] font-bold text-ac-blue uppercase tracking-[0.15em] mb-4 pb-2 border-b border-ac-blue/20 dark:border-ac-blue/10">
               {category}
             </h3>
             <div className="space-y-1.5">
@@ -501,9 +502,9 @@ Track these metrics:
                 <button
                   key={doc.id}
                   onClick={() => onSelectDoc(doc.id)}
-                  className={`w-full text-left px-3 py-2 rounded transition-all text-[13px] ${
-                    selectedDocId === doc.id 
-                      ? 'bg-white shadow-sm text-ac-navy font-bold border-l-4 border-ac-blue' 
+                  className={`w-full text-left px-3 py-2 transition-all text-[13px] ${
+                    selectedDocId === doc.id
+                      ? 'bg-white dark:bg-surface-card shadow-sm text-ac-navy dark:text-white font-bold border-l-4 border-ac-blue'
                       : 'text-ink-secondary hover:text-ac-blue hover:translate-x-1'
                   }`}
                 >
@@ -523,8 +524,8 @@ Track these metrics:
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ac-blue"></div>
             </div>
           ) : (
-            <div 
-              className="prose prose-slate dark:prose-invert max-w-none 
+            <div
+              className="prose prose-slate dark:prose-invert max-w-none
                 font-sans text-ink-secondary leading-relaxed
                 prose-headings:font-light prose-headings:tracking-tight prose-headings:text-ac-navy dark:prose-headings:text-white
                 prose-h1:text-[48px] prose-h1:mb-12
@@ -532,10 +533,13 @@ Track these metrics:
                 prose-h3:text-[28px] prose-h3:mt-12 prose-h3:mb-4
                 prose-h4:text-[24px]
                 prose-strong:font-bold prose-strong:text-ac-blue
-                prose-code:bg-ac-navy/5 prose-code:text-ac-navy prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:font-mono prose-code:text-sm
-                prose-pre:bg-ac-navy prose-pre:text-white prose-pre:shadow-2xl prose-pre:border-none prose-pre:rounded-xl
-                prose-li:my-2"
-              dangerouslySetInnerHTML={{ __html: htmlContent }} 
+                prose-code:bg-ac-navy/10 prose-code:text-ac-navy dark:prose-code:bg-ac-navy/30 dark:prose-code:text-ac-blue-tint prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm
+                prose-pre:bg-ac-navy prose-pre:text-white prose-pre:shadow-xl prose-pre:border prose-pre:border-ac-navy-light/20
+                prose-a:text-ac-blue prose-a:no-underline hover:prose-a:underline
+                prose-li:my-2
+                prose-table:border-collapse prose-th:bg-ac-navy prose-th:text-white prose-th:text-left prose-th:px-4 prose-th:py-2 prose-th:text-xs prose-th:uppercase prose-th:tracking-wider
+                prose-td:px-4 prose-td:py-2 prose-td:border-b prose-td:border-border-subtle"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
           )}
         </div>
@@ -575,15 +579,15 @@ function DiagnosticsCenter() {
         <button
           onClick={handleGenerate}
           disabled={isGenerating}
-          className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-8 py-3 rounded-lg font-bold uppercase tracking-widest text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
+          className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-8 py-3 font-bold uppercase tracking-widest text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 hover:shadow-xl"
         >
           {isGenerating ? 'Generating...' : 'Generate New Bundle'}
         </button>
       </div>
 
-      <div className="bg-white dark:bg-surface-card shadow-card rounded-2xl overflow-hidden border border-border-subtle">
+      <div className="bg-white dark:bg-surface-card shadow-card overflow-hidden border border-border-subtle">
         <table className="w-full text-sm text-left">
-          <thead className="bg-ac-navy text-white/70 uppercase tracking-widest text-[10px] font-bold">
+          <thead className="bg-ac-navy text-white uppercase tracking-widest text-[10px] font-bold">
             <tr>
               <th className="px-8 py-4">Bundle ID</th>
               <th className="px-8 py-4">Date Generated</th>
@@ -593,15 +597,15 @@ function DiagnosticsCenter() {
               <th className="px-8 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody className="divide-y divide-border-subtle bg-white dark:bg-transparent">
             {bundles.map((bundle) => (
-              <tr key={bundle.id} className="hover:bg-ac-blue/5 transition-colors group">
+              <tr key={bundle.id} className="hover:bg-ac-blue/5 dark:hover:bg-ac-blue/10 transition-colors group">
                 <td className="px-8 py-5 font-mono font-bold text-ac-blue">{bundle.id}</td>
                 <td className="px-8 py-5 text-ink-secondary">{bundle.date}</td>
                 <td className="px-8 py-5 text-ink-secondary">{bundle.type}</td>
                 <td className="px-8 py-5 text-ink-secondary">{bundle.size}</td>
                 <td className="px-8 py-5">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-ac-green/10 text-ac-green">
+                  <span className="inline-flex items-center px-3 py-1 text-[11px] font-bold uppercase tracking-wider bg-ac-green/10 text-ac-green border border-ac-green/20">
                     {bundle.status}
                   </span>
                 </td>
@@ -621,21 +625,21 @@ function DiagnosticsCenter() {
 
 function ContactSupport() {
   return (
-    <div className="max-w-2xl w-full bg-white dark:bg-surface-card p-12 rounded-3xl shadow-card-strong border border-border-subtle">
+    <div className="max-w-2xl w-full bg-white dark:bg-surface-card p-12 shadow-card-strong border border-border-subtle">
       <h1 className="text-[32px] font-light text-ac-navy dark:text-white tracking-tight mb-2">Contact Support</h1>
       <p className="text-ink-secondary mb-10">Direct access to the Atlas Crew security engineering team.</p>
-      
+
       <form className="space-y-8">
         <div>
-          <label className="block text-[11px] font-bold text-ac-navy dark:text-white/60 uppercase tracking-[0.2em] mb-3">Subject</label>
-          <input type="text" className="w-full px-5 py-4 rounded-xl border border-border-subtle bg-surface-subtle text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-transparent transition-all" placeholder="Brief description of the issue" />
+          <label className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Subject</label>
+          <input type="text" className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Brief description of the issue" />
         </div>
         <div>
-          <label className="block text-[11px] font-bold text-ac-navy dark:text-white/60 uppercase tracking-[0.2em] mb-3">Message</label>
-          <textarea rows={6} className="w-full px-5 py-4 rounded-xl border border-border-subtle bg-surface-subtle text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-transparent transition-all" placeholder="Describe the problem you're experiencing..." />
+          <label className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Message</label>
+          <textarea rows={6} className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Describe the problem you're experiencing..." />
         </div>
         <div className="flex items-center justify-between pt-4">
-          <button type="button" className="bg-ac-blue hover:bg-ac-navy text-white px-10 py-4 rounded-xl font-bold uppercase tracking-widest text-xs shadow-xl transition-all active:scale-95">
+          <button type="button" className="bg-ac-magenta hover:bg-ac-magenta/90 text-white px-10 py-4 font-bold uppercase tracking-widest text-xs shadow-lg hover:shadow-xl transition-all active:scale-95">
             Send Message
           </button>
           <div className="text-right">

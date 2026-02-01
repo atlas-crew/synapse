@@ -27,9 +27,11 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  CartesianGrid,
 } from 'recharts';
 import { useBeamThreats, type ThreatTimeRange } from '../../../hooks/useBeamThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { getTooltipStyle, getAxisTickColor, getGridStroke } from '../../../lib/chartTheme';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
@@ -154,16 +156,6 @@ const SEVERITY_CONFIG: Record<ThreatSeverity, { color: string; bg: string; label
   low: { color: 'text-ac-navy', bg: 'bg-ac-navy/20', label: 'Low' },
 };
 
-// Brand colors for charts
-const CHART_COLORS = {
-  threats: '#D62598',     // Magenta for threats
-  blocked: '#00B140',     // Atlas Crew Green for blocked
-  gradient: {
-    start: '#D62598',     // Magenta
-    end: '#E35205',       // Orange
-  },
-};
-
 // Stat Card Component
 function StatCard({
   label,
@@ -256,6 +248,104 @@ function TimeRangeSelector({
         </button>
       ))}
     </div>
+  );
+}
+
+// Threat Timeline Chart
+function ThreatTimelineChart() {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+  const gridStroke = useMemo(() => getGridStroke(), []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="col-span-2 bg-surface-card border border-border-subtle p-5"
+    >
+      <h3 className="text-ink-primary font-medium mb-4">Threat Timeline</h3>
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={DEMO_THREAT_TIMELINE}>
+            <defs>
+              <linearGradient id="threatGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#D62598" stopOpacity={0.5} />
+                <stop offset="50%" stopColor="#D62598" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="#D62598" stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+            <XAxis
+              dataKey="time"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: tickColor, fontSize: 11 }}
+            />
+            <YAxis axisLine={false} tickLine={false} tick={{ fill: tickColor, fontSize: 11 }} />
+            <Tooltip
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
+            />
+            <Area
+              type="monotone"
+              dataKey="threats"
+              stroke="#D62598"
+              fill="url(#threatGradient)"
+              strokeWidth={2.5}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </motion.div>
+  );
+}
+
+// Top Threat Sources Chart
+function TopThreatSourcesChart() {
+  const tooltipStyle = useMemo(() => getTooltipStyle(), []);
+  const tickColor = useMemo(() => getAxisTickColor(), []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-surface-card border border-border-subtle p-5"
+    >
+      <h3 className="text-ink-primary font-medium mb-4">Top Threat Sources</h3>
+      <div className="h-48 mb-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={DEMO_TOP_SOURCES} layout="vertical">
+            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: tickColor, fontSize: 12 }} />
+            <YAxis
+              type="category"
+              dataKey="ip"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: tickColor, fontSize: 11 }}
+              width={110}
+            />
+            <Tooltip
+              contentStyle={tooltipStyle.contentStyle}
+              labelStyle={tooltipStyle.labelStyle}
+              itemStyle={tooltipStyle.itemStyle}
+            />
+            <Bar dataKey="threats" fill="#D62598" radius={[0, 0, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="space-y-2">
+        {DEMO_TOP_SOURCES.slice(0, 3).map((source) => (
+          <div key={source.ip} className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-ink-secondary font-mono">{source.ip}</span>
+              <span className="text-xs text-ink-muted">({source.country})</span>
+            </div>
+            <span className="text-red-400">{source.threats} threats</span>
+          </div>
+        ))}
+      </div>
+    </motion.div>
   );
 }
 
@@ -442,50 +532,8 @@ export default function ThreatActivityPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-3 gap-4">
         {/* Threat Timeline */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="col-span-2 bg-surface-card border border-border-subtle p-5"
-        >
-          <h3 className="text-ink-primary font-medium mb-4">Threat Timeline</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={DEMO_THREAT_TIMELINE}>
-                <defs>
-                  <linearGradient id="threatGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#D62598" stopOpacity={0.5} />
-                    <stop offset="50%" stopColor="#D62598" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#D62598" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
-                <XAxis
-                  dataKey="time"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#7B8FA8', fontSize: 11 }}
-                />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#001544',
-                    border: '1px solid rgba(214, 37, 152, 0.4)',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                  }}
-                  labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                  itemStyle={{ color: '#B0C4DE' }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="threats"
-                  stroke="#D62598"
-                  fill="url(#threatGradient)"
-                  strokeWidth={2.5}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
+        <ThreatTimelineChart />
+
 
         {/* Severity Distribution - Horizontal Stacked Bar */}
         <motion.div
@@ -552,50 +600,7 @@ export default function ThreatActivityPage() {
         </motion.div>
 
         {/* Top Threat Sources */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-surface-card border border-border-subtle p-5"
-        >
-          <h3 className="text-ink-primary font-medium mb-4">Top Threat Sources</h3>
-          <div className="h-48 mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={DEMO_TOP_SOURCES} layout="vertical">
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#7B8FA8', fontSize: 12 }} />
-                <YAxis
-                  type="category"
-                  dataKey="ip"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#7B8FA8', fontSize: 11 }}
-                  width={110}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#001544',
-                    border: '1px solid rgba(0, 87, 183, 0.4)',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                    borderRadius: '0',
-                  }}
-                  labelStyle={{ color: '#FFFFFF', fontWeight: 500 }}
-                  itemStyle={{ color: '#B0C4DE' }}
-                />
-                <Bar dataKey="threats" fill="#D62598" radius={[0, 0, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="space-y-2">
-            {DEMO_TOP_SOURCES.slice(0, 3).map((source) => (
-              <div key={source.ip} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-ink-secondary font-mono">{source.ip}</span>
-                  <span className="text-xs text-ink-muted">({source.country})</span>
-                </div>
-                <span className="text-red-400">{source.threats} threats</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+        <TopThreatSourcesChart />
       </div>
     </div>
   );

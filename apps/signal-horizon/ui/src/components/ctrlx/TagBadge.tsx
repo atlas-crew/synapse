@@ -10,7 +10,7 @@ interface TagBadgeProps {
 
 /**
  * TagBadge - Simple tag/chip component for labels and categories.
- * Gray background with optional remove button.
+ * Theme-aware styling following Signal Horizon design system.
  */
 export const TagBadge = memo(function TagBadge({
   label,
@@ -19,8 +19,8 @@ export const TagBadge = memo(function TagBadge({
   className = '',
 }: TagBadgeProps) {
   const variantStyles = {
-    default: 'bg-gray-100 text-gray-700',
-    outline: 'bg-white border border-gray-300 text-gray-700',
+    default: 'bg-surface-subtle dark:bg-surface-card text-ink-secondary border border-border-subtle',
+    outline: 'bg-white dark:bg-transparent border border-border-subtle dark:border-border-strong text-ink-secondary',
   };
 
   return (
@@ -36,7 +36,7 @@ export const TagBadge = memo(function TagBadge({
         <button
           type="button"
           onClick={onRemove}
-          className="ml-0.5 p-0.5 hover:bg-gray-200 rounded transition-colors"
+          className="ml-0.5 p-0.5 hover:bg-surface-card dark:hover:bg-surface-subtle transition-colors"
         >
           <X className="w-3 h-3" />
         </button>
