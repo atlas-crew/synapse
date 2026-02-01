@@ -13,9 +13,6 @@ import {
   WifiOff,
   Clock,
   TrendingUp,
-  Server,
-  Database,
-  Cog,
   PlayCircle,
   Globe,
   Lock,
@@ -48,14 +45,6 @@ interface ConnectivityStats {
   uptime: number;
 }
 
-interface CloudEndpoint {
-  name: string;
-  url: string;
-  status: 'operational' | 'degraded' | 'down';
-  latency: number;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
 interface ConnectivityTest {
   id: string;
   name: string;
@@ -72,31 +61,6 @@ interface SensorConnectivity {
   reconnects: number;
   packetLoss: number;
 }
-
-// Cloud endpoints configuration
-const cloudEndpoints: CloudEndpoint[] = [
-  {
-    name: 'API Gateway',
-    url: 'api.atlascrew.io',
-    status: 'operational',
-    latency: 45,
-    icon: Server,
-  },
-  {
-    name: 'Telemetry Collector',
-    url: 'telemetry.atlascrew.io',
-    status: 'operational',
-    latency: 38,
-    icon: Database,
-  },
-  {
-    name: 'Rules Engine',
-    url: 'rules.atlascrew.io',
-    status: 'operational',
-    latency: 52,
-    icon: Cog,
-  },
-];
 
 // Connectivity tests
 const connectivityTests: ConnectivityTest[] = [
@@ -220,21 +184,6 @@ export function ConnectivityPage(): React.ReactElement {
     }
   };
 
-  const getStatusBgColor = (status: string) => {
-    switch (status) {
-      case 'operational':
-      case 'connected':
-        return 'bg-status-success/10';
-      case 'degraded':
-        return 'bg-status-warning/10';
-      case 'down':
-      case 'disconnected':
-        return 'bg-status-error/10';
-      default:
-        return 'bg-surface-subtle';
-    }
-  };
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'operational':
@@ -286,39 +235,6 @@ export function ConnectivityPage(): React.ReactElement {
           icon={<TrendingUp className="w-6 h-6" />}
           trend={{ value: 0, label: 'Last 30 days' }}
         />
-      </div>
-
-      {/* Atlas Crew Cloud Endpoints */}
-      <div className="bg-surface-card border border-border-subtle rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-ink-primary mb-4">Atlas Crew Cloud Endpoints</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {cloudEndpoints.map((endpoint) => {
-            const Icon = endpoint.icon;
-            return (
-              <div
-                key={endpoint.name}
-                className={`${getStatusBgColor(endpoint.status)} border border-border-subtle rounded-lg p-4`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Icon className="w-5 h-5 text-ink-muted" />
-                    <h3 className="font-medium text-ink-primary">{endpoint.name}</h3>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {getStatusIcon(endpoint.status)}
-                    <span className={`text-xs font-medium capitalize ${getStatusColor(endpoint.status)}`}>
-                      {endpoint.status}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-1 text-sm text-ink-secondary">
-                  <div>{endpoint.url}</div>
-                  <div>Latency: <span className="font-medium text-ink-primary">{endpoint.latency}ms</span></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* Connectivity Tests */}
