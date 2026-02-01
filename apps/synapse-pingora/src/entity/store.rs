@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Configuration for entity tracking.
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ impl Default for EntityConfig {
 }
 
 /// Per-IP entity state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityState {
     /// IP address (primary key).
     pub entity_id: String,
@@ -119,7 +119,7 @@ impl EntityState {
 }
 
 /// Rule match history for a single rule.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleMatchHistory {
     /// Rule ID.
     pub rule_id: u32,
@@ -756,6 +756,44 @@ impl EntityManager {
         for id in remove_ids {
             matches.remove(&id);
         }
+    }
+
+    // ========== Persistence Methods ==========
+
+    /// Create a snapshot of all entity states for persistence.
+    ///
+    /// Returns a Vec of cloned EntityState suitable for serialization.
+    pub fn snapshot(&self) -> Vec<EntityState> {
+        self.entities.iter().map(|e| e.value().clone()).collect()
+    }
+
+    /// Restore entity states from a persisted snapshot.
+    ///
+    /// Clears existing entities and inserts the restored ones.
+    /// Updates total_created counter to reflect restored count.
+    pub fn restore(&self, entities: Vec<EntityState>) {
+        self.entities.clear();
+        let count = entities.len() as u64;
+        for entity in entities {
+            self.entities.insert(entity.entity_id.clone(), entity);
+        }
+        self.total_created.store(count, Ordering::Relaxed);
+        self.total_evicted.store(0, Ordering::Relaxed);
+    }
+
+    /// Merge restored entities with existing ones (additive restore).
+    ///
+    /// Only inserts entities that don't already exist.
+    /// Useful for partial recovery scenarios.
+    pub fn merge_restore(&self, entities: Vec<EntityState>) -> usize {
+        let mut merged = 0;
+        for entity in entities {
+            if self.entities.insert(entity.entity_id.clone(), entity).is_none() {
+                merged += 1;
+            }
+        }
+        self.total_created.fetch_add(merged as u64, Ordering::Relaxed);
+        merged
     }
 }
 

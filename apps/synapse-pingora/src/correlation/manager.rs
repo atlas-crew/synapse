@@ -1049,6 +1049,34 @@ impl CampaignManager {
         self.store.list_campaigns(None)
     }
 
+    /// Create a snapshot of all campaigns for persistence.
+    ///
+    /// Returns all campaigns regardless of status.
+    pub fn snapshot(&self) -> Vec<Campaign> {
+        self.store.list_campaigns(None)
+    }
+
+    /// Restore campaigns from a snapshot.
+    ///
+    /// Clears existing state and loads the provided campaigns.
+    pub fn restore(&self, campaigns: Vec<Campaign>) {
+        // Clear existing state
+        self.store.clear();
+        self.index.clear();
+
+        // Restore campaigns
+        for campaign in campaigns {
+            // Re-add IP mappings
+            for ip_str in &campaign.actors {
+                // Update fingerprint index with a placeholder to re-establish the IP entry
+                self.index.update_entity(ip_str, None, None);
+            }
+
+            // Create the campaign in the store
+            let _ = self.store.create_campaign(campaign);
+        }
+    }
+
     /// Get a specific campaign by ID.
     ///
     /// # Arguments

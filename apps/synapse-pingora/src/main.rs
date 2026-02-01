@@ -92,6 +92,7 @@ use synapse_pingora::shadow::{ShadowMirrorConfig, ShadowMirrorManager, MirrorPay
 use synapse_pingora::actor::{ActorConfig, ActorManager, RuleMatch as ActorRuleMatch};
 use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
 use parking_lot::RwLock;
+use sha2::{Sha256, Digest};
 
 // ============================================================================
 // Configuration
@@ -1631,8 +1632,10 @@ impl ProxyHttp for SynapseProxy {
 
         if let Some(token) = session_token {
             if !token.is_empty() {
-                // Hash the token for storage (don't store raw tokens)
-                let token_hash = format!("{:x}", md5::compute(&token));
+                // Hash the token with SHA-256 for secure storage (MD5 is cryptographically broken)
+                let mut hasher = Sha256::new();
+                hasher.update(token.as_bytes());
+                let token_hash = format!("{:x}", hasher.finalize());
 
                 if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
                     let ja4_str = fingerprint.ja4.as_ref().map(|j| j.raw.as_str());
@@ -2787,8 +2790,25 @@ fn main() {
         None
     };
 
+    // ========== Phase 7: Persistence - Load existing WAF state ==========
+    use synapse_pingora::persistence::{PersistenceConfig, SnapshotManager, WafSnapshot};
+
+    let persistence_config = PersistenceConfig::default();
+    let snapshot_manager = Arc::new(SnapshotManager::new(persistence_config.clone()));
+
+    // Try to load existing WAF state from disk
+    let loaded_snapshot = snapshot_manager.load_on_startup().ok().flatten();
+
     // Create shared EntityManager for both admin API and proxy
     let shared_entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
+
+    // Restore entities from snapshot if available
+    if let Some(ref snapshot) = loaded_snapshot {
+        if !snapshot.entities.is_empty() {
+            shared_entity_manager.restore(snapshot.entities.clone());
+            info!("Restored {} entities from snapshot", snapshot.entities.len());
+        }
+    }
 
     // Create shared BlockLog for both admin API and proxy
     let shared_block_log = Arc::new(BlockLog::default());
@@ -2796,8 +2816,25 @@ fn main() {
     // Create shared CampaignManager for threat correlation
     let campaign_manager = Arc::new(CampaignManager::new());
 
+    // Restore campaigns from snapshot if available
+    if let Some(ref snapshot) = loaded_snapshot {
+        if !snapshot.campaigns.is_empty() {
+            campaign_manager.restore(snapshot.campaigns.clone());
+            info!("Restored {} campaigns from snapshot", snapshot.campaigns.len());
+        }
+    }
+
     // Phase 5: Create shared ActorManager for behavioral tracking across admin API and proxy
     let shared_actor_manager = Arc::new(ActorManager::new(ActorConfig::default()));
+
+    // Restore actors from snapshot if available
+    if let Some(ref snapshot) = loaded_snapshot {
+        if !snapshot.actors.is_empty() {
+            shared_actor_manager.restore(snapshot.actors.clone());
+            info!("Restored {} actors from snapshot", snapshot.actors.len());
+        }
+    }
+
     info!("ActorManager initialized with default config");
 
     // Phase 5: Create shared SessionManager for session validation and hijack detection
@@ -2836,17 +2873,18 @@ fn main() {
     }
 
     // Parse trusted proxies for X-Forwarded-For validation
-    let trusted_proxies: Vec<CidrRange> = config.server.trusted_proxies.iter()
-        .filter_map(|cidr_str| {
-            match CidrRange::parse(cidr_str) {
-                Ok(cidr) => Some(cidr),
-                Err(e) => {
-                    warn!("Invalid trusted_proxy CIDR '{}': {:?}", cidr_str, e);
-                    None
-                }
+    // Fail startup on invalid CIDR to prevent misconfiguration from silently degrading security
+    let mut trusted_proxies: Vec<CidrRange> = Vec::with_capacity(config.server.trusted_proxies.len());
+    for cidr_str in &config.server.trusted_proxies {
+        match CidrRange::parse(cidr_str) {
+            Ok(cidr) => trusted_proxies.push(cidr),
+            Err(e) => {
+                error!("Invalid trusted_proxy CIDR '{}': {:?}", cidr_str, e);
+                error!("Fix the trusted_proxies configuration and restart. Valid formats: '10.0.0.0/8', '192.168.1.1'");
+                std::process::exit(1);
             }
-        })
-        .collect();
+        }
+    }
 
     if trusted_proxies.is_empty() {
         info!("No trusted proxies configured - X-Forwarded-For headers will be ignored (secure default)");
@@ -2982,13 +3020,22 @@ fn main() {
     info!("Graceful reload: pkill -SIGQUIT synapse-pingora && ./synapse-pingora -u");
 
     // Phase 7: Persistence - Start background snapshotting
-    let persistence_config = synapse_pingora::persistence::PersistenceConfig::default();
-    // NOTE: Background profile saver disabled until new profiler module integration
-    // The old DetectionEngine::get_profiles() returns synapse::EndpointProfile
-    // The new persistence module expects synapse_pingora::EndpointProfile
-    // TODO: Integrate crate::profiler::Profiler with this persistence workflow
-    let _snapshot_manager = Arc::new(SnapshotManager::new(persistence_config));
-    info!("Profile persistence configured but background saver disabled pending profiler integration");
+    // Clone Arc references for the background saver closure
+    let entity_mgr_for_snapshot = Arc::clone(&shared_entity_manager);
+    let campaign_mgr_for_snapshot = Arc::clone(&campaign_manager);
+    let actor_mgr_for_snapshot = Arc::clone(&shared_actor_manager);
+    let instance_id = config.telemetry.instance_id.clone().unwrap_or_else(|| "synapse".to_string());
+
+    snapshot_manager.clone().start_background_saver(move || {
+        WafSnapshot::new(
+            instance_id.clone(),
+            entity_mgr_for_snapshot.snapshot(),
+            campaign_mgr_for_snapshot.snapshot(),
+            actor_mgr_for_snapshot.snapshot(),
+            vec![], // profiles - TODO: integrate with new profiler module
+        )
+    });
+    info!("WAF state persistence enabled (interval: {}s)", persistence_config.save_interval_secs);
 
     server.run_forever();
 }

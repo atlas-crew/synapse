@@ -640,6 +640,52 @@ impl ActorManager {
         self.stats.blocked_actors.store(0, Ordering::Relaxed);
     }
 
+    /// Create a snapshot of all actors for persistence.
+    ///
+    /// Returns all actors regardless of status.
+    pub fn snapshot(&self) -> Vec<ActorState> {
+        self.actors.iter().map(|e| e.value().clone()).collect()
+    }
+
+    /// Restore actors from a snapshot.
+    ///
+    /// Clears existing state and loads the provided actors.
+    pub fn restore(&self, actors: Vec<ActorState>) {
+        // Clear existing state
+        self.clear();
+
+        let mut blocked_count: u64 = 0;
+
+        // Restore actors and mappings
+        for actor in actors {
+            let actor_id = actor.actor_id.clone();
+
+            // Restore IP mappings
+            for ip in &actor.ips {
+                self.ip_to_actor.insert(*ip, actor_id.clone());
+            }
+
+            // Restore fingerprint mappings
+            for fp in &actor.fingerprints {
+                self.fingerprint_to_actor.insert(fp.clone(), actor_id.clone());
+            }
+
+            // Track blocked count
+            if actor.is_blocked {
+                blocked_count += 1;
+            }
+
+            // Insert actor
+            self.actors.insert(actor_id, actor);
+        }
+
+        // Update stats
+        let actor_count = self.actors.len() as u64;
+        self.stats.total_actors.store(actor_count, Ordering::Relaxed);
+        self.stats.blocked_actors.store(blocked_count, Ordering::Relaxed);
+        self.stats.total_created.store(actor_count, Ordering::Relaxed);
+    }
+
     // ========================================================================
     // Private Methods
     // ========================================================================
