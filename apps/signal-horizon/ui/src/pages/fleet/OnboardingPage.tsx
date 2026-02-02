@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 interface RegistrationToken {
   id: string;
