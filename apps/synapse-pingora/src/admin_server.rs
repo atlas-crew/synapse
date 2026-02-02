@@ -4508,6 +4508,7 @@ mod tests {
             .route("/restart", post(restart_handler))
             .route("/", get(root_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .layer(middleware::from_fn(security_headers))
             .with_state(state)
     }
 
@@ -4973,5 +4974,67 @@ mod tests {
         assert!(json.contains("\"risk_score\":20"));
         assert!(json.contains("\"matched_rules\":[]"));
         assert!(json.contains("\"block_reason\":null"));
+    }
+
+    #[tokio::test]
+    async fn test_security_headers_on_api_response() {
+        let app = create_test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify security headers are present
+        let headers = response.headers();
+
+        // X-Content-Type-Options: nosniff - prevents MIME type sniffing
+        assert_eq!(
+            headers.get(header::X_CONTENT_TYPE_OPTIONS).map(|v| v.to_str().unwrap()),
+            Some("nosniff"),
+            "X-Content-Type-Options header missing or incorrect"
+        );
+
+        // X-Frame-Options: DENY - prevents clickjacking
+        assert_eq!(
+            headers.get(header::X_FRAME_OPTIONS).map(|v| v.to_str().unwrap()),
+            Some("DENY"),
+            "X-Frame-Options header missing or incorrect"
+        );
+
+        // Referrer-Policy - controls referrer information
+        assert_eq!(
+            headers.get(header::REFERRER_POLICY).map(|v| v.to_str().unwrap()),
+            Some("strict-origin-when-cross-origin"),
+            "Referrer-Policy header missing or incorrect"
+        );
+
+        // Cache-Control: no-store - prevents caching sensitive data
+        assert!(
+            headers.get(header::CACHE_CONTROL).map(|v| v.to_str().unwrap())
+                .unwrap_or("")
+                .contains("no-store"),
+            "Cache-Control header should contain no-store"
+        );
+
+        // Content-Security-Policy for API responses
+        assert!(
+            headers.get(header::CONTENT_SECURITY_POLICY).is_some(),
+            "Content-Security-Policy header missing"
+        );
+
+        // Permissions-Policy header
+        assert!(
+            headers.get("permissions-policy").is_some(),
+            "Permissions-Policy header missing"
+        );
     }
 }
