@@ -186,6 +186,69 @@ export interface ApiKeysData {
   keys: ApiKey[];
 }
 
+export interface DlpViolation {
+  timestamp: number;
+  pattern_name: string;
+  data_type: string;
+  severity: string;
+  masked_value: string;
+  client_ip?: string;
+  path: string;
+}
+
+export interface DlpStats {
+  totalScans: number;
+  totalMatches: number;
+  patternCount: number;
+}
+
+export interface DlpData {
+  stats: DlpStats;
+  violations: DlpViolation[];
+}
+
+export interface GraphNode {
+  data: {
+    id: string;
+    label: string;
+    type: 'ip' | 'actor' | 'token' | 'asn' | 'campaign' | 'other';
+    details?: Record<string, string | number>;
+  };
+}
+
+export interface GraphEdge {
+  data: {
+    id: string;
+    source: string;
+    target: string;
+    label: string;
+  };
+}
+
+export interface CampaignGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface ConfigTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  environment: 'production' | 'staging' | 'dev';
+  version: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SyncStatus {
+  totalSensors: number;
+  syncedSensors: number;
+  outOfSyncSensors: number;
+  errorSensors: number;
+  syncPercentage: number;
+}
+
 export interface FleetData {
   sensors: FleetSensor[];
   metrics: FleetMetrics;
@@ -195,6 +258,10 @@ export interface FleetData {
   rules: FleetRulesData;
   onboarding: OnboardingData;
   apiKeys: ApiKeysData;
+  dlp: DlpData;
+  campaignGraphs: Record<string, CampaignGraphData>;
+  configTemplates: ConfigTemplate[];
+  syncStatus: SyncStatus;
 }
 
 // ============================================================================
@@ -998,6 +1065,163 @@ function generateApiKeysData(sensors: FleetSensor[], scenario: DemoScenario): Ap
 }
 
 // ============================================================================
+// DLP Generation
+// ============================================================================
+
+function generateDlpData(scenario: DemoScenario): DlpData {
+  const totalScans = scenario === 'high-threat' ? 842100 : scenario === 'quiet' ? 12400 : 452300;
+  const totalMatches = scenario === 'high-threat' ? 1242 : scenario === 'quiet' ? 3 : 156;
+  const patternCount = 25;
+
+  const patterns = [
+    { name: 'Visa Card', type: 'credit_card', severity: 'critical' },
+    { name: 'MasterCard', type: 'credit_card', severity: 'critical' },
+    { name: 'SSN (formatted)', type: 'ssn', severity: 'critical' },
+    { name: 'Email Address', type: 'email', severity: 'medium' },
+    { name: 'AWS Secret Key', type: 'aws_key', severity: 'critical' },
+    { name: 'GitHub Token', type: 'api_key', severity: 'critical' },
+    { name: 'Stripe API Key', type: 'api_key', severity: 'critical' },
+    { name: 'Password in JSON', type: 'password', severity: 'critical' },
+    { name: 'Custom Keyword', type: 'custom', severity: 'high' },
+  ];
+
+  const paths = [
+    '/api/v1/users/profile',
+    '/api/v1/payments/checkout',
+    '/api/v1/admin/config',
+    '/api/v1/auth/login',
+    '/api/v1/debug/dump',
+  ];
+
+  const violations: DlpViolation[] = Array.from({ length: totalMatches > 20 ? 20 : totalMatches }, (_, i) => {
+    const pattern = pickRandom(patterns);
+    return {
+      timestamp: Date.now() - i * 1000 * 60 * 5, // Every 5 minutes
+      pattern_name: pattern.name,
+      data_type: pattern.type,
+      severity: pattern.severity,
+      masked_value: pattern.type === 'credit_card' ? '****-****-****-4242' : '********',
+      client_ip: generateIp(false),
+      path: pickRandom(paths),
+    };
+  });
+
+  return {
+    stats: { totalScans, totalMatches, patternCount },
+    violations,
+  };
+}
+
+// ============================================================================
+// Campaign Graph Generation
+// ============================================================================
+
+function generateCampaignGraphsData(_scenario: DemoScenario): Record<string, CampaignGraphData> {
+  const graphs: Record<string, CampaignGraphData> = {};
+  
+  // Generate a couple of demo graphs
+  const campaignIds = ['camp-001', 'camp-002'];
+  
+  for (const id of campaignIds) {
+    const nodes: GraphNode[] = [
+      { data: { id: 'campaign', label: id === 'camp-001' ? 'Dark Phoenix' : 'SQLi Wave', type: 'campaign' } },
+    ];
+    const edges: GraphEdge[] = [];
+
+    // Add 3-5 actor nodes
+    for (let i = 1; i <= 3; i++) {
+      const actorId = `fp-${id}-${i}`;
+      nodes.push({ data: { id: actorId, label: `FP-${Math.random().toString(36).substring(2, 6)}`, type: 'actor' } });
+      edges.push({ data: { id: `e-c-${actorId}`, source: 'campaign', target: actorId, label: 'attributed' } });
+
+      // Link each actor to 2-3 IPs
+      for (let j = 1; j <= 2; j++) {
+        const ipId = `ip-${id}-${i}-${j}`;
+        nodes.push({ data: { id: ipId, label: generateIp(false), type: 'ip', details: { 'Risk Score': randomInRange(60, 95) } } });
+        edges.push({ data: { id: `e-a-${ipId}`, source: actorId, target: ipId, label: 'uses' } });
+      }
+    }
+
+    graphs[id] = { nodes, edges };
+  }
+
+  return graphs;
+}
+
+// ============================================================================
+// Configuration Generation
+// ============================================================================
+
+function generateConfigTemplatesData(scenario: DemoScenario): ConfigTemplate[] {
+  const templates: ConfigTemplate[] = [
+    {
+      id: 'tpl-prod-standard',
+      name: 'Production Standard',
+      description: 'Standard WAF and rate limit settings for production sites',
+      environment: 'production',
+      version: '1.2.4',
+      isActive: true,
+      createdAt: generateTimestamp(720),
+      updatedAt: generateTimestamp(24),
+    },
+    {
+      id: 'tpl-staging-v2',
+      name: 'Staging v2 Testing',
+      description: 'Experimental schema validation settings for v2 rollout',
+      environment: 'staging',
+      version: '2.0.0-rc1',
+      isActive: true,
+      createdAt: generateTimestamp(168),
+      updatedAt: generateTimestamp(48),
+    },
+    {
+      id: 'tpl-dev-permissive',
+      name: 'Developer Permissive',
+      description: 'Relaxed security settings for local development environments',
+      environment: 'dev',
+      version: '0.9.5',
+      isActive: true,
+      createdAt: generateTimestamp(240),
+      updatedAt: generateTimestamp(120),
+    },
+  ];
+
+  if (scenario === 'high-threat') {
+    templates.push({
+      id: 'tpl-incident-hardened',
+      name: 'Incident Response Hardened',
+      description: 'Aggressive blocking and detailed logging for active attacks',
+      environment: 'production',
+      version: '1.0.0',
+      isActive: false,
+      createdAt: generateTimestamp(2),
+      updatedAt: generateTimestamp(1),
+    });
+  }
+
+  return templates;
+}
+
+function generateSyncStatusData(sensors: FleetSensor[]): SyncStatus {
+  const totalSensors = sensors.length;
+  const offlineCount = sensors.filter(s => s.status === 'offline').length;
+  const warningCount = sensors.filter(s => s.status === 'warning').length;
+  
+  const syncedSensors = totalSensors - offlineCount - warningCount;
+  const outOfSyncSensors = warningCount;
+  const errorSensors = 0; // Simulated
+  const syncPercentage = totalSensors > 0 ? (syncedSensors / totalSensors) * 100 : 100;
+
+  return {
+    totalSensors,
+    syncedSensors,
+    outOfSyncSensors,
+    errorSensors,
+    syncPercentage,
+  };
+}
+
+// ============================================================================
 // Main Export
 // ============================================================================
 
@@ -1015,6 +1239,10 @@ export function generateFleetData(scenario: DemoScenario): FleetData {
   const rules = generateRulesData(sensors, scenario);
   const onboarding = generateOnboardingData(scenario);
   const apiKeys = generateApiKeysData(sensors, scenario);
+  const dlp = generateDlpData(scenario);
+  const campaignGraphs = generateCampaignGraphsData(scenario);
+  const configTemplates = generateConfigTemplatesData(scenario);
+  const syncStatus = generateSyncStatusData(sensors);
 
   return {
     sensors,
@@ -1025,6 +1253,10 @@ export function generateFleetData(scenario: DemoScenario): FleetData {
     rules,
     onboarding,
     apiKeys,
+    dlp,
+    campaignGraphs,
+    configTemplates,
+    syncStatus,
   };
 }
 
