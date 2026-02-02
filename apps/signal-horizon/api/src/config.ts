@@ -50,7 +50,9 @@ const envSchema = z.object({
 
   // Security
   API_KEY_HEADER: z.string().min(1).default('X-API-Key'),
-  CORS_ORIGINS: z.string().default('*'),
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:5173,http://localhost:4200,http://localhost:5180,http://127.0.0.1:5180'),
 
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -138,7 +140,9 @@ function loadConfig() {
 
     security: {
       apiKeyHeader: env.API_KEY_HEADER,
-      corsOrigins: env.CORS_ORIGINS === '*' ? '*' : env.CORS_ORIGINS.split(','),
+      corsOrigins: env.CORS_ORIGINS === '*'
+        ? '*'
+        : env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
     },
 
     logging: {
