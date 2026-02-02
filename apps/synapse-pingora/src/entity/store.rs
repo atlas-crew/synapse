@@ -14,6 +14,15 @@ use serde::{Deserialize, Serialize};
 pub struct EntityConfig {
     /// Maximum number of entities to track (LRU eviction when exceeded).
     pub max_entities: usize,
+    /// Maximum entities per site/tenant (prevents single tenant from filling global pool).
+    ///
+    /// SECURITY: This limit ensures fair-share allocation across tenants. A single
+    /// tenant generating many unique actors (intentional attack or misconfigured
+    /// client) cannot fill the global pool and degrade security for other tenants.
+    ///
+    /// Default: 10% of max_entities (10,000 for default 100,000 max)
+    /// Set to 0 to disable per-site limits.
+    pub max_entities_per_site: usize,
     /// Risk half-life in minutes (time for risk to decay to 50% of current value).
     ///
     /// SECURITY: Using exponential decay prevents attackers from predicting when
@@ -50,6 +59,7 @@ impl Default for EntityConfig {
     fn default() -> Self {
         Self {
             max_entities: 100_000,  // 100K for production
+            max_entities_per_site: 10_000, // 10% of max - fair share per tenant
             risk_half_life_minutes: 5.0, // 50% decay every 5 minutes
             repeat_offender_max_factor: 3.0, // Up to 3x longer half-life for repeat offenders
             block_threshold: 70.0,
@@ -66,6 +76,9 @@ impl Default for EntityConfig {
 pub struct EntityState {
     /// IP address (primary key).
     pub entity_id: String,
+    /// Site/tenant ID this entity is associated with (for multi-tenant isolation).
+    #[serde(default)]
+    pub site_id: Option<String>,
     /// Accumulated risk score (0.0-max_risk).
     pub risk: f64,
     /// First seen timestamp (ms).
@@ -101,11 +114,34 @@ impl EntityState {
     pub fn new(entity_id: String, now: u64) -> Self {
         Self {
             entity_id,
+            site_id: None,
             risk: 0.0,
             first_seen_at: now,
             last_seen_at: now,
             last_decay_at: now,
             request_count: 0, // touch will increment to 1
+            blocked: false,
+            blocked_reason: None,
+            blocked_since: None,
+            matches: HashMap::new(),
+            ja4_fingerprint: None,
+            combined_fingerprint: None,
+            previous_ja4: None,
+            ja4_change_count: 0,
+            last_ja4_change_ms: None,
+        }
+    }
+
+    /// Create a new entity state with a site ID.
+    pub fn with_site(entity_id: String, site_id: String, now: u64) -> Self {
+        Self {
+            entity_id,
+            site_id: Some(site_id),
+            risk: 0.0,
+            first_seen_at: now,
+            last_seen_at: now,
+            last_decay_at: now,
+            request_count: 0,
             blocked: false,
             blocked_reason: None,
             blocked_since: None,
@@ -220,9 +256,14 @@ pub struct Ja4ReputationResult {
 ///
 /// Provides lock-free concurrent access to entity state for high-RPS WAF scenarios.
 /// Uses timestamp-based LRU eviction instead of ordered list for better concurrency.
+///
+/// SECURITY: Implements per-site entity quotas to prevent a single tenant from
+/// filling the global pool and degrading security for all tenants.
 pub struct EntityManager {
     /// Entities by IP address (lock-free concurrent map).
     entities: DashMap<String, EntityState>,
+    /// Per-site entity counts for fair-share allocation.
+    site_counts: DashMap<String, AtomicU64>,
     /// Configuration (immutable after creation).
     config: EntityConfig,
     /// Total entities ever created (for metrics).
@@ -244,6 +285,7 @@ impl EntityManager {
     pub fn new(config: EntityConfig) -> Self {
         Self {
             entities: DashMap::with_capacity(config.max_entities),
+            site_counts: DashMap::new(),
             config,
             total_created: AtomicU64::new(0),
             total_evicted: AtomicU64::new(0),
@@ -352,6 +394,117 @@ impl EntityManager {
             blocked: entity.blocked,
             blocked_reason: entity.blocked_reason.clone(),
         }
+    }
+
+    /// Touch an entity for a specific site/tenant.
+    ///
+    /// SECURITY: Enforces per-site entity limits to prevent a single tenant from
+    /// exhausting the global entity pool and degrading security for all tenants.
+    ///
+    /// Returns None if the site has exceeded its quota and the entity doesn't exist.
+    pub fn touch_entity_for_site(&self, ip: &str, site_id: &str) -> Option<EntitySnapshot> {
+        let now = now_ms();
+
+        // Check if entity already exists (allows updates even if at quota)
+        if let Some(mut entry) = self.entities.get_mut(ip) {
+            let entity = entry.value_mut();
+            self.apply_decay(entity, now);
+            entity.last_seen_at = now;
+            entity.request_count += 1;
+            // Update site_id if not set
+            if entity.site_id.is_none() {
+                entity.site_id = Some(site_id.to_string());
+            }
+            return Some(EntitySnapshot {
+                entity_id: entity.entity_id.clone(),
+                risk: entity.risk,
+                request_count: entity.request_count,
+                blocked: entity.blocked,
+                blocked_reason: entity.blocked_reason.clone(),
+            });
+        }
+
+        // Entity doesn't exist - check per-site quota before creating
+        if self.config.max_entities_per_site > 0 {
+            let site_count = self.get_site_count(site_id);
+            if site_count >= self.config.max_entities_per_site as u64 {
+                // Site at quota - try to evict some old entries for this site
+                self.evict_oldest_for_site(site_id, 10);
+                // Check again after eviction
+                let new_count = self.get_site_count(site_id);
+                if new_count >= self.config.max_entities_per_site as u64 {
+                    tracing::warn!(
+                        site_id = %site_id,
+                        count = site_count,
+                        max = self.config.max_entities_per_site,
+                        "Site entity quota exceeded, rejecting new entity"
+                    );
+                    return None;
+                }
+            }
+        }
+
+        // Check global capacity
+        self.maybe_evict();
+
+        // Create new entity with site_id
+        let mut entry = self.entities.entry(ip.to_string()).or_insert_with(|| {
+            self.total_created.fetch_add(1, Ordering::Relaxed);
+            self.increment_site_count(site_id);
+            EntityState::with_site(ip.to_string(), site_id.to_string(), now)
+        });
+
+        let entity = entry.value_mut();
+        self.apply_decay(entity, now);
+        entity.last_seen_at = now;
+        entity.request_count += 1;
+
+        Some(EntitySnapshot {
+            entity_id: entity.entity_id.clone(),
+            risk: entity.risk,
+            request_count: entity.request_count,
+            blocked: entity.blocked,
+            blocked_reason: entity.blocked_reason.clone(),
+        })
+    }
+
+    /// Get the current entity count for a site.
+    pub fn get_site_count(&self, site_id: &str) -> u64 {
+        self.site_counts
+            .get(site_id)
+            .map(|c| c.load(Ordering::Relaxed))
+            .unwrap_or(0)
+    }
+
+    /// Increment the entity count for a site.
+    fn increment_site_count(&self, site_id: &str) {
+        self.site_counts
+            .entry(site_id.to_string())
+            .or_insert_with(|| AtomicU64::new(0))
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Decrement the entity count for a site.
+    fn decrement_site_count(&self, site_id: &str) {
+        if let Some(counter) = self.site_counts.get(site_id) {
+            // Use saturating sub to avoid underflow
+            let current = counter.load(Ordering::Relaxed);
+            if current > 0 {
+                counter.fetch_sub(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Get site metrics for monitoring.
+    pub fn site_metrics(&self) -> Vec<SiteMetrics> {
+        self.site_counts
+            .iter()
+            .map(|entry| SiteMetrics {
+                site_id: entry.key().clone(),
+                entity_count: entry.value().load(Ordering::Relaxed),
+                max_entities: self.config.max_entities_per_site as u64,
+            })
+            .collect()
     }
 
     /// Get an entity snapshot (read-only).
@@ -590,11 +743,6 @@ impl EntityManager {
         count
     }
 
-    /// Clear all entities.
-    pub fn clear(&self) {
-        self.entities.clear();
-    }
-
     /// List all entity IDs.
     pub fn list_entity_ids(&self) -> Vec<String> {
         self.entities.iter().map(|e| e.key().clone()).collect()
@@ -789,19 +937,71 @@ impl EntityManager {
         }
 
         // Sample entities - DashMap iter() provides reasonable distribution
-        let mut candidates: Vec<(String, u64)> = Vec::with_capacity(sample_size);
+        let mut candidates: Vec<(String, Option<String>, u64)> = Vec::with_capacity(sample_size);
         for entry in self.entities.iter().take(sample_size) {
-            candidates.push((entry.key().clone(), entry.value().last_seen_at));
+            candidates.push((
+                entry.key().clone(),
+                entry.value().site_id.clone(),
+                entry.value().last_seen_at,
+            ));
         }
 
         // Sort sampled candidates by last_seen_at (oldest first)
-        candidates.sort_unstable_by_key(|(_, ts)| *ts);
+        candidates.sort_unstable_by_key(|(_, _, ts)| *ts);
 
         // Evict oldest N from sample
+        for (ip, site_id, _) in candidates.into_iter().take(count) {
+            if self.entities.remove(&ip).is_some() {
+                self.total_evicted.fetch_add(1, Ordering::Relaxed);
+                // Decrement site count if entity had a site_id
+                if let Some(ref site) = site_id {
+                    self.decrement_site_count(site);
+                }
+            }
+        }
+    }
+
+    /// Evict oldest entities for a specific site.
+    ///
+    /// SECURITY: Used when a site exceeds its quota to make room for new entities.
+    /// Only evicts entities belonging to the specified site.
+    fn evict_oldest_for_site(&self, site_id: &str, count: usize) {
+        // Sample entities belonging to this site
+        let sample_size = (count * 10).min(500);
+        let mut candidates: Vec<(String, u64)> = Vec::with_capacity(sample_size);
+
+        for entry in self.entities.iter() {
+            if entry.value().site_id.as_deref() == Some(site_id) {
+                candidates.push((entry.key().clone(), entry.value().last_seen_at));
+                if candidates.len() >= sample_size {
+                    break;
+                }
+            }
+        }
+
+        if candidates.is_empty() {
+            return;
+        }
+
+        // Sort by last_seen_at (oldest first)
+        candidates.sort_unstable_by_key(|(_, ts)| *ts);
+
+        // Evict oldest N
+        let mut evicted = 0;
         for (ip, _) in candidates.into_iter().take(count) {
             if self.entities.remove(&ip).is_some() {
                 self.total_evicted.fetch_add(1, Ordering::Relaxed);
+                self.decrement_site_count(site_id);
+                evicted += 1;
             }
+        }
+
+        if evicted > 0 {
+            tracing::debug!(
+                site_id = %site_id,
+                evicted = evicted,
+                "Evicted oldest entities for site to make room"
+            );
         }
     }
 
@@ -865,10 +1065,17 @@ impl EntityManager {
     ///
     /// Clears existing entities and inserts the restored ones.
     /// Updates total_created counter to reflect restored count.
+    /// Rebuilds site_counts from restored entity site_id fields.
     pub fn restore(&self, entities: Vec<EntityState>) {
         self.entities.clear();
+        self.site_counts.clear();
+
         let count = entities.len() as u64;
         for entity in entities {
+            // Rebuild site counts
+            if let Some(ref site_id) = entity.site_id {
+                self.increment_site_count(site_id);
+            }
             self.entities.insert(entity.entity_id.clone(), entity);
         }
         self.total_created.store(count, Ordering::Relaxed);
@@ -879,15 +1086,27 @@ impl EntityManager {
     ///
     /// Only inserts entities that don't already exist.
     /// Useful for partial recovery scenarios.
+    /// Updates site_counts for newly merged entities.
     pub fn merge_restore(&self, entities: Vec<EntityState>) -> usize {
         let mut merged = 0;
         for entity in entities {
+            let site_id = entity.site_id.clone();
             if self.entities.insert(entity.entity_id.clone(), entity).is_none() {
                 merged += 1;
+                // Update site count for new entity
+                if let Some(ref site) = site_id {
+                    self.increment_site_count(site);
+                }
             }
         }
         self.total_created.fetch_add(merged as u64, Ordering::Relaxed);
         merged
+    }
+
+    /// Clear the entity store and all site counts.
+    pub fn clear(&self) {
+        self.entities.clear();
+        self.site_counts.clear();
     }
 }
 
@@ -908,6 +1127,14 @@ pub struct EntityMetrics {
     pub max_entities: usize,
     pub total_created: u64,
     pub total_evicted: u64,
+}
+
+/// Per-site entity metrics for monitoring multi-tenant fairness.
+#[derive(Debug, Clone)]
+pub struct SiteMetrics {
+    pub site_id: String,
+    pub entity_count: u64,
+    pub max_entities: u64,
 }
 
 /// Get current time in milliseconds since Unix epoch.

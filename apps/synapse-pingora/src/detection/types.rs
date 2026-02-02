@@ -120,7 +120,7 @@ impl StuffingVerdict {
 /// Per-entity authentication metrics.
 ///
 /// Tracks auth attempts for a single entity (IP) against auth endpoints.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthMetrics {
     /// Entity identifier (IP address)
     pub entity_id: String,
@@ -238,7 +238,7 @@ impl AuthMetrics {
 }
 
 /// Distributed attack tracking (same fingerprint, multiple IPs).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistributedAttack {
     /// Fingerprint ID correlating the attack
     pub fingerprint: String,
@@ -667,7 +667,7 @@ impl AuthResult {
 ///
 /// SECURITY: Detects distributed credential stuffing where a botnet targets
 /// the same username(s) from many different IPs to evade per-IP rate limiting.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsernameTargetedAttack {
     /// Target username
     pub username: String,

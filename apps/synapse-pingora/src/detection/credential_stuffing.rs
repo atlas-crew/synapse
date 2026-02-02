@@ -15,6 +15,7 @@ use crate::detection::{
     TakeoverAlert, UsernameTargetedAttack,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
+use serde::{Deserialize, Serialize};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use regex::Regex;
@@ -744,7 +745,7 @@ pub struct StuffingStats {
 }
 
 /// Exportable state for persistence/HA sync.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StuffingState {
     pub entity_metrics: Vec<AuthMetrics>,
     pub distributed_attacks: Vec<DistributedAttack>,

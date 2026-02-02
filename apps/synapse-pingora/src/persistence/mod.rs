@@ -18,6 +18,7 @@ use tokio::time;
 
 use crate::actor::ActorState;
 use crate::correlation::Campaign;
+use crate::detection::StuffingState;
 use crate::entity::EntityState;
 use crate::profiler::EndpointProfile;
 
@@ -68,6 +69,9 @@ pub struct WafSnapshot {
     pub actors: Vec<ActorState>,
     /// Learned endpoint profiles
     pub profiles: Vec<EndpointProfile>,
+    /// Credential stuffing detector state
+    #[serde(default)]
+    pub credential_stuffing: Option<StuffingState>,
 }
 
 impl WafSnapshot {
@@ -92,6 +96,33 @@ impl WafSnapshot {
             campaigns,
             actors,
             profiles,
+            credential_stuffing: None,
+        }
+    }
+
+    /// Create a new snapshot with credential stuffing state.
+    pub fn with_credential_stuffing(
+        instance_id: String,
+        entities: Vec<EntityState>,
+        campaigns: Vec<Campaign>,
+        actors: Vec<ActorState>,
+        profiles: Vec<EndpointProfile>,
+        credential_stuffing: StuffingState,
+    ) -> Self {
+        let saved_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        Self {
+            version: SNAPSHOT_VERSION,
+            saved_at,
+            instance_id,
+            entities,
+            campaigns,
+            actors,
+            profiles,
+            credential_stuffing: Some(credential_stuffing),
         }
     }
 
@@ -101,15 +132,32 @@ impl WafSnapshot {
             && self.campaigns.is_empty()
             && self.actors.is_empty()
             && self.profiles.is_empty()
+            && self.credential_stuffing.as_ref().map_or(true, |s| {
+                s.entity_metrics.is_empty()
+                    && s.distributed_attacks.is_empty()
+                    && s.takeover_alerts.is_empty()
+            })
     }
 
     /// Get summary stats for logging.
     pub fn stats(&self) -> SnapshotStats {
+        let (auth_entities, distributed_attacks, takeover_alerts) =
+            self.credential_stuffing.as_ref().map_or((0, 0, 0), |s| {
+                (
+                    s.entity_metrics.len(),
+                    s.distributed_attacks.len(),
+                    s.takeover_alerts.len(),
+                )
+            });
+
         SnapshotStats {
             entities: self.entities.len(),
             campaigns: self.campaigns.len(),
             actors: self.actors.len(),
             profiles: self.profiles.len(),
+            auth_entities,
+            distributed_attacks,
+            takeover_alerts,
         }
     }
 }
@@ -121,14 +169,21 @@ pub struct SnapshotStats {
     pub campaigns: usize,
     pub actors: usize,
     pub profiles: usize,
+    /// Credential stuffing: auth entity metrics
+    pub auth_entities: usize,
+    /// Credential stuffing: distributed attacks being tracked
+    pub distributed_attacks: usize,
+    /// Credential stuffing: takeover alerts
+    pub takeover_alerts: usize,
 }
 
 impl std::fmt::Display for SnapshotStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} entities, {} campaigns, {} actors, {} profiles",
-            self.entities, self.campaigns, self.actors, self.profiles
+            "{} entities, {} campaigns, {} actors, {} profiles, {} auth entities, {} attacks, {} takeovers",
+            self.entities, self.campaigns, self.actors, self.profiles,
+            self.auth_entities, self.distributed_attacks, self.takeover_alerts
         )
     }
 }
