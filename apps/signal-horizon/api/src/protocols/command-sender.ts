@@ -1,6 +1,9 @@
 /**
  * CommandSender manages reliable command delivery to sensors.
  * Queues commands when sensors are offline, retries on failure.
+ *
+ * Implements global and per-sensor queue limits to prevent memory
+ * exhaustion when sensors are offline for extended periods.
  */
 
 import { EventEmitter } from 'events';
@@ -8,6 +11,22 @@ import type WebSocket from 'ws';
 
 export type CommandType = 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics' | 'update';
 export type CommandStatus = 'pending' | 'sent' | 'success' | 'failed' | 'timeout';
+
+/** Configuration for command queue limits */
+export interface CommandSenderConfig {
+  /** Maximum total commands across all sensors (default: 10000) */
+  maxQueueSize: number;
+  /** Maximum pending commands per sensor (default: 100) */
+  maxPerSensorQueueSize: number;
+  /** TTL for pending commands in ms before auto-eviction (default: 1 hour) */
+  pendingTTL: number;
+}
+
+export const DEFAULT_CONFIG: CommandSenderConfig = {
+  maxQueueSize: 10000,
+  maxPerSensorQueueSize: 100,
+  pendingTTL: 3600000, // 1 hour
+};
 
 export interface Command {
   id: string;
@@ -29,6 +48,14 @@ export class CommandSender extends EventEmitter {
   private sensorConnections = new Map<string, WebSocket>();
   private timeoutHandles = new Map<string, NodeJS.Timeout>();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private config: CommandSenderConfig;
+  private droppedCommands = 0;
+  private evictedCommands = 0;
+
+  constructor(config: Partial<CommandSenderConfig> = {}) {
+    super();
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
 
   start(): void {
     if (this.cleanupInterval) return;
@@ -55,8 +82,37 @@ export class CommandSender extends EventEmitter {
     this.sensorConnections.delete(sensorId);
   }
 
-  sendCommand(sensorId: string, type: CommandType, payload: unknown, customId?: string): string {
+  /**
+   * Send a command to a sensor.
+   * Returns the command ID on success, or null if the command was dropped
+   * due to queue limits being exceeded.
+   */
+  sendCommand(sensorId: string, type: CommandType, payload: unknown, customId?: string): string | null {
     const id = customId ?? `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Check per-sensor limit
+    const sensorPending = this.getPendingCommands(sensorId);
+    if (sensorPending.length >= this.config.maxPerSensorQueueSize) {
+      // Try to evict oldest pending command for this sensor
+      const evicted = this.evictOldestPending(sensorId);
+      if (!evicted) {
+        this.droppedCommands++;
+        this.emit('command-dropped', { sensorId, type, reason: 'per_sensor_limit' });
+        return null;
+      }
+    }
+
+    // Check global limit
+    if (this.commands.size >= this.config.maxQueueSize) {
+      // Try to evict oldest pending command globally
+      const evicted = this.evictOldestPendingGlobal();
+      if (!evicted) {
+        this.droppedCommands++;
+        this.emit('command-dropped', { sensorId, type, reason: 'global_limit' });
+        return null;
+      }
+    }
+
     const command: Command = {
       id,
       type,
@@ -72,6 +128,50 @@ export class CommandSender extends EventEmitter {
     this.commands.set(id, command);
     this.trySendCommand(command);
     return id;
+  }
+
+  /**
+   * Evict the oldest pending command for a specific sensor.
+   * Returns true if a command was evicted.
+   */
+  private evictOldestPending(sensorId: string): boolean {
+    let oldest: Command | null = null;
+    for (const cmd of this.commands.values()) {
+      if (cmd.sensorId === sensorId && cmd.status === 'pending') {
+        if (!oldest || cmd.createdAt < oldest.createdAt) {
+          oldest = cmd;
+        }
+      }
+    }
+    if (oldest) {
+      this.commands.delete(oldest.id);
+      this.evictedCommands++;
+      this.emit('command-evicted', oldest);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Evict the oldest pending command globally.
+   * Returns true if a command was evicted.
+   */
+  private evictOldestPendingGlobal(): boolean {
+    let oldest: Command | null = null;
+    for (const cmd of this.commands.values()) {
+      if (cmd.status === 'pending') {
+        if (!oldest || cmd.createdAt < oldest.createdAt) {
+          oldest = cmd;
+        }
+      }
+    }
+    if (oldest) {
+      this.commands.delete(oldest.id);
+      this.evictedCommands++;
+      this.emit('command-evicted', oldest);
+      return true;
+    }
+    return false;
   }
 
   handleResponse(commandId: string, success: boolean, error?: string): void {
@@ -154,11 +254,21 @@ export class CommandSender extends EventEmitter {
 
   private cleanupOldCommands(): void {
     const now = Date.now();
-    const ttl = 300000; // 5 minutes
+    const completedTTL = 300000; // 5 minutes for completed commands
+
     for (const [id, cmd] of this.commands) {
+      // Clean up completed commands after TTL
       if (['success', 'failed', 'timeout'].includes(cmd.status) && cmd.completedAt) {
-        if (now - cmd.completedAt > ttl) {
+        if (now - cmd.completedAt > completedTTL) {
           this.commands.delete(id);
+        }
+      }
+      // Evict pending commands that have exceeded pendingTTL
+      else if (cmd.status === 'pending') {
+        if (now - cmd.createdAt > this.config.pendingTTL) {
+          this.commands.delete(id);
+          this.evictedCommands++;
+          this.emit('command-evicted', { ...cmd, reason: 'ttl_expired' });
         }
       }
     }
@@ -181,16 +291,49 @@ export class CommandSender extends EventEmitter {
     success: number;
     failed: number;
     timeout: number;
+    dropped: number;
+    evicted: number;
+    queueCapacity: number;
+    queueUtilization: number;
   } {
     const commands = Array.from(this.commands.values());
+    const total = commands.length;
     return {
-      total: commands.length,
+      total,
       pending: commands.filter((c) => c.status === 'pending').length,
       sent: commands.filter((c) => c.status === 'sent').length,
       success: commands.filter((c) => c.status === 'success').length,
       failed: commands.filter((c) => c.status === 'failed').length,
       timeout: commands.filter((c) => c.status === 'timeout').length,
+      dropped: this.droppedCommands,
+      evicted: this.evictedCommands,
+      queueCapacity: this.config.maxQueueSize,
+      queueUtilization: total / this.config.maxQueueSize,
     };
+  }
+
+  /** Get per-sensor queue statistics */
+  getSensorStats(sensorId: string): {
+    total: number;
+    pending: number;
+    capacity: number;
+    utilization: number;
+  } {
+    const commands = Array.from(this.commands.values()).filter(
+      (c) => c.sensorId === sensorId
+    );
+    const pending = commands.filter((c) => c.status === 'pending').length;
+    return {
+      total: commands.length,
+      pending,
+      capacity: this.config.maxPerSensorQueueSize,
+      utilization: pending / this.config.maxPerSensorQueueSize,
+    };
+  }
+
+  /** Get the current configuration */
+  getConfig(): CommandSenderConfig {
+    return { ...this.config };
   }
 
   cancelCommand(commandId: string): boolean {
@@ -210,5 +353,11 @@ export class CommandSender extends EventEmitter {
     }
     this.timeoutHandles.clear();
     this.commands.clear();
+  }
+
+  /** Reset statistics (for testing) */
+  resetStats(): void {
+    this.droppedCommands = 0;
+    this.evictedCommands = 0;
   }
 }
