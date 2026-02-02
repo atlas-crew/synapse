@@ -20,6 +20,7 @@ use crate::waf::types::{Action, EvalContext, Request, RiskContribution, Verdict}
 use crate::waf::WafError;
 
 // Pre-compiled regex patterns for SQL/XSS detection
+#[allow(dead_code)]
 static BASE64_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2,3}=)?$").expect("base64 regex")
 });

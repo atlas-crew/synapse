@@ -4,8 +4,7 @@ use std::collections::{HashMap, VecDeque};
 
 use super::config::TrendsConfig;
 use super::types::{
-    BucketSummary, CategorySummary, CategoryTrendSummary, Signal, SignalBucketData,
-    SignalCategory, SignalTrend, SignalType, TimeRange, TopSignalType, TrendHistogramBucket,
+    BucketSummary, CategorySummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend, SignalType, TimeRange, TopSignalType, TrendHistogramBucket,
     TrendQueryOptions, TrendsSummary,
 };
 
@@ -459,6 +458,7 @@ pub struct TimeStoreStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::types::SignalCategory;
 
     fn create_test_signal(entity_id: &str, timestamp: i64) -> Signal {
         Signal {

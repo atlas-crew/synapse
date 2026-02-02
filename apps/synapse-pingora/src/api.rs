@@ -32,7 +32,7 @@ use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions};
 use crate::crawler::CrawlerDetector;
 use crate::horizon::HorizonClient;
 use crate::dlp::DlpScanner;
-use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Verdict, Action as SynapseAction};
+use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]

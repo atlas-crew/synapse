@@ -452,7 +452,6 @@ impl EntityManager {
 
         // Log risk application for debugging and audit
         if risk > 0.0 && !reason.is_empty() {
-            #[cfg(feature = "tracing")]
             tracing::debug!(
                 ip = %ip,
                 old_risk = old_risk,
@@ -461,7 +460,6 @@ impl EntityManager {
                 reason = %reason,
                 "Applied external risk"
             );
-            let _ = (old_risk, reason); // Suppress unused warning when tracing disabled
         }
 
         entity.risk

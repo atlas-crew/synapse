@@ -28,7 +28,7 @@ use synapse_pingora::waf::{
     Synapse, Verdict as SynapseVerdict, BlockingMode,
 };
 // Schema learning and validation (API anomaly detection)
-use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig, ViolationSeverity, ValidationResult as SchemaValidationResult};
+use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig};
 use log::{debug, info, warn, error};
 use once_cell::sync::Lazy;
 use pingora_core::prelude::*;
@@ -45,7 +45,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use dashmap::DashMap;
 use tokio::sync::oneshot;
-use synapse_pingora::TlsVersion;
 use pingora::listeners::tls::TlsSettings;
 
 // Admin API imports
@@ -83,22 +82,21 @@ use synapse_pingora::ratelimit::RateLimitManager;
 use synapse_pingora::access::{AccessListManager, CidrRange};
 use synapse_pingora::headers;
 use synapse_pingora::telemetry::{
-    TelemetryClient, TelemetryConfig, TelemetryEvent,
-    ExternalActorContext, ExternalSignalContext, ExternalRequestContext
+    TelemetryClient, TelemetryConfig, TelemetryEvent
 };
 use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use synapse_pingora::block_log::{BlockLog, BlockEvent};
 use synapse_pingora::correlation::CampaignManager;
-use synapse_pingora::shadow::{ShadowMirrorConfig, ShadowMirrorManager, MirrorPayload};
+use synapse_pingora::shadow::{ShadowMirrorManager, MirrorPayload};
 
 // Phase 5: Actor and Session State Management (previously sleeping capabilities)
-use synapse_pingora::actor::{ActorConfig, ActorManager, RuleMatch as ActorRuleMatch};
+use synapse_pingora::actor::{ActorConfig, ActorManager};
 use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
 use parking_lot::RwLock;
 use sha2::{Sha256, Digest};
 
 // Phase 9: Crawler Detection
-use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig, VerificationMethod};
+use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
 
 // Phase 9: Signal Horizon Hub integration (fleet-wide threat intelligence)
 use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, SignalType, Severity};
@@ -667,6 +665,7 @@ fn create_synapse_engine() -> Synapse {
 }
 
 /// Get the global rule count (from first instance)
+#[allow(dead_code)]
 static RULE_COUNT: Lazy<usize> = Lazy::new(|| {
     SYNAPSE.read().rule_count()
 });
@@ -733,10 +732,10 @@ impl DetectionEngine {
 /// Rule IDs are generally numeric, with ranges indicating attack types.
 fn categorize_rule_id(rule_id: u32) -> String {
     match rule_id {
-        // SQL Injection rules (900xxx, 940xxx, 941xxx, 942xxx)
-        900000..=900999 | 940000..=942999 => "sqli".to_string(),
-        // XSS rules (941xxx)
+        // XSS rules (941xxx) - must come before SQLi to avoid being shadowed
         941000..=941999 => "xss".to_string(),
+        // SQL Injection rules (900xxx, 940xxx, 942xxx)
+        900000..=900999 | 940000..=940999 | 942000..=942999 => "sqli".to_string(),
         // Path Traversal rules (930xxx)
         930000..=930999 => "path_traversal".to_string(),
         // RCE/Command Injection rules (932xxx)
@@ -879,6 +878,7 @@ fn cleanup_per_ip_limits() {
 }
 
 /// The Synapse WAF Proxy
+#[allow(dead_code)]
 pub struct SynapseProxy {
     /// Backend servers for round-robin selection (fallback/default)
     backends: Vec<(String, u16)>,
@@ -2730,6 +2730,7 @@ impl ProxyHttp for SynapseProxy {
 
 use synapse_pingora::horizon::MetricsProvider;
 
+#[allow(dead_code)]
 struct HorizonMetricsProvider {
     metrics: Arc<MetricsRegistry>,
     health: Arc<HealthChecker>,
@@ -2770,7 +2771,6 @@ impl MetricsProvider for HorizonMetricsProvider {
 // Main Entry Point
 // ============================================================================
 
-use synapse_pingora::persistence::SnapshotManager;
 use synapse_pingora::config::ConfigFile as MultisiteConfigFile;
 
 // ============================================================================

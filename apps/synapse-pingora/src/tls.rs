@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use parking_lot::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use ahash::RandomState;
 use zeroize::Zeroize;
 

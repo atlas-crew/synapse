@@ -40,7 +40,7 @@ use crate::correlation::{
     FingerprintIndex, FingerprintType,
 };
 
-use super::{Detector, DetectorError, DetectorResult};
+use super::{Detector, DetectorResult};
 
 /// Configuration for shared fingerprint detection
 #[derive(Debug, Clone)]

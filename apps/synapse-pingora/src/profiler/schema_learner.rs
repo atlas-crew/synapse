@@ -296,6 +296,7 @@ impl LruTracker {
     }
 
     /// Remove a key from tracking (used when schema is evicted).
+    #[allow(dead_code)]
     fn remove(&mut self, key: &str) {
         self.generations.remove(key);
         // Note: stale entries in queue will be skipped during eviction
@@ -319,6 +320,7 @@ impl LruTracker {
     }
 
     /// Get number of tracked keys.
+    #[allow(dead_code)]
     fn len(&self) -> usize {
         self.generations.len()
     }

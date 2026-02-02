@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use super::blocklist::BlocklistCache;
-use super::client::{ClientStats, HorizonClient, MetricsProvider};
+use super::client::{HorizonClient, MetricsProvider};
 use super::config::HorizonConfig;
 use super::error::HorizonError;
 use super::types::{ConnectionState, ThreatSignal};
@@ -106,8 +106,8 @@ impl HorizonManager {
     }
 
     /// Set the configuration manager.
-    pub fn set_config_manager(&self, config_manager: Arc<ConfigManager>) {
-        let mut client = self.client.write();
+    pub fn set_config_manager(&self, _config_manager: Arc<ConfigManager>) {
+        let _client = self.client.write();
         // Replace the client with a new one that has the config manager
         // This is a bit hacky because we're inside a RwLock, but HorizonClient
         // doesn't expose a setter for config_manager.
@@ -252,12 +252,14 @@ impl HorizonManager {
 }
 
 /// Builder for creating a HorizonManager with custom settings.
+#[allow(dead_code)]
 pub struct HorizonManagerBuilder {
     config: HorizonConfig,
     metrics_provider: Option<Arc<dyn MetricsProvider>>,
     config_manager: Option<Arc<ConfigManager>>,
 }
 
+#[allow(dead_code)]
 impl HorizonManagerBuilder {
     /// Create a new builder.
     pub fn new(config: HorizonConfig) -> Self {

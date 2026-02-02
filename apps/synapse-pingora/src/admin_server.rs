@@ -76,6 +76,7 @@ where
 }
 
 /// Run WAF evaluation using the registered callback.
+#[allow(dead_code)]
 fn run_evaluate(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> Option<EvaluationResult> {
     EVALUATE_CALLBACK
         .read()
@@ -170,7 +171,6 @@ pub fn record_log(level: &str, message: String) {
 }
 
 use axum::{
-    body::Body,
     extract::{Path, Query, Request, State},
     http::{header, Method, StatusCode},
     middleware::{self, Next},
@@ -214,6 +214,7 @@ pub mod scopes {
 ///
 /// SECURITY: These generic error codes prevent internal details from being
 /// exposed to clients. Full error details are logged internally.
+#[allow(dead_code)]
 mod error_codes {
     pub const BAD_REQUEST: &str = "BAD_REQUEST";
     pub const VALIDATION_ERROR: &str = "VALIDATION_ERROR";
@@ -275,6 +276,7 @@ fn internal_error(public_message: &str, internal_error: Option<&dyn std::fmt::Di
 }
 
 /// Create a not found error response (404).
+#[allow(dead_code)]
 fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json<serde_json::Value>) {
     // Note: We don't include the resource_id in the response to avoid enumeration attacks
     sanitized_error(
@@ -297,7 +299,7 @@ fn service_unavailable(service_name: &str) -> (StatusCode, Json<serde_json::Valu
 
 use crate::config_manager::{
     CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
-    RateLimitRequest, AccessListRequest, MutationResult,
+    RateLimitRequest, AccessListRequest,
 };
 
 /// GET /config - Retrieve full configuration
@@ -2819,7 +2821,6 @@ async fn sensor_dlp_violations_handler(
     }
 }
 
-use crate::persistence::SnapshotManager;
 
 // =============================================================================
 // API Profiling Endpoints (for API Catalog)

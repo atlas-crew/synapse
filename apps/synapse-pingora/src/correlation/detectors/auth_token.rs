@@ -29,7 +29,7 @@ pub struct TokenFingerprint {
 
 impl TokenFingerprint {
     /// Create a fingerprint from JWT parts
-    pub fn from_jwt_parts(header: &str, payload: &str) -> Option<Self> {
+    pub fn from_jwt_parts(_header: &str, _payload: &str) -> Option<Self> {
         // Simplified: In production, would decode base64 and parse JSON
         Some(Self {
             issuer: None,

@@ -575,7 +575,7 @@ where
     Ok(())
 }
 
-use super::types::{CommandAckPayload, ConfigPayload};
+use super::types::CommandAckPayload;
 
 async fn handle_hub_message<S>(
     msg: HubMessage,
@@ -628,7 +628,7 @@ async fn handle_hub_message<S>(
         HubMessage::Error { error, code } => {
             warn!("Hub error: {} (code: {:?})", error, code);
         }
-        HubMessage::ConfigUpdate { config, version } => {
+        HubMessage::ConfigUpdate { config: _, version } => {
             info!("Received config update (legacy direct) version: {}", version);
             // ... (legacy handling if needed, but PushConfig handles it better)
         }
