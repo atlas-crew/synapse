@@ -917,6 +917,10 @@ impl SessionManager {
             if let Some(actor_id) = &session.actor_id {
                 if let Some(mut entry) = self.actor_sessions.get_mut(actor_id) {
                     entry.retain(|id| id != &session.session_id);
+                    if entry.is_empty() {
+                        drop(entry);
+                        self.actor_sessions.remove(actor_id);
+                    }
                 }
             }
 
@@ -1338,6 +1342,19 @@ mod tests {
 
         let session = manager.get_session("token_hash_1").unwrap();
         assert_eq!(session.actor_id, Some("actor_456".to_string()));
+    }
+
+    #[test]
+    fn test_remove_session_cleans_actor_sessions() {
+        let manager = create_test_manager();
+        let ip = create_test_ip(1);
+
+        manager.create_session("token_hash_1", ip, None);
+        assert!(manager.bind_to_actor("token_hash_1", "actor_cleanup"));
+        assert!(manager.actor_sessions.contains_key("actor_cleanup"));
+
+        assert!(manager.remove_session("token_hash_1"));
+        assert!(!manager.actor_sessions.contains_key("actor_cleanup"));
     }
 
     #[test]
