@@ -51,6 +51,7 @@ pub mod dlp;
 
 // Phase 6: Security Hardening
 pub mod validation;
+pub mod sni_validation;
 
 // Phase 7: Persistence
 pub mod persistence;
@@ -143,6 +144,11 @@ pub use validation::{
     ValidationError, ValidationResult,
     validate_domain_name, validate_certificate_file, validate_private_key_file,
     validate_tls_config,
+};
+
+// Re-export SNI validation types (domain fronting prevention)
+pub use sni_validation::{
+    SniValidator, SniValidationConfig, SniValidationMode, SniValidationResult,
 };
 
 // Re-export honeypot trap types
