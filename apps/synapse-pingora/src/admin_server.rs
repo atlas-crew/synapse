@@ -14,6 +14,7 @@
 use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::Instant;
 use std::num::NonZeroU32;
 
 use governor::{Quota, RateLimiter, state::keyed::DefaultKeyedStateStore};
@@ -688,6 +689,11 @@ async fn rate_limit_admin(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    // DEV MODE: Skip rate limiting for local development
+    if is_dev_mode() {
+        return Ok(next.run(request).await);
+    }
+
     // Extract client IP from X-Forwarded-For or fall back to peer address
     let client_ip = extract_client_ip(&request);
 
@@ -714,6 +720,11 @@ async fn rate_limit_public(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    // DEV MODE: Skip rate limiting for local development
+    if is_dev_mode() {
+        return Ok(next.run(request).await);
+    }
+
     let client_ip = extract_client_ip(&request);
 
     match state.public_rate_limiter.check_key(&client_ip) {
@@ -731,6 +742,100 @@ async fn rate_limit_public(
             ).into_response())
         }
     }
+}
+
+/// Audit logging middleware for state-changing admin operations.
+async fn audit_log(request: Request, next: Next) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let client_ip = extract_client_ip(&request);
+    let start = Instant::now();
+
+    let response = next.run(request).await;
+
+    if matches!(method, Method::POST | Method::PUT | Method::DELETE | Method::PATCH) {
+        let status = response.status();
+        let duration_ms = start.elapsed().as_millis();
+        let actor = "admin_api_key";
+
+        tracing::info!(
+            target: "audit",
+            actor = actor,
+            method = %method,
+            path = %path,
+            status = status.as_u16(),
+            client_ip = %client_ip,
+            duration_ms = duration_ms,
+            "admin_api_mutation"
+        );
+
+        record_log_with_source(
+            "info",
+            LogSource::Access,
+            format!(
+                "audit actor={} method={} path={} status={} ip={} duration_ms={}",
+                actor,
+                method.as_str(),
+                path,
+                status.as_u16(),
+                client_ip,
+                duration_ms
+            ),
+        );
+    }
+
+    response
+}
+
+/// Security headers middleware for all API responses.
+/// Adds defense-in-depth headers to prevent common web vulnerabilities.
+async fn security_headers(
+    request: Request,
+    next: Next,
+) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+
+    // Prevent MIME type sniffing attacks
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        "nosniff".parse().unwrap(),
+    );
+
+    // Prevent clickjacking - API should never be framed
+    headers.insert(
+        header::X_FRAME_OPTIONS,
+        "DENY".parse().unwrap(),
+    );
+
+    // Control referrer information leakage
+    headers.insert(
+        header::REFERRER_POLICY,
+        "strict-origin-when-cross-origin".parse().unwrap(),
+    );
+
+    // Prevent caching of sensitive API responses
+    headers.insert(
+        header::CACHE_CONTROL,
+        "no-store, no-cache, must-revalidate".parse().unwrap(),
+    );
+
+    // Content-Security-Policy for API responses (stricter than console)
+    // Note: Console handler sets its own CSP via ADMIN_CONSOLE_CSP
+    if !headers.contains_key(header::CONTENT_SECURITY_POLICY) {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; frame-ancestors 'none'".parse().unwrap(),
+        );
+    }
+
+    // Permissions-Policy to disable unnecessary browser features
+    headers.insert(
+        http::header::HeaderName::from_static("permissions-policy"),
+        "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()".parse().unwrap(),
+    );
+
+    response
 }
 
 /// Starts the admin HTTP server.
@@ -916,6 +1021,8 @@ pub async fn start_admin_server(
         .merge(sensor_read_routes)
         .merge(authenticated_routes)
         .merge(public_routes)
+        .layer(middleware::from_fn(security_headers))
+        .layer(middleware::from_fn(audit_log))
         .layer(cors)
         .with_state(state);
 
