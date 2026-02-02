@@ -854,6 +854,12 @@ pub struct RequestContext {
     challenge_cookie: Option<String>,
     /// Phase 10: Whether a challenge response was validated on this request
     challenge_validated: bool,
+    /// Phase 10: WAF action selected for this request
+    waf_action: Option<WafAction>,
+    /// Phase 10: Whether a challenge response was served
+    waf_challenged: bool,
+    /// Phase 10: Whether request was logged-only by WAF
+    waf_logged: bool,
 }
 
 impl Drop for RequestContext {
@@ -1370,6 +1376,58 @@ impl SynapseProxy {
         }
     }
 
+    /// Record a WAF block event and report to Signal Horizon.
+    fn record_waf_block_event(
+        &self,
+        client_ip: &str,
+        method: &str,
+        uri: &str,
+        result: &DetectionResult,
+        fingerprint: Option<&ClientFingerprint>,
+        reason: &str,
+    ) {
+        self.block_log.record(BlockEvent::new(
+            client_ip.to_string(),
+            method.to_string(),
+            uri.to_string(),
+            result.risk_score,
+            result.matched_rules.clone(),
+            reason.to_string(),
+            fingerprint.map(|fp| fp.combined_hash.clone()),
+        ));
+
+        if let Some(ref horizon) = self.horizon_manager {
+            let severity = if result.risk_score >= 80 {
+                Severity::Critical
+            } else if result.risk_score >= 60 {
+                Severity::High
+            } else if result.risk_score >= 40 {
+                Severity::Medium
+            } else {
+                Severity::Low
+            };
+
+            let mut signal = ThreatSignal::new(SignalType::IpThreat, severity)
+                .with_source_ip(client_ip)
+                .with_confidence(result.risk_score as f64 / 100.0);
+
+            if let Some(fp) = fingerprint.and_then(|fp| fp.ja4.as_ref()) {
+                signal = signal.with_fingerprint(&fp.raw);
+            }
+
+            let rule_ids: Vec<String> = result
+                .matched_rules
+                .iter()
+                .map(|r| format!("rule_{}", r))
+                .collect();
+            if !rule_ids.is_empty() {
+                signal = signal.with_metadata(serde_json::json!({ "rule_ids": rule_ids }));
+            }
+
+            horizon.report_signal(signal);
+        }
+    }
+
     /// Extract a named cookie from the Cookie header.
     fn extract_cookie_value(cookie_header: &str, cookie_name: &str) -> Option<String> {
         cookie_header
@@ -1436,6 +1494,9 @@ impl ProxyHttp for SynapseProxy {
             actor_risk_score: 0.0,
             challenge_cookie: None,
             challenge_validated: false,
+            waf_action: None,
+            waf_challenged: false,
+            waf_logged: false,
         }
     }
 
@@ -2290,6 +2351,9 @@ impl ProxyHttp for SynapseProxy {
         }
 
         let waf_action = self.resolve_waf_action(ctx, &result);
+        ctx.waf_action = Some(waf_action);
+        ctx.waf_logged = matches!(waf_action, WafAction::Log);
+        ctx.waf_challenged = false;
 
         info!(
             "Detection complete: blocked={}, action={:?}, risk={}, entity_risk={:.1}, tarpit={}ms, rules={:?}, time={}μs, uri={}",
@@ -2303,157 +2367,193 @@ impl ProxyHttp for SynapseProxy {
             uri
         );
 
-        if result.blocked {
-            // Clone block_reason before moving result
-            let block_reason = result.block_reason.clone().unwrap_or_else(|| "rule_match".to_string());
+        let mut detection = result.clone();
+        detection.blocked = false;
 
-            // Log the block
-            warn!(
-                "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}",
-                uri,
-                client_ip,
-                result.risk_score,
-                result.matched_rules,
-                block_reason
-            );
+        let block_reason = result
+            .block_reason
+            .clone()
+            .unwrap_or_else(|| "rule_match".to_string());
 
-            // Record block event for dashboard visibility
-            self.block_log.record(BlockEvent::new(
-                client_ip.to_string(),
-                method.to_string(),
-                uri.clone(),
-                result.risk_score,
-                result.matched_rules.clone(),
-                block_reason.clone(),
-                ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
-            ));
+        if matches!(waf_action, WafAction::Challenge | WafAction::Block) {
+            let should_skip_challenge =
+                matches!(waf_action, WafAction::Challenge) && ctx.challenge_validated;
 
-            // Report threat to Signal Horizon for fleet-wide intelligence
-            if let Some(ref horizon) = self.horizon_manager {
-                let severity = if result.risk_score >= 80 {
-                    Severity::Critical
-                } else if result.risk_score >= 60 {
-                    Severity::High
-                } else if result.risk_score >= 40 {
-                    Severity::Medium
+            if should_skip_challenge {
+                debug!(
+                    "Challenge already validated for actor {} - allowing request",
+                    ctx.actor_id.as_deref().unwrap_or(client_ip)
+                );
+            } else {
+                // ===== Phase 10: Progressive Challenge System =====
+                // Instead of hard blocking, use the progression manager to determine
+                // the appropriate challenge level based on actor behavior and risk score.
+                let actor_id = if let Some(ref actor_id) = ctx.actor_id {
+                    actor_id.clone()
+                } else if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+                    let actor_id = self.actor_manager.get_or_create_actor(
+                        ip_addr,
+                        ctx.fingerprint
+                            .as_ref()
+                            .and_then(|fp| fp.ja4.as_ref())
+                            .map(|j| j.raw.as_str()),
+                    );
+                    ctx.actor_id = Some(actor_id.clone());
+                    actor_id
                 } else {
-                    Severity::Low
+                    client_ip.to_string()
                 };
 
-                let mut signal = ThreatSignal::new(SignalType::IpThreat, severity)
-                    .with_source_ip(client_ip)
-                    .with_confidence(result.risk_score as f64 / 100.0);
+                let max_risk = self.actor_manager.config().max_risk;
+                let actor_risk_normalized = if max_risk > 0.0 {
+                    (ctx.actor_risk_score / max_risk).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                let risk_score_normalized = if ctx.actor_risk_score > 0.0 {
+                    actor_risk_normalized
+                } else {
+                    (result.risk_score as f64 / 100.0).min(1.0)
+                };
 
-                // Add fingerprint if available
-                if let Some(ref fp) = ctx.fingerprint {
-                    if let Some(ref ja4) = fp.ja4 {
-                        signal = signal.with_fingerprint(&ja4.raw);
+                let challenge = self
+                    .progression_manager
+                    .get_challenge(&actor_id, risk_score_normalized);
+
+                match challenge {
+                    ChallengeResponse::Allow => {
+                        // Low risk after progression check - allow through
+                        // This can happen if actor recently passed challenges
+                        debug!(
+                            "Actor {} allowed after progression check (risk={})",
+                            actor_id, result.risk_score
+                        );
                     }
-                }
 
-                // Add rule IDs as metadata
-                let rule_ids: Vec<String> = result.matched_rules.iter().map(|r| format!("rule_{}", r)).collect();
-                if !rule_ids.is_empty() {
-                    signal = signal.with_metadata(serde_json::json!({ "rule_ids": rule_ids }));
-                }
-
-                horizon.report_signal(signal);
-            }
-
-            // Store result for logging hook
-            ctx.detection = Some(result.clone());
-
-            // ===== Phase 10: Progressive Challenge System =====
-            // Instead of hard blocking, use the progression manager to determine
-            // the appropriate challenge level based on actor behavior and risk score.
-            let actor_id = if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
-                self.actor_manager.get_or_create_actor(
-                    ip_addr,
-                    ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref()).map(|j| j.raw.as_str()),
-                )
-            } else {
-                // Fallback to IP string if parsing fails
-                client_ip.to_string()
-            };
-
-            // Get challenge based on risk score (normalize to 0.0-1.0 range)
-            let risk_score_normalized = (result.risk_score as f64) / 100.0;
-            let challenge = self.progression_manager.get_challenge(&actor_id, risk_score_normalized);
-
-            // Handle challenge response based on level
-            match challenge {
-                ChallengeResponse::Allow => {
-                    // Low risk after progression check - allow through
-                    // This can happen if actor recently passed challenges
-                    debug!("Actor {} allowed after progression check (risk={})", actor_id, result.risk_score);
-                }
-
-                ChallengeResponse::Cookie { name, value, max_age, http_only, secure } => {
-                    // Set tracking cookie and allow request to continue
-                    // The cookie enables correlation of future requests
-                    debug!("Setting challenge cookie for actor {}", actor_id);
-                    ctx.challenge_cookie = Some(format!(
-                        "{}={}; Path=/; Max-Age={}{}{}; SameSite=Strict",
+                    ChallengeResponse::Cookie {
                         name,
                         value,
                         max_age,
-                        if http_only { "; HttpOnly" } else { "" },
-                        if secure { "; Secure" } else { "" }
-                    ));
-                    // Continue to upstream (cookie set in response_filter)
-                }
+                        http_only,
+                        secure,
+                    } => {
+                        // Set tracking cookie and allow request to continue
+                        // The cookie enables correlation of future requests
+                        debug!("Setting challenge cookie for actor {}", actor_id);
+                        ctx.challenge_cookie = Some(format!(
+                            "{}={}; Path=/; Max-Age={}{}{}; SameSite=Strict",
+                            name,
+                            value,
+                            max_age,
+                            if http_only { "; HttpOnly" } else { "" },
+                            if secure { "; Secure" } else { "" }
+                        ));
+                        ctx.waf_challenged = true;
+                    }
 
-                ChallengeResponse::JsChallenge { html, .. } => {
-                    // Present JavaScript proof-of-work challenge
-                    info!("Presenting JS challenge to actor {} (risk={})", actor_id, result.risk_score);
-                    let mut resp = ResponseHeader::build(200, None)?;
-                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
-                    resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
-                    resp.insert_header("x-challenge-level", "2")?;
-                    resp.insert_header("x-challenge-type", "js_pow")?;
-                    session.write_response_header(Box::new(resp), false).await?;
-                    session.write_response_body(Some(Bytes::from(html)), true).await?;
-                    return Ok(true);
-                }
+                    ChallengeResponse::JsChallenge { html, .. } => {
+                        // Present JavaScript proof-of-work challenge
+                        info!(
+                            "Presenting JS challenge to actor {} (risk={})",
+                            actor_id, result.risk_score
+                        );
+                        ctx.waf_challenged = true;
+                        ctx.detection = Some(detection.clone());
+                        let mut resp = ResponseHeader::build(200, None)?;
+                        resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                        resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
+                        resp.insert_header("x-challenge-level", "2")?;
+                        resp.insert_header("x-challenge-type", "js_pow")?;
+                        session.write_response_header(Box::new(resp), false).await?;
+                        session.write_response_body(Some(Bytes::from(html)), true).await?;
+                        return Ok(true);
+                    }
 
-                ChallengeResponse::Captcha { html, session_id } => {
-                    // Present CAPTCHA challenge
-                    info!("Presenting CAPTCHA challenge to actor {} (session={})", actor_id, session_id);
-                    let mut resp = ResponseHeader::build(200, None)?;
-                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
-                    resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
-                    resp.insert_header("x-challenge-level", "3")?;
-                    resp.insert_header("x-challenge-type", "captcha")?;
-                    session.write_response_header(Box::new(resp), false).await?;
-                    session.write_response_body(Some(Bytes::from(html)), true).await?;
-                    return Ok(true);
-                }
+                    ChallengeResponse::Captcha { html, session_id } => {
+                        // Present CAPTCHA challenge
+                        info!(
+                            "Presenting CAPTCHA challenge to actor {} (session={})",
+                            actor_id, session_id
+                        );
+                        ctx.waf_challenged = true;
+                        ctx.detection = Some(detection.clone());
+                        let mut resp = ResponseHeader::build(200, None)?;
+                        resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                        resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
+                        resp.insert_header("x-challenge-level", "3")?;
+                        resp.insert_header("x-challenge-type", "captcha")?;
+                        session.write_response_header(Box::new(resp), false).await?;
+                        session.write_response_body(Some(Bytes::from(html)), true).await?;
+                        return Ok(true);
+                    }
 
-                ChallengeResponse::Tarpit { delay_ms } => {
-                    // Apply tarpit delay then block
-                    info!("Tarpitting actor {} for {}ms (risk={})", actor_id, delay_ms, result.risk_score);
-                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                    // After delay, send block page
-                    let block_html = self.progression_manager.config().block_page_html.clone();
-                    let mut resp = ResponseHeader::build(403, None)?;
-                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
-                    resp.insert_header("x-challenge-level", "4")?;
-                    resp.insert_header("x-challenge-type", "tarpit")?;
-                    session.write_response_header(Box::new(resp), true).await?;
-                    session.write_response_body(Some(Bytes::from(block_html)), true).await?;
-                    return Ok(true);
-                }
+                    ChallengeResponse::Tarpit { delay_ms } => {
+                        // Apply tarpit delay then block
+                        info!(
+                            "Tarpitting actor {} for {}ms (risk={})",
+                            actor_id, delay_ms, result.risk_score
+                        );
+                        detection.blocked = true;
+                        warn!(
+                            "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}",
+                            uri,
+                            client_ip,
+                            result.risk_score,
+                            result.matched_rules,
+                            block_reason
+                        );
+                        self.record_waf_block_event(
+                            client_ip,
+                            method,
+                            &uri,
+                            &result,
+                            ctx.fingerprint.as_ref(),
+                            &block_reason,
+                        );
+                        ctx.detection = Some(detection.clone());
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        let block_html = self.progression_manager.config().block_page_html.clone();
+                        let mut resp = ResponseHeader::build(403, None)?;
+                        resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                        resp.insert_header("x-challenge-level", "4")?;
+                        resp.insert_header("x-challenge-type", "tarpit")?;
+                        session.write_response_header(Box::new(resp), true).await?;
+                        session.write_response_body(Some(Bytes::from(block_html)), true).await?;
+                        return Ok(true);
+                    }
 
-                ChallengeResponse::Block { html, status_code } => {
-                    // Hard block with custom page
-                    warn!("Hard blocking actor {} (risk={})", actor_id, result.risk_score);
-                    let mut resp = ResponseHeader::build(status_code, None)?;
-                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
-                    resp.insert_header("x-challenge-level", "5")?;
-                    resp.insert_header("x-challenge-type", "block")?;
-                    session.write_response_header(Box::new(resp), true).await?;
-                    session.write_response_body(Some(Bytes::from(html)), true).await?;
-                    return Ok(true);
+                    ChallengeResponse::Block { html, status_code } => {
+                        // Hard block with custom page
+                        warn!(
+                            "Hard blocking actor {} (risk={})",
+                            actor_id, result.risk_score
+                        );
+                        detection.blocked = true;
+                        warn!(
+                            "BLOCKED: {} from {} - risk={}, rules={:?}, reason={}",
+                            uri,
+                            client_ip,
+                            result.risk_score,
+                            result.matched_rules,
+                            block_reason
+                        );
+                        self.record_waf_block_event(
+                            client_ip,
+                            method,
+                            &uri,
+                            &result,
+                            ctx.fingerprint.as_ref(),
+                            &block_reason,
+                        );
+                        ctx.detection = Some(detection.clone());
+                        let mut resp = ResponseHeader::build(status_code, None)?;
+                        resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                        resp.insert_header("x-challenge-level", "5")?;
+                        resp.insert_header("x-challenge-type", "block")?;
+                        session.write_response_header(Box::new(resp), true).await?;
+                        session.write_response_body(Some(Bytes::from(html)), true).await?;
+                        return Ok(true);
+                    }
                 }
             }
         }
@@ -2507,7 +2607,7 @@ impl ProxyHttp for SynapseProxy {
         }
         // ===== End Shadow Mirroring =====
 
-        ctx.detection = Some(result);
+        ctx.detection = Some(detection);
 
         // Return false = continue to upstream
         Ok(false)
@@ -3141,10 +3241,13 @@ impl ProxyHttp for SynapseProxy {
         self.metrics_registry.record_request(status, total_time_us);
         
         if let Some(ref detection) = ctx.detection {
+            let blocked = detection.blocked;
+            let challenged = ctx.waf_challenged;
+            let logged = ctx.waf_logged;
             self.metrics_registry.record_waf(
-                detection.blocked,
-                false, // challenged (not used yet)
-                false, // logged (not used yet)
+                blocked,
+                challenged,
+                logged,
                 detection.detection_time_us
             );
             
@@ -3701,6 +3804,14 @@ fn main() {
 
     info!("ActorManager initialized with default config");
 
+    // Restore profiles from snapshot if available (API endpoint behavioral baselines)
+    if let Some(ref snapshot) = loaded_snapshot {
+        if !snapshot.profiles.is_empty() {
+            DetectionEngine::load_profiles(snapshot.profiles.clone());
+            info!("Restored {} endpoint profiles from snapshot", snapshot.profiles.len());
+        }
+    }
+
     // Phase 5: Create shared SessionManager for session validation and hijack detection
     let shared_session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
     info!("SessionManager initialized with default config");
@@ -3939,7 +4050,7 @@ fn main() {
             entity_mgr_for_snapshot.snapshot(),
             campaign_mgr_for_snapshot.snapshot(),
             actor_mgr_for_snapshot.snapshot(),
-            vec![], // profiles - TODO: integrate with new profiler module
+            DetectionEngine::get_profiles(), // API endpoint behavioral baselines
         )
     });
     info!("WAF state persistence enabled (interval: {}s)", persistence_config.save_interval_secs);
