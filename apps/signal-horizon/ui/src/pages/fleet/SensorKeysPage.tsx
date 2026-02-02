@@ -11,6 +11,8 @@ import { Key, Plus, RotateCw, Trash2, Copy, Check, AlertTriangle, Clock, Shield 
 import { MetricCard } from '../../components/fleet';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
 
 interface SensorKey {
   id: string;
@@ -60,7 +62,7 @@ export function SensorKeysPage(): React.ReactElement {
   const { data: keysData, isLoading, error } = useQuery({
     queryKey: ['sensor-keys'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/management/keys`);
+      const response = await fetch(`${API_BASE}/management/keys`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch keys');
       return response.json();
     },
@@ -72,7 +74,7 @@ export function SensorKeysPage(): React.ReactElement {
   const { data: sensorsData } = useQuery({
     queryKey: ['sensors-list'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/fleet/sensors`);
+      const response = await fetch(`${API_BASE}/fleet/sensors`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch sensors');
       return response.json();
     },
@@ -85,7 +87,7 @@ export function SensorKeysPage(): React.ReactElement {
     mutationFn: async (request: NewKeyRequest) => {
       const response = await fetch(`${API_BASE}/management/keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
       if (!response.ok) throw new Error('Failed to generate key');
@@ -102,7 +104,7 @@ export function SensorKeysPage(): React.ReactElement {
     mutationFn: async (keyId: string) => {
       const response = await fetch(`${API_BASE}/management/keys/${keyId}/rotate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       if (!response.ok) throw new Error('Failed to rotate key');
@@ -119,6 +121,7 @@ export function SensorKeysPage(): React.ReactElement {
     mutationFn: async (keyId: string) => {
       const response = await fetch(`${API_BASE}/management/keys/${keyId}`, {
         method: 'DELETE',
+        headers: authHeaders,
       });
       if (!response.ok) throw new Error('Failed to revoke key');
       return response.json();

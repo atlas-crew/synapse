@@ -3,6 +3,7 @@
  * Service for searching and managing sessions across all connected sensors in a fleet
  */
 
+import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
@@ -19,7 +20,7 @@ import type {
 } from './session-query-types.js';
 
 /** Timeout for sensor queries in milliseconds */
-const SENSOR_QUERY_TIMEOUT_MS = 5000;
+const SENSOR_QUERY_TIMEOUT_MS = 10000;
 
 /** Maximum concurrent sensor queries */
 const MAX_CONCURRENT_QUERIES = 50;
@@ -81,10 +82,64 @@ export class FleetSessionQueryService {
   }
 
   /**
-   * Execute an RPC call to a sensor with timeout.
-   *
-   * Uses TunnelBroker request/response correlation to send a direct request
-   * to the sensor and wait for the response payload.
+   * Map RPC method and parameters to a web request payload
+   */
+  private mapRpcToWebRequest(
+    method: string,
+    params: Record<string, unknown>
+  ): { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; endpoint: string; body?: unknown } {
+    switch (method) {
+      case 'sessions.search': {
+        const query = new URLSearchParams();
+        if (params.sessionId) query.set('session_id', params.sessionId as string);
+        if (params.actorId) query.set('actor_id', params.actorId as string);
+        if (params.clientIp) query.set('client_ip', params.clientIp as string);
+        if (params.ja4Fingerprint) query.set('ja4', params.ja4Fingerprint as string);
+        if (params.userAgent) query.set('ua', params.userAgent as string);
+        if (params.timeRangeStart) query.set('start', params.timeRangeStart as string);
+        if (params.timeRangeEnd) query.set('end', params.timeRangeEnd as string);
+        if (params.riskScoreMin !== undefined) query.set('min_risk', String(params.riskScoreMin));
+        if (params.blockedOnly !== undefined) query.set('blocked', String(params.blockedOnly));
+        if (params.limit !== undefined) query.set('limit', String(params.limit));
+
+        return { method: 'GET', endpoint: `/_sensor/sessions?${query.toString()}` };
+      }
+
+      case 'sessions.revoke': {
+        return {
+          method: 'DELETE',
+          endpoint: `/_sensor/sessions/${params.sessionId}`,
+          body: { reason: params.reason },
+        };
+      }
+
+      case 'actors.ban': {
+        // Map actor ban to creating a block record on the sensor
+        return {
+          method: 'POST',
+          endpoint: '/_sensor/blocks',
+          body: {
+            type: 'IP',
+            value: params.actorId,
+            reason: params.reason,
+            source: 'FLEET_COMMAND',
+            expiresAt: params.durationSeconds
+              ? new Date(Date.now() + (params.durationSeconds as number) * 1000).toISOString()
+              : undefined,
+          },
+        };
+      }
+
+      case 'sessions.stats':
+        return { method: 'GET', endpoint: '/_sensor/sessions/stats' };
+
+      default:
+        throw new Error(`Unknown RPC method: ${method}`);
+    }
+  }
+
+  /**
+   * Execute an RPC call to a sensor with timeout
    */
   private async callSensorWithTimeout<T>(
     sensorId: string,
@@ -96,22 +151,13 @@ export class FleetSessionQueryService {
     const startTime = Date.now();
 
     try {
-      // Check if sensor is connected via tunnel broker
       if (!this.tunnelBroker) {
-        this.logger.debug({ sensorId, method }, 'Tunnel broker not available for sensor RPC');
-        return {
-          sensorId,
-          sensorName,
-          success: false,
-          error: 'Tunnel broker not available',
-          durationMs: Date.now() - startTime,
-          online: false,
-        };
+        throw new Error('Tunnel broker not available');
       }
 
-      // Prefer legacy tunnel info for direct RPC support
+      // Check if sensor is connected
       const tunnelInfo = this.tunnelBroker.getSensorTunnelInfo(sensorId);
-      if (!tunnelInfo || !tunnelInfo.connected) {
+      if (!tunnelInfo?.connected) {
         return {
           sensorId,
           sensorName,
@@ -122,45 +168,43 @@ export class FleetSessionQueryService {
         };
       }
 
+      // Map RPC method to web request
+      const webReq = this.mapRpcToWebRequest(method, params);
+      const requestId = randomUUID();
+
+      // Use TunnelBroker's sendRequest for correlation
       const response = await this.tunnelBroker.sendRequest(
         sensorId,
         {
-          type: method,
-          payload: params,
+          type: 'dashboard-request',
+          payload: {
+            requestId,
+            ...webReq,
+          },
         },
         timeoutMs
       );
 
-      const payload = response.payload;
-      if (!payload || typeof payload !== 'object') {
-        return {
-          sensorId,
-          sensorName,
-          success: false,
-          error: 'Invalid response payload',
-          durationMs: Date.now() - startTime,
-          online: true,
-        };
+      // Check for errors in sensor response payload
+      const payload = response.payload as {
+        status: number;
+        data?: T;
+        error?: string;
+      };
+
+      if (payload.error) {
+        throw new Error(payload.error);
       }
 
-      const payloadRecord = payload as Record<string, unknown>;
-      if (payloadRecord.success === false) {
-        return {
-          sensorId,
-          sensorName,
-          success: false,
-          error: typeof payloadRecord.error === 'string' ? payloadRecord.error : 'Sensor returned error',
-          durationMs: Date.now() - startTime,
-          online: true,
-        };
+      if (payload.status >= 400) {
+        throw new Error(`Sensor returned status ${payload.status}`);
       }
 
-      const data = (payloadRecord.data as T | undefined) ?? (payload as T);
       return {
         sensorId,
         sensorName,
         success: true,
-        data,
+        data: payload.data,
         durationMs: Date.now() - startTime,
         online: true,
       };

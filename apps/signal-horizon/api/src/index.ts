@@ -31,6 +31,7 @@ import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
+import { FleetSessionQueryService } from './services/fleet/session-query.js';
 import { ImpossibleTravelService } from './services/impossible-travel.js';
 import { SecurityAuditService } from './services/audit/security-audit.js';
 // Protocol handlers
@@ -207,6 +208,7 @@ let ruleDistributor: RuleDistributor;
 let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
 let synapseProxy: SynapseProxyService;
+let sessionQueryService: FleetSessionQueryService;
 let warRoomService: WarRoomService;
 let securityAuditService: SecurityAuditService;
 let playbookService: PlaybookService;
@@ -457,6 +459,7 @@ async function start() {
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
   tunnelBroker = new TunnelBroker(logger);
   synapseProxy = new SynapseProxyService(tunnelBroker, logger);
+  sessionQueryService = new FleetSessionQueryService({ prisma, logger, tunnelBroker });
   
   // Default War Room config
   const warRoomConfig: WarRoomConfig = {
@@ -494,6 +497,7 @@ async function start() {
     ruleDistributor,
     synapseProxy,
     tunnelBroker,
+    sessionQueryService,
     warRoomService,
     apiIntelligenceService,
     playbookService,

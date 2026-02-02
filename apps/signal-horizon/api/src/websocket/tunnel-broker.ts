@@ -1555,34 +1555,36 @@ export class TunnelBroker extends EventEmitter {
 
   /**
    * Handle a response from a sensor (called from message handler).
-   * Matches responses to pending requests by requestId.
+   * Matches responses to pending requests by requestId or sessionId.
    *
    * @param sensorId - The sensor that sent the response
    * @param message - The response message
    * @returns True if the message was handled as a response
    */
   private handleSensorResponse(sensorId: string, message: LegacyTunnelMessage): boolean {
-    if (!message.requestId) {
+    // Correlate using requestId or sessionId (for backward compatibility)
+    const correlationId = message.requestId || message.sessionId;
+    if (!correlationId) {
       return false;
     }
 
-    const pending = this.pendingRequests.get(message.requestId);
+    const pending = this.pendingRequests.get(correlationId);
     if (!pending || pending.sensorId !== sensorId) {
       return false;
     }
 
     // Clear timeout and remove from pending
     clearTimeout(pending.timeout);
-    this.pendingRequests.delete(message.requestId);
+    this.pendingRequests.delete(correlationId);
 
     // Resolve with the response
     pending.resolve({
       type: message.type,
       payload: message.payload,
-      requestId: message.requestId,
+      requestId: correlationId,
     });
 
-    this.logger.debug({ sensorId, requestId: message.requestId }, 'Received response from sensor');
+    this.logger.debug({ sensorId, requestId: correlationId, type: message.type }, 'Received response from sensor');
     return true;
   }
 

@@ -20,7 +20,7 @@ import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
-const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 
 interface FleetOverview {
   summary: {

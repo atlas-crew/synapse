@@ -34,6 +34,8 @@ import {
 import { MetricCard } from '../../components/fleet';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
 
 interface ConnectivityStats {
   total: number;
@@ -97,7 +99,7 @@ export function ConnectivityPage(): React.ReactElement {
   const { data: statsData } = useQuery({
     queryKey: ['connectivity-stats'],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/management/connectivity`);
+      const response = await fetch(`${API_BASE}/management/connectivity`, { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to fetch connectivity stats');
       return response.json();
     },
