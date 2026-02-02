@@ -35,11 +35,13 @@
 //! - `X-Challenge-Level`: Current challenge level for actor
 //! - `X-Challenge-Type`: Type of challenge issued (cookie/js/captcha/tarpit/block)
 
+pub mod captcha_manager;
 pub mod cookie_manager;
 pub mod injection_tracker;
 pub mod js_challenge_manager;
 pub mod progression_manager;
 
+pub use captcha_manager::{CaptchaChallenge, CaptchaConfig, CaptchaManager, CaptchaStats};
 pub use cookie_manager::{CookieChallenge, CookieConfig, CookieError, CookieManager, CookieStats};
 pub use injection_tracker::{
     HeadlessIndicators, InjectionRecord, InjectionSummary, InjectionTracker,

@@ -40,7 +40,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Notify;
 
-use super::{ChallengeResponse, CookieManager, JsChallengeManager, ValidationResult};
+use super::{CaptchaManager, ChallengeResponse, CookieManager, JsChallengeManager, ValidationResult};
 use crate::tarpit::TarpitManager;
 
 /// Challenge levels for progressive escalation
@@ -242,6 +242,8 @@ pub struct ProgressionManager {
     cookie_manager: Arc<CookieManager>,
     /// JS challenge manager
     js_manager: Arc<JsChallengeManager>,
+    /// CAPTCHA challenge manager
+    captcha_manager: Arc<CaptchaManager>,
     /// Tarpit manager
     tarpit_manager: Arc<TarpitManager>,
     /// Configuration
@@ -259,6 +261,7 @@ impl ProgressionManager {
     pub fn new(
         cookie_manager: Arc<CookieManager>,
         js_manager: Arc<JsChallengeManager>,
+        captcha_manager: Arc<CaptchaManager>,
         tarpit_manager: Arc<TarpitManager>,
         config: ProgressionConfig,
     ) -> Self {
@@ -266,6 +269,7 @@ impl ProgressionManager {
             actor_states: DashMap::with_capacity(config.max_states.min(10_000)),
             cookie_manager,
             js_manager,
+            captcha_manager,
             tarpit_manager,
             config,
             stats: ProgressionStats::default(),
@@ -546,6 +550,9 @@ impl ProgressionManager {
             ChallengeLevel::JsChallenge => {
                 self.js_manager.validate_pow(actor_id, response)
             }
+            ChallengeLevel::Captcha => {
+                self.captcha_manager.validate_response(actor_id, response)
+            }
             _ => ValidationResult::NotFound,
         };
 
@@ -768,11 +775,10 @@ impl ProgressionManager {
             }
 
             ChallengeLevel::Captcha => {
-                // Stub implementation
-                let session_id = format!("captcha_{}", now_ms());
+                let challenge = self.captcha_manager.issue_challenge(actor_id);
                 ChallengeResponse::Captcha {
-                    html: self.config.captcha_page_html.clone(),
-                    session_id,
+                    html: challenge.html,
+                    session_id: challenge.session_id,
                 }
             }
 
@@ -894,12 +900,13 @@ const DEFAULT_CAPTCHA_PAGE: &str = r#"<!DOCTYPE html>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interrogator::{CookieConfig, JsChallengeConfig};
+    use crate::interrogator::{CaptchaConfig, CookieConfig, JsChallengeConfig};
     use crate::tarpit::TarpitConfig;
 
     fn test_managers() -> (
         Arc<CookieManager>,
         Arc<JsChallengeManager>,
+        Arc<CaptchaManager>,
         Arc<TarpitManager>,
     ) {
         let cookie_config = CookieConfig {
@@ -914,6 +921,12 @@ mod tests {
             difficulty: 1, // Low for fast tests
             ..Default::default()
         };
+        let captcha_config = CaptchaConfig {
+            secret: "test_captcha_secret".to_string(),
+            expiry_secs: 300,
+            max_challenges: 100,
+            cleanup_interval_secs: 60,
+        };
         let tarpit_config = TarpitConfig {
             base_delay_ms: 10, // Low for fast tests
             ..Default::default()
@@ -922,6 +935,7 @@ mod tests {
         (
             Arc::new(CookieManager::new(cookie_config).expect("valid test config")),
             Arc::new(JsChallengeManager::new(js_config)),
+            Arc::new(CaptchaManager::new(captcha_config)),
             Arc::new(TarpitManager::new(tarpit_config)),
         )
     }
@@ -937,8 +951,8 @@ mod tests {
 
     #[test]
     fn test_level_from_risk_score() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Low risk -> None
         assert_eq!(
@@ -973,8 +987,8 @@ mod tests {
 
     #[test]
     fn test_escalation() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         assert_eq!(manager.get_level("actor_123"), ChallengeLevel::None);
 
@@ -998,8 +1012,8 @@ mod tests {
 
     #[test]
     fn test_de_escalation() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Start at block
         for _ in 0..5 {
@@ -1027,8 +1041,8 @@ mod tests {
 
     #[test]
     fn test_failure_escalation() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Start a challenge to get state
         manager.get_challenge("actor_123", 0.3);
@@ -1045,8 +1059,8 @@ mod tests {
 
     #[test]
     fn test_skip_to_block() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Start a challenge
         manager.get_challenge("actor_123", 0.3);
@@ -1061,8 +1075,8 @@ mod tests {
 
     #[test]
     fn test_get_challenge_response() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Low risk -> Allow
         let response = manager.get_challenge("actor_1", 0.1);
@@ -1083,8 +1097,8 @@ mod tests {
 
     #[test]
     fn test_actor_state_tracking() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         manager.get_challenge("actor_123", 0.5);
 
@@ -1101,8 +1115,8 @@ mod tests {
 
     #[test]
     fn test_list_actors_at_level() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         manager.get_challenge("actor_1", 0.3); // Cookie
         manager.get_challenge("actor_2", 0.5); // JS
@@ -1121,8 +1135,8 @@ mod tests {
 
     #[test]
     fn test_reset() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         manager.get_challenge("actor_123", 0.5);
         assert!(manager.get_actor_state("actor_123").is_some());
@@ -1133,8 +1147,8 @@ mod tests {
 
     #[test]
     fn test_stats_tracking() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         manager.get_challenge("actor_1", 0.5);
         manager.get_challenge("actor_2", 0.5);
@@ -1177,8 +1191,8 @@ mod tests {
 
     #[test]
     fn test_risk_higher_than_current_level() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Start with cookie level
         manager.get_challenge("actor_123", 0.3);
@@ -1192,8 +1206,8 @@ mod tests {
 
     #[test]
     fn test_behavior_escalates_above_risk() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Low risk, but manual escalation
         manager.get_challenge("actor_123", 0.1);
@@ -1210,8 +1224,8 @@ mod tests {
 
     #[test]
     fn test_escalation_history() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         manager.get_challenge("actor_123", 0.3);
         manager.escalate("actor_123");
@@ -1225,8 +1239,8 @@ mod tests {
 
     #[test]
     fn test_clear() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         manager.get_challenge("actor_1", 0.5);
         manager.get_challenge("actor_2", 0.5);
@@ -1238,7 +1252,7 @@ mod tests {
 
     #[test]
     fn test_disabled_levels_skipped() {
-        let (cookie, js, tarpit) = test_managers();
+        let (cookie, js, captcha, tarpit) = test_managers();
         let config = ProgressionConfig {
             enable_cookie: false,
             enable_js_challenge: false,
@@ -1246,7 +1260,7 @@ mod tests {
             enable_tarpit: true,
             ..test_config()
         };
-        let manager = ProgressionManager::new(cookie, js, tarpit, config);
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, config);
 
         // Escalation should skip disabled levels
         let level = manager.escalate("actor_123");
@@ -1258,11 +1272,89 @@ mod tests {
 
     #[test]
     fn test_tarpit_challenge() {
-        let (cookie, js, tarpit) = test_managers();
-        let manager = ProgressionManager::new(cookie, js, tarpit, test_config());
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Get tarpit challenge
         let response = manager.get_challenge("actor_123", 0.7);
         assert!(matches!(response, ChallengeResponse::Tarpit { delay_ms } if delay_ms > 0));
+    }
+
+    #[test]
+    fn test_captcha_challenge() {
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let config = ProgressionConfig {
+            enable_captcha: true,
+            ..test_config()
+        };
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, config);
+
+        // Get CAPTCHA challenge at medium-high risk
+        let response = manager.get_challenge("actor_123", 0.65);
+        match response {
+            ChallengeResponse::Captcha { html, session_id } => {
+                assert!(html.contains("Human Verification Required"));
+                assert!(html.contains("What is"));
+                assert!(!session_id.is_empty());
+            }
+            _ => panic!("Expected CAPTCHA challenge, got {:?}", response),
+        }
+    }
+
+    #[test]
+    fn test_captcha_validation() {
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let config = ProgressionConfig {
+            enable_captcha: true,
+            ..test_config()
+        };
+        let manager = ProgressionManager::new(cookie, js, captcha.clone(), tarpit, config);
+
+        // Get CAPTCHA challenge
+        let response = manager.get_challenge("actor_123", 0.65);
+        let session_id = match response {
+            ChallengeResponse::Captcha { session_id, .. } => session_id,
+            _ => panic!("Expected CAPTCHA challenge"),
+        };
+
+        // Get the challenge details from the captcha manager to know the answer
+        let challenge = captcha.issue_challenge("actor_123");
+        // Parse the question to get the answer (e.g., "What is 5 + 3?")
+        let parts: Vec<&str> = challenge.question.split_whitespace().collect();
+        let a: i32 = parts[2].parse().unwrap();
+        let b: i32 = parts[4].trim_end_matches('?').parse().unwrap();
+        let answer = a + b;
+
+        // Validate with correct answer
+        let validation_response = format!("{}:{}", challenge.session_id, answer);
+        let result = captcha.validate_response("actor_123", &validation_response);
+        assert_eq!(result, ValidationResult::Valid);
+    }
+
+    #[test]
+    fn test_captcha_escalation_with_enabled() {
+        let (cookie, js, captcha, tarpit) = test_managers();
+        let config = ProgressionConfig {
+            enable_captcha: true,
+            ..test_config()
+        };
+        let manager = ProgressionManager::new(cookie, js, captcha, tarpit, config);
+
+        // Start at Cookie
+        manager.get_challenge("actor_123", 0.3);
+        assert_eq!(manager.get_level("actor_123"), ChallengeLevel::Cookie);
+
+        // Escalate through levels
+        let level = manager.escalate("actor_123");
+        assert_eq!(level, ChallengeLevel::JsChallenge);
+
+        let level = manager.escalate("actor_123");
+        assert_eq!(level, ChallengeLevel::Captcha); // Now enabled!
+
+        let level = manager.escalate("actor_123");
+        assert_eq!(level, ChallengeLevel::Tarpit);
+
+        let level = manager.escalate("actor_123");
+        assert_eq!(level, ChallengeLevel::Block);
     }
 }

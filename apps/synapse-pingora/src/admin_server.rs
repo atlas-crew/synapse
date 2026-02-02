@@ -1239,81 +1239,25 @@ async fn sensor_blocks_handler(
 ) -> impl IntoResponse {
     let limit = params.limit.unwrap_or(100);
     let blocks = state.handler.handle_list_blocks(limit);
-
-    // If no real blocks, return seed data for dashboard testing
-    // Schema must match BlockEvent: { timestamp, client_ip, method, path, risk_score, matched_rules, block_reason, fingerprint }
-    if blocks.is_empty() {
-        let now = chrono::Utc::now().timestamp_millis();
-        let seed_blocks = vec![
-            serde_json::json!({
-                "timestamp": now - 5 * 60 * 1000,
-                "client_ip": "192.168.1.105",
-                "method": "POST",
-                "path": "/api/auth/login",
-                "risk_score": 85,
-                "matched_rules": [1001, 1002, 1003],
-                "block_reason": "Credential stuffing attack - risk threshold exceeded",
-                "fingerprint": "fp_a1b2c3d4"
-            }),
-            serde_json::json!({
-                "timestamp": now - 12 * 60 * 1000,
-                "client_ip": "10.0.0.42",
-                "method": "GET",
-                "path": "/api/users?id=1' OR '1'='1",
-                "risk_score": 92,
-                "matched_rules": [2001, 2005],
-                "block_reason": "SQL injection attempt detected",
-                "fingerprint": "fp_e5f6g7h8"
-            }),
-            serde_json::json!({
-                "timestamp": now - 25 * 60 * 1000,
-                "client_ip": "192.168.1.200",
-                "method": "GET",
-                "path": "/api/files/../../../etc/passwd",
-                "risk_score": 88,
-                "matched_rules": [3001, 3002],
-                "block_reason": "Path traversal attack blocked",
-                "fingerprint": "fp_i9j0k1l2"
-            }),
-            serde_json::json!({
-                "timestamp": now - 55 * 60 * 1000,
-                "client_ip": "203.0.113.50",
-                "method": "POST",
-                "path": "/api/admin/users",
-                "risk_score": 95,
-                "matched_rules": [4001, 4002, 4003, 4004],
-                "block_reason": "Unauthorized admin access attempt",
-                "fingerprint": "fp_m3n4o5p6"
-            }),
-            serde_json::json!({
-                "timestamp": now - 2 * 60 * 60 * 1000,
-                "client_ip": "10.0.0.99",
-                "method": "GET",
-                "path": "/api/export/database",
-                "risk_score": 78,
-                "matched_rules": [5001],
-                "block_reason": "Data exfiltration pattern detected",
-                "fingerprint": "fp_q7r8s9t0"
-            }),
-            serde_json::json!({
-                "timestamp": now - 3 * 60 * 60 * 1000,
-                "client_ip": "198.51.100.22",
-                "method": "GET",
-                "path": "/api/products",
-                "risk_score": 72,
-                "matched_rules": [6001],
-                "block_reason": "Automated bot blocked - rate limit exceeded",
-                "fingerprint": null
-            }),
-        ];
-        return (StatusCode::OK, Json(serde_json::json!({ "blocks": seed_blocks.into_iter().take(limit).collect::<Vec<_>>() })));
-    }
-
     (StatusCode::OK, Json(serde_json::json!({ "blocks": blocks })))
 }
 
-/// GET /_sensor/trends - Returns empty trends data
-async fn sensor_trends_handler() -> impl IntoResponse {
+/// GET /_sensor/trends - Returns real trends data from TrendsManager
+async fn sensor_trends_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let response = state.handler.handle_trends_summary();
+    if response.success {
+        if let Some(data) = response.data {
+            return (StatusCode::OK, Json(serde_json::json!({
+                "signalCounts": data.category_count,
+                "totalSignals": data.total_signals,
+                "topSignals": data.top_signal_types
+            })));
+        }
+    }
+    // Fallback to empty data if TrendsManager not available
+    if let Some(err) = response.error {
+        log::warn!("TrendsManager not available: {}", err);
+    }
     (StatusCode::OK, Json(serde_json::json!({
         "signalCounts": {},
         "timeline": [],
@@ -1321,105 +1265,33 @@ async fn sensor_trends_handler() -> impl IntoResponse {
     })))
 }
 
-/// GET /_sensor/anomalies - Returns anomaly events for threat activity
-async fn sensor_anomalies_handler() -> impl IntoResponse {
-    let now = chrono::Utc::now();
-
-    // Seed data matching Anomaly interface
-    let anomalies = vec![
-        serde_json::json!({
-            "id": "anom-001",
-            "type": "credential_stuffing",
-            "severity": "high",
-            "description": "Multiple failed login attempts from distributed IPs targeting /api/auth/login",
-            "entityId": "192.168.1.105",
-            "riskApplied": 45,
-            "timestamp": (now - chrono::Duration::minutes(5)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-002",
-            "type": "sql_injection",
-            "severity": "high",
-            "description": "SQL injection pattern detected in query parameter on /api/search",
-            "entityId": "10.0.0.42",
-            "riskApplied": 65,
-            "timestamp": (now - chrono::Duration::minutes(12)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-003",
-            "type": "rate_limit_exceeded",
-            "severity": "medium",
-            "description": "Request rate 5x above baseline for /api/products endpoint",
-            "entityId": "172.16.0.88",
-            "riskApplied": 25,
-            "timestamp": (now - chrono::Duration::minutes(18)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-004",
-            "type": "path_traversal",
-            "severity": "high",
-            "description": "Path traversal attempt detected: ../../../etc/passwd",
-            "entityId": "192.168.1.200",
-            "riskApplied": 70,
-            "timestamp": (now - chrono::Duration::minutes(25)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-005",
-            "type": "xss_attempt",
-            "severity": "medium",
-            "description": "Cross-site scripting payload in user input field",
-            "entityId": "10.0.0.15",
-            "riskApplied": 35,
-            "timestamp": (now - chrono::Duration::minutes(32)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-006",
-            "type": "enumeration_attack",
-            "severity": "low",
-            "description": "Sequential user ID enumeration detected on /api/users/{id}",
-            "entityId": "192.168.1.55",
-            "riskApplied": 15,
-            "timestamp": (now - chrono::Duration::minutes(45)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-007",
-            "type": "admin_access",
-            "severity": "high",
-            "description": "Unauthorized access attempt to /api/admin/users from external IP",
-            "entityId": "203.0.113.50",
-            "riskApplied": 80,
-            "timestamp": (now - chrono::Duration::minutes(55)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-008",
-            "type": "bot_behavior",
-            "severity": "medium",
-            "description": "Automated bot pattern detected - no JS execution, fixed timing",
-            "entityId": "198.51.100.22",
-            "riskApplied": 30,
-            "timestamp": (now - chrono::Duration::hours(1)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-009",
-            "type": "data_exfiltration",
-            "severity": "high",
-            "description": "Unusually large response payload (15MB) to single client",
-            "entityId": "10.0.0.99",
-            "riskApplied": 55,
-            "timestamp": (now - chrono::Duration::hours(2)).to_rfc3339()
-        }),
-        serde_json::json!({
-            "id": "anom-010",
-            "type": "session_anomaly",
-            "severity": "low",
-            "description": "Session token reuse from different geographic location",
-            "entityId": "172.16.0.150",
-            "riskApplied": 20,
-            "timestamp": (now - chrono::Duration::hours(3)).to_rfc3339()
-        }),
-    ];
-
-    (StatusCode::OK, Json(serde_json::json!({ "data": anomalies })))
+/// GET /_sensor/anomalies - Returns real anomaly events from TrendsManager
+async fn sensor_anomalies_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let response = state.handler.handle_trends_anomalies(50);
+    if response.success {
+        if let Some(anomalies) = response.data {
+            let data: Vec<serde_json::Value> = anomalies
+                .into_iter()
+                .map(|a| serde_json::json!({
+                    "id": format!("anom-{}", &a.detected_at_ms.to_string()[..6]),
+                    "type": a.anomaly_type.to_lowercase().replace("_", "-"),
+                    "severity": a.severity.to_lowercase(),
+                    "description": a.description,
+                    "entityId": a.entities.first().unwrap_or(&"unknown".to_string()),
+                    "riskApplied": 0, // Not stored in TrendsAnomalyResponse
+                    "timestamp": chrono::DateTime::from_timestamp_millis(a.detected_at_ms)
+                        .map(|dt| dt.to_rfc3339())
+                        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339())
+                }))
+                .collect();
+            return (StatusCode::OK, Json(serde_json::json!({ "data": data })));
+        }
+    }
+    // Fallback if TrendsManager not available
+    if let Some(err) = response.error {
+        log::warn!("TrendsManager not available for anomalies: {}", err);
+    }
+    (StatusCode::OK, Json(serde_json::json!({ "data": [] })))
 }
 
 /// GET /_sensor/campaigns - Returns active threat campaigns
@@ -3094,103 +2966,20 @@ async fn profiling_baselines_handler(State(_state): State<AdminState>) -> impl I
 
 /// GET /_sensor/profiling/schemas - Returns schema information per endpoint
 async fn profiling_schemas_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    let now = chrono::Utc::now().timestamp_millis() as u64;
-
-    // Try to get real schema data from the schema learner
+    // Get real schema data from the schema learner
     let real_schemas = get_schemas();
 
-    if !real_schemas.is_empty() {
-        // Convert real schemas to JSON format matching the frontend interface
-        let schemas: Vec<serde_json::Value> = real_schemas.iter().map(|s| {
-            serde_json::json!({
-                "template": s.template,
-                "sampleCount": s.sample_count,
-                "requestFieldCount": s.request_schema.len(),
-                "responseFieldCount": s.response_schema.len(),
-                "lastUpdated": s.last_updated_ms,
-                "version": s.version
-            })
-        }).collect();
-
-        return (StatusCode::OK, Json(serde_json::json!({
-            "schemas": schemas,
-            "count": schemas.len()
-        })));
-    }
-
-    // Fallback: Seed data matching EndpointSchema interface for dashboard testing
-    let schemas = vec![
+    // Convert real schemas to JSON format matching the frontend interface
+    let schemas: Vec<serde_json::Value> = real_schemas.iter().map(|s| {
         serde_json::json!({
-            "template": "/api/users",
-            "sampleCount": 90,
-            "requestFieldCount": 3,  // page, limit, sort
-            "responseFieldCount": 12, // id, email, name, etc.
-            "lastUpdated": now - 300000
-        }),
-        serde_json::json!({
-            "template": "/api/users/{id}",
-            "sampleCount": 156,
-            "requestFieldCount": 1,
-            "responseFieldCount": 15,
-            "lastUpdated": now - 120000
-        }),
-        serde_json::json!({
-            "template": "/api/products/{id}",
-            "sampleCount": 45,
-            "requestFieldCount": 2,
-            "responseFieldCount": 18,
-            "lastUpdated": now - 600000
-        }),
-        serde_json::json!({
-            "template": "/api/auth/login",
-            "sampleCount": 120,
-            "requestFieldCount": 3,  // username, password, remember
-            "responseFieldCount": 5, // token, expires, user, etc.
-            "lastUpdated": now - 60000
-        }),
-        serde_json::json!({
-            "template": "/api/auth/refresh",
-            "sampleCount": 85,
-            "requestFieldCount": 1,
-            "responseFieldCount": 3,
-            "lastUpdated": now - 180000
-        }),
-        serde_json::json!({
-            "template": "/api/admin/users",
-            "sampleCount": 15,
-            "requestFieldCount": 4,
-            "responseFieldCount": 20,
-            "lastUpdated": now - 240000
-        }),
-        serde_json::json!({
-            "template": "/api/search",
-            "sampleCount": 200,
-            "requestFieldCount": 5,
-            "responseFieldCount": 8,
-            "lastUpdated": now - 30000
-        }),
-        serde_json::json!({
-            "template": "/api/orders",
-            "sampleCount": 67,
-            "requestFieldCount": 3,
-            "responseFieldCount": 14,
-            "lastUpdated": now - 300000
-        }),
-        serde_json::json!({
-            "template": "/api/orders/{id}",
-            "sampleCount": 134,
-            "requestFieldCount": 1,
-            "responseFieldCount": 22,
-            "lastUpdated": now - 120000
-        }),
-        serde_json::json!({
-            "template": "/api/checkout",
-            "sampleCount": 42,
-            "requestFieldCount": 12, // cart, payment, shipping, etc.
-            "responseFieldCount": 8,
-            "lastUpdated": now - 600000
-        }),
-    ];
+            "template": s.template,
+            "sampleCount": s.sample_count,
+            "requestFieldCount": s.request_schema.len(),
+            "responseFieldCount": s.response_schema.len(),
+            "lastUpdated": s.last_updated_ms,
+            "version": s.version
+        })
+    }).collect();
 
     (StatusCode::OK, Json(serde_json::json!({
         "schemas": schemas,

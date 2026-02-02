@@ -107,6 +107,14 @@ use synapse_pingora::payload::{PayloadManager, PayloadConfig};
 // Phase 9: Trends (signal tracking and anomaly detection)
 use synapse_pingora::trends::{TrendsManager, TrendsConfig};
 
+// Phase 10: Interrogator System (progressive challenge escalation)
+use synapse_pingora::interrogator::{
+    ChallengeResponse, ProgressionConfig, ProgressionManager,
+    CookieConfig, CookieManager,
+    JsChallengeConfig, JsChallengeManager,
+    CaptchaConfig, CaptchaManager,
+};
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -246,6 +254,20 @@ fn default_per_ip_rps() -> usize {
 
 fn default_enabled() -> bool {
     true
+}
+
+/// Create a CookieConfig with cryptographically secure random secret key
+fn create_default_cookie_config() -> CookieConfig {
+    let mut secret_key = [0u8; 32];
+    getrandom::getrandom(&mut secret_key).expect("Failed to generate random secret key");
+    CookieConfig {
+        cookie_name: "__synapse_challenge".to_string(),
+        cookie_max_age_secs: 86400, // 1 day
+        secret_key,
+        secure_only: true,
+        http_only: true,
+        same_site: "Strict".to_string(),
+    }
 }
 
 impl Default for RateLimitConfig {
@@ -812,6 +834,8 @@ pub struct RequestContext {
     response_content_type: Option<String>,
     /// Request path for schema template mapping (stored for response phase)
     request_path: Option<String>,
+    /// Phase 10: Challenge cookie to set in response (progressive challenge system)
+    challenge_cookie: Option<String>,
 }
 
 impl Drop for RequestContext {
@@ -933,6 +957,8 @@ pub struct SynapseProxy {
     payload_manager: Arc<PayloadManager>,
     /// Phase 9: Trends manager for signal tracking and anomaly detection
     trends_manager: Arc<TrendsManager>,
+    /// Phase 10: Progression manager for challenge escalation
+    progression_manager: Arc<ProgressionManager>,
 }
 
 impl SynapseProxy {
@@ -979,13 +1005,33 @@ impl SynapseProxy {
         crawler_detector: Arc<CrawlerDetector>,
         horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
+        // Create tarpit manager first (needed by progression manager)
+        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
+
+        // Create interrogator managers for progressive challenge system
+        let cookie_manager = Arc::new(
+            CookieManager::new(create_default_cookie_config())
+                .expect("default cookie config should be valid")
+        );
+        let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
+        let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
+
+        // Create progression manager orchestrating all challenge types
+        let progression_manager = Arc::new(ProgressionManager::new(
+            cookie_manager,
+            js_manager,
+            captcha_manager,
+            tarpit_manager.clone(),
+            ProgressionConfig::default(),
+        ));
+
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             per_ip_rps_limit,
             entity_manager,
-            tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
+            tarpit_manager,
             dlp_scanner,
             health_checker,
             metrics_registry,
@@ -1006,19 +1052,39 @@ impl SynapseProxy {
             horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
             trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
+            progression_manager,
         }
     }
 
     pub async fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
         let crawler_detector = CrawlerDetector::new(CrawlerConfig::default()).await.unwrap();
-        
+
+        // Create tarpit manager first (needed by progression manager)
+        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
+
+        // Create interrogator managers
+        let cookie_manager = Arc::new(
+            CookieManager::new(create_default_cookie_config())
+                .expect("default cookie config should be valid")
+        );
+        let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
+        let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
+
+        let progression_manager = Arc::new(ProgressionManager::new(
+            cookie_manager,
+            js_manager,
+            captcha_manager,
+            tarpit_manager.clone(),
+            ProgressionConfig::default(),
+        ));
+
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             per_ip_rps_limit: default_per_ip_rps(),
             entity_manager: Arc::new(EntityManager::new(entity_config)),
-            tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
+            tarpit_manager,
             dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
@@ -1039,6 +1105,7 @@ impl SynapseProxy {
             horizon_manager: None,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
             trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
+            progression_manager,
         }
     }
 
@@ -1067,13 +1134,32 @@ impl SynapseProxy {
         crawler_detector: Arc<CrawlerDetector>,
         horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
+        // Create tarpit manager first (needed by progression manager)
+        let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
+
+        // Create interrogator managers
+        let cookie_manager = Arc::new(
+            CookieManager::new(create_default_cookie_config())
+                .expect("default cookie config should be valid")
+        );
+        let js_manager = Arc::new(JsChallengeManager::new(JsChallengeConfig::default()));
+        let captcha_manager = Arc::new(CaptchaManager::new(CaptchaConfig::default()));
+
+        let progression_manager = Arc::new(ProgressionManager::new(
+            cookie_manager,
+            js_manager,
+            captcha_manager,
+            tarpit_manager.clone(),
+            ProgressionConfig::default(),
+        ));
+
         Self {
             backends: default_backends,
             backend_counter: AtomicUsize::new(0),
             rps_limit,
             per_ip_rps_limit,
             entity_manager,
-            tarpit_manager: Arc::new(TarpitManager::new(tarpit_config)),
+            tarpit_manager,
             dlp_scanner,
             health_checker,
             metrics_registry,
@@ -1094,6 +1180,7 @@ impl SynapseProxy {
             horizon_manager,
             payload_manager: Arc::new(PayloadManager::new(PayloadConfig::default())),
             trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
+            progression_manager,
         }
     }
 
@@ -1230,6 +1317,7 @@ impl ProxyHttp for SynapseProxy {
             dlp_scan_time_us: 0,
             response_content_type: None,
             request_path: None,
+            challenge_cookie: None,
         }
     }
 
@@ -1938,21 +2026,101 @@ impl ProxyHttp for SynapseProxy {
             }
 
             // Store result for logging hook
-            ctx.detection = Some(result);
+            ctx.detection = Some(result.clone());
 
-            // Send 403 response
-            // Security: Generic error - specific reason logged internally only
-            let resp = ResponseHeader::build(403, None)?;
-            session.write_response_header(Box::new(resp), true).await?;
-            session
-                .write_response_body(
-                    Some(Bytes::from("{\"error\": \"access_denied\"}")),
-                    true,
+            // ===== Phase 10: Progressive Challenge System =====
+            // Instead of hard blocking, use the progression manager to determine
+            // the appropriate challenge level based on actor behavior and risk score.
+            let actor_id = if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+                self.actor_manager.get_or_create_actor(
+                    ip_addr,
+                    ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref()).map(|j| j.raw.as_str()),
                 )
-                .await?;
+            } else {
+                // Fallback to IP string if parsing fails
+                client_ip.to_string()
+            };
 
-            // Return true = we handled the request
-            return Ok(true);
+            // Get challenge based on risk score (normalize to 0.0-1.0 range)
+            let risk_score_normalized = (result.risk_score as f64) / 100.0;
+            let challenge = self.progression_manager.get_challenge(&actor_id, risk_score_normalized);
+
+            // Handle challenge response based on level
+            match challenge {
+                ChallengeResponse::Allow => {
+                    // Low risk after progression check - allow through
+                    // This can happen if actor recently passed challenges
+                    debug!("Actor {} allowed after progression check (risk={})", actor_id, result.risk_score);
+                }
+
+                ChallengeResponse::Cookie { name, value, max_age, http_only, secure } => {
+                    // Set tracking cookie and allow request to continue
+                    // The cookie enables correlation of future requests
+                    debug!("Setting challenge cookie for actor {}", actor_id);
+                    ctx.challenge_cookie = Some(format!(
+                        "{}={}; Path=/; Max-Age={}{}{}; SameSite=Strict",
+                        name,
+                        value,
+                        max_age,
+                        if http_only { "; HttpOnly" } else { "" },
+                        if secure { "; Secure" } else { "" }
+                    ));
+                    // Continue to upstream (cookie set in response_filter)
+                }
+
+                ChallengeResponse::JsChallenge { html, .. } => {
+                    // Present JavaScript proof-of-work challenge
+                    info!("Presenting JS challenge to actor {} (risk={})", actor_id, result.risk_score);
+                    let mut resp = ResponseHeader::build(200, None)?;
+                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                    resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
+                    resp.insert_header("x-challenge-level", "2")?;
+                    resp.insert_header("x-challenge-type", "js_pow")?;
+                    session.write_response_header(Box::new(resp), false).await?;
+                    session.write_response_body(Some(Bytes::from(html)), true).await?;
+                    return Ok(true);
+                }
+
+                ChallengeResponse::Captcha { html, session_id } => {
+                    // Present CAPTCHA challenge
+                    info!("Presenting CAPTCHA challenge to actor {} (session={})", actor_id, session_id);
+                    let mut resp = ResponseHeader::build(200, None)?;
+                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                    resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
+                    resp.insert_header("x-challenge-level", "3")?;
+                    resp.insert_header("x-challenge-type", "captcha")?;
+                    session.write_response_header(Box::new(resp), false).await?;
+                    session.write_response_body(Some(Bytes::from(html)), true).await?;
+                    return Ok(true);
+                }
+
+                ChallengeResponse::Tarpit { delay_ms } => {
+                    // Apply tarpit delay then block
+                    info!("Tarpitting actor {} for {}ms (risk={})", actor_id, delay_ms, result.risk_score);
+                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    // After delay, send block page
+                    let block_html = self.progression_manager.config().block_page_html.clone();
+                    let mut resp = ResponseHeader::build(403, None)?;
+                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                    resp.insert_header("x-challenge-level", "4")?;
+                    resp.insert_header("x-challenge-type", "tarpit")?;
+                    session.write_response_header(Box::new(resp), true).await?;
+                    session.write_response_body(Some(Bytes::from(block_html)), true).await?;
+                    return Ok(true);
+                }
+
+                ChallengeResponse::Block { html, status_code } => {
+                    // Hard block with custom page
+                    warn!("Hard blocking actor {} (risk={})", actor_id, result.risk_score);
+                    let mut resp = ResponseHeader::build(status_code, None)?;
+                    resp.insert_header("content-type", "text/html; charset=utf-8")?;
+                    resp.insert_header("x-challenge-level", "5")?;
+                    resp.insert_header("x-challenge-type", "block")?;
+                    session.write_response_header(Box::new(resp), true).await?;
+                    session.write_response_body(Some(Bytes::from(html)), true).await?;
+                    return Ok(true);
+                }
+            }
         }
 
         // ===== Phase 7: Shadow Mirroring =====
@@ -2445,6 +2613,12 @@ impl ProxyHttp for SynapseProxy {
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
+
+        // ===== Phase 10: Set Challenge Cookie =====
+        // If progressive challenge system set a tracking cookie, add it to response
+        if let Some(ref cookie) = ctx.challenge_cookie {
+            upstream_response.insert_header("set-cookie", cookie.as_str())?;
+        }
 
         // ===== Header Manipulation (Response) =====
         if let Some(ref site) = ctx.matched_site {
