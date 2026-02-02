@@ -406,6 +406,45 @@ mod error_codes {
     pub const NOT_FOUND: &str = "NOT_FOUND";
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
     pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
+    pub const RATE_LIMIT_EXCEEDED: &str = "RATE_LIMIT_EXCEEDED";
+    pub const UNAUTHORIZED: &str = "UNAUTHORIZED";
+    pub const INSUFFICIENT_SCOPE: &str = "INSUFFICIENT_SCOPE";
+}
+
+/// RFC 7807 Problem Details response.
+#[derive(Debug, serde::Serialize)]
+struct ProblemDetails {
+    #[serde(rename = "type")]
+    type_url: String,
+    title: String,
+    status: u16,
+    detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instance: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    required_scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_after_secs: Option<u64>,
+}
+
+impl ProblemDetails {
+    fn new(status: StatusCode, detail: impl Into<String>) -> Self {
+        Self {
+            type_url: "about:blank".to_string(),
+            title: status
+                .canonical_reason()
+                .unwrap_or("Error")
+                .to_string(),
+            status: status.as_u16(),
+            detail: detail.into(),
+            instance: None,
+            code: None,
+            required_scope: None,
+            retry_after_secs: None,
+        }
+    }
 }
 
 /// Create a sanitized error response that hides internal details.
@@ -417,7 +456,7 @@ fn sanitized_error(
     code: &str,
     public_message: &str,
     internal_error: Option<&dyn std::fmt::Display>,
-) -> (StatusCode, Json<serde_json::Value>) {
+) -> (StatusCode, Json<ProblemDetails>) {
     // Log internal details if provided
     if let Some(err) = internal_error {
         tracing::warn!(
@@ -428,20 +467,20 @@ fn sanitized_error(
         );
     }
 
+    let mut problem = ProblemDetails::new(status, public_message.to_string());
+    problem.code = Some(code.to_string());
+
     (
         status,
-        Json(serde_json::json!({
-            "success": false,
-            "error": {
-                "code": code,
-                "message": public_message
-            }
-        })),
+        Json(problem),
     )
 }
 
 /// Create a validation error response (400 Bad Request).
-fn validation_error(public_message: &str, internal_error: Option<&dyn std::fmt::Display>) -> (StatusCode, Json<serde_json::Value>) {
+fn validation_error(
+    public_message: &str,
+    internal_error: Option<&dyn std::fmt::Display>,
+) -> (StatusCode, Json<ProblemDetails>) {
     sanitized_error(
         StatusCode::BAD_REQUEST,
         error_codes::VALIDATION_ERROR,
@@ -451,7 +490,10 @@ fn validation_error(public_message: &str, internal_error: Option<&dyn std::fmt::
 }
 
 /// Create an internal server error response (500).
-fn internal_error(public_message: &str, internal_error: Option<&dyn std::fmt::Display>) -> (StatusCode, Json<serde_json::Value>) {
+fn internal_error(
+    public_message: &str,
+    internal_error: Option<&dyn std::fmt::Display>,
+) -> (StatusCode, Json<ProblemDetails>) {
     sanitized_error(
         StatusCode::INTERNAL_SERVER_ERROR,
         error_codes::INTERNAL_ERROR,
@@ -462,7 +504,7 @@ fn internal_error(public_message: &str, internal_error: Option<&dyn std::fmt::Di
 
 /// Create a not found error response (404).
 #[allow(dead_code)]
-fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json<serde_json::Value>) {
+fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json<ProblemDetails>) {
     // Note: We don't include the resource_id in the response to avoid enumeration attacks
     sanitized_error(
         StatusCode::NOT_FOUND,
@@ -473,7 +515,7 @@ fn not_found_error(resource_type: &str, _resource_id: &str) -> (StatusCode, Json
 }
 
 /// Create a service unavailable error response (503).
-fn service_unavailable(service_name: &str) -> (StatusCode, Json<serde_json::Value>) {
+fn service_unavailable(service_name: &str) -> (StatusCode, Json<ProblemDetails>) {
     sanitized_error(
         StatusCode::SERVICE_UNAVAILABLE,
         error_codes::SERVICE_UNAVAILABLE,
@@ -533,7 +575,7 @@ async fn require_auth(
     State(state): State<AdminState>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, Response> {
     // DEV MODE: Skip authentication for local development
     if is_dev_mode() {
         return Ok(next.run(request).await);
@@ -562,16 +604,62 @@ async fn require_auth(
                 Ok(next.run(request).await)
             } else {
                 // SECURITY: Track failed auth attempt and check rate limit
-                record_auth_failure(&state, client_ip)?;
-                warn!(client_ip = %client_ip, "Admin auth failed: invalid API key");
-                Err(StatusCode::UNAUTHORIZED)
+                match record_auth_failure(&state, client_ip) {
+                    Ok(()) => {
+                        warn!(client_ip = %client_ip, "Admin auth failed: invalid API key");
+                        let mut problem = ProblemDetails::new(
+                            StatusCode::UNAUTHORIZED,
+                            "Invalid X-Admin-Key value",
+                        );
+                        problem.code = Some(error_codes::UNAUTHORIZED.to_string());
+                        Err((StatusCode::UNAUTHORIZED, Json(problem)).into_response())
+                    }
+                    Err(retry_after) => {
+                        warn!(client_ip = %client_ip, "Admin auth failed: too many attempts");
+                        let mut problem = ProblemDetails::new(
+                            StatusCode::TOO_MANY_REQUESTS,
+                            "Too many failed authentication attempts",
+                        );
+                        problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
+                        problem.retry_after_secs = Some(retry_after.as_secs());
+                        Err((
+                            StatusCode::TOO_MANY_REQUESTS,
+                            [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
+                            Json(problem),
+                        )
+                            .into_response())
+                    }
+                }
             }
         }
         None => {
             // SECURITY: Track failed auth attempt (missing header counts as failure)
-            record_auth_failure(&state, client_ip)?;
-            warn!(client_ip = %client_ip, "Admin auth failed: missing X-Admin-Key header");
-            Err(StatusCode::UNAUTHORIZED)
+            match record_auth_failure(&state, client_ip) {
+                Ok(()) => {
+                    warn!(client_ip = %client_ip, "Admin auth failed: missing X-Admin-Key header");
+                    let mut problem = ProblemDetails::new(
+                        StatusCode::UNAUTHORIZED,
+                        "Missing X-Admin-Key header",
+                    );
+                    problem.code = Some(error_codes::UNAUTHORIZED.to_string());
+                    Err((StatusCode::UNAUTHORIZED, Json(problem)).into_response())
+                }
+                Err(retry_after) => {
+                    warn!(client_ip = %client_ip, "Admin auth failed: too many attempts");
+                    let mut problem = ProblemDetails::new(
+                        StatusCode::TOO_MANY_REQUESTS,
+                        "Too many failed authentication attempts",
+                    );
+                    problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
+                    problem.retry_after_secs = Some(retry_after.as_secs());
+                    Err((
+                        StatusCode::TOO_MANY_REQUESTS,
+                        [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
+                        Json(problem),
+                    )
+                        .into_response())
+                }
+            }
         }
     }
 }
@@ -580,15 +668,20 @@ async fn require_auth(
 ///
 /// SECURITY: Returns 429 Too Many Requests if the client has exceeded the
 /// allowed number of authentication failures (5 per minute by default).
-fn record_auth_failure(state: &AdminState, client_ip: IpAddr) -> Result<(), StatusCode> {
+fn record_auth_failure(
+    state: &AdminState,
+    client_ip: IpAddr,
+) -> Result<(), std::time::Duration> {
     match state.auth_failure_limiter.check_key(&client_ip) {
         Ok(_) => Ok(()), // Within rate limit
-        Err(_not_until) => {
+        Err(not_until) => {
             warn!(
                 client_ip = %client_ip,
                 "Auth rate limit exceeded: too many failed authentication attempts"
             );
-            Err(StatusCode::TOO_MANY_REQUESTS)
+            Err(not_until.wait_time_from(governor::clock::Clock::now(
+                &governor::clock::DefaultClock::default(),
+            )))
         }
     }
 }
@@ -672,14 +765,10 @@ async fn check_scope(
             "Scope check failed: required '{}', granted: {:?}",
             required_scope, state.admin_scopes
         );
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({
-                "error": "Insufficient scope",
-                "required": required_scope,
-                "code": "INSUFFICIENT_SCOPE"
-            }))
-        ).into_response())
+        let mut problem = ProblemDetails::new(StatusCode::FORBIDDEN, "Insufficient scope");
+        problem.code = Some(error_codes::INSUFFICIENT_SCOPE.to_string());
+        problem.required_scope = Some(required_scope.to_string());
+        Err((StatusCode::FORBIDDEN, Json(problem)).into_response())
     }
 }
 
@@ -701,16 +790,20 @@ async fn rate_limit_admin(
     match state.admin_rate_limiter.check_key(&client_ip) {
         Ok(_) => Ok(next.run(request).await),
         Err(not_until) => {
-            let retry_after = not_until.wait_time_from(governor::clock::Clock::now(&governor::clock::DefaultClock::default()));
+            let retry_after = not_until.wait_time_from(governor::clock::Clock::now(
+                &governor::clock::DefaultClock::default(),
+            ));
             warn!("Admin rate limit exceeded for IP: {}", client_ip);
+            let mut problem =
+                ProblemDetails::new(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
+            problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
+            problem.retry_after_secs = Some(retry_after.as_secs());
             Err((
                 StatusCode::TOO_MANY_REQUESTS,
                 [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
-                Json(serde_json::json!({
-                    "error": "Rate limit exceeded",
-                    "retry_after_secs": retry_after.as_secs()
-                }))
-            ).into_response())
+                Json(problem),
+            )
+                .into_response())
         }
     }
 }
@@ -731,16 +824,20 @@ async fn rate_limit_public(
     match state.public_rate_limiter.check_key(&client_ip) {
         Ok(_) => Ok(next.run(request).await),
         Err(not_until) => {
-            let retry_after = not_until.wait_time_from(governor::clock::Clock::now(&governor::clock::DefaultClock::default()));
+            let retry_after = not_until.wait_time_from(governor::clock::Clock::now(
+                &governor::clock::DefaultClock::default(),
+            ));
             warn!("Public rate limit exceeded for IP: {}", client_ip);
+            let mut problem =
+                ProblemDetails::new(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
+            problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
+            problem.retry_after_secs = Some(retry_after.as_secs());
             Err((
                 StatusCode::TOO_MANY_REQUESTS,
                 [(header::RETRY_AFTER, retry_after.as_secs().to_string())],
-                Json(serde_json::json!({
-                    "error": "Rate limit exceeded",
-                    "retry_after_secs": retry_after.as_secs()
-                }))
-            ).into_response())
+                Json(problem),
+            )
+                .into_response())
         }
     }
 }
@@ -1319,13 +1416,7 @@ async fn get_site_shadow_handler(
         }
     }
 
-    (
-        StatusCode::NOT_FOUND,
-        Json(serde_json::json!({
-            "success": false,
-            "error": format!("Site {} not found", hostname)
-        }))
-    )
+    not_found_error("Site", &hostname)
 }
 
 /// PUT /sites/:hostname/shadow - Update site shadow mirror config
@@ -1341,13 +1432,7 @@ async fn update_site_shadow_handler(
         let existing_shadow = match config_mgr.get_site(&hostname) {
             Ok(site) => site.shadow_mirror,
             Err(_) => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(serde_json::json!({
-                        "success": false,
-                        "error": format!("Site {} not found", hostname)
-                    }))
-                );
+                return not_found_error("Site", &hostname);
             }
         };
 
@@ -1544,16 +1629,10 @@ async fn sensor_release_entity_handler(
                 "message": format!("Entity {} released", ip)
             })))
         } else {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({
-                "success": false,
-                "message": format!("Entity {} not found", ip)
-            })))
+            not_found_error("Entity", &ip)
         }
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "success": false,
-            "message": "Entity tracking not enabled"
-        })))
+        service_unavailable("Entity tracking")
     }
 }
 
@@ -1570,10 +1649,7 @@ async fn sensor_release_all_handler(
             "message": format!("Released {} entities", count)
         })))
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "success": false,
-            "message": "Entity tracking not enabled"
-        })))
+        service_unavailable("Entity tracking")
     }
 }
 
@@ -1781,14 +1857,10 @@ async fn sensor_campaign_detail_handler(
                     });
                     (StatusCode::OK, Json(serde_json::json!({ "data": data })))
                 }
-                None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
-                    "error": format!("Campaign {} not found", id)
-                })))
+                None => not_found_error("Campaign", &id),
             }
         }
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
-            "error": "Campaign correlation not enabled"
-        })))
+        None => service_unavailable("Campaign correlation"),
     }
 }
 
@@ -1914,7 +1986,7 @@ async fn _sensor_campaign_detail_handler_mock(Path(id): Path<String>) -> impl In
 
     match campaign_data {
         Some(data) => (StatusCode::OK, Json(serde_json::json!({ "data": data }))),
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Campaign not found" }))),
+        None => not_found_error("Campaign", &id),
     }
 }
 
@@ -1994,13 +2066,7 @@ async fn sensor_campaign_graph_handler(
                 "snapshotVersion": graph.snapshot_version
             })))
         }
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
-            "type": "https://api.synapse.local/errors/correlation-not-enabled",
-            "title": "Campaign Correlation Not Enabled",
-            "status": 404,
-            "detail": "Campaign correlation feature is not enabled on this sensor",
-            "instance": format!("/_sensor/campaigns/{}/graph", id)
-        })))
+        None => service_unavailable("Campaign correlation"),
     }
 }
 
@@ -2220,10 +2286,7 @@ async fn sensor_actors_handler(
                 match ip_str.parse::<IpAddr>() {
                     Ok(ip) => manager.get_actor_by_ip(ip).into_iter().collect(),
                     Err(_) => {
-                        return (
-                            StatusCode::BAD_REQUEST,
-                            Json(serde_json::json!({ "error": "Invalid IP address" })),
-                        );
+                        return validation_error("Invalid IP address", None);
                     }
                 }
             } else if let Some(fp) = params.fingerprint.as_deref() {
@@ -2264,15 +2327,9 @@ async fn sensor_actor_detail_handler(
     match state.handler.actor_manager() {
         Some(manager) => match manager.get_actor(&actor_id) {
             Some(actor) => (StatusCode::OK, Json(serde_json::json!({ "actor": actor_to_json(&actor) }))),
-            None => (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": format!("Actor {} not found", actor_id) })),
-            ),
+            None => not_found_error("Actor", &actor_id),
         },
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Actor tracking not enabled" })),
-        ),
+        None => service_unavailable("Actor tracking"),
     }
 }
 
@@ -2285,17 +2342,11 @@ async fn sensor_actor_timeline_handler(
     let limit = params.limit.unwrap_or(100);
 
     let Some(manager) = state.handler.actor_manager() else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Actor tracking not enabled" })),
-        );
+        return service_unavailable("Actor tracking");
     };
 
     let Some(actor) = manager.get_actor(&actor_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": format!("Actor {} not found", actor_id) })),
-        );
+        return not_found_error("Actor", &actor_id);
     };
 
     let mut events: Vec<serde_json::Value> = Vec::new();
@@ -2459,15 +2510,9 @@ async fn sensor_session_detail_handler(
                 StatusCode::OK,
                 Json(serde_json::json!({ "session": session_to_json(&session, true) })),
             ),
-            None => (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({ "error": format!("Session {} not found", session_id) })),
-            ),
+            None => not_found_error("Session", &session_id),
         },
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Session tracking not enabled" })),
-        ),
+        None => service_unavailable("Session tracking"),
     }
 }
 
@@ -3269,13 +3314,7 @@ async fn config_import_handler(
             }
         }
         None => {
-            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-                "success": false,
-                "error": {
-                    "code": error_codes::SERVICE_UNAVAILABLE,
-                    "message": "ConfigManager not available. Configuration cannot be applied at runtime."
-                }
-            })))
+            service_unavailable("ConfigManager")
         }
     }
 }
@@ -3303,13 +3342,15 @@ async fn sensor_dlp_stats_handler(State(state): State<AdminState>) -> impl IntoR
                 "patternCount": scanner.pattern_count(),
             })))
         }
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
-            "type": "https://api.synapse.local/errors/dlp-not-enabled",
-            "title": "DLP Not Enabled",
-            "status": 404,
-            "detail": "DLP scanning feature is not enabled on this sensor",
-            "instance": "/_sensor/dlp/stats"
-        })))
+        None => {
+            let mut problem = ProblemDetails::new(
+                StatusCode::NOT_FOUND,
+                "DLP scanning feature is not enabled on this sensor",
+            );
+            problem.code = Some(error_codes::NOT_FOUND.to_string());
+            problem.instance = Some("/_sensor/dlp/stats".to_string());
+            (StatusCode::NOT_FOUND, Json(problem))
+        }
     }
 }
 
@@ -3362,13 +3403,15 @@ async fn sensor_dlp_violations_handler(
                 }
             })))
         }
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({
-            "type": "https://api.synapse.local/errors/dlp-not-enabled",
-            "title": "DLP Not Enabled",
-            "status": 404,
-            "detail": "DLP scanning feature is not enabled on this sensor",
-            "instance": "/_sensor/dlp/violations"
-        })))
+        None => {
+            let mut problem = ProblemDetails::new(
+                StatusCode::NOT_FOUND,
+                "DLP scanning feature is not enabled on this sensor",
+            );
+            problem.code = Some(error_codes::NOT_FOUND.to_string());
+            problem.instance = Some("/_sensor/dlp/violations".to_string());
+            (StatusCode::NOT_FOUND, Json(problem))
+        }
     }
 }
 
@@ -3940,12 +3983,16 @@ async fn api_schemas_reset_handler(State(state): State<AdminState>) -> impl Into
 
 /// Wraps an ApiResponse into an HTTP response with appropriate status code.
 fn wrap_response<T: serde::Serialize>(response: ApiResponse<T>) -> Response {
-    let status = if response.success {
-        StatusCode::OK
-    } else {
-        StatusCode::INTERNAL_SERVER_ERROR
-    };
-    (status, Json(response)).into_response()
+    if response.success {
+        return (StatusCode::OK, Json(response)).into_response();
+    }
+
+    let detail = response
+        .error
+        .unwrap_or_else(|| "Request failed".to_string());
+    let mut problem = ProblemDetails::new(StatusCode::INTERNAL_SERVER_ERROR, detail);
+    problem.code = Some(error_codes::INTERNAL_ERROR.to_string());
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(problem)).into_response()
 }
 
 /// Test configuration result.
@@ -4060,10 +4107,7 @@ async fn sensor_evaluate_handler(
         }
         None => {
             // Synapse engine not configured
-            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-                "error": "WAF evaluation not available",
-                "message": "Synapse detection engine not configured"
-            })))
+            service_unavailable("WAF evaluation")
         }
     }
 }
@@ -4210,13 +4254,7 @@ async fn api_profiles_detail_handler(
                 }
             })),
         ),
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({
-                "success": false,
-                "error": format!("Profile not found: {}", decoded_template)
-            })),
-        ),
+        None => not_found_error("Profile", &decoded_template),
     }
 }
 
@@ -4287,13 +4325,7 @@ async fn api_schemas_detail_handler(
                 }
             })),
         ),
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({
-                "success": false,
-                "error": format!("Schema not found: {}", decoded_template)
-            })),
-        ),
+        None => not_found_error("Schema", &decoded_template),
     }
 }
 
@@ -5121,7 +5153,7 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 
         // The response should NOT contain internal details
-        let response_str = json.0.to_string();
+        let response_str = serde_json::to_string(&json.0).unwrap();
         assert!(
             !response_str.contains("/etc/secret"),
             "Response should not leak file paths"
@@ -5155,7 +5187,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
 
-        let response_str = json.0.to_string();
+        let response_str = serde_json::to_string(&json.0).unwrap();
         assert!(
             !response_str.contains("position 42"),
             "Should not leak parse error details"
