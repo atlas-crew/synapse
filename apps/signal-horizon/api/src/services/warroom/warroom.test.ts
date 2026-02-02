@@ -268,13 +268,14 @@ describe('WarRoomService', () => {
       });
     });
 
-    it('should broadcast status change to dashboards', async () => {
+    it('should broadcast status change to tenant dashboards only', async () => {
       vi.mocked(mockPrisma.warRoom.update).mockResolvedValue(createWarRoom({ status: 'CLOSED' }));
       vi.mocked(mockPrisma.warRoomActivity.create).mockResolvedValue(createActivity());
 
       await warRoomService.updateStatus('warroom-123', 'CLOSED', 'user-1', 'John Doe');
 
-      expect(mockDashboardGateway.broadcastAll).toHaveBeenCalledWith(
+      expect(mockDashboardGateway.broadcastToTenant).toHaveBeenCalledWith(
+        'tenant-1',
         expect.objectContaining({
           type: 'war-room-status',
           warRoomId: 'warroom-123',

@@ -279,8 +279,8 @@ export class WarRoomService {
       metadata: { status },
     });
 
-    // Broadcast status change
-    this.broadcastStatusChange(warRoomId, status);
+    // Broadcast status change to tenant dashboards only
+    this.broadcastStatusChange(warRoomId, warRoom.tenantId, status);
 
     this.logger.info({ warRoomId, status, actorId }, 'War room status updated');
 
@@ -657,21 +657,18 @@ export class WarRoomService {
     this.dashboardGateway.broadcastToTenant(activity.tenantId, message);
   }
 
-  private broadcastStatusChange(warRoomId: string, status: WarRoomStatus): void {
+  private broadcastStatusChange(warRoomId: string, tenantId: string, status: WarRoomStatus): void {
     if (!this.dashboardGateway) return;
 
-    // Note: Would need to fetch tenantId from warRoom for proper tenant isolation
-    // For now, broadcast to all dashboards via broadcastAll
-    const _message: WarRoomStatusMessage = {
+    const message: WarRoomStatusMessage = {
       type: 'war-room-status',
       warRoomId,
       status,
       timestamp: Date.now(),
     };
 
-    // This would need tenantId for proper isolation
-    // For now, we broadcast to all authenticated connections
-    this.dashboardGateway.broadcastAll(_message);
+    // Broadcast to tenant-specific dashboards only for proper isolation
+    this.dashboardGateway.broadcastToTenant(tenantId, message);
   }
 
   // ===========================================================================
