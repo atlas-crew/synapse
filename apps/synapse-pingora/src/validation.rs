@@ -46,6 +46,7 @@ use once_cell::sync::Lazy;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use openssl::ec::EcKey;
+use idna::domain_to_ascii;
 
 /// RFC 1035 compliant domain name regex pattern.
 /// Allows labels with alphanumeric and hyphens, supports wildcards, max 253 chars.
@@ -111,6 +112,13 @@ pub enum ValidationError {
 
     /// Domain name exceeds the maximum length of 253 characters.
     DomainTooLong(String),
+
+    /// Domain contains Unicode characters that could be homograph attacks.
+    ///
+    /// SECURITY: Domains with Cyrillic, Greek, or other characters that
+    /// visually resemble ASCII (e.g., Cyrillic 'а' vs ASCII 'a') are
+    /// rejected to prevent phishing attacks like "аpple.com".
+    HomographAttack(String),
 }
 
 impl std::fmt::Display for ValidationError {
@@ -124,6 +132,7 @@ impl std::fmt::Display for ValidationError {
             Self::WeakKey(reason) => write!(f, "Weak cryptographic key: {}", reason),
             Self::SuspiciousPath(path) => write!(f, "Suspicious path (potential traversal): {}", path),
             Self::DomainTooLong(domain) => write!(f, "Domain name too long (max 253 chars): {}", domain),
+            Self::HomographAttack(domain) => write!(f, "Domain contains suspicious Unicode characters (potential homograph attack): {}", domain),
         }
     }
 }
@@ -366,9 +375,19 @@ fn validate_pkcs8_key(pem_bytes: &[u8], path: &str) -> ValidationResult<()> {
 /// - Labels can contain alphanumeric and hyphens, but not start/end with hyphen
 /// - Supports wildcard domains (*.example.com)
 /// - Case-insensitive comparison
+/// - **SECURITY**: Rejects Unicode homograph attacks (e.g., Cyrillic characters mimicking ASCII)
 ///
 /// # Arguments
 /// * `domain` - Domain name to validate
+///
+/// # Security
+///
+/// This function detects Unicode homograph attacks where non-ASCII characters
+/// that visually resemble ASCII are used to create phishing domains:
+/// - `аpple.com` (Cyrillic 'а') vs `apple.com` (ASCII 'a')
+/// - `gооgle.com` (Cyrillic 'о') vs `google.com` (ASCII 'o')
+///
+/// Domains containing such characters are rejected to prevent phishing.
 pub fn validate_domain_name(domain: &str) -> ValidationResult<()> {
     // Check max length
     if domain.len() > 253 {
@@ -378,6 +397,35 @@ pub fn validate_domain_name(domain: &str) -> ValidationResult<()> {
     // Empty domain is invalid
     if domain.is_empty() {
         return Err(ValidationError::InvalidDomain("empty domain".to_string()));
+    }
+
+    // SECURITY: Detect Unicode homograph attacks
+    // If domain contains non-ASCII, convert to punycode and check for mixed scripts
+    if !domain.is_ascii() {
+        // Domain contains non-ASCII characters - potential homograph attack
+        // Convert to punycode (ACE) to expose the real characters
+        match domain_to_ascii(domain) {
+            Ok(punycode) => {
+                // If punycode differs from original, it had international characters
+                // Check if the punycode contains "xn--" (internationalized label marker)
+                if punycode.contains("xn--") {
+                    // This is an internationalized domain name (IDN)
+                    // Reject it as a potential homograph attack
+                    // In production, you might want to allow certain TLDs or trusted IDNs
+                    return Err(ValidationError::HomographAttack(format!(
+                        "{} (punycode: {})",
+                        domain, punycode
+                    )));
+                }
+            }
+            Err(_) => {
+                // IDNA conversion failed - invalid domain
+                return Err(ValidationError::InvalidDomain(format!(
+                    "{} (contains invalid Unicode)",
+                    domain
+                )));
+            }
+        }
     }
 
     // Use regex for RFC 1035 compliance
@@ -550,6 +598,43 @@ mod tests {
         let max_domain = "a".repeat(253);
         // Should validate (exact limit) if it matches pattern
         let _ = validate_domain_name(&max_domain);
+    }
+
+    /// SECURITY TEST: Verify Unicode homograph attacks are detected.
+    #[test]
+    fn test_homograph_attack_cyrillic_a() {
+        // Cyrillic 'а' (U+0430) looks like ASCII 'a' (U+0061)
+        let homograph = "аpple.com"; // First char is Cyrillic
+        let result = validate_domain_name(homograph);
+        assert!(result.is_err(), "Homograph attack should be rejected");
+        match result.unwrap_err() {
+            ValidationError::HomographAttack(msg) => {
+                assert!(msg.contains("xn--"), "Should show punycode: {}", msg);
+            }
+            e => panic!("Expected HomographAttack error, got {:?}", e),
+        }
+    }
+
+    /// SECURITY TEST: Verify Cyrillic 'о' homograph is detected.
+    #[test]
+    fn test_homograph_attack_cyrillic_o() {
+        // Cyrillic 'о' (U+043E) looks like ASCII 'o' (U+006F)
+        let homograph = "gооgle.com"; // Middle chars are Cyrillic
+        let result = validate_domain_name(homograph);
+        assert!(result.is_err(), "Homograph attack should be rejected");
+        match result.unwrap_err() {
+            ValidationError::HomographAttack(_) => {} // Expected
+            e => panic!("Expected HomographAttack error, got {:?}", e),
+        }
+    }
+
+    /// SECURITY TEST: Pure ASCII domains should pass.
+    #[test]
+    fn test_valid_ascii_domain_not_flagged() {
+        // Real ASCII domain should pass
+        assert!(validate_domain_name("apple.com").is_ok());
+        assert!(validate_domain_name("google.com").is_ok());
+        assert!(validate_domain_name("example.org").is_ok());
     }
 
     #[test]
