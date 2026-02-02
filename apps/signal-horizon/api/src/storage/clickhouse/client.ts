@@ -256,6 +256,8 @@ export class ClickHouseService {
   /**
    * Execute a raw query (for Hunt service)
    * For large result sets, consider using queryStream() instead.
+   *
+   * @deprecated Use queryWithParams() for user-controlled inputs to prevent SQL injection
    */
   async query<T>(sql: string): Promise<T[]> {
     if (!this.enabled || !this.client) {
@@ -273,6 +275,52 @@ export class ClickHouseService {
       this.logger.error({ error, sql: sql.substring(0, 100) }, 'Query failed');
       throw error;
     }
+  }
+
+  /**
+   * Execute a parameterized query (SQL injection safe)
+   *
+   * Uses ClickHouse's native parameter binding with typed placeholders:
+   * - {name:String} for string parameters
+   * - {name:UInt32} for unsigned integers
+   * - {name:Float64} for floating point numbers
+   * - {name:DateTime64(3)} for timestamps
+   * - {name:Array(String)} for string arrays
+   *
+   * Example:
+   * ```typescript
+   * const sql = `SELECT * FROM events WHERE tenant_id = {tenantId:String} AND confidence >= {minConfidence:Float64}`;
+   * const rows = await clickhouse.queryWithParams<EventRow>(sql, {
+   *   tenantId: 'tenant-123',
+   *   minConfidence: 0.8,
+   * });
+   * ```
+   */
+  async queryWithParams<T>(sql: string, params: Record<string, unknown>): Promise<T[]> {
+    if (!this.enabled || !this.client) {
+      throw new Error('ClickHouse is not enabled');
+    }
+
+    try {
+      const resultSet = await this.client.query({
+        query: sql,
+        query_params: params,
+        format: 'JSONEachRow',
+      });
+      const rows = await resultSet.json<T>();
+      return rows;
+    } catch (error) {
+      this.logger.error({ error, sql: sql.substring(0, 100) }, 'Parameterized query failed');
+      throw error;
+    }
+  }
+
+  /**
+   * Execute a parameterized query and return a single value
+   */
+  async queryOneWithParams<T>(sql: string, params: Record<string, unknown>): Promise<T | null> {
+    const rows = await this.queryWithParams<T>(sql, params);
+    return rows.length > 0 ? rows[0] : null;
   }
 
   /**

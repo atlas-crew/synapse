@@ -31,6 +31,8 @@ const mockClickHouse = {
   isEnabled: vi.fn(),
   query: vi.fn(),
   queryOne: vi.fn(),
+  queryWithParams: vi.fn(),
+  queryOneWithParams: vi.fn(),
   ping: vi.fn(),
 } as unknown as ClickHouseService;
 
@@ -187,8 +189,8 @@ describe('HuntService', () => {
 
   describe('queryTimeline - ClickHouse routing', () => {
     it('should route to ClickHouse for queries older than 24h', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([]);
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({ count: '0' });
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([]);
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '0' });
 
       const query = createHuntQuery({
         startTime: new Date(Date.now() - 48 * 60 * 60 * 1000), // 48h ago
@@ -198,11 +200,11 @@ describe('HuntService', () => {
       const result = await huntServiceWithClickHouse.queryTimeline(query);
 
       expect(result.source).toBe('clickhouse');
-      expect(mockClickHouse.query).toHaveBeenCalled();
+      expect(mockClickHouse.queryWithParams).toHaveBeenCalled();
     });
 
     it('should parse ClickHouse results correctly', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
         {
           id: 'ch-signal-1',
           timestamp: '2024-06-14T12:00:00.000Z',
@@ -216,7 +218,7 @@ describe('HuntService', () => {
           event_count: 10,
         },
       ]);
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({ count: '1' });
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '1' });
 
       const query = createHuntQuery({
         startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
@@ -254,7 +256,7 @@ describe('HuntService', () => {
 
   describe('queryTimeline - hybrid routing', () => {
     it('should use hybrid query when time range spans 24h threshold', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
         {
           id: 'ch-signal-old',
           timestamp: '2024-06-14T00:00:00.000Z',
@@ -268,7 +270,7 @@ describe('HuntService', () => {
           event_count: 3,
         },
       ]);
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({ count: '50' });
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '50' });
       vi.mocked(mockPrisma.signal.findMany).mockResolvedValue([
         createSignal({ id: 'pg-signal-new' }),
       ]);
@@ -285,14 +287,14 @@ describe('HuntService', () => {
       expect(result.signals).toHaveLength(2); // 1 from PG + 1 from CH
       expect(result.total).toBe(60); // 10 from PG + 50 from CH
       expect(mockPrisma.signal.findMany).toHaveBeenCalled();
-      expect(mockClickHouse.query).toHaveBeenCalled();
+      expect(mockClickHouse.queryWithParams).toHaveBeenCalled();
     });
 
     it('should order results with recent first', async () => {
       const oldTimestamp = new Date('2024-06-13T12:00:00.000Z');
       const newTimestamp = new Date('2024-06-15T11:00:00.000Z');
 
-      vi.mocked(mockClickHouse.query).mockResolvedValue([
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
         {
           id: 'ch-old',
           timestamp: oldTimestamp.toISOString(),
@@ -306,7 +308,7 @@ describe('HuntService', () => {
           event_count: 1,
         },
       ]);
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({ count: '1' });
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '1' });
       vi.mocked(mockPrisma.signal.findMany).mockResolvedValue([
         createSignal({ id: 'pg-new', createdAt: newTimestamp }),
       ]);
@@ -331,15 +333,15 @@ describe('HuntService', () => {
         tenant_id: 'tenant-1',
         sensor_id: 'sensor-1',
         signal_type: 'IP_THREAT',
-        source_ip: `10.0.0.${i}`,
+        source_ip: `10.0.0.${i % 256}`,
         anon_fingerprint: '',
         severity: 'LOW',
         confidence: 0.5,
         event_count: 1,
       }));
 
-      vi.mocked(mockClickHouse.query).mockResolvedValue(chSignals);
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({ count: '100' });
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue(chSignals);
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '100' });
       vi.mocked(mockPrisma.signal.findMany).mockResolvedValue([
         createSignal({ id: 'pg-1' }),
         createSignal({ id: 'pg-2' }),
@@ -491,7 +493,7 @@ describe('HuntService', () => {
     });
 
     it('should use ClickHouse when available', async () => {
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({
         total_hits: '150',
         tenants_hit: '5',
         first_seen: '2024-05-01T00:00:00.000Z',
@@ -501,7 +503,7 @@ describe('HuntService', () => {
 
       const result = await huntServiceWithClickHouse.getIpActivity('192.168.1.100', 90);
 
-      expect(mockClickHouse.queryOne).toHaveBeenCalled();
+      expect(mockClickHouse.queryOneWithParams).toHaveBeenCalled();
       expect(result).toMatchObject({
         totalHits: 150,
         tenantsHit: 5,
@@ -510,7 +512,7 @@ describe('HuntService', () => {
     });
 
     it('should handle ClickHouse returning null', async () => {
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue(null);
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue(null);
 
       const result = await huntServiceWithClickHouse.getIpActivity('10.0.0.1', 30);
 
@@ -537,7 +539,7 @@ describe('HuntService', () => {
     });
 
     it('should fetch campaign timeline from ClickHouse', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
         {
           timestamp: '2024-06-10T08:00:00.000Z',
           campaign_id: 'campaign-123',
@@ -592,7 +594,7 @@ describe('HuntService', () => {
     });
 
     it('should fetch hourly stats from ClickHouse', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([
         {
           hour: '2024-06-15T10:00:00.000Z',
           tenant_id: 'tenant-1',
@@ -628,7 +630,7 @@ describe('HuntService', () => {
     });
 
     it('should filter by signal types', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([]);
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([]);
 
       await huntServiceWithClickHouse.getHourlyStats(
         'tenant-1',
@@ -637,8 +639,10 @@ describe('HuntService', () => {
         ['IP_THREAT', 'RATE_ANOMALY']
       );
 
-      const queryCall = vi.mocked(mockClickHouse.query).mock.calls[0][0];
-      expect(queryCall).toContain("signal_type IN ('IP_THREAT','RATE_ANOMALY')");
+      // Verify parameterized query was called with signal types array
+      const call = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0];
+      const params = call[1] as Record<string, unknown>;
+      expect(params.signalTypes).toEqual(['IP_THREAT', 'RATE_ANOMALY']);
     });
   });
 
@@ -647,25 +651,88 @@ describe('HuntService', () => {
   // ===========================================================================
 
   describe('SQL injection prevention', () => {
-    it('should escape single quotes in tenant ID', async () => {
-      vi.mocked(mockClickHouse.query).mockResolvedValue([]);
-      vi.mocked(mockClickHouse.queryOne).mockResolvedValue({ count: '0' });
-
+    it('should reject tenant ID with SQL injection characters', async () => {
       const query = createHuntQuery({
         startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
         endTime: new Date(Date.now() - 30 * 60 * 60 * 1000),
         tenantId: "tenant'; DROP TABLE signal_events; --",
       });
 
+      // Should throw validation error for invalid characters
+      await expect(huntServiceWithClickHouse.queryTimeline(query)).rejects.toThrow(
+        'Invalid tenantId: contains disallowed characters'
+      );
+    });
+
+    it('should reject IP addresses with invalid format', async () => {
+      const query = createHuntQuery({
+        startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() - 30 * 60 * 60 * 1000),
+        sourceIps: ['192.168.1.1; DROP TABLE--'],
+      });
+
+      await expect(huntServiceWithClickHouse.queryTimeline(query)).rejects.toThrow(
+        'Invalid sourceIps[0]: not a valid IP address'
+      );
+    });
+
+    it('should reject signal types with special characters', async () => {
+      const query = createHuntQuery({
+        startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() - 30 * 60 * 60 * 1000),
+        signalTypes: ["IP_THREAT' OR '1'='1"],
+      });
+
+      await expect(huntServiceWithClickHouse.queryTimeline(query)).rejects.toThrow(
+        'Invalid signalTypes[0]: contains disallowed characters'
+      );
+    });
+
+    it('should accept valid identifiers with allowed characters', async () => {
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([]);
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '0' });
+
+      const query = createHuntQuery({
+        startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() - 30 * 60 * 60 * 1000),
+        tenantId: 'tenant-123_abc.prod:v2',
+        signalTypes: ['IP_THREAT', 'BOT_SIGNATURE'],
+        sourceIps: ['192.168.1.100', '10.0.0.1'],
+      });
+
+      // Should not throw - valid characters
+      await expect(huntServiceWithClickHouse.queryTimeline(query)).resolves.toBeDefined();
+
+      // Verify parameterized query was used
+      expect(mockClickHouse.queryWithParams).toHaveBeenCalled();
+      const call = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0];
+      const params = call[1] as Record<string, unknown>;
+      expect(params.tenantId).toBe('tenant-123_abc.prod:v2');
+    });
+
+    it('should use parameterized queries instead of string interpolation', async () => {
+      vi.mocked(mockClickHouse.queryWithParams).mockResolvedValue([]);
+      vi.mocked(mockClickHouse.queryOneWithParams).mockResolvedValue({ count: '0' });
+
+      const query = createHuntQuery({
+        startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() - 30 * 60 * 60 * 1000),
+        tenantId: 'tenant-1',
+        minConfidence: 0.8,
+      });
+
       await huntServiceWithClickHouse.queryTimeline(query);
 
-      const queryCall = vi.mocked(mockClickHouse.query).mock.calls[0][0];
-      // The single quote should be escaped to neutralize injection
-      // Input: tenant'; DROP... → Output: tenant\'; DROP...
-      // The backslash-quote (\') breaks the SQL injection attempt
-      expect(queryCall).toContain("tenant\\'");
-      // Verify the injection payload is neutralized (inside escaped string)
-      expect(queryCall).not.toMatch(/tenant_id\s*=\s*'tenant';/);
+      // Verify queryWithParams was called (parameterized), not query (string)
+      expect(mockClickHouse.queryWithParams).toHaveBeenCalled();
+      expect(mockClickHouse.query).not.toHaveBeenCalled();
+
+      // Verify SQL uses placeholders, not interpolated values
+      const call = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0];
+      const sql = call[0] as string;
+      expect(sql).toContain('{tenantId:String}');
+      expect(sql).toContain('{minConfidence:Float64}');
+      expect(sql).not.toContain("'tenant-1'"); // No interpolated string
     });
   });
 });

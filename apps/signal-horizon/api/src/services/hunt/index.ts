@@ -176,11 +176,11 @@ export class HuntService {
       throw new Error('ClickHouse is not enabled');
     }
 
-    const { sql, countSql } = this.buildClickHouseQuery(query);
+    const { sql, countSql, params } = this.buildClickHouseQuery(query);
 
     const [signals, countResult] = await Promise.all([
-      this.clickhouse.query<ClickHouseSignalRow>(sql),
-      this.clickhouse.queryOne<{ count: string }>(countSql),
+      this.clickhouse.queryWithParams<ClickHouseSignalRow>(sql, params),
+      this.clickhouse.queryOneWithParams<{ count: string }>(countSql, params),
     ]);
 
     return {
@@ -234,8 +234,11 @@ export class HuntService {
       return [];
     }
 
-    const start = startTime?.toISOString() ?? '1970-01-01 00:00:00';
-    const end = endTime?.toISOString() ?? new Date().toISOString();
+    // Validate inputs
+    this.validateIdentifier(campaignId, 'campaignId');
+
+    const start = startTime?.toISOString().replace('T', ' ').replace('Z', '') ?? '1970-01-01 00:00:00';
+    const end = endTime?.toISOString().replace('T', ' ').replace('Z', '') ?? new Date().toISOString().replace('T', ' ').replace('Z', '');
 
     const sql = `
       SELECT
@@ -249,13 +252,14 @@ export class HuntService {
         tenants_affected,
         confidence
       FROM campaign_history
-      WHERE campaign_id = '${this.escapeString(campaignId)}'
-        AND timestamp >= toDateTime64('${start}', 3)
-        AND timestamp <= toDateTime64('${end}', 3)
+      WHERE campaign_id = {campaignId:String}
+        AND timestamp >= toDateTime64({startTime:String}, 3)
+        AND timestamp <= toDateTime64({endTime:String}, 3)
       ORDER BY timestamp ASC
     `;
 
-    const rows = await this.clickhouse.query<ClickHouseCampaignRow>(sql);
+    const params = { campaignId, startTime: start, endTime: end };
+    const rows = await this.clickhouse.queryWithParams<ClickHouseCampaignRow>(sql, params);
 
     return rows.map((row) => ({
       timestamp: new Date(row.timestamp),
@@ -284,10 +288,36 @@ export class HuntService {
       return [];
     }
 
-    const start = startTime?.toISOString() ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const end = endTime?.toISOString() ?? new Date().toISOString();
+    // Validate inputs
+    if (tenantId) {
+      this.validateIdentifier(tenantId, 'tenantId');
+    }
+    if (signalTypes) {
+      signalTypes.forEach((t, i) => this.validateIdentifier(t, `signalTypes[${i}]`));
+    }
 
-    let sql = `
+    const start = startTime?.toISOString().replace('T', ' ').replace('Z', '')
+      ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').replace('Z', '');
+    const end = endTime?.toISOString().replace('T', ' ').replace('Z', '')
+      ?? new Date().toISOString().replace('T', ' ').replace('Z', '');
+
+    const params: Record<string, unknown> = { startTime: start, endTime: end };
+    const whereClauses: string[] = [
+      'hour >= toStartOfHour(toDateTime64({startTime:String}, 3))',
+      'hour <= toStartOfHour(toDateTime64({endTime:String}, 3))',
+    ];
+
+    if (tenantId) {
+      whereClauses.push('tenant_id = {tenantId:String}');
+      params.tenantId = tenantId;
+    }
+
+    if (signalTypes && signalTypes.length > 0) {
+      whereClauses.push('signal_type IN {signalTypes:Array(String)}');
+      params.signalTypes = signalTypes;
+    }
+
+    const sql = `
       SELECT
         hour,
         tenant_id,
@@ -298,22 +328,12 @@ export class HuntService {
         unique_ips,
         unique_fingerprints
       FROM signal_hourly_mv
-      WHERE hour >= toStartOfHour(toDateTime64('${start}', 3))
-        AND hour <= toStartOfHour(toDateTime64('${end}', 3))
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY hour DESC
+      LIMIT 1000
     `;
 
-    if (tenantId) {
-      sql += ` AND tenant_id = '${this.escapeString(tenantId)}'`;
-    }
-
-    if (signalTypes && signalTypes.length > 0) {
-      const types = signalTypes.map((t) => `'${this.escapeString(t)}'`).join(',');
-      sql += ` AND signal_type IN (${types})`;
-    }
-
-    sql += ' ORDER BY hour DESC LIMIT 1000';
-
-    const rows = await this.clickhouse.query<ClickHouseHourlyRow>(sql);
+    const rows = await this.clickhouse.queryWithParams<ClickHouseHourlyRow>(sql, params);
 
     return rows.map((row) => ({
       hour: new Date(row.hour),
@@ -340,12 +360,16 @@ export class HuntService {
     lastSeen: Date | null;
     signalTypes: string[];
   }> {
+    // Validate inputs
+    this.validateIpAddress(sourceIp, 'sourceIp');
+    const validDays = this.validatePositiveInt(days, 1, 365);
+
     if (!this.clickhouse?.isEnabled()) {
       // Fall back to PostgreSQL for recent data
       const signals = await this.prisma.signal.findMany({
         where: {
           sourceIp,
-          createdAt: { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) },
+          createdAt: { gte: new Date(Date.now() - validDays * 24 * 60 * 60 * 1000) },
         },
         select: { tenantId: true, signalType: true, createdAt: true },
       });
@@ -371,17 +395,18 @@ export class HuntService {
         max(timestamp) AS last_seen,
         groupUniqArray(signal_type) AS signal_types
       FROM signal_events
-      WHERE source_ip = toIPv4('${this.escapeString(sourceIp)}')
-        AND timestamp >= now() - INTERVAL ${days} DAY
+      WHERE source_ip = toIPv4({sourceIp:String})
+        AND timestamp >= now() - INTERVAL {days:UInt32} DAY
     `;
 
-    const result = await this.clickhouse.queryOne<{
+    const params = { sourceIp, days: validDays };
+    const result = await this.clickhouse.queryOneWithParams<{
       total_hits: string;
       tenants_hit: string;
       first_seen: string;
       last_seen: string;
       signal_types: string[];
-    }>(sql);
+    }>(sql, params);
 
     if (!result) {
       return {
@@ -491,41 +516,63 @@ export class HuntService {
     return where;
   }
 
-  private buildClickHouseQuery(query: HuntQuery): { sql: string; countSql: string } {
-    const limit = query.limit ?? 1000;
-    const offset = query.offset ?? 0;
+  private buildClickHouseQuery(query: HuntQuery): { sql: string; countSql: string; params: Record<string, unknown> } {
+    // Validate and sanitize numeric inputs
+    const limit = this.validatePositiveInt(query.limit ?? 1000, 1, 10000);
+    const offset = this.validatePositiveInt(query.offset ?? 0, 0, 1000000);
+    const minConfidence = query.minConfidence !== undefined
+      ? this.validateFloat(query.minConfidence, 0, 1)
+      : undefined;
 
-    let whereClause = `
-      timestamp >= toDateTime64('${query.startTime.toISOString()}', 3)
-      AND timestamp <= toDateTime64('${query.endTime.toISOString()}', 3)
-    `;
+    // Build parameterized query
+    const params: Record<string, unknown> = {
+      startTime: query.startTime.toISOString().replace('T', ' ').replace('Z', ''),
+      endTime: query.endTime.toISOString().replace('T', ' ').replace('Z', ''),
+      limit,
+      offset,
+    };
+
+    const whereClauses: string[] = [
+      'timestamp >= toDateTime64({startTime:String}, 3)',
+      'timestamp <= toDateTime64({endTime:String}, 3)',
+    ];
 
     if (query.tenantId) {
-      whereClause += ` AND tenant_id = '${this.escapeString(query.tenantId)}'`;
+      this.validateIdentifier(query.tenantId, 'tenantId');
+      whereClauses.push('tenant_id = {tenantId:String}');
+      params.tenantId = query.tenantId;
     }
 
     if (query.signalTypes && query.signalTypes.length > 0) {
-      const types = query.signalTypes.map((t) => `'${this.escapeString(t)}'`).join(',');
-      whereClause += ` AND signal_type IN (${types})`;
+      query.signalTypes.forEach((t, i) => this.validateIdentifier(t, `signalTypes[${i}]`));
+      whereClauses.push('signal_type IN {signalTypes:Array(String)}');
+      params.signalTypes = query.signalTypes;
     }
 
     if (query.sourceIps && query.sourceIps.length > 0) {
-      const ips = query.sourceIps.map((ip) => `toIPv4('${this.escapeString(ip)}')`).join(',');
-      whereClause += ` AND source_ip IN (${ips})`;
+      query.sourceIps.forEach((ip, i) => this.validateIpAddress(ip, `sourceIps[${i}]`));
+      whereClauses.push('source_ip IN {sourceIps:Array(IPv4)}');
+      params.sourceIps = query.sourceIps;
     }
 
     if (query.severities && query.severities.length > 0) {
-      const sevs = query.severities.map((s) => `'${this.escapeString(s)}'`).join(',');
-      whereClause += ` AND severity IN (${sevs})`;
+      query.severities.forEach((s, i) => this.validateIdentifier(s, `severities[${i}]`));
+      whereClauses.push('severity IN {severities:Array(String)}');
+      params.severities = query.severities;
     }
 
-    if (query.minConfidence !== undefined) {
-      whereClause += ` AND confidence >= ${query.minConfidence}`;
+    if (minConfidence !== undefined) {
+      whereClauses.push('confidence >= {minConfidence:Float64}');
+      params.minConfidence = minConfidence;
     }
 
     if (query.anonFingerprint) {
-      whereClause += ` AND anon_fingerprint = '${this.escapeString(query.anonFingerprint)}'`;
+      this.validateIdentifier(query.anonFingerprint, 'anonFingerprint');
+      whereClauses.push('anon_fingerprint = {anonFingerprint:String}');
+      params.anonFingerprint = query.anonFingerprint;
     }
+
+    const whereClause = whereClauses.join(' AND ');
 
     const sql = `
       SELECT
@@ -543,7 +590,7 @@ export class HuntService {
       FROM signal_events
       WHERE ${whereClause}
       ORDER BY timestamp DESC
-      LIMIT ${limit} OFFSET ${offset}
+      LIMIT {limit:UInt32} OFFSET {offset:UInt32}
     `;
 
     const countSql = `
@@ -552,7 +599,7 @@ export class HuntService {
       WHERE ${whereClause}
     `;
 
-    return { sql, countSql };
+    return { sql, countSql, params };
   }
 
   private mapSignalToResult(signal: Signal): SignalResult {
@@ -596,20 +643,80 @@ export class HuntService {
     };
   }
 
+  // =============================================================================
+  // Input Validation Helpers (SQL Injection Prevention)
+  // =============================================================================
+
   /**
-   * Escape string for ClickHouse SQL injection prevention.
-   * CRITICAL: Backslash must be escaped FIRST, then quotes.
-   * Otherwise: "test'" → "test\'" → "test\\'" (broken)
-   * Correct:  "test'" → "test'" → "test\'" (safe)
+   * Validate a positive integer within bounds
+   * @throws Error if value is not a valid integer within bounds
    */
-  private escapeString(str: string): string {
-    return str
-      .replace(/\\/g, '\\\\')   // Backslash FIRST
-      .replace(/'/g, "\\'")     // Then single quotes
-      .replace(/\n/g, '\\n')    // Newlines
-      .replace(/\r/g, '\\r')    // Carriage returns
-      .replace(/\0/g, '');      // Null bytes (remove completely)
+  private validatePositiveInt(value: number, min: number, max: number): number {
+    if (!Number.isInteger(value) || !Number.isFinite(value)) {
+      throw new Error(`Invalid integer value: ${value}`);
+    }
+    if (value < min || value > max) {
+      throw new Error(`Value ${value} out of range [${min}, ${max}]`);
+    }
+    return value;
   }
+
+  /**
+   * Validate a floating point number within bounds
+   * @throws Error if value is not a valid number within bounds
+   */
+  private validateFloat(value: number, min: number, max: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`Invalid float value: ${value}`);
+    }
+    if (value < min || value > max) {
+      throw new Error(`Value ${value} out of range [${min}, ${max}]`);
+    }
+    return value;
+  }
+
+  /**
+   * Validate an identifier (tenant ID, signal type, fingerprint, etc.)
+   * Allows alphanumeric, hyphens, underscores, and periods (for UUIDs and domains)
+   * @throws Error if identifier contains invalid characters
+   */
+  private validateIdentifier(value: string, fieldName: string): void {
+    if (typeof value !== 'string' || value.length === 0 || value.length > 256) {
+      throw new Error(`Invalid ${fieldName}: must be a non-empty string <= 256 chars`);
+    }
+    // Allow alphanumeric, hyphen, underscore, period, colon (for namespaced types)
+    const validPattern = /^[a-zA-Z0-9_\-.:]+$/;
+    if (!validPattern.test(value)) {
+      throw new Error(`Invalid ${fieldName}: contains disallowed characters`);
+    }
+  }
+
+  /**
+   * Validate an IP address (IPv4 or IPv6)
+   * @throws Error if not a valid IP address
+   */
+  private validateIpAddress(value: string, fieldName: string): void {
+    if (typeof value !== 'string') {
+      throw new Error(`Invalid ${fieldName}: must be a string`);
+    }
+    // Basic IPv4 pattern
+    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    // Basic IPv6 pattern (simplified)
+    const ipv6Pattern = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+
+    if (!ipv4Pattern.test(value) && !ipv6Pattern.test(value)) {
+      throw new Error(`Invalid ${fieldName}: not a valid IP address`);
+    }
+
+    // Additional IPv4 validation - each octet must be 0-255
+    if (ipv4Pattern.test(value)) {
+      const octets = value.split('.').map(Number);
+      if (octets.some((o) => o < 0 || o > 255)) {
+        throw new Error(`Invalid ${fieldName}: IP address octets must be 0-255`);
+      }
+    }
+  }
+
 }
 
 // =============================================================================
