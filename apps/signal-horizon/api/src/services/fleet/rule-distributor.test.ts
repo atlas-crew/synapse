@@ -568,9 +568,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'strategy selection (rolling)');
 
       expect(result.totalTargets).toBe(1);
     });
@@ -1094,8 +1092,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       });
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'tenant isolation (all sensors owned)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(2);
@@ -1136,8 +1133,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       });
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'tenant isolation (empty sensors)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(0);
@@ -1159,8 +1155,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'immediate deployment (all sensors)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(3);
@@ -1188,8 +1183,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      await resultPromise;
+      await settleResult(resultPromise, 'immediate deployment (sync state creation)');
 
       // Should have called upsert for each sensor-rule combination
       expect(mockPrisma.ruleSyncState.upsert).toHaveBeenCalledTimes(4);
@@ -1223,8 +1217,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      await resultPromise;
+      await settleResult(resultPromise, 'immediate deployment (hash)');
 
       const sentPayload = vi.mocked(mockFleetCommander.sendCommandToMultiple).mock.calls[0][2]
         .payload as { hash: string };
@@ -1247,8 +1240,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'immediate deployment (command ids)');
 
       expect(result.results).toHaveLength(2);
       expect(result.results[0].commandId).toBe('cmd-001');
@@ -1446,8 +1438,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'scheduled deployment (future)');
 
       // Should return pending immediately
       expect(result.success).toBe(true);
@@ -1484,8 +1475,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'scheduled deployment (past)');
 
       expect(result.success).toBe(true);
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -1521,8 +1511,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      await resultPromise;
+      await settleResult(resultPromise, 'scheduled deployment (delay calc)');
 
       // Verify logged delay is approximately correct (log message was updated to reflect persistence)
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -1599,8 +1588,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'rollback (failure threshold)');
 
       expect(result.success).toBe(false);
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -1642,8 +1630,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      await resultPromise;
+      await settleResult(resultPromise, 'rollback (previous version)');
 
       // Rollback should trigger deployment of previous rules
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -1685,8 +1672,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      await resultPromise;
+      await settleResult(resultPromise, 'rollback (per-sensor success)');
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.objectContaining({ sensorId: expect.any(String) }),
@@ -1730,8 +1716,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      await resultPromise;
+      await settleResult(resultPromise, 'rollback (failure logging)');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1773,8 +1758,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (healthy sensor)');
 
       expect(result.success).toBe(true);
       expect(result.failureCount).toBe(0);
@@ -1806,8 +1790,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (stale heartbeat)');
 
       // Degraded sensors count as failures
       expect(result.failureCount).toBeGreaterThan(0);
@@ -1839,8 +1822,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (disconnected sensor)');
 
       expect(result.failureCount).toBeGreaterThan(0);
     });
@@ -1866,8 +1848,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (sensor missing)');
 
       expect(result.failureCount).toBeGreaterThan(0);
     });
@@ -1896,8 +1877,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (db error)');
 
       expect(result.failureCount).toBeGreaterThan(0);
     });
@@ -1924,8 +1904,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (timeout)');
 
       // Should complete with health check timeout failure
       expect(result.failureCount).toBeGreaterThan(0);
@@ -1963,8 +1942,10 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(500);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'health check (poll interval)', {
+        stepMs: 50,
+        maxSteps: 50,
+      });
 
       expect(result.success).toBe(true);
       expect(pollCount).toBeGreaterThanOrEqual(3);
@@ -2290,8 +2271,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       });
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'distribute rules (immediate)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(2);
@@ -2352,8 +2332,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRules(TEST_TENANT_ID, sensorIds, rules);
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'push rules (simple)');
 
       expect(result.success).toBe(true);
       expect(result.totalTargets).toBe(2);
@@ -2515,8 +2494,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(100);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'error handling (offline immediate)');
 
       // Returns success because commands were queued (delivery is async)
       expect(result.success).toBe(true);
@@ -2560,8 +2538,7 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      await vi.advanceTimersByTimeAsync(5000);
-      const result = await resultPromise;
+      const result = await settleResult(resultPromise, 'error handling (partial failures)');
 
       expect(result.failureCount).toBeGreaterThanOrEqual(1);
       expect(result.results.some((r) => r.error?.includes('Network timeout'))).toBe(true);
