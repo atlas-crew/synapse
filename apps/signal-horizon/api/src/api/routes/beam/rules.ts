@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
+import { sendProblem } from '../../../lib/problem-details.js';
 import { CreateRuleSchema, UUIDParamSchema } from './validation.js';
 
 export function createRulesRouter(prisma: PrismaClient, logger: Logger): Router {
@@ -65,9 +66,9 @@ export function createRulesRouter(prisma: PrismaClient, logger: Logger): Router 
     });
 
     if (!rule) {
-      return res.status(404).json({
+      return sendProblem(res, 404, 'Rule not found', {
         code: 'NOT_FOUND',
-        message: 'Rule not found',
+        instance: req.originalUrl,
       });
     }
 

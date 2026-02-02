@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
+import { sendProblem } from '../../../lib/problem-details.js';
 import { ThreatQuerySchema, UUIDParamSchema } from './validation.js';
 
 export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Router {
@@ -94,9 +95,9 @@ export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Route
     });
 
     if (!block) {
-      return res.status(404).json({
+      return sendProblem(res, 404, 'Block decision not found', {
         code: 'NOT_FOUND',
-        message: 'Block decision not found',
+        instance: req.originalUrl,
       });
     }
 

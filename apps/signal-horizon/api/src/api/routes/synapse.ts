@@ -9,6 +9,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Logger } from 'pino';
 import { requireScope } from '../middleware/auth.js';
+import { sendProblem } from '../../lib/problem-details.js';
 import {
   SynapseProxyService,
   SynapseProxyError,
@@ -143,7 +144,7 @@ export function createSynapseRoutes(
    * Helper to handle synapse proxy errors consistently
    * Uses the enhanced SynapseProxyError.toJSON() for structured responses
    */
-  function handleError(res: Response, error: unknown, context: string): void {
+  function handleError(req: Request, res: Response, error: unknown, context: string): void {
     if (error instanceof SynapseProxyError) {
       const statusMap: Record<string, number> = {
         TUNNEL_NOT_FOUND: 503,
@@ -160,14 +161,25 @@ export function createSynapseRoutes(
       };
 
       const status = statusMap[error.code] || 500;
-      // Use enhanced toJSON() for structured response with suggestions
-      res.status(status).json(error.toJSON());
+      const payload = error.toJSON();
+      sendProblem(res, status, payload.error, {
+        code: payload.code,
+        instance: req.originalUrl,
+        details: {
+          retryable: payload.retryable,
+          suggestion: payload.suggestion,
+          upstreamStatus: payload.status,
+        },
+      });
     } else {
       logger.error({ error, context }, 'Synapse proxy error');
-      res.status(500).json({
-        error: 'Internal server error',
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      sendProblem(res, 500, 'Internal server error', {
         code: 'INTERNAL_ERROR',
-        retryable: false,
+        instance: req.originalUrl,
+        details: isDevelopment
+          ? { message: error instanceof Error ? error.message : String(error) }
+          : { retryable: false },
       });
     }
   }
@@ -233,7 +245,7 @@ export function createSynapseRoutes(
         const status = await synapseProxy.getSensorStatus(sensorId, tenantId);
         res.json(status);
       } catch (error) {
-        handleError(res, error, 'getSensorStatus');
+        handleError(req, res, error, 'getSensorStatus');
       }
     }
   );
@@ -269,7 +281,7 @@ export function createSynapseRoutes(
           : await synapseProxy.getSensorConfig(sensorId, tenantId);
         res.json(config);
       } catch (error) {
-        handleError(res, error, 'getSensorConfig');
+        handleError(req, res, error, 'getSensorConfig');
       }
     }
   );
@@ -304,7 +316,7 @@ export function createSynapseRoutes(
         );
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'updateSensorConfig');
+        handleError(req, res, error, 'updateSensorConfig');
       }
     }
   );
@@ -411,7 +423,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listEntities(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'listEntities');
+        handleError(req, res, error, 'listEntities');
       }
     }
   );
@@ -431,7 +443,7 @@ export function createSynapseRoutes(
         const entity = await synapseProxy.getEntity(sensorId, tenantId, entityId);
         res.json(entity);
       } catch (error) {
-        handleError(res, error, 'getEntity');
+        handleError(req, res, error, 'getEntity');
       }
     }
   );
@@ -452,7 +464,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, entityId, tenantId }, 'Entity released');
         res.status(204).send();
       } catch (error) {
-        handleError(res, error, 'releaseEntity');
+        handleError(req, res, error, 'releaseEntity');
       }
     }
   );
@@ -485,7 +497,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listBlocks(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'listBlocks');
+        handleError(req, res, error, 'listBlocks');
       }
     }
   );
@@ -519,7 +531,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, blockId: block.id, tenantId }, 'Block added');
         res.status(201).json(block);
       } catch (error) {
-        handleError(res, error, 'addBlock');
+        handleError(req, res, error, 'addBlock');
       }
     }
   );
@@ -540,7 +552,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, blockId, tenantId }, 'Block removed');
         res.status(204).send();
       } catch (error) {
-        handleError(res, error, 'removeBlock');
+        handleError(req, res, error, 'removeBlock');
       }
     }
   );
@@ -573,7 +585,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.listRules(sensorId, tenantId, parsed.data);
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'listRules');
+        handleError(req, res, error, 'listRules');
       }
     }
   );
@@ -609,7 +621,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, ruleId: rule.id, tenantId }, 'Rule added');
         res.status(201).json(rule);
       } catch (error) {
-        handleError(res, error, 'addRule');
+        handleError(req, res, error, 'addRule');
       }
     }
   );
@@ -639,7 +651,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, ruleId, tenantId }, 'Rule updated');
         res.json(rule);
       } catch (error) {
-        handleError(res, error, 'updateRule');
+        handleError(req, res, error, 'updateRule');
       }
     }
   );
@@ -660,7 +672,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, ruleId, tenantId }, 'Rule deleted');
         res.status(204).send();
       } catch (error) {
-        handleError(res, error, 'deleteRule');
+        handleError(req, res, error, 'deleteRule');
       }
     }
   );
@@ -701,7 +713,7 @@ export function createSynapseRoutes(
         });
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'listActors');
+        handleError(req, res, error, 'listActors');
       }
     }
   );
@@ -721,7 +733,7 @@ export function createSynapseRoutes(
         const actor = await synapseProxy.getActor(sensorId, tenantId, actorId);
         res.json(actor);
       } catch (error) {
-        handleError(res, error, 'getActor');
+        handleError(req, res, error, 'getActor');
       }
     }
   );
@@ -755,7 +767,7 @@ export function createSynapseRoutes(
         );
         res.json(timeline);
       } catch (error) {
-        handleError(res, error, 'getActorTimeline');
+        handleError(req, res, error, 'getActorTimeline');
       }
     }
   );
@@ -794,7 +806,7 @@ export function createSynapseRoutes(
         });
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'listSessions');
+        handleError(req, res, error, 'listSessions');
       }
     }
   );
@@ -854,7 +866,7 @@ export function createSynapseRoutes(
 
         res.json({ campaigns: filtered.slice(offset, offset + limit) });
       } catch (error) {
-        handleError(res, error, 'listCampaigns');
+        handleError(req, res, error, 'listCampaigns');
       }
     }
   );
@@ -896,7 +908,7 @@ export function createSynapseRoutes(
           })) ?? [],
         });
       } catch (error) {
-        handleError(res, error, 'getCampaign');
+        handleError(req, res, error, 'getCampaign');
       }
     }
   );
@@ -922,7 +934,7 @@ export function createSynapseRoutes(
         }));
         res.json({ campaignId, actors });
       } catch (error) {
-        handleError(res, error, 'listCampaignActors');
+        handleError(req, res, error, 'listCampaignActors');
       }
     }
   );
@@ -942,7 +954,7 @@ export function createSynapseRoutes(
         const result = await synapseProxy.getCampaignGraph(sensorId, tenantId, campaignId);
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'getCampaignGraph');
+        handleError(req, res, error, 'getCampaignGraph');
       }
     }
   );
@@ -962,7 +974,7 @@ export function createSynapseRoutes(
         const session = await synapseProxy.getSession(sensorId, tenantId, sessionId);
         res.json(session);
       } catch (error) {
-        handleError(res, error, 'getSession');
+        handleError(req, res, error, 'getSession');
       }
     }
   );
@@ -999,7 +1011,7 @@ export function createSynapseRoutes(
         );
         res.json(result);
       } catch (error) {
-        handleError(res, error, 'evaluateRequest');
+        handleError(req, res, error, 'evaluateRequest');
       }
     }
   );
@@ -1026,7 +1038,7 @@ export function createSynapseRoutes(
         logger.info({ sensorId, tenantId }, 'Sensor cache cleared');
         res.json({ message: 'Cache cleared' });
       } catch (error) {
-        handleError(res, error, 'clearCache');
+        handleError(req, res, error, 'clearCache');
       }
     }
   );

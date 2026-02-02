@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
+import { sendProblem } from '../../../lib/problem-details.js';
 import { EndpointQuerySchema, UUIDParamSchema } from './validation.js';
 
 export function createEndpointsRouter(prisma: PrismaClient, logger: Logger): Router {
@@ -76,9 +77,9 @@ export function createEndpointsRouter(prisma: PrismaClient, logger: Logger): Rou
     });
 
     if (!endpoint) {
-      return res.status(404).json({
+      return sendProblem(res, 404, 'Endpoint not found', {
         code: 'NOT_FOUND',
-        message: 'Endpoint not found',
+        instance: req.originalUrl,
       });
     }
 

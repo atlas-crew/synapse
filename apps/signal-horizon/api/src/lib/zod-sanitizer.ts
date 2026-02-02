@@ -8,6 +8,7 @@
 
 import { ZodError, type ZodSchema } from 'zod';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import { sendProblem } from './problem-details.js';
 
 export interface SanitizeOptions {
   /** Run in production mode (hide field names and messages) */
@@ -132,13 +133,17 @@ export function createValidationMiddleware<T>(
     }
 
     if (production) {
-      res.status(statusCode).json({ error: genericMessage });
+      sendProblem(res, statusCode, genericMessage, {
+        code: 'VALIDATION_ERROR',
+        instance: req.originalUrl,
+      });
       return;
     }
 
-    res.status(statusCode).json({
-      error: sanitizeZodError(result.error, { production: false }),
-      source,
+    sendProblem(res, statusCode, sanitizeZodError(result.error, { production: false }), {
+      code: 'VALIDATION_ERROR',
+      instance: req.originalUrl,
+      details: { source },
     });
   };
 }
@@ -184,12 +189,16 @@ export function createCombinedValidation(
       }
 
       if (production) {
-        res.status(statusCode).json({ error: genericMessage });
+        sendProblem(res, statusCode, genericMessage, {
+          code: 'VALIDATION_ERROR',
+          instance: req.originalUrl,
+        });
         return;
       }
 
-      res.status(statusCode).json({
-        error: genericMessage,
+      sendProblem(res, statusCode, genericMessage, {
+        code: 'VALIDATION_ERROR',
+        instance: req.originalUrl,
         details: errors,
       });
       return;
