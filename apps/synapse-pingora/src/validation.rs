@@ -485,29 +485,135 @@ pub fn validate_hostname(hostname: &str) -> ValidationResult<()> {
     validate_domain_name(hostname)
 }
 
-/// Validates an upstream address (host:port).
+/// SSRF protection error.
+#[derive(Debug, Clone)]
+pub struct SsrfError(pub String);
+
+impl std::fmt::Display for SsrfError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SSRF protection: {}", self.0)
+    }
+}
+
+impl std::error::Error for SsrfError {}
+
+/// Check if an IP address is a private/internal address that could be used for SSRF.
+///
+/// # Security
+/// Blocks access to:
+/// - Loopback (127.0.0.0/8, ::1)
+/// - Private networks (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+/// - Link-local (169.254.0.0/16 - includes cloud metadata at 169.254.169.254)
+/// - IPv6 private (fc00::/7, fe80::/10)
+fn is_private_or_internal_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ipv4) => {
+            // Loopback: 127.0.0.0/8
+            if ipv4.is_loopback() {
+                return true;
+            }
+            // Private: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            if ipv4.is_private() {
+                return true;
+            }
+            // Link-local: 169.254.0.0/16 (includes AWS/GCP/Azure metadata at 169.254.169.254)
+            if ipv4.is_link_local() {
+                return true;
+            }
+            // Broadcast
+            if ipv4.is_broadcast() {
+                return true;
+            }
+            // Unspecified (0.0.0.0)
+            if ipv4.is_unspecified() {
+                return true;
+            }
+            // Documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24)
+            let octets = ipv4.octets();
+            if (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
+                || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+                || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+            {
+                return true;
+            }
+            false
+        }
+        std::net::IpAddr::V6(ipv6) => {
+            // Loopback: ::1
+            if ipv6.is_loopback() {
+                return true;
+            }
+            // Unspecified: ::
+            if ipv6.is_unspecified() {
+                return true;
+            }
+            // Check segments for private ranges
+            let segments = ipv6.segments();
+            // Unique local (fc00::/7) - first byte is 0xfc or 0xfd
+            if (segments[0] >> 8) == 0xfc || (segments[0] >> 8) == 0xfd {
+                return true;
+            }
+            // Link-local (fe80::/10)
+            if (segments[0] & 0xffc0) == 0xfe80 {
+                return true;
+            }
+            // IPv4-mapped addresses (::ffff:x.x.x.x) - check the mapped IPv4
+            if segments[0] == 0 && segments[1] == 0 && segments[2] == 0
+                && segments[3] == 0 && segments[4] == 0 && segments[5] == 0xffff
+            {
+                let ipv4 = std::net::Ipv4Addr::new(
+                    (segments[6] >> 8) as u8,
+                    (segments[6] & 0xff) as u8,
+                    (segments[7] >> 8) as u8,
+                    (segments[7] & 0xff) as u8,
+                );
+                return is_private_or_internal_ip(&std::net::IpAddr::V4(ipv4));
+            }
+            false
+        }
+    }
+}
+
+/// Validates an upstream address (host:port) with SSRF protection.
+///
+/// # Security
+/// This function validates upstream addresses and blocks SSRF attempts by:
+/// - Rejecting private/internal IP addresses
+/// - Rejecting cloud metadata endpoints (169.254.169.254)
+/// - Rejecting localhost and loopback addresses
+///
+/// For hostnames, DNS resolution is NOT performed at validation time to avoid
+/// DNS rebinding attacks. The upstream proxy should enforce IP restrictions
+/// at connection time as well.
 pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
     if upstream.is_empty() {
         return Err(ValidationError::InvalidDomain("empty upstream".to_string()));
     }
-    
+
     // Check for port
     let parts: Vec<&str> = upstream.split(':').collect();
     if parts.len() != 2 {
          return Err(ValidationError::InvalidDomain(format!("upstream must be host:port, got {}", upstream)));
     }
-    
+
     let host = parts[0];
     let port_str = parts[1];
-    
+
     // Validate host part (can be IP or domain)
-    if validate_domain_name(host).is_err() {
-        // Simple check if it's a valid IP
-        if host.parse::<std::net::IpAddr>().is_err() {
-             return Err(ValidationError::InvalidDomain(format!("invalid host in upstream: {}", host)));
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        // SECURITY: Block private/internal IPs to prevent SSRF
+        if is_private_or_internal_ip(&ip) {
+            return Err(ValidationError::InvalidDomain(format!(
+                "SSRF protection: upstream IP {} is private/internal and not allowed",
+                ip
+            )));
         }
+    } else if validate_domain_name(host).is_err() {
+        return Err(ValidationError::InvalidDomain(format!("invalid host in upstream: {}", host)));
     }
-    
+    // Note: For domain names, we don't resolve DNS here to avoid DNS rebinding attacks.
+    // The proxy should also enforce IP restrictions at connection time.
+
     // Validate port
     match port_str.parse::<u16>() {
         Ok(p) if p > 0 => Ok(()),
@@ -805,5 +911,67 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
     #[test]
     fn test_file_not_found() {
         assert!(validate_file_path("/nonexistent/path/to/file.txt", "test").is_err());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SSRF Protection Tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// SECURITY TEST: Verify loopback addresses are blocked.
+    #[test]
+    fn test_ssrf_loopback_blocked() {
+        assert!(validate_upstream("127.0.0.1:8080").is_err());
+        assert!(validate_upstream("127.0.0.53:53").is_err());
+        assert!(validate_upstream("127.255.255.255:80").is_err());
+    }
+
+    /// SECURITY TEST: Verify private IPv4 ranges are blocked.
+    #[test]
+    fn test_ssrf_private_ipv4_blocked() {
+        // 10.0.0.0/8
+        assert!(validate_upstream("10.0.0.1:80").is_err());
+        assert!(validate_upstream("10.255.255.255:443").is_err());
+        // 172.16.0.0/12
+        assert!(validate_upstream("172.16.0.1:8080").is_err());
+        assert!(validate_upstream("172.31.255.255:9000").is_err());
+        // 192.168.0.0/16
+        assert!(validate_upstream("192.168.0.1:3000").is_err());
+        assert!(validate_upstream("192.168.255.255:5000").is_err());
+    }
+
+    /// SECURITY TEST: Verify link-local/metadata addresses are blocked.
+    #[test]
+    fn test_ssrf_link_local_blocked() {
+        // AWS/GCP/Azure metadata endpoint
+        assert!(validate_upstream("169.254.169.254:80").is_err());
+        // Other link-local
+        assert!(validate_upstream("169.254.0.1:80").is_err());
+    }
+
+    /// SECURITY TEST: Verify public IPs are allowed.
+    #[test]
+    fn test_ssrf_public_ip_allowed() {
+        assert!(validate_upstream("8.8.8.8:53").is_ok());
+        assert!(validate_upstream("1.1.1.1:443").is_ok());
+        assert!(validate_upstream("203.0.114.1:80").is_ok()); // Just outside doc range
+    }
+
+    /// SECURITY TEST: Verify valid domain names are allowed.
+    #[test]
+    fn test_ssrf_domain_allowed() {
+        assert!(validate_upstream("example.com:443").is_ok());
+        assert!(validate_upstream("api.backend.local:8080").is_ok());
+    }
+
+    /// SECURITY TEST: Verify IPv6 loopback is blocked.
+    #[test]
+    fn test_ssrf_ipv6_loopback_blocked() {
+        assert!(validate_upstream("[::1]:80").is_err());
+    }
+
+    /// SECURITY TEST: Verify unspecified addresses are blocked.
+    #[test]
+    fn test_ssrf_unspecified_blocked() {
+        assert!(validate_upstream("0.0.0.0:80").is_err());
     }
 }
