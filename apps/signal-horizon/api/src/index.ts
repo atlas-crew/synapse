@@ -45,6 +45,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createHash } from 'node:crypto';
 // Security middleware
 import { jsonDepthLimit } from './middleware/json-depth.js';
+import { requestId } from './middleware/request-id.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -74,6 +75,10 @@ const prisma = new PrismaClient({
 // Initialize Express
 const app = express();
 const httpServer = createServer(app);
+
+// Request ID middleware - must be first for tracing
+// Accepts X-Request-ID header or generates UUID v4
+app.use(requestId());
 
 // Middleware - Security headers with comprehensive protection
 app.use(helmet({
@@ -134,7 +139,14 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 // JSON depth limiting to prevent stack overflow attacks (WS4-003)
 app.use(jsonDepthLimit(20));
-app.use(pinoHttp({ logger }));
+app.use(pinoHttp({
+  logger,
+  // Include request ID in all log entries for tracing
+  genReqId: (req) => (req as Express.Request).id ?? 'unknown',
+  customProps: (req) => ({
+    requestId: (req as Express.Request).id,
+  }),
+}));
 
 // Health check
 app.get('/health', (_req, res) => {
