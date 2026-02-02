@@ -38,14 +38,29 @@ const failedAuthCleanupInterval = setInterval(() => {
 failedAuthCleanupInterval.unref();
 
 /**
+ * Check if auth lockout is disabled (dev mode or explicit bypass)
+ */
+function isAuthLockoutDisabled(): boolean {
+  return process.env.NODE_ENV === 'development' || process.env.DISABLE_AUTH_LOCKOUT === 'true';
+}
+
+/**
  * Check if an IP is currently locked out due to too many failed auth attempts.
  * Call this BEFORE checking credentials.
+ *
+ * Note: Auth lockout is disabled in development mode to prevent blocking
+ * during local testing when auth might fail frequently.
  *
  * @returns { locked: true, retryAfter } if locked out, { locked: false } otherwise
  */
 export function checkAuthLockout(
   clientIp: string
 ): { locked: true; retryAfterSeconds: number } | { locked: false } {
+  // Skip lockout in dev mode
+  if (isAuthLockoutDisabled()) {
+    return { locked: false };
+  }
+
   const now = Date.now();
   const entry = failedAuthStore.get(clientIp);
 
@@ -66,8 +81,15 @@ export function checkAuthLockout(
 /**
  * Record a failed authentication attempt for an IP.
  * Call this AFTER authentication fails.
+ *
+ * Note: Skipped in dev mode to prevent lockout during testing.
  */
 export function recordFailedAuth(clientIp: string): void {
+  // Skip recording in dev mode
+  if (isAuthLockoutDisabled()) {
+    return;
+  }
+
   const now = Date.now();
   let entry = failedAuthStore.get(clientIp);
 
