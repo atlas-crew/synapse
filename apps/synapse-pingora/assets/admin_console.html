@@ -3541,6 +3541,43 @@ Authorization: Bearer token123"></textarea>
       localStorage.setItem('synapseAdminApiKey', apiKey);
     }
 
+    function getCookie(name) {
+      const parts = document.cookie.split(';').map(part => part.trim());
+      for (const part of parts) {
+        if (!part) continue;
+        const [key, value] = part.split('=');
+        if (key === name) {
+          return decodeURIComponent(value || '');
+        }
+      }
+      return '';
+    }
+
+    function isMutationMethod(method) {
+      return ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+    }
+
+    async function ensureCsrfToken() {
+      const existing = getCookie('synapse_csrf');
+      if (existing) return existing;
+      if (!apiKey) return '';
+
+      try {
+        const response = await fetch('/csrf', {
+          method: 'GET',
+          headers: { 'X-Admin-Key': apiKey }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        return data.csrf_token || getCookie('synapse_csrf') || '';
+      } catch (error) {
+        console.warn('Failed to fetch CSRF token', error);
+        return '';
+      }
+    }
+
     async function fetchApi(endpoint, options = {}) {
       const headers = {
         'Content-Type': 'application/json',
@@ -3549,9 +3586,16 @@ Authorization: Bearer token123"></textarea>
       if (apiKey) {
         headers['X-Admin-Key'] = apiKey;
       }
+      const method = (options.method || 'GET').toUpperCase();
+      if (isMutationMethod(method)) {
+        const csrfToken = await ensureCsrfToken();
+        if (csrfToken) {
+          headers['X-CSRF-Token'] = csrfToken;
+        }
+      }
 
       try {
-        const response = await fetch(endpoint, { ...options, headers });
+        const response = await fetch(endpoint, { ...options, method, headers });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
