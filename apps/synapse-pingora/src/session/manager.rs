@@ -1563,6 +1563,48 @@ mod tests {
         assert!(manager.stats().total_created.load(Ordering::Relaxed) > 0);
     }
 
+    #[test]
+    fn test_stress_concurrent_sessions() {
+        let manager = Arc::new(SessionManager::new(SessionConfig {
+            max_sessions: 10_000,
+            session_ttl_secs: 86_400,
+            idle_timeout_secs: 86_400,
+            ..Default::default()
+        }));
+        let mut handles = vec![];
+
+        for thread_id in 0..16 {
+            let manager = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                let actor_id = format!("actor_{}", thread_id);
+                for i in 0..300 {
+                    let ip: IpAddr =
+                        format!("10.{}.{}.{}", thread_id, i / 256, i % 256).parse().unwrap();
+                    let token = format!("token_t{}_{}", thread_id, i);
+                    let ja4 = format!("ja4_t{}_{}", thread_id, i % 10);
+
+                    manager.validate_request(&token, ip, Some(&ja4));
+
+                    if i % 3 == 0 {
+                        let _ = manager.bind_to_actor(&token, &actor_id);
+                    }
+                    if i % 2 == 0 {
+                        manager.touch_session(&token);
+                    }
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let stats = manager.stats();
+        assert!(manager.len() > 0);
+        assert!(stats.total_created.load(Ordering::Relaxed) > 0);
+        assert!(!manager.get_actor_sessions("actor_0").is_empty());
+    }
+
     // ========================================================================
     // Statistics Tests
     // ========================================================================

@@ -1450,6 +1450,47 @@ mod tests {
         assert!(manager.stats().total_created.load(Ordering::Relaxed) > 0);
     }
 
+    #[test]
+    fn test_stress_concurrent_updates() {
+        let manager = Arc::new(ActorManager::new(ActorConfig {
+            max_actors: 10_000,
+            max_fingerprint_mappings: 50_000,
+            ..Default::default()
+        }));
+        let mut handles = vec![];
+
+        // Higher concurrency and mixed operations to exercise thread safety.
+        for thread_id in 0..16 {
+            let manager = Arc::clone(&manager);
+            handles.push(thread::spawn(move || {
+                for i in 0..500 {
+                    let ip: IpAddr =
+                        format!("10.{}.{}.{}", thread_id, i / 256, i % 256).parse().unwrap();
+                    let fingerprint = format!("fp_t{}_{}", thread_id, i % 20);
+                    let actor_id = manager.get_or_create_actor(ip, Some(&fingerprint));
+
+                    manager.record_rule_match(&actor_id, "stress", 0.5, "stress");
+
+                    if i % 5 == 0 {
+                        manager.touch_actor(&actor_id);
+                    }
+                    if i % 200 == 0 {
+                        manager.block_actor(&actor_id, "stress");
+                    }
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let stats = manager.stats();
+        assert!(manager.len() > 0);
+        assert!(stats.total_created.load(Ordering::Relaxed) > 0);
+        assert!(stats.total_rule_matches.load(Ordering::Relaxed) > 0);
+    }
+
     // ========================================================================
     // Statistics Tests
     // ========================================================================
