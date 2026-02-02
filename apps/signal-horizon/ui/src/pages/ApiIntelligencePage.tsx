@@ -30,6 +30,8 @@ export default function ApiIntelligencePage() {
     stats,
     endpoints,
     signals,
+    inventory,
+    schemaChanges,
     isLoading,
     error,
     refetch,
@@ -40,6 +42,62 @@ export default function ApiIntelligencePage() {
     hasMore,
   } = useApiIntelligence({ pollInterval: 30000 });
   const [searchQuery, setSearchQuery] = useState('');
+
+  const schemaDriftGroups = useMemo(() => {
+    if (!schemaChanges || schemaChanges.length === 0) return [];
+
+    const groups = new Map<string, {
+      endpoint: string;
+      method: string;
+      detectedAt: string;
+      changes: Array<{
+        field: string;
+        oldType?: string;
+        newType?: string;
+        description: string;
+        severity: 'low' | 'medium' | 'high';
+      }>;
+    }>();
+
+    const toSeverity = (riskLevel: string): 'low' | 'medium' | 'high' => {
+      const normalized = riskLevel.toLowerCase();
+      if (normalized === 'high' || normalized === 'critical') return 'high';
+      if (normalized === 'medium') return 'medium';
+      return 'low';
+    };
+
+    schemaChanges.forEach((change) => {
+      const key = `${change.method}:${change.endpoint}`;
+      const entry = groups.get(key) ?? {
+        endpoint: change.endpoint,
+        method: change.method,
+        detectedAt: change.detectedAt,
+        changes: [],
+      };
+
+      entry.changes.push({
+        field: change.field,
+        oldType: change.oldValue ?? undefined,
+        newType: change.newValue ?? undefined,
+        description: `${change.changeType} change detected for ${change.field}`,
+        severity: toSeverity(change.riskLevel),
+      });
+
+      if (new Date(change.detectedAt) > new Date(entry.detectedAt)) {
+        entry.detectedAt = change.detectedAt;
+      }
+
+      groups.set(key, entry);
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        changes: group.changes.slice(0, 3),
+      }))
+      .sort((a, b) => new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime())
+      .slice(0, 2);
+  }, [schemaChanges]);
 
   const filteredEndpoints = useMemo(() =>
     endpoints.filter(ep =>
@@ -151,7 +209,7 @@ export default function ApiIntelligencePage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ApiTreemap />
+        <ApiTreemap services={inventory?.services} />
         
         <div className="card h-[400px]">
           <div className="card-header">
@@ -197,23 +255,21 @@ export default function ApiIntelligencePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           <h2 className="font-medium text-ink-primary">Recent Schema Drift</h2>
-          <SchemaDriftDiff 
-            endpoint="/api/v1/checkout" 
-            method="POST" 
-            detectedAt={new Date().toISOString()}
-            changes={[
-              { field: 'body.amount', oldType: 'number', newType: 'string', description: 'Type mismatch: expected number, received string', severity: 'high' },
-              { field: 'body.currency', oldType: 'enum(USD,EUR)', newType: 'string(GBP)', description: 'Unexpected enum value', severity: 'medium' }
-            ]}
-          />
-          <SchemaDriftDiff 
-            endpoint="/api/v1/users/profile" 
-            method="GET" 
-            detectedAt={new Date(Date.now() - 3600000).toISOString()}
-            changes={[
-              { field: 'response.social_links', oldType: 'undefined', newType: 'array', description: 'New field detected in response', severity: 'low' }
-            ]}
-          />
+          {schemaDriftGroups.length > 0 ? (
+            schemaDriftGroups.map((group) => (
+              <SchemaDriftDiff
+                key={`${group.method}:${group.endpoint}`}
+                endpoint={group.endpoint}
+                method={group.method}
+                detectedAt={group.detectedAt}
+                changes={group.changes}
+              />
+            ))
+          ) : (
+            <div className="card border border-border-subtle p-6 text-sm text-ink-muted">
+              No schema drift events detected yet.
+            </div>
+          )}
         </div>
 
         <div className="card h-full">

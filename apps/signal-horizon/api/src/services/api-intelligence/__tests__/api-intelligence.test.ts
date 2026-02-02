@@ -43,6 +43,8 @@ function createMockPrisma(): {
     };
     endpointSchemaChange: {
       create: Mock;
+      findMany: Mock;
+      count: Mock;
     };
   };
 } {
@@ -62,6 +64,8 @@ function createMockPrisma(): {
     },
     endpointSchemaChange: {
       create: vi.fn().mockResolvedValue({ id: 'change-1' }),
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
     },
   };
 
@@ -465,6 +469,7 @@ describe('APIIntelligenceService', () => {
       it('should return comprehensive discovery statistics', async () => {
         mockPrisma.mocks.endpoint.count
           .mockResolvedValueOnce(100) // total
+          .mockResolvedValueOnce(80) // with schema
           .mockResolvedValueOnce(20) // new this week
           .mockResolvedValueOnce(5); // new today
 
@@ -497,6 +502,7 @@ describe('APIIntelligenceService', () => {
         expect(stats.newToday).toBe(5);
         expect(stats.schemaViolations24h).toBe(15);
         expect(stats.schemaViolations7d).toBe(45);
+        expect(stats.coveragePercent).toBe(80);
         expect(stats.endpointsByMethod).toEqual({
           GET: 50,
           POST: 30,
@@ -602,6 +608,143 @@ describe('APIIntelligenceService', () => {
 
         const dates = trends.map((t) => t.date);
         expect(dates).toEqual([...dates].sort());
+      });
+    });
+
+    describe('getFleetInventory', () => {
+      it('should group endpoints by service and compute totals', async () => {
+        const now = new Date();
+        mockPrisma.mocks.endpoint.findMany.mockResolvedValue([
+          {
+            id: '1',
+            path: '/api/users',
+            pathTemplate: '/api/users',
+            method: 'GET',
+            service: 'user-service',
+            sensorId: 'sensor-1',
+            requestCount: 10,
+            riskLevel: 'low',
+            lastSeenAt: now,
+          },
+          {
+            id: '2',
+            path: '/api/orders',
+            pathTemplate: '/api/orders',
+            method: 'POST',
+            service: 'order-service',
+            sensorId: 'sensor-1',
+            requestCount: 5,
+            riskLevel: 'high',
+            lastSeenAt: now,
+          },
+          {
+            id: '3',
+            path: '/api/users/{id}',
+            pathTemplate: '/api/users/{id}',
+            method: 'GET',
+            service: 'user-service',
+            sensorId: 'sensor-2',
+            requestCount: 20,
+            riskLevel: 'medium',
+            lastSeenAt: now,
+          },
+        ]);
+
+        const inventory = await service.getFleetInventory('tenant-1', {
+          maxServices: 10,
+          maxEndpoints: 10,
+        });
+
+        expect(inventory.totalEndpoints).toBe(3);
+        expect(inventory.totalRequests).toBe(35);
+        expect(inventory.services).toHaveLength(2);
+
+        const userService = inventory.services.find((s) => s.service === 'user-service');
+        expect(userService?.endpointCount).toBe(2);
+        expect(userService?.totalRequests).toBe(30);
+      });
+    });
+
+    describe('listSchemaChanges', () => {
+      it('should map schema change details with endpoint context', async () => {
+        const now = new Date();
+        mockPrisma.mocks.endpointSchemaChange.findMany.mockResolvedValue([
+          {
+            id: 'change-1',
+            changeType: 'violation',
+            field: 'body.amount',
+            oldValue: 'number',
+            newValue: 'string',
+            riskLevel: 'high',
+            detectedAt: now,
+            endpoint: {
+              path: '/api/checkout',
+              pathTemplate: '/api/checkout',
+              method: 'POST',
+              service: 'payment-service',
+            },
+          },
+        ]);
+        mockPrisma.mocks.endpointSchemaChange.count.mockResolvedValue(1);
+
+        const result = await service.listSchemaChanges('tenant-1', {
+          limit: 10,
+          offset: 0,
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.changes[0]).toMatchObject({
+          endpoint: '/api/checkout',
+          method: 'POST',
+          service: 'payment-service',
+          changeType: 'violation',
+          field: 'body.amount',
+          breaking: true,
+        });
+      });
+    });
+
+    describe('getSchemaDriftTrends', () => {
+      it('should aggregate schema drift trends by endpoint', async () => {
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        mockPrisma.mocks.endpointSchemaChange.findMany.mockResolvedValue([
+          {
+            detectedAt: yesterday,
+            endpoint: {
+              path: '/api/users',
+              pathTemplate: '/api/users',
+              method: 'GET',
+              service: 'user-service',
+            },
+          },
+          {
+            detectedAt: yesterday,
+            endpoint: {
+              path: '/api/users',
+              pathTemplate: '/api/users',
+              method: 'GET',
+              service: 'user-service',
+            },
+          },
+          {
+            detectedAt: now,
+            endpoint: {
+              path: '/api/orders',
+              pathTemplate: '/api/orders',
+              method: 'POST',
+              service: 'order-service',
+            },
+          },
+        ]);
+
+        const trends = await service.getSchemaDriftTrends('tenant-1', 2, 5);
+
+        expect(trends[0].endpoint).toBe('/api/users');
+        expect(trends[0].total).toBe(2);
+        expect(trends[1].endpoint).toBe('/api/orders');
+        expect(trends[1].total).toBe(1);
       });
     });
   });

@@ -1,4 +1,5 @@
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
+import type { InventoryService } from '../../hooks/useApiIntelligence';
 
 const DEMO_TREEMAP_DATA = [
   {
@@ -63,7 +64,24 @@ const CustomizedContent = (props: any) => {
   );
 };
 
-export function ApiTreemap() {
+interface ApiTreemapProps {
+  services?: InventoryService[];
+}
+
+export function ApiTreemap({ services }: ApiTreemapProps) {
+  const hasServiceData = Array.isArray(services);
+  const treemapData = hasServiceData
+    ? services.map((service) => ({
+        name: service.service,
+        children: service.endpoints.map((endpoint) => ({
+          name: endpoint.pathTemplate || endpoint.path,
+          size: Math.max(endpoint.requestCount, 1),
+          risk: endpoint.riskScore,
+          method: endpoint.method,
+        })),
+      }))
+    : DEMO_TREEMAP_DATA;
+
   return (
     <div className="card h-[400px] flex flex-col">
       <div className="card-header flex justify-between items-center">
@@ -71,48 +89,59 @@ export function ApiTreemap() {
         <span className="text-xs text-ink-secondary">Size = Request Volume</span>
       </div>
       <div className="flex-1 min-h-0 p-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <Treemap
-            data={DEMO_TREEMAP_DATA}
-            dataKey="size"
-            stroke="#001E62"
-            fill="#0057B7"
-            content={<CustomizedContent />}
-          >
-            <Tooltip
-              content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0].payload;
-                  return (
-                    <div className="bg-surface-hero border border-border-subtle p-3 shadow-lg text-xs">
-                      <p className="font-semibold text-ink-primary">{data.name}</p>
-                      <p className="text-ink-secondary">Volume: {data.size?.toLocaleString()}</p>
-                      {data.risk !== undefined && (
-                        <p className={data.risk > 70 ? 'text-ac-magenta' : 'text-ac-blue'}>
-                          Risk: {data.risk}/100
-                        </p>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-          </Treemap>
-        </ResponsiveContainer>
+        {treemapData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <Treemap
+              data={treemapData}
+              dataKey="size"
+              stroke="#001E62"
+              fill="#0057B7"
+              content={<CustomizedContent />}
+            >
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-surface-hero border border-border-subtle p-3 shadow-lg text-xs">
+                        <p className="font-semibold text-ink-primary">{data.name}</p>
+                        {data.method && (
+                          <p className="text-ink-secondary">Method: {data.method}</p>
+                        )}
+                        <p className="text-ink-secondary">Volume: {data.size?.toLocaleString()}</p>
+                        {data.risk !== undefined && (
+                          <p className={data.risk > 70 ? 'text-ac-magenta' : 'text-ac-blue'}>
+                            Risk: {data.risk}/100
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+            </Treemap>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-sm text-ink-muted">
+            No API inventory data available yet.
+          </div>
+        )}
       </div>
       {/* Legend */}
-      <div className="px-4 pb-4 flex flex-wrap gap-4">
-        {DEMO_TREEMAP_DATA.map((service, i) => (
-          <div key={service.name} className="flex items-center gap-2">
-            <div
-              className="w-3 h-3"
-              style={{ backgroundColor: COLORS[i % COLORS.length] }}
-            />
-            <span className="text-xs text-ink-secondary">{service.name}</span>
-          </div>
-        ))}
-      </div>
+      {treemapData.length > 0 && (
+        <div className="px-4 pb-4 flex flex-wrap gap-4">
+          {treemapData.map((service, i) => (
+            <div key={service.name} className="flex items-center gap-2">
+              <div
+                className="w-3 h-3"
+                style={{ backgroundColor: COLORS[i % COLORS.length] }}
+              />
+              <span className="text-xs text-ink-secondary">{service.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -55,6 +55,32 @@ export interface ActorTimelineEntry {
   blockCount: number;
 }
 
+export interface ActorGraphNode {
+  data: {
+    id: string;
+    label: string;
+    type: string;
+    details?: Record<string, string | number>;
+  };
+}
+
+export interface ActorGraphEdge {
+  data: {
+    id: string;
+    source: string;
+    target: string;
+    label: string;
+    weight?: number;
+  };
+}
+
+export interface ActorInfrastructureGraph {
+  fingerprint: string;
+  windowHours: number;
+  nodes: ActorGraphNode[];
+  edges: ActorGraphEdge[];
+}
+
 // =============================================================================
 // Actor Service
 // =============================================================================
@@ -382,6 +408,143 @@ export class ActorService {
     }));
   }
 
+  /**
+   * Build a graph linking a fingerprint to IPs and sensors across the fleet.
+   */
+  async getActorInfrastructureGraph(
+    fingerprint: string,
+    options: { tenantId?: string | null; windowHours?: number } = {}
+  ): Promise<ActorInfrastructureGraph | null> {
+    if (!fingerprint) return null;
+
+    const windowHours = options.windowHours ?? 168;
+    const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
+
+    const where = {
+      fingerprint,
+      createdAt: { gte: since },
+      ...(options.tenantId ? { tenantId: options.tenantId } : {}),
+    };
+
+    const signals = await this.prisma.signal.findMany({
+      where,
+      select: {
+        sourceIp: true,
+        sensorId: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (signals.length === 0) return null;
+
+    const ipMap = new Map<
+      string,
+      {
+        count: number;
+        lastSeen: Date;
+        sensors: Map<string, number>;
+      }
+    >();
+    const sensorTotals = new Map<string, number>();
+
+    for (const signal of signals) {
+      if (!signal.sourceIp) continue;
+      const sensorId = signal.sensorId ?? 'unknown';
+      const entry = ipMap.get(signal.sourceIp) ?? {
+        count: 0,
+        lastSeen: signal.createdAt,
+        sensors: new Map<string, number>(),
+      };
+
+      entry.count += 1;
+      entry.lastSeen = signal.createdAt > entry.lastSeen ? signal.createdAt : entry.lastSeen;
+      entry.sensors.set(sensorId, (entry.sensors.get(sensorId) ?? 0) + 1);
+      ipMap.set(signal.sourceIp, entry);
+
+      sensorTotals.set(sensorId, (sensorTotals.get(sensorId) ?? 0) + 1);
+    }
+
+    const nodes: ActorGraphNode[] = [];
+    const edges: ActorGraphEdge[] = [];
+    const actorNodeId = `actor:${fingerprint}`;
+    let edgeIndex = 0;
+
+    nodes.push({
+      data: {
+        id: actorNodeId,
+        label: this.formatFingerprintLabel(fingerprint),
+        type: 'actor',
+        details: {
+          fingerprint,
+        },
+      },
+    });
+
+    const sensorNodeIds = new Map<string, string>();
+
+    for (const [ip, data] of ipMap.entries()) {
+      const ipNodeId = `ip:${ip}`;
+      nodes.push({
+        data: {
+          id: ipNodeId,
+          label: ip,
+          type: 'ip',
+          details: {
+            hitCount: data.count,
+            lastSeen: data.lastSeen.toISOString(),
+          },
+        },
+      });
+
+      edges.push({
+        data: {
+          id: `edge-${edgeIndex++}`,
+          source: actorNodeId,
+          target: ipNodeId,
+          label: 'uses',
+          weight: data.count,
+        },
+      });
+
+      for (const [sensorId, count] of data.sensors.entries()) {
+        let sensorNodeId = sensorNodeIds.get(sensorId);
+        if (!sensorNodeId) {
+          sensorNodeId = `sensor:${sensorId}`;
+          sensorNodeIds.set(sensorId, sensorNodeId);
+
+          nodes.push({
+            data: {
+              id: sensorNodeId,
+              label: sensorId,
+              type: 'sensor',
+              details: {
+                hitCount: sensorTotals.get(sensorId) ?? count,
+              },
+            },
+          });
+        }
+
+        edges.push({
+          data: {
+            id: `edge-${edgeIndex++}`,
+            source: ipNodeId,
+            target: sensorNodeId,
+            label: 'observed_on',
+            weight: count,
+          },
+        });
+      }
+    }
+
+    return {
+      fingerprint,
+      windowHours,
+      nodes,
+      edges,
+    };
+  }
+
   // ===========================================================================
   // Private Helpers
   // ===========================================================================
@@ -416,5 +579,11 @@ export class ActorService {
     }
 
     return result;
+  }
+
+  private formatFingerprintLabel(fingerprint: string): string {
+    const trimmed = fingerprint.trim();
+    if (trimmed.length <= 10) return trimmed;
+    return `FP-${trimmed.slice(0, 8)}`;
   }
 }

@@ -132,6 +132,7 @@ export interface DiscoveryStats {
   newToday: number;
   schemaViolations24h: number;
   schemaViolations7d: number;
+  coveragePercent: number;
   topViolatingEndpoints: Array<{
     endpoint: string;
     method: string;
@@ -151,6 +152,65 @@ export interface ViolationTrend {
   date: string;
   type: string;
   count: number;
+}
+
+export interface InventoryEndpoint {
+  id: string;
+  path: string;
+  pathTemplate: string;
+  method: string;
+  service: string;
+  sensorId: string;
+  requestCount: number;
+  riskLevel: string;
+  riskScore: number;
+  lastSeenAt: string;
+}
+
+export interface InventoryService {
+  service: string;
+  endpointCount: number;
+  totalRequests: number;
+  avgRiskScore: number;
+  endpoints: InventoryEndpoint[];
+}
+
+export interface FleetInventory {
+  totalEndpoints: number;
+  totalRequests: number;
+  services: InventoryService[];
+}
+
+export interface SchemaChangeSummary {
+  id: string;
+  endpoint: string;
+  method: string;
+  service: string;
+  changeType: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  riskLevel: string;
+  detectedAt: string;
+  breaking: boolean;
+}
+
+export interface SchemaChangeList {
+  changes: SchemaChangeSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EndpointDriftTrend {
+  endpoint: string;
+  method: string;
+  service: string;
+  total: number;
+  series: Array<{
+    date: string;
+    count: number;
+  }>;
 }
 
 // =============================================================================
@@ -188,6 +248,31 @@ export const ViolationTrendsQuerySchema = z.object({
 });
 
 export type ViolationTrendsQuery = z.infer<typeof ViolationTrendsQuerySchema>;
+
+export const InventoryQuerySchema = z.object({
+  maxServices: z.coerce.number().int().min(1).max(200).default(20),
+  maxEndpoints: z.coerce.number().int().min(1).max(500).default(50),
+});
+
+export type InventoryQuery = z.infer<typeof InventoryQuerySchema>;
+
+export const SchemaChangesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  service: z.string().min(1).optional(),
+  method: HttpMethodSchema.optional(),
+  changeType: z.string().min(1).optional(),
+  days: z.coerce.number().int().min(1).max(365).optional(),
+});
+
+export type SchemaChangesQuery = z.infer<typeof SchemaChangesQuerySchema>;
+
+export const SchemaDriftTrendsQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(90).default(30),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export type SchemaDriftTrendsQuery = z.infer<typeof SchemaDriftTrendsQuerySchema>;
 
 // =============================================================================
 // Response Types

@@ -14,6 +14,9 @@ import {
   ListEndpointsQuerySchema,
   ListSignalsQuerySchema,
   ViolationTrendsQuerySchema,
+  InventoryQuerySchema,
+  SchemaChangesQuerySchema,
+  SchemaDriftTrendsQuerySchema,
 } from '../../schemas/api-intelligence.js';
 import { requireScope } from '../middleware/auth.js';
 import { validateQuery, validateBody } from '../middleware/validation.js';
@@ -113,6 +116,31 @@ export function createAPIIntelligenceRoutes(
   );
 
   /**
+   * GET /api/v1/api-intelligence/inventory
+   * Get fleet API inventory grouped by service
+   */
+  router.get(
+    '/inventory',
+    requireScope('dashboard:read'),
+    validateQuery(InventoryQuerySchema),
+    async (req, res) => {
+      try {
+        const tenantId = req.auth?.tenantId ?? 'default';
+        const { maxServices, maxEndpoints } = req.query as unknown as z.infer<typeof InventoryQuerySchema>;
+
+        const inventory = await service.getFleetInventory(tenantId, { maxServices, maxEndpoints });
+        res.json(inventory);
+      } catch (error) {
+        logger.error({ error }, 'Failed to get API inventory');
+        res.status(500).json({
+          error: 'Failed to get API inventory',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/api-intelligence/violations/trends
    * Get violation trends over time
    */
@@ -131,6 +159,65 @@ export function createAPIIntelligenceRoutes(
         logger.error({ error }, 'Failed to get violation trends');
         res.status(500).json({
           error: 'Failed to get violation trends',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/api-intelligence/violations/trends/endpoints
+   * Get schema drift trends by endpoint
+   */
+  router.get(
+    '/violations/trends/endpoints',
+    requireScope('dashboard:read'),
+    validateQuery(SchemaDriftTrendsQuerySchema),
+    async (req, res) => {
+      try {
+        const tenantId = req.auth?.tenantId ?? 'default';
+        const { days, limit } = req.query as unknown as z.infer<typeof SchemaDriftTrendsQuerySchema>;
+
+        const trends = await service.getSchemaDriftTrends(tenantId, days, limit);
+        res.json({ days, limit, trends });
+      } catch (error) {
+        logger.error({ error }, 'Failed to get endpoint drift trends');
+        res.status(500).json({
+          error: 'Failed to get endpoint drift trends',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/api-intelligence/schema-changes
+   * List schema changes for drift analysis
+   */
+  router.get(
+    '/schema-changes',
+    requireScope('dashboard:read'),
+    validateQuery(SchemaChangesQuerySchema),
+    async (req, res) => {
+      try {
+        const tenantId = req.auth?.tenantId ?? 'default';
+        const { limit, offset, service: serviceFilter, method, changeType, days } =
+          req.query as unknown as z.infer<typeof SchemaChangesQuerySchema>;
+
+        const result = await service.listSchemaChanges(tenantId, {
+          limit,
+          offset,
+          service: serviceFilter,
+          method,
+          changeType,
+          days,
+        });
+
+        res.json(result);
+      } catch (error) {
+        logger.error({ error }, 'Failed to list schema changes');
+        res.status(500).json({
+          error: 'Failed to list schema changes',
           message: getErrorMessage(error),
         });
       }
@@ -158,6 +245,7 @@ export function createAPIIntelligenceRoutes(
 
         res.json({
           endpoints: result.endpoints,
+          total: result.total,
           pagination: {
             total: result.total,
             limit,
@@ -225,6 +313,7 @@ export function createAPIIntelligenceRoutes(
 
         res.json({
           signals: result.signals,
+          total: result.total,
           pagination: {
             total: result.total,
             limit,

@@ -491,4 +491,37 @@ describe('ActorService', () => {
       expect(result).toHaveLength(168);
     });
   });
+
+  describe('getActorInfrastructureGraph', () => {
+    it('should build graph nodes and edges for fingerprint activity', async () => {
+      const now = new Date();
+      vi.mocked(mockPrisma.signal.findMany).mockResolvedValue([
+        { sourceIp: '10.0.0.1', sensorId: 'sensor-1', createdAt: now },
+        { sourceIp: '10.0.0.1', sensorId: 'sensor-2', createdAt: now },
+        { sourceIp: '10.0.0.2', sensorId: 'sensor-1', createdAt: now },
+      ] as never);
+
+      const result = await actorService.getActorInfrastructureGraph('fp-123', {
+        tenantId: 'tenant-1',
+        windowHours: 24,
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.nodes.some((node) => node.data.type === 'actor')).toBe(true);
+      expect(result?.nodes.some((node) => node.data.type === 'ip')).toBe(true);
+      expect(result?.nodes.some((node) => node.data.type === 'sensor')).toBe(true);
+      expect(result?.edges.length).toBeGreaterThan(0);
+    });
+
+    it('should return null when no signals are found', async () => {
+      vi.mocked(mockPrisma.signal.findMany).mockResolvedValue([]);
+
+      const result = await actorService.getActorInfrastructureGraph('fp-empty', {
+        tenantId: 'tenant-1',
+        windowHours: 24,
+      });
+
+      expect(result).toBeNull();
+    });
+  });
 });

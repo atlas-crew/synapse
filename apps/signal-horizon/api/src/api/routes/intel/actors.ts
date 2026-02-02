@@ -26,6 +26,11 @@ const TimelineQuerySchema = z.object({
   windowHours: z.coerce.number().int().min(1).max(720).default(168), // 7 days default
 });
 
+const ActorGraphQuerySchema = z.object({
+  fingerprint: z.string().min(1),
+  windowHours: z.coerce.number().int().min(1).max(720).default(168),
+});
+
 // =============================================================================
 // Route Factory
 // =============================================================================
@@ -68,6 +73,38 @@ export function createActorRoutes(
       } catch (error) {
         console.error('Failed to list actors:', error);
         res.status(500).json({ error: 'Failed to list actors', message: getErrorMessage(error) });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/intel/actors/graph
+   * Get actor-to-infrastructure graph for a fingerprint
+   */
+  router.get(
+    '/graph',
+    requireScope('dashboard:read'),
+    validateQuery(ActorGraphQuerySchema),
+    async (req, res) => {
+      try {
+        const { fingerprint, windowHours } = req.query as unknown as z.infer<typeof ActorGraphQuerySchema>;
+        const auth = req.auth!;
+
+        const tenantId = auth.isFleetAdmin ? null : auth.tenantId;
+        const graph = await actorService.getActorInfrastructureGraph(fingerprint, {
+          tenantId,
+          windowHours,
+        });
+
+        if (!graph) {
+          res.status(404).json({ error: 'Actor not found' });
+          return;
+        }
+
+        res.json(graph);
+      } catch (error) {
+        console.error('Failed to build actor graph:', error);
+        res.status(500).json({ error: 'Failed to build actor graph', message: getErrorMessage(error) });
       }
     }
   );
