@@ -122,13 +122,13 @@ serial_test = "3"
 # harness = false
 
 [profile.release]
-lto = "fat"
+lto = "thin"  # Changed from "fat" to reduce memory usage during linking
 codegen-units = 1
 opt-level = 3
 panic = "abort"
 
 [profile.bench]
-lto = "fat"
+lto = "thin"  # Changed from "fat" to reduce memory usage
 codegen-units = 1
 opt-level = 3
 # Note: panic = "abort" removed for criterion compatibility

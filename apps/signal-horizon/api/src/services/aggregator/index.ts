@@ -148,6 +148,10 @@ export class Aggregator {
   /**
    * Process accumulated signals
    * Uses transaction-like pattern: only clears batch after successful processing
+   *
+   * CRITICAL: Signals can arrive via queueSignal() during async processing.
+   * We snapshot the queues and swap retryQueue to a fresh array so new arrivals
+   * don't get nuked when we clear after success.
    */
   private async flushBatch(): Promise<void> {
     if (this.signalBatch.length === 0 && this.retryQueue.length === 0) return;
@@ -155,8 +159,14 @@ export class Aggregator {
 
     this.isFlushing = true;
 
-    // Take ownership of current batch (don't clear yet - that's the fix!)
-    const batch = [...this.signalBatch, ...this.retryQueue];
+    // Snapshot current queues - swap retryQueue so new arrivals during processing
+    // go to a fresh array instead of being lost when we clear on success
+    const batchSnapshot = this.signalBatch;
+    const retrySnapshot = this.retryQueue;
+    this.signalBatch = [];
+    this.retryQueue = []; // New arrivals during flush go here
+    
+    const batch = [...batchSnapshot, ...retrySnapshot];
     const batchSize = batch.length;
 
     try {
@@ -182,9 +192,9 @@ export class Aggregator {
         });
       }
 
-      // SUCCESS: Now safe to clear the batch
-      this.signalBatch = [];
-      this.retryQueue = [];
+      // SUCCESS: Batch processed, snapshots can be discarded
+      // signalBatch and retryQueue were already swapped to fresh arrays above,
+      // so any signals that arrived during processing are preserved
       this.retryCount = 0;
 
       this.logger.info(
@@ -198,18 +208,20 @@ export class Aggregator {
         'Failed to process signal batch'
       );
 
-      // Keep signals for retry, but limit retry attempts
+      // Restore failed batch for retry, prepending to any signals that arrived during flush
       if (this.retryCount >= this.config.maxRetries) {
         this.logger.error(
           { droppedCount: batchSize, maxRetries: this.config.maxRetries },
           'Max retries exceeded, dropping batch to prevent memory exhaustion'
         );
-        // Clear to prevent infinite loop, but log the loss
-        this.signalBatch = [];
-        this.retryQueue = [];
+        // Don't restore snapshots - let them be garbage collected
+        // retryQueue already has only signals that arrived during this flush
         this.retryCount = 0;
+      } else {
+        // Prepend failed batch to current queues for retry
+        // Signals that arrived during flush are already in this.signalBatch/retryQueue
+        this.retryQueue = [...batchSnapshot, ...retrySnapshot, ...this.retryQueue];
       }
-      // Otherwise, signals remain in batch for next flush attempt
     } finally {
       this.isFlushing = false;
     }

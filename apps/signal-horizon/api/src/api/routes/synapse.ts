@@ -15,6 +15,7 @@ import {
   type Block,
   type Rule,
   type EvalRequest,
+  type SensorConfigSection,
 } from '../../services/synapse-proxy.js';
 
 // ============================================================================
@@ -104,6 +105,28 @@ const EvalRequestSchema = z.object({
   body: z.string().optional(),
   clientIp: z.string(),
   fingerprint: z.string().optional(),
+});
+
+const ConfigSectionSchema = z.enum([
+  'dlp',
+  'block-page',
+  'crawler',
+  'tarpit',
+  'travel',
+  'entity',
+]);
+
+const ConfigQuerySchema = z.object({
+  section: ConfigSectionSchema.optional(),
+});
+
+const ConfigUpdateSchema = z.object({
+  section: ConfigSectionSchema,
+  config: z.record(z.unknown()),
+});
+
+const GlobalConfigUpdateSchema = ConfigUpdateSchema.extend({
+  sensorIds: z.array(z.string().min(1)).optional(),
 });
 
 // ============================================================================
@@ -212,6 +235,151 @@ export function createSynapseRoutes(
       } catch (error) {
         handleError(res, error, 'getSensorStatus');
       }
+    }
+  );
+
+  // ==========================================================================
+  // Configuration Endpoints
+  // ==========================================================================
+
+  /**
+   * GET /synapse/:sensorId/config
+   * Fetch sensor configuration (system config view or specific section)
+   */
+  router.get(
+    '/:sensorId/config',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = ConfigQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const section = parsed.data.section as SensorConfigSection | undefined;
+        const config = section
+          ? await synapseProxy.getSensorConfigSection(sensorId, tenantId, section)
+          : await synapseProxy.getSensorConfig(sensorId, tenantId);
+        res.json(config);
+      } catch (error) {
+        handleError(res, error, 'getSensorConfig');
+      }
+    }
+  );
+
+  /**
+   * PUT /synapse/:sensorId/config
+   * Update a specific sensor configuration section
+   */
+  router.put(
+    '/:sensorId/config',
+    requireScope('fleet:write'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = ConfigUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid request body',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const { section, config } = parsed.data;
+        const result = await synapseProxy.updateSensorConfig(
+          sensorId,
+          tenantId,
+          section as SensorConfigSection,
+          config
+        );
+        res.json(result);
+      } catch (error) {
+        handleError(res, error, 'updateSensorConfig');
+      }
+    }
+  );
+
+  /**
+   * PUT /synapse/config
+   * Push a configuration update across all connected sensors for a tenant
+   */
+  router.put(
+    '/config',
+    requireScope('fleet:write'),
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = GlobalConfigUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid request body',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      const { section, config, sensorIds } = parsed.data;
+      const targets = sensorIds?.length
+        ? sensorIds
+        : synapseProxy.listActiveSensors(tenantId);
+
+      if (targets.length === 0) {
+        res.status(404).json({
+          error: 'No connected sensors found for tenant',
+          code: 'NO_CONNECTED_SENSORS',
+        });
+        return;
+      }
+
+      const results = await Promise.all(targets.map(async (targetSensorId) => {
+        try {
+          await synapseProxy.updateSensorConfig(
+            targetSensorId,
+            tenantId,
+            section as SensorConfigSection,
+            config
+          );
+          return { sensorId: targetSensorId, success: true };
+        } catch (error) {
+          if (error instanceof SynapseProxyError) {
+            return {
+              sensorId: targetSensorId,
+              success: false,
+              error: error.message,
+              code: error.code,
+            };
+          }
+          return {
+            sensorId: targetSensorId,
+            success: false,
+            error: 'Config update failed',
+            code: 'INTERNAL_ERROR',
+          };
+        }
+      }));
+
+      const successCount = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success);
+
+      res.json({
+        success: failed.length === 0,
+        summary: {
+          total: results.length,
+          updated: successCount,
+          failed: failed.length,
+        },
+        results,
+      });
     }
   );
 

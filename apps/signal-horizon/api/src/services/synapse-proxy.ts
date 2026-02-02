@@ -269,6 +269,20 @@ export interface EvalResult {
   reasoning?: string;
 }
 
+export type SensorConfigSection =
+  | 'dlp'
+  | 'block-page'
+  | 'crawler'
+  | 'tarpit'
+  | 'travel'
+  | 'entity';
+
+export interface SensorConfigResponse {
+  success?: boolean;
+  data?: unknown;
+  message?: string;
+}
+
 export interface SynapseProxyRequest {
   requestId: string;
   endpoint: string;
@@ -312,6 +326,10 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/evaluate',
   '/_sensor/profiling',
   '/_sensor/payload',
+  '/_sensor/config',
+  '/_sensor/system',
+  '/_sensor/signals',
+  '/_sensor/trends',
 ] as const;
 
 /** Sensor ID format validation */
@@ -609,6 +627,71 @@ export class SynapseProxyService extends EventEmitter {
 
     this.setCache(cacheKey, status, this.STATUS_CACHE_TTL);
     return status;
+  }
+
+  /**
+   * Get sensor configuration (system config view)
+   */
+  async getSensorConfig(
+    sensorId: string,
+    tenantId: string
+  ): Promise<SensorConfigResponse> {
+    const cacheKey = `config:${sensorId}:system`;
+    const cached = this.getFromCache<SensorConfigResponse>(cacheKey);
+    if (cached) return cached;
+
+    const config = await this.proxyRequest<SensorConfigResponse>(
+      sensorId,
+      tenantId,
+      '/_sensor/system/config',
+      'GET'
+    );
+
+    this.setCache(cacheKey, config, this.LIST_CACHE_TTL);
+    return config;
+  }
+
+  /**
+   * Get a specific configuration section
+   */
+  async getSensorConfigSection(
+    sensorId: string,
+    tenantId: string,
+    section: SensorConfigSection
+  ): Promise<SensorConfigResponse> {
+    const cacheKey = `config:${sensorId}:${section}`;
+    const cached = this.getFromCache<SensorConfigResponse>(cacheKey);
+    if (cached) return cached;
+
+    const config = await this.proxyRequest<SensorConfigResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/config/${section}`,
+      'GET'
+    );
+
+    this.setCache(cacheKey, config, this.LIST_CACHE_TTL);
+    return config;
+  }
+
+  /**
+   * Update a specific configuration section
+   */
+  async updateSensorConfig(
+    sensorId: string,
+    tenantId: string,
+    section: SensorConfigSection,
+    config: Record<string, unknown>
+  ): Promise<SensorConfigResponse> {
+    this.invalidateCache(`config:${sensorId}`);
+
+    return this.proxyRequest<SensorConfigResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/config/${section}`,
+      'PUT',
+      config
+    );
   }
 
   /**
@@ -1025,6 +1108,15 @@ export class SynapseProxyService extends EventEmitter {
     );
   }
 
+  /**
+   * List connected sensors for a tenant (legacy tunnel protocol).
+   */
+  listActiveSensors(tenantId: string): string[] {
+    return this.tunnelBroker
+      .getActiveTunnels(tenantId)
+      .map((tunnel) => tunnel.sensorId);
+  }
+
   // ==========================================================================
   // Tunnel Response Handler
   // ==========================================================================
@@ -1100,7 +1192,7 @@ export class SynapseProxyService extends EventEmitter {
    */
   clearSensorCache(sensorId: string): void {
     const sanitizedSensorId = sensorId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions', 'campaigns'];
+    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions', 'campaigns', 'config'];
     for (const prefix of prefixes) {
       this.invalidateCache(`${prefix}:${sanitizedSensorId}`);
     }
