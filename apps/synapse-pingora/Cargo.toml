@@ -44,9 +44,6 @@ once_cell = "1"
 lazy_static = "1"       # Static regex pattern initialization for DLP
 aho-corasick = "1.1"    # Multi-pattern matching for DLP optimization
 
-# Session token hashing
-md5 = "0.7"             # Fast hashing for session tokens (not for security-sensitive use)
-
 # Logging
 log = "0.4"
 env_logger = "0.11"
