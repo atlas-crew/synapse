@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
+import { useDemoMode } from '../../stores/demoModeStore';
+import { getDemoData } from '../../lib/demoData';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -49,6 +51,7 @@ async function pushConfig(templateId: string, sensorIds: string[]): Promise<void
 
 export function ConfigManagerPage() {
   const queryClient = useQueryClient();
+  const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   
@@ -59,14 +62,24 @@ export function ConfigManagerPage() {
   const [newConfig, setNewConfig] = useState('{\n  "version": "1.0.0",\n  "settings": {\n    "logLevel": "info"\n  }\n}');
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
-    queryKey: ['fleet', 'config', 'templates'],
-    queryFn: fetchTemplates,
+    queryKey: ['fleet', 'config', 'templates', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        return getDemoData(scenario).fleet.configTemplates;
+      }
+      return fetchTemplates();
+    },
   });
 
   const { data: syncStatus } = useQuery({
-    queryKey: ['fleet', 'config', 'sync-status'],
-    queryFn: fetchSyncStatus,
-    refetchInterval: 10000,
+    queryKey: ['fleet', 'config', 'sync-status', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        return getDemoData(scenario).fleet.syncStatus;
+      }
+      return fetchSyncStatus();
+    },
+    refetchInterval: isDemoMode ? false : 10000,
   });
 
   const pushMutation = useMutation({

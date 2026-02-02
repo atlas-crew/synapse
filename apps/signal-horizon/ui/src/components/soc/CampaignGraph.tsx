@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 // @ts-expect-error - fcose has no type declarations
 import fcose from 'cytoscape-fcose';
+import { useDemoMode } from '../../stores/demoModeStore';
+import { getDemoData } from '../../lib/demoData';
 
 cytoscape.use(fcose);
 
@@ -58,6 +60,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
   const [hoveredNode, setHoveredNode] = useState<NodeDetails | null>(null);
   const [isLayoutComplete, setIsLayoutComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isEnabled: isDemoMode, scenario } = useDemoMode();
 
   const handleNodeHover = useCallback((node: NodeDetails | null) => {
     setHoveredNode(node);
@@ -71,10 +74,17 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
 
     const loadAndInit = async () => {
       try {
-        const targetSensorId = sensorId || 'synapse-pingora';
-        const graphData = await fetchGraphData(targetSensorId, campaignId);
+        let graphData;
+        if (isDemoMode) {
+          const demoData = getDemoData(scenario);
+          // Try to get graph for specific campaign, or default to camp-001
+          graphData = demoData.fleet.campaignGraphs[campaignId] || demoData.fleet.campaignGraphs['camp-001'];
+        } else {
+          const targetSensorId = sensorId || 'synapse-pingora';
+          graphData = await fetchGraphData(targetSensorId, campaignId);
+        }
 
-        if (!containerRef.current) return;
+        if (!containerRef.current || !graphData) return;
 
         cy = cytoscape({
           container: containerRef.current,

@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Shield, AlertTriangle, FileSearch, Search, BarChart3 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { clsx } from 'clsx';
+import { useDemoMode } from '../../stores/demoModeStore';
+import { getDemoData } from '../../lib/demoData';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -41,16 +43,30 @@ async function fetchDlpViolations(): Promise<{ violations: DlpViolation[] }> {
 }
 
 export function DlpDashboardPage() {
+  const { isEnabled: isDemoMode, scenario } = useDemoMode();
+
   const { data: stats } = useQuery({
-    queryKey: ['fleet', 'dlp', 'stats'],
-    queryFn: fetchDlpStats,
-    refetchInterval: 10000,
+    queryKey: ['fleet', 'dlp', 'stats', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        const demoData = getDemoData(scenario);
+        return demoData.fleet.dlp.stats;
+      }
+      return fetchDlpStats();
+    },
+    refetchInterval: isDemoMode ? false : 10000,
   });
 
   const { data: violationsData, isLoading: violationsLoading } = useQuery({
-    queryKey: ['fleet', 'dlp', 'violations'],
-    queryFn: fetchDlpViolations,
-    refetchInterval: 5000,
+    queryKey: ['fleet', 'dlp', 'violations', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        const demoData = getDemoData(scenario);
+        return { violations: demoData.fleet.dlp.violations };
+      }
+      return fetchDlpViolations();
+    },
+    refetchInterval: isDemoMode ? false : 5000,
   });
 
   const violations = violationsData?.violations || [];
@@ -66,7 +82,7 @@ export function DlpDashboardPage() {
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/20 rounded text-status-success text-xs font-bold">
           <Shield className="w-4 h-4" />
-          ENFORCEMENT ACTIVE
+          {isDemoMode ? 'SIMULATED ENFORCEMENT' : 'ENFORCEMENT ACTIVE'}
         </div>
       </div>
 

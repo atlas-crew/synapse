@@ -7,7 +7,7 @@ import {
   XCircle,
   Zap,
   Search,
-  ClipboardList,
+  Shield,
   Settings,
   Globe,
   type LucideIcon,
@@ -121,6 +121,10 @@ export function FleetOverviewPage() {
     navigate(`/fleet/sensors/${sensor.id}`);
   }, [navigate]);
 
+  const handleConfigureClick = useCallback((sensor: SensorSummary) => {
+    navigate(`/fleet/sensors/${sensor.id}/config`);
+  }, [navigate]);
+
   if (overviewLoading || sensorsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -161,7 +165,7 @@ export function FleetOverviewPage() {
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
         <QuickAction icon={Search} title="Run Diagnostics" description="Check sensor health & connectivity" />
-        <QuickAction icon={ClipboardList} title="View Access Logs" description="Synapse-Pingora access & error logs" />
+        <QuickAction icon={Shield} title="DLP Management" description="Monitor sensitive data leaks" onClick={() => navigate('/fleet/dlp')} />
         <QuickAction icon={Settings} title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} />
         <QuickAction icon={Globe} title="Test Connectivity" description="Run network connectivity tests" />
       </div>
@@ -222,7 +226,11 @@ export function FleetOverviewPage() {
             </select>
           </div>
         </div>
-        <SensorTable sensors={filteredSensors} onSensorClick={handleSensorClick} />
+        <SensorTable 
+          sensors={filteredSensors} 
+          onSensorClick={handleSensorClick}
+          onConfigureClick={handleConfigureClick}
+        />
         <div className="p-4 border-t border-border-subtle text-sm text-ink-muted">
           Showing {filteredSensors.length} of {sensors.length} sensors
         </div>

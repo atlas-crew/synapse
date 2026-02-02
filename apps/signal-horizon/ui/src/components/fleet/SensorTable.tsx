@@ -1,16 +1,18 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { SensorSummary } from '../../types/fleet';
 import { SensorStatusBadge } from './SensorStatusBadge';
+import { Settings } from 'lucide-react';
 
 interface SensorTableProps {
   sensors: SensorSummary[];
   onSensorClick?: (sensor: SensorSummary) => void;
+  onConfigureClick?: (sensor: SensorSummary) => void;
 }
 
 type SortField = keyof SensorSummary | 'none';
 type SortDirection = 'asc' | 'desc';
 
-export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
+export function SensorTable({ sensors, onSensorClick, onConfigureClick }: SensorTableProps) {
   const [sortField, setSortField] = useState<SortField>('none');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -70,13 +72,16 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
                 </div>
               </th>
             ))}
+            <th className="px-6 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-widest">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody className="bg-surface-base divide-y divide-border-subtle">
           {sortedSensors.map((sensor) => (
             <tr
               key={sensor.id}
-              className="hover:bg-surface-subtle cursor-pointer transition-colors"
+              className="hover:bg-surface-subtle cursor-pointer transition-colors group"
               onClick={() => onSensorClick?.(sensor)}
             >
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-ink-primary">{sensor.name}</td>
@@ -87,6 +92,18 @@ export function SensorTable({ sensors, onSensorClick }: SensorTableProps) {
               <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">{sensor.latencyMs != null ? `${sensor.latencyMs.toFixed(0)}ms` : '—'}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">{sensor.version ?? '—'}</td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">{sensor.region ?? '—'}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-right">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfigureClick?.(sensor);
+                  }}
+                  className="p-1 hover:bg-surface-card rounded text-ink-muted hover:text-accent-primary transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  title="Configure Sensor"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
