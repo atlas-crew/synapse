@@ -117,6 +117,7 @@ static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> = Lazy::new(|| {
 });
 
 static ADMIN_CONSOLE_TEMPLATE: &str = include_str!("../assets/admin_console.html");
+const ADMIN_CONSOLE_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self'";
 
 /// Dev mode flag - when true, serves admin console from disk instead of embedded
 static DEV_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -945,18 +946,27 @@ async fn root_handler() -> impl IntoResponse {
 
 /// GET /console - Admin console for synapse operations
 async fn admin_console_handler() -> impl IntoResponse {
-    if is_dev_mode() {
+    let content = if is_dev_mode() {
         // In dev mode, read from disk for live reloading
         match std::fs::read_to_string("assets/admin_console.html") {
-            Ok(content) => Html(content),
+            Ok(content) => content,
             Err(e) => {
                 tracing::warn!("Failed to read admin console from disk: {}, falling back to embedded", e);
-                Html(ADMIN_CONSOLE_TEMPLATE.to_string())
+                ADMIN_CONSOLE_TEMPLATE.to_string()
             }
         }
     } else {
-        Html(ADMIN_CONSOLE_TEMPLATE.to_string())
-    }
+        ADMIN_CONSOLE_TEMPLATE.to_string()
+    };
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CONTENT_SECURITY_POLICY, ADMIN_CONSOLE_CSP),
+        ],
+        Html(content),
+    )
 }
 
 /// GET /health - Health check endpoint

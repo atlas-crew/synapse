@@ -3495,6 +3495,33 @@ Authorization: Bearer token123"></textarea>
   <div class="toast-container" id="toastContainer"></div>
 
   <script>
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function sanitizeJson(value) {
+      if (Array.isArray(value)) {
+        return value.map(sanitizeJson);
+      }
+      if (value && typeof value === 'object') {
+        const sanitized = {};
+        for (const [key, entry] of Object.entries(value)) {
+          sanitized[key] = sanitizeJson(entry);
+        }
+        return sanitized;
+      }
+      if (typeof value === 'string') {
+        return escapeHtml(value);
+      }
+      return value;
+    }
+
     // Theme management
     function toggleTheme() {
       document.body.classList.toggle('dark');
@@ -3523,7 +3550,8 @@ Authorization: Bearer token123"></textarea>
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        return await response.json();
+        const data = await response.json();
+        return sanitizeJson(data);
       } catch (error) {
         console.error(`API error: ${endpoint}`, error);
         throw error;
@@ -3821,11 +3849,11 @@ Authorization: Bearer token123"></textarea>
               Threshold: ${site.waf?.threshold || 70} | Rate: ${site.rate_limit?.requests_per_second || 'Unlimited'}/s
             </div>
             <div class="site-actions">
-              <button class="btn btn-ghost btn-sm" onclick="editSite('${site.hostname}')">Edit</button>
-              <button class="btn btn-secondary btn-sm" onclick="toggleSiteWaf('${site.hostname}', ${!site.waf?.enabled})">
+              <button class="btn btn-ghost btn-sm" data-hostname="${site.hostname}" onclick="editSite(this.dataset.hostname)">Edit</button>
+              <button class="btn btn-secondary btn-sm" data-hostname="${site.hostname}" data-enabled="${!site.waf?.enabled}" onclick="toggleSiteWaf(this.dataset.hostname, this.dataset.enabled === 'true')">
                 ${site.waf?.enabled ? 'Disable WAF' : 'Enable WAF'}
               </button>
-              <button class="btn btn-danger btn-sm" onclick="deleteSite('${site.hostname}')">Delete</button>
+              <button class="btn btn-danger btn-sm" data-hostname="${site.hostname}" onclick="deleteSite(this.dataset.hostname)">Delete</button>
             </div>
           </div>
         `).join('');
@@ -4342,7 +4370,7 @@ Authorization: Bearer token123"></textarea>
                   <span class="access-cidr">${rule.cidr || rule}</span>
                   <span class="access-comment">${rule.comment || ''}</span>
                 </div>
-                <button class="btn btn-danger btn-sm" onclick="removeAccessRule('${site}', 'allow', '${rule.cidr || rule}')">Remove</button>
+                <button class="btn btn-danger btn-sm" data-site="${site}" data-list="allow" data-cidr="${rule.cidr || rule}" onclick="removeAccessRule(this.dataset.site, this.dataset.list, this.dataset.cidr)">Remove</button>
               </div>
             `).join('');
           }
@@ -4354,7 +4382,7 @@ Authorization: Bearer token123"></textarea>
                   <span class="access-cidr">${rule.cidr || rule}</span>
                   <span class="access-comment">${rule.comment || ''}</span>
                 </div>
-                <button class="btn btn-danger btn-sm" onclick="removeAccessRule('${site}', 'deny', '${rule.cidr || rule}')">Remove</button>
+                <button class="btn btn-danger btn-sm" data-site="${site}" data-list="deny" data-cidr="${rule.cidr || rule}" onclick="removeAccessRule(this.dataset.site, this.dataset.list, this.dataset.cidr)">Remove</button>
               </div>
             `).join('');
           }
@@ -4454,7 +4482,7 @@ Authorization: Bearer token123"></textarea>
             </div>
             <div style="display: flex; align-items: center; gap: 16px;">
               <span class="entity-time">${formatTime(entity.blocked_at || entity.blockedAt)}</span>
-              <button class="btn btn-ghost btn-sm" onclick="releaseEntity('${entity.ip || entity.id}')">Release</button>
+              <button class="btn btn-ghost btn-sm" data-entity-id="${entity.ip || entity.id}" onclick="releaseEntity(this.dataset.entityId)">Release</button>
             </div>
           </div>
         `).join('');
@@ -4530,8 +4558,8 @@ Authorization: Bearer token123"></textarea>
               Attack types: ${(campaign.attack_types || []).join(', ') || 'Unknown'}
             </div>
             <div class="campaign-actions">
-              <button class="btn btn-danger btn-sm" onclick="blockCampaign('${campaign.id || campaign.campaign_id}')">Block All IPs</button>
-              <button class="btn btn-ghost btn-sm" onclick="resolveCampaign('${campaign.id || campaign.campaign_id}')">Resolve</button>
+              <button class="btn btn-danger btn-sm" data-campaign-id="${campaign.id || campaign.campaign_id}" onclick="blockCampaign(this.dataset.campaignId)">Block All IPs</button>
+              <button class="btn btn-ghost btn-sm" data-campaign-id="${campaign.id || campaign.campaign_id}" onclick="resolveCampaign(this.dataset.campaignId)">Resolve</button>
             </div>
           </div>
         `).join('');
@@ -4833,9 +4861,9 @@ Authorization: Bearer token123"></textarea>
               </div>
             </div>
             <div class="rule-actions">
-              <button class="btn btn-ghost btn-sm" onclick="editRule(${rule.id})">Edit</button>
-              <button class="btn btn-secondary btn-sm" onclick="toggleRule(${rule.id}, ${!rule.enabled})">${rule.enabled ? 'Disable' : 'Enable'}</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteRule(${rule.id})">Delete</button>
+              <button class="btn btn-ghost btn-sm" data-rule-id="${rule.id}" onclick="editRule(Number(this.dataset.ruleId))">Edit</button>
+              <button class="btn btn-secondary btn-sm" data-rule-id="${rule.id}" data-enabled="${!rule.enabled}" onclick="toggleRule(Number(this.dataset.ruleId), this.dataset.enabled === 'true')">${rule.enabled ? 'Disable' : 'Enable'}</button>
+              <button class="btn btn-danger btn-sm" data-rule-id="${rule.id}" onclick="deleteRule(Number(this.dataset.ruleId))">Delete</button>
             </div>
           </div>
         `;
@@ -5389,7 +5417,7 @@ Content-Type: application/json
             </div>
             <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
               <span class="cert-expiry ${expiryClass}">${expiryText}</span>
-              <button class="btn btn-sm btn-danger" onclick="deleteCertificate('${cert.id}')">Delete</button>
+              <button class="btn btn-sm btn-danger" data-cert-id="${cert.id}" onclick="deleteCertificate(this.dataset.certId)">Delete</button>
             </div>
           </div>
         `;
@@ -5484,7 +5512,7 @@ Content-Type: application/json
         allowContainer.innerHTML = cidrAllowList.map(cidr => `
           <span class="cidr-tag allow">
             ${cidr}
-            <button onclick="removeCidr('allow', '${cidr}')">&times;</button>
+            <button data-list="allow" data-cidr="${cidr}" onclick="removeCidr(this.dataset.list, this.dataset.cidr)">&times;</button>
           </span>
         `).join('');
       }
@@ -5495,7 +5523,7 @@ Content-Type: application/json
         denyContainer.innerHTML = cidrDenyList.map(cidr => `
           <span class="cidr-tag deny">
             ${cidr}
-            <button onclick="removeCidr('deny', '${cidr}')">&times;</button>
+            <button data-list="deny" data-cidr="${cidr}" onclick="removeCidr(this.dataset.list, this.dataset.cidr)">&times;</button>
           </span>
         `).join('');
       }
