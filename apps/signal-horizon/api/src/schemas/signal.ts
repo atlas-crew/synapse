@@ -6,6 +6,96 @@
 import { z } from 'zod';
 
 // =============================================================================
+// Fingerprint Validation (labs-764)
+// =============================================================================
+
+/**
+ * Minimum fingerprint length to ensure sufficient entropy.
+ * Browser fingerprints typically have 32+ characters.
+ */
+const MIN_FINGERPRINT_LENGTH = 16;
+
+/**
+ * Maximum fingerprint length to prevent memory exhaustion.
+ */
+const MAX_FINGERPRINT_LENGTH = 256;
+
+/**
+ * Valid characters for fingerprint strings.
+ * Allows alphanumeric, hyphens, underscores, colons, and periods.
+ * This covers common fingerprint formats:
+ * - JA4: t13d1517h2_8daaf6152771_b0da82dd1658
+ * - Canvas: a1b2c3d4e5f6...
+ * - WebGL: vendor_renderer_extensions
+ */
+const FINGERPRINT_CHAR_PATTERN = /^[a-zA-Z0-9_\-.:]+$/;
+
+/**
+ * Patterns that indicate low entropy/spoofed fingerprints.
+ * These patterns are commonly used in spoofing attempts.
+ */
+const SUSPICIOUS_FINGERPRINT_PATTERNS = [
+  /^(.)\1{7,}$/,           // 8+ repeated chars (aaaaaaaa)
+  /^(012345|123456|abcdef)/i, // Sequential patterns
+  /^(test|fake|spoof|null|undefined|none)/i, // Obviously fake values
+  /^0+$/,                  // All zeros
+];
+
+/**
+ * Validates a fingerprint string for format and entropy.
+ * Returns { valid: true } or { valid: false, reason: string }
+ */
+function validateFingerprintFormat(fp: string): { valid: true } | { valid: false; reason: string } {
+  // Check length
+  if (fp.length < MIN_FINGERPRINT_LENGTH) {
+    return { valid: false, reason: `Fingerprint too short (min ${MIN_FINGERPRINT_LENGTH} chars)` };
+  }
+
+  // Check character set
+  if (!FINGERPRINT_CHAR_PATTERN.test(fp)) {
+    return { valid: false, reason: 'Fingerprint contains invalid characters' };
+  }
+
+  // Check for suspicious patterns
+  for (const pattern of SUSPICIOUS_FINGERPRINT_PATTERNS) {
+    if (pattern.test(fp)) {
+      return { valid: false, reason: 'Fingerprint appears to be spoofed or invalid' };
+    }
+  }
+
+  // Check entropy - require at least 4 unique characters
+  const uniqueChars = new Set(fp.toLowerCase()).size;
+  if (uniqueChars < 4) {
+    return { valid: false, reason: 'Fingerprint has insufficient entropy' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Zod schema for validated fingerprint strings.
+ * Applies format, length, character set, and entropy validation.
+ *
+ * Accepted formats:
+ * - JA4 fingerprints: t13d1517h2_8daaf6152771_b0da82dd1658
+ * - Canvas fingerprints: a1b2c3d4e5f6g7h8i9j0...
+ * - Browser fingerprints: 3a7bd2f9e1c4...
+ */
+export const FingerprintSchema = z
+  .string()
+  .min(MIN_FINGERPRINT_LENGTH, `Fingerprint must be at least ${MIN_FINGERPRINT_LENGTH} characters`)
+  .max(MAX_FINGERPRINT_LENGTH, `Fingerprint must be at most ${MAX_FINGERPRINT_LENGTH} characters`)
+  .superRefine((fp, ctx) => {
+    const result = validateFingerprintFormat(fp);
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.reason,
+      });
+    }
+  });
+
+// =============================================================================
 // Signal Types & Metadata
 // =============================================================================
 
@@ -42,7 +132,11 @@ const DefaultMetadataSchema = z.record(z.unknown()).optional();
 
 export const BaseThreatSignalSchema = z.object({
   sourceIp: z.string().ip().optional(),
-  fingerprint: z.string().max(256).optional(),
+  /**
+   * Browser/device fingerprint with validation for format, entropy, and anti-spoofing.
+   * If provided, must meet minimum entropy requirements (labs-764).
+   */
+  fingerprint: FingerprintSchema.optional(),
   severity: SeveritySchema,
   confidence: z.number().min(0).max(1),
   eventCount: z.number().int().positive().optional(),
