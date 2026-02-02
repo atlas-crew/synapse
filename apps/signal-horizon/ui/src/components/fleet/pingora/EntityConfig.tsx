@@ -1,4 +1,5 @@
-import { Users, TrendingDown, MapPin, Plane } from 'lucide-react';
+import { useMemo } from 'react';
+import { Users, TrendingDown, MapPin, Plane, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export interface EntityConfigData {
@@ -24,7 +25,26 @@ interface EntityConfigProps {
   onTravelChange: (config: TravelConfigData) => void;
 }
 
+interface ValidationErrors {
+  block_threshold?: string;
+  max_risk?: string;
+}
+
+function validateEntityConfig(config: EntityConfigData): ValidationErrors {
+  const errors: ValidationErrors = {};
+
+  if (config.block_threshold > config.max_risk) {
+    errors.block_threshold = 'Block threshold cannot exceed max risk score';
+    errors.max_risk = 'Max risk must be >= block threshold';
+  }
+
+  return errors;
+}
+
 export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTravelChange }: EntityConfigProps) {
+  const validationErrors = useMemo(() => validateEntityConfig(entityConfig), [entityConfig]);
+  const hasErrors = Object.keys(validationErrors).length > 0;
+
   return (
     <div className="space-y-8">
       {/* Entity Store Section */}
@@ -49,7 +69,14 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
         </div>
 
         {entityConfig.enabled && (
-          <div className="grid grid-cols-3 gap-4 border-t border-border-subtle pt-6">
+          <div className="space-y-4 border-t border-border-subtle pt-6">
+            {hasErrors && (
+              <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+                <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
+                <span className="text-xs text-status-error">Configuration has validation errors</span>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-medium text-ink-secondary">Max Entities</label>
               <input
@@ -84,8 +111,16 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 max="100"
                 value={entityConfig.block_threshold}
                 onChange={(e) => onEntityChange({ ...entityConfig, block_threshold: parseFloat(e.target.value) || 70 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className={clsx(
+                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  validationErrors.block_threshold
+                    ? "border-status-error focus:border-status-error"
+                    : "border-border-subtle focus:border-ac-blue"
+                )}
               />
+              {validationErrors.block_threshold && (
+                <p className="text-xs text-status-error">{validationErrors.block_threshold}</p>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-ink-secondary">Max Risk Score</label>
@@ -95,8 +130,16 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 max="1000"
                 value={entityConfig.max_risk}
                 onChange={(e) => onEntityChange({ ...entityConfig, max_risk: parseFloat(e.target.value) || 100 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className={clsx(
+                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  validationErrors.max_risk
+                    ? "border-status-error focus:border-status-error"
+                    : "border-border-subtle focus:border-ac-blue"
+                )}
               />
+              {validationErrors.max_risk && (
+                <p className="text-xs text-status-error">{validationErrors.max_risk}</p>
+              )}
             </div>
             <div className="space-y-1 col-span-2">
               <label className="text-xs font-medium text-ink-secondary">Max Rules Per Entity</label>
@@ -108,6 +151,7 @@ export function EntityConfig({ entityConfig, travelConfig, onEntityChange, onTra
                 onChange={(e) => onEntityChange({ ...entityConfig, max_rules_per_entity: parseInt(e.target.value) || 50 })}
                 className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
               />
+            </div>
             </div>
           </div>
         )}

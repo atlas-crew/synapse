@@ -1,4 +1,5 @@
-import { Eye, Zap } from 'lucide-react';
+import { useMemo } from 'react';
+import { Eye, Zap, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export interface DlpConfigData {
@@ -16,7 +17,26 @@ interface DlpConfigProps {
   onChange: (config: DlpConfigData) => void;
 }
 
+interface ValidationErrors {
+  max_scan_size?: string;
+  max_body_inspection_bytes?: string;
+}
+
+function validateDlpConfig(config: DlpConfigData): ValidationErrors {
+  const errors: ValidationErrors = {};
+
+  if (config.max_body_inspection_bytes > config.max_scan_size) {
+    errors.max_body_inspection_bytes = 'Inspect bytes cannot exceed max scan size';
+    errors.max_scan_size = 'Max scan size must be >= inspect bytes';
+  }
+
+  return errors;
+}
+
 export function DlpConfig({ config, onChange }: DlpConfigProps) {
+  const validationErrors = useMemo(() => validateDlpConfig(config), [config]);
+  const hasErrors = Object.keys(validationErrors).length > 0;
+
   const handleKeywordsChange = (value: string) => {
     const keywords = value.split(',').map(k => k.trim()).filter(k => k.length > 0);
     onChange({ ...config, custom_keywords: keywords });
@@ -45,6 +65,13 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
 
       {config.enabled && (
         <div className="space-y-4 border-t border-border-subtle pt-6">
+          {hasErrors && (
+            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
+              <span className="text-xs text-status-error">Configuration has validation errors</span>
+            </div>
+          )}
+
           {/* Mode toggles */}
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -80,8 +107,16 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
                 max="50"
                 value={Math.round(config.max_scan_size / (1024 * 1024))}
                 onChange={(e) => onChange({ ...config, max_scan_size: (parseInt(e.target.value) || 5) * 1024 * 1024 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className={clsx(
+                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  validationErrors.max_scan_size
+                    ? "border-status-error focus:border-status-error"
+                    : "border-border-subtle focus:border-ac-blue"
+                )}
               />
+              {validationErrors.max_scan_size && (
+                <p className="text-xs text-status-error">{validationErrors.max_scan_size}</p>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-ink-secondary">Inspect Bytes (KB)</label>
@@ -91,8 +126,16 @@ export function DlpConfig({ config, onChange }: DlpConfigProps) {
                 max="64"
                 value={Math.round(config.max_body_inspection_bytes / 1024)}
                 onChange={(e) => onChange({ ...config, max_body_inspection_bytes: (parseInt(e.target.value) || 8) * 1024 })}
-                className="w-full px-3 py-2 bg-surface-base border border-border-subtle rounded text-sm focus:border-ac-blue focus:outline-none transition-colors"
+                className={clsx(
+                  "w-full px-3 py-2 bg-surface-base border rounded text-sm focus:outline-none transition-colors",
+                  validationErrors.max_body_inspection_bytes
+                    ? "border-status-error focus:border-status-error"
+                    : "border-border-subtle focus:border-ac-blue"
+                )}
               />
+              {validationErrors.max_body_inspection_bytes && (
+                <p className="text-xs text-status-error">{validationErrors.max_body_inspection_bytes}</p>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-ink-secondary">Max Matches</label>
