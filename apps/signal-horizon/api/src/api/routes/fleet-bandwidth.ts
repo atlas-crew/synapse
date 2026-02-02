@@ -53,6 +53,7 @@ const BillingQuerySchema = z.object({
 
 export interface FleetBandwidthRoutesOptions {
   tunnelBroker?: TunnelBroker;
+  bandwidthService?: BandwidthAggregatorService;
 }
 
 export function createFleetBandwidthRoutes(
@@ -61,7 +62,8 @@ export function createFleetBandwidthRoutes(
   options: FleetBandwidthRoutesOptions = {}
 ): Router {
   const router = Router();
-  const bandwidthService = new BandwidthAggregatorService(
+  // Use shared service if provided, otherwise create local instance
+  const bandwidthService = options.bandwidthService ?? new BandwidthAggregatorService(
     prisma,
     logger,
     { demoMode: true },

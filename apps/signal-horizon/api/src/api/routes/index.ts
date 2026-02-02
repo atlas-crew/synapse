@@ -54,6 +54,12 @@ export interface ApiRouterOptions {
   sessionQueryService?: FleetSessionQueryService;
   warRoomService?: WarRoomService;
   apiIntelligenceService?: APIIntelligenceService;
+  // Additional services for dependency injection
+  intelService?: import('../../services/intel/index.js').IntelService;
+  policyService?: import('../../services/fleet/policy-template.js').PolicyTemplateService;
+  bandwidthService?: import('../../services/fleet/bandwidth-aggregator.js').BandwidthAggregatorService;
+  playbookService?: import('../../services/warroom/playbook-service.js').PlaybookService;
+  securityAuditService?: import('../../services/audit/security-audit.js').SecurityAuditService;
 }
 
 export function createApiRouter(
@@ -110,7 +116,9 @@ export function createApiRouter(
   router.use('/warrooms', createWarRoomRoutes(prisma, logger, {
     warRoomService: options.warRoomService,
   }));
-  router.use('/intel', createIntelRoutes(prisma, logger));
+  router.use('/intel', createIntelRoutes(prisma, logger, {
+    intelService: options.intelService,
+  }));
 
   // Mount hunt routes if HuntService is provided
   if (options.huntService) {
@@ -176,6 +184,7 @@ export function createApiRouter(
   // Mount Fleet Policy routes for global security policy management
   router.use('/fleet/policies', createFleetPolicyRoutes(prisma, logger, {
     fleetCommander: options.fleetCommander,
+    policyService: options.policyService,
   }));
   logger.info('Fleet Policy routes mounted at /api/v1/fleet/policies');
 
@@ -188,6 +197,7 @@ export function createApiRouter(
   // Mount Fleet Bandwidth routes for bandwidth metrics and billing
   router.use('/fleet/bandwidth', createFleetBandwidthRoutes(prisma, logger, {
     tunnelBroker: options.tunnelBroker,
+    bandwidthService: options.bandwidthService,
   }));
   logger.info('Fleet Bandwidth routes mounted at /api/v1/fleet/bandwidth');
 
@@ -195,6 +205,8 @@ export function createApiRouter(
   router.use('/playbooks', createPlaybookRoutes(prisma, logger, {
     fleetCommander: options.fleetCommander,
     warRoomService: options.warRoomService,
+    playbookService: options.playbookService,
+    securityAuditService: options.securityAuditService,
   }));
   logger.info('Playbook routes mounted at /api/v1/playbooks');
 

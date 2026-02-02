@@ -14,6 +14,7 @@ export interface PlaybookRoutesOptions {
   fleetCommander?: FleetCommander;
   warRoomService?: WarRoomService;
   securityAuditService?: SecurityAuditService;
+  playbookService?: PlaybookService;
 }
 
 // Allowed command types for playbook steps
@@ -167,8 +168,8 @@ export function createPlaybookRoutes(
   // Initialize security audit service (create if not provided)
   const auditService = options.securityAuditService ?? new SecurityAuditService(prisma, logger);
 
-  // Pass audit service to PlaybookService for step-level and command-level auditing
-  const service = new PlaybookService(
+  // Use shared playbook service if provided, otherwise create local instance
+  const service = options.playbookService ?? new PlaybookService(
     prisma,
     logger,
     options.fleetCommander,

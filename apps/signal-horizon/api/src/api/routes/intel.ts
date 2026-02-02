@@ -39,9 +39,18 @@ const DEFAULT_CONFIG: IntelConfig = {
   minRiskScoreForExport: 0,
 };
 
-export function createIntelRoutes(prisma: PrismaClient, logger: import('pino').Logger): Router {
+export interface IntelRoutesOptions {
+  intelService?: IntelService;
+}
+
+export function createIntelRoutes(
+  prisma: PrismaClient,
+  logger: import('pino').Logger,
+  options: IntelRoutesOptions = {}
+): Router {
   const router = Router();
-  const intelService = new IntelService(prisma, logger, DEFAULT_CONFIG);
+  // Use shared service if provided, otherwise create local instance
+  const intelService = options.intelService ?? new IntelService(prisma, logger, DEFAULT_CONFIG);
 
   // Mount actor sub-routes
   router.use('/actors', createActorRoutes(prisma, logger));

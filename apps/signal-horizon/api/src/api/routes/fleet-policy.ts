@@ -31,6 +31,7 @@ import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 
 export interface FleetPolicyRoutesOptions {
   fleetCommander?: FleetCommander;
+  policyService?: PolicyTemplateService;
 }
 
 /**
@@ -42,7 +43,8 @@ export function createFleetPolicyRoutes(
   options: FleetPolicyRoutesOptions = {}
 ): Router {
   const router = Router();
-  const policyService = new PolicyTemplateService(prisma, logger);
+  // Use shared service if provided, otherwise create local instance
+  const policyService = options.policyService ?? new PolicyTemplateService(prisma, logger);
 
   // Set fleet commander if available
   if (options.fleetCommander) {
