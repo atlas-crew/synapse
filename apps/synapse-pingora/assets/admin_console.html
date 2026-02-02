@@ -3534,7 +3534,12 @@ Authorization: Bearer token123"></textarea>
     }
 
     // API helpers
-    const apiKey = '';
+    let apiKey = localStorage.getItem('synapseAdminApiKey') || '';
+    const apiKeyParam = new URLSearchParams(window.location.search).get('admin_key');
+    if (apiKeyParam) {
+      apiKey = apiKeyParam;
+      localStorage.setItem('synapseAdminApiKey', apiKey);
+    }
 
     async function fetchApi(endpoint, options = {}) {
       const headers = {

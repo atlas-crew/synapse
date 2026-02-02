@@ -180,7 +180,7 @@ pub struct ServerConfig {
     pub admin_listen: String,
     #[serde(default)]
     pub workers: usize,
-    /// API key for authenticating privileged admin operations (None = no auth)
+    /// API key for authenticating privileged admin operations (unset = generated at startup)
     #[serde(default)]
     pub admin_api_key: Option<String>,
     /// Trusted proxy CIDR ranges for X-Forwarded-For validation

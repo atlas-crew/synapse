@@ -329,8 +329,7 @@ impl ApiHandler {
     /// Uses `subtle::ConstantTimeEq` to prevent timing attacks that could
     /// allow attackers to guess valid tokens character-by-character.
     pub fn validate_auth(&self, token: Option<&str>) -> bool {
-        match (&self.auth_token, token) {
-            (None, _) => true, // No auth required
+        match (self.auth_token.as_deref(), token) {
             (Some(expected), Some(provided)) => {
                 let expected_bytes = expected.as_bytes();
                 let provided_bytes = provided.as_bytes();
@@ -338,7 +337,7 @@ impl ApiHandler {
                 expected_bytes.len() == provided_bytes.len()
                     && bool::from(expected_bytes.ct_eq(provided_bytes))
             }
-            (Some(_), None) => false,
+            _ => false,
         }
     }
 
@@ -1162,9 +1161,9 @@ mod tests {
     fn test_api_handler_no_auth() {
         let handler = ApiHandler::builder().build();
 
-        // Should allow any auth when no token configured
-        assert!(handler.validate_auth(None));
-        assert!(handler.validate_auth(Some("anything")));
+        // No configured auth token should deny access
+        assert!(!handler.validate_auth(None));
+        assert!(!handler.validate_auth(Some("anything")));
     }
 
     #[test]

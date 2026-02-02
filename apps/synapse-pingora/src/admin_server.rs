@@ -1,6 +1,7 @@
 //! Admin HTTP server for Pingora configuration management.
 //!
-//! Provides HTTP endpoints for the dashboard to manage Pingora:
+//! Provides HTTP endpoints for the dashboard to manage Pingora.
+//! SECURITY: All admin API endpoints require the X-Admin-Key header.
 //! - GET /health - Service health and WAF statistics
 //! - GET /metrics - Prometheus metrics
 //! - POST /reload - Reload configuration (requires auth)
@@ -732,8 +733,7 @@ async fn rate_limit_public(
 /// # Arguments
 /// * `addr` - Socket address to bind (e.g., "0.0.0.0:6191")
 /// * `handler` - API handler with references to health, metrics, reloader, etc.
-/// * `admin_api_key` - Optional API key for authenticating privileged operations
-/// * `admin_scopes` - Optional list of scopes granted to the API key (defaults to all)
+/// * `admin_api_key` - Required API key for authenticating admin operations
 pub async fn start_admin_server(
     addr: SocketAddr,
     handler: Arc<ApiHandler>,
@@ -827,8 +827,12 @@ pub async fn start_admin_server(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
-    // Routes that don't require authentication (read-only or health checks)
+    // Routes that are safe to expose without authentication (console shell only).
     let public_routes = Router::new()
+        .route("/console", get(admin_console_handler));
+
+    // All remaining admin API routes require authentication.
+    let authenticated_routes = Router::new()
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .route("/sites", get(sites_handler))
@@ -895,9 +899,9 @@ pub async fn start_admin_server(
         // Configuration export/import
         .route("/_sensor/config/export", get(config_export_handler))
         .route("/_sensor/config/import", post(config_import_handler))
-        .route("/console", get(admin_console_handler))
         .route("/", get(root_handler))
-        // Rate limit public endpoints (1000 req/min per IP)
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        // Rate limit authenticated endpoints (1000 req/min per IP)
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
 
     let app = Router::new()
@@ -905,6 +909,7 @@ pub async fn start_admin_server(
         .merge(config_write_routes)
         .merge(service_manage_routes)
         .merge(sensor_read_routes)
+        .merge(authenticated_routes)
         .merge(public_routes)
         .layer(cors)
         .with_state(state);
@@ -4373,8 +4378,8 @@ mod tests {
         let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
         let state = AdminState {
             handler,
-            admin_api_key: None,
-            admin_scopes: vec![],
+            admin_api_key: "test-key".to_string(),
+            admin_scopes: scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
             admin_rate_limiter,
             public_rate_limiter,
             auth_failure_limiter,
@@ -4390,6 +4395,7 @@ mod tests {
             .route("/test", post(test_handler))
             .route("/restart", post(restart_handler))
             .route("/", get(root_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
             .with_state(state)
     }
 
@@ -4398,7 +4404,13 @@ mod tests {
         let app = create_test_app();
 
         let response = app
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -4410,7 +4422,13 @@ mod tests {
         let app = create_test_app();
 
         let response = app
-            .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/metrics")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -4422,7 +4440,13 @@ mod tests {
         let app = create_test_app();
 
         let response = app
-            .oneshot(Request::builder().uri("/stats").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/stats")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -4434,7 +4458,13 @@ mod tests {
         let app = create_test_app();
 
         let response = app
-            .oneshot(Request::builder().uri("/waf/stats").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/waf/stats")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -4450,6 +4480,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/reload")
+                    .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -4469,6 +4500,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/test")
+                    .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -4487,6 +4519,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/restart")
+                    .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -4501,7 +4534,13 @@ mod tests {
         let app = create_test_app();
 
         let response = app
-            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 

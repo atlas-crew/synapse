@@ -39,7 +39,7 @@ pub struct GlobalConfig {
     /// Log level (trace, debug, info, warn, error)
     #[serde(default = "default_log_level")]
     pub log_level: String,
-    /// API key for the admin server (requires authentication if set)
+    /// API key for the admin server (if unset, a secure random key is generated at startup)
     #[serde(default)]
     pub admin_api_key: Option<String>,
     /// Honeypot trap endpoint configuration
