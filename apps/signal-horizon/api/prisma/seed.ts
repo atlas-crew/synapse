@@ -85,6 +85,16 @@ async function main() {
   const sensors = await Promise.all([
     prisma.sensor.create({
       data: {
+        id: 'synapse-pingora-1',  // Sensor bridge sensor
+        tenantId: 'tenant-acme',
+        name: 'Synapse Pingora WAF',
+        version: '0.1.0',
+        connectionState: 'DISCONNECTED',
+        region: 'local',
+      },
+    }),
+    prisma.sensor.create({
+      data: {
         id: 'sensor-acme-1',  // Predictable ID for tunnel testing
         tenantId: 'tenant-acme',
         name: 'acme-sensor-prod-1',
