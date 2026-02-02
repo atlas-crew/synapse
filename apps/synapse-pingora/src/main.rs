@@ -3876,13 +3876,25 @@ fn main() {
     let admin_addr: SocketAddr = config.server.admin_listen.parse()
         .expect("Invalid admin_listen address");
     let admin_handler = Arc::clone(&api_handler);
-    let admin_api_key = config.server.admin_api_key.clone();
-
-    if admin_api_key.is_some() {
-        info!("Admin API authentication enabled");
-    } else {
-        warn!("Admin API authentication DISABLED - set server.admin_api_key in config");
-    }
+    // SECURITY: Enforce authentication on admin API
+    // If no API key is configured, generate a secure random token to prevent unauthorized access
+    let admin_api_key = match config.server.admin_api_key.clone() {
+        Some(key) => {
+            info!("Admin API authentication enabled (configured key)");
+            key
+        }
+        None => {
+            // Generate a secure random token using UUID v4
+            let generated_key = uuid::Uuid::new_v4().to_string();
+            warn!("==========================================================");
+            warn!("ADMIN API KEY NOT CONFIGURED - GENERATED SECURE TOKEN:");
+            warn!("  {}", generated_key);
+            warn!("Use this key in X-Admin-Key header for admin API access.");
+            warn!("To persist, set server.admin_api_key in your config file.");
+            warn!("==========================================================");
+            generated_key
+        }
+    };
 
     // Parse trusted proxies for X-Forwarded-For validation
     // Fail startup on invalid CIDR to prevent misconfiguration from silently degrading security

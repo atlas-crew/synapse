@@ -506,8 +506,8 @@ type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, governo
 #[derive(Clone)]
 pub struct AdminState {
     pub handler: Arc<ApiHandler>,
-    /// API key for authenticating privileged operations (None = no auth required)
-    pub admin_api_key: Option<String>,
+    /// API key for authenticating privileged operations (SECURITY: now mandatory)
+    pub admin_api_key: String,
     /// Scopes granted to the admin API key (defaults to ALL if not specified)
     pub admin_scopes: Vec<String>,
     /// Per-IP rate limiter for admin endpoints (100 req/min for admin, 1000 req/min for public)
@@ -523,18 +523,14 @@ pub struct AdminState {
 /// Authentication middleware for privileged admin endpoints.
 /// Checks X-Admin-Key header against configured API key.
 ///
-/// SECURITY: Implements rate limiting for authentication failures to prevent
+/// SECURITY: Authentication is now mandatory - no bypass for missing config.
+/// Implements rate limiting for authentication failures to prevent
 /// brute-force attacks. After 5 failed attempts per minute, returns 429.
 async fn require_auth(
     State(state): State<AdminState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // If no API key is configured, allow all requests (backwards compatibility)
-    let Some(ref expected_key) = state.admin_api_key else {
-        return Ok(next.run(request).await);
-    };
-
     // Extract client IP for rate limiting
     let client_ip = extract_client_ip(&request);
 
@@ -550,7 +546,7 @@ async fn require_auth(
             // An attacker could otherwise measure response times to incrementally
             // guess the API key byte-by-byte
             let key_bytes = key.as_bytes();
-            let expected_bytes = expected_key.as_bytes();
+            let expected_bytes = state.admin_api_key.as_bytes();
             let is_valid = key_bytes.len() == expected_bytes.len()
                 && bool::from(key_bytes.ct_eq(expected_bytes));
 
@@ -741,14 +737,10 @@ async fn rate_limit_public(
 pub async fn start_admin_server(
     addr: SocketAddr,
     handler: Arc<ApiHandler>,
-    admin_api_key: Option<String>,
+    admin_api_key: String,
 ) -> std::io::Result<()> {
-    // Default to all scopes if API key is provided, empty if no auth required
-    let admin_scopes = if admin_api_key.is_some() {
-        scopes::ALL.iter().map(|s| s.to_string()).collect()
-    } else {
-        vec![] // No scopes needed when auth is disabled
-    };
+    // SECURITY: Authentication is now mandatory - all admin scopes granted to the API key
+    let admin_scopes: Vec<String> = scopes::ALL.iter().map(|s| s.to_string()).collect();
     // Create rate limiters:
     // - Admin routes: 100 requests per minute per IP (stricter for privileged operations)
     // - Public routes: 1000 requests per minute per IP (more generous for monitoring)
