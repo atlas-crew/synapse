@@ -8,6 +8,7 @@
 //! - WAF statistics (`GET /waf/stats`)
 //! - Site-specific configuration (`PUT /sites/:hostname/waf`, etc.)
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use parking_lot::RwLock;
@@ -28,7 +29,8 @@ use crate::correlation::CampaignManager;
 use crate::actor::{ActorManager, ActorState, ActorStatsSnapshot};
 use crate::session::{SessionManager, SessionState, SessionStatsSnapshot};
 use crate::payload::{PayloadManager, EndpointSortBy};
-use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions};
+use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions, TopSignalType, TimeRange};
+use crate::intelligence::{SignalManager, SignalQueryOptions, Signal, SignalSummary};
 use crate::crawler::CrawlerDetector;
 use crate::horizon::HorizonClient;
 use crate::dlp::DlpScanner;
@@ -99,6 +101,8 @@ pub struct ApiHandler {
     payload_manager: Option<Arc<PayloadManager>>,
     /// Trends/anomaly detection manager (Phase 6)
     trends_manager: Option<Arc<TrendsManager>>,
+    /// Signal intelligence manager (Phase 6)
+    signal_manager: Option<Arc<SignalManager>>,
     /// Crawler/bot detection (Phase 6)
     crawler_detector: Option<Arc<CrawlerDetector>>,
     /// DLP scanner for sensitive data detection (Phase 4)
@@ -378,6 +382,11 @@ impl ApiHandler {
         self.session_manager.as_ref().map(Arc::clone)
     }
 
+    /// Returns the signal manager (if configured).
+    pub fn signal_manager(&self) -> Option<Arc<SignalManager>> {
+        self.signal_manager.as_ref().map(Arc::clone)
+    }
+
     /// Returns the synapse engine (if configured).
     pub fn synapse_engine(&self) -> Option<Arc<RwLock<Synapse>>> {
         self.synapse_engine.as_ref().map(Arc::clone)
@@ -532,12 +541,17 @@ impl ApiHandler {
         match &self.trends_manager {
             Some(manager) => {
                 let summary = manager.get_summary(TrendQueryOptions::default());
+                let signal_counts: HashMap<String, usize> = summary
+                    .by_category
+                    .iter()
+                    .map(|(category, data)| (category.to_string(), data.count))
+                    .collect();
                 ApiResponse::ok(TrendsSummaryResponse {
                     total_signals: summary.total_signals,
-                    category_count: summary.by_category.len(),
-                    top_signal_types: summary.top_signal_types.iter()
-                        .map(|t| format!("{:?}", t.signal_type))
-                        .collect(),
+                    signal_counts,
+                    top_signal_types: summary.top_signal_types.clone(),
+                    time_range: summary.time_range,
+                    anomaly_count: summary.anomaly_count,
                 })
             }
             None => ApiResponse::err("Trends manager not available"),
@@ -564,6 +578,22 @@ impl ApiHandler {
                 ApiResponse::ok(responses)
             }
             None => ApiResponse::err("Trends manager not available"),
+        }
+    }
+
+    // =========================================================================
+    // Signal Intelligence Endpoints
+    // =========================================================================
+
+    /// Handles GET /_sensor/signals - returns recent intelligence signals.
+    pub fn handle_signals(&self, options: SignalQueryOptions) -> ApiResponse<SignalListResponse> {
+        match &self.signal_manager {
+            Some(manager) => {
+                let signals = manager.list_signals(options);
+                let summary = manager.summary();
+                ApiResponse::ok(SignalListResponse { signals, summary })
+            }
+            None => ApiResponse::err("Signal manager not available"),
         }
     }
 
@@ -699,8 +729,10 @@ pub struct PayloadAnomalyResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrendsSummaryResponse {
     pub total_signals: usize,
-    pub category_count: usize,
-    pub top_signal_types: Vec<String>,
+    pub signal_counts: HashMap<String, usize>,
+    pub top_signal_types: Vec<TopSignalType>,
+    pub time_range: TimeRange,
+    pub anomaly_count: usize,
 }
 
 /// Trends anomaly response.
@@ -711,6 +743,13 @@ pub struct TrendsAnomalyResponse {
     pub entities: Vec<String>,
     pub description: String,
     pub detected_at_ms: i64,
+}
+
+/// Signal list response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignalListResponse {
+    pub signals: Vec<Signal>,
+    pub summary: SignalSummary,
 }
 
 /// Crawler detection stats response.
@@ -763,6 +802,7 @@ pub struct ApiHandlerBuilder {
     synapse_engine: Option<Arc<RwLock<Synapse>>>,
     payload_manager: Option<Arc<PayloadManager>>,
     trends_manager: Option<Arc<TrendsManager>>,
+    signal_manager: Option<Arc<SignalManager>>,
     crawler_detector: Option<Arc<CrawlerDetector>>,
     dlp_scanner: Option<Arc<DlpScanner>>,
     horizon_client: Option<Arc<HorizonClient>>,
@@ -859,6 +899,12 @@ impl ApiHandlerBuilder {
         self
     }
 
+    /// Sets the signal intelligence manager.
+    pub fn signal_manager(mut self, manager: Arc<SignalManager>) -> Self {
+        self.signal_manager = Some(manager);
+        self
+    }
+
     /// Sets the crawler/bot detector.
     pub fn crawler_detector(mut self, detector: Arc<CrawlerDetector>) -> Self {
         self.crawler_detector = Some(detector);
@@ -899,6 +945,7 @@ impl ApiHandlerBuilder {
             synapse_engine: self.synapse_engine,
             payload_manager: self.payload_manager,
             trends_manager: self.trends_manager,
+            signal_manager: self.signal_manager,
             crawler_detector: self.crawler_detector,
             dlp_scanner: self.dlp_scanner,
             horizon_client: self.horizon_client,

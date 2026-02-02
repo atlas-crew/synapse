@@ -19,6 +19,7 @@ use governor::{Quota, RateLimiter, state::keyed::DefaultKeyedStateStore};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use sysinfo::{System, Networks, Disks};
+use crate::intelligence::{SignalCategory, SignalQueryOptions};
 
 // Type aliases for profile/schema data accessors
 // These are callbacks that the binary (main.rs) can set to provide real data
@@ -852,6 +853,7 @@ pub async fn start_admin_server(
         .route("/_sensor/metrics/reset", post(sensor_metrics_reset_handler))
         .route("/_sensor/blocks", get(sensor_blocks_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
+        .route("/_sensor/signals", get(sensor_signals_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
         .route("/_sensor/campaigns", get(sensor_campaigns_handler))
         .route("/_sensor/campaigns/:id", get(sensor_campaign_detail_handler))
@@ -1446,6 +1448,14 @@ struct BlocksQuery {
     limit: Option<usize>,
 }
 
+/// Query parameters for signals endpoint
+#[derive(Debug, Deserialize)]
+struct SignalsQuery {
+    limit: Option<usize>,
+    category: Option<String>,
+    since_ms: Option<u64>,
+}
+
 /// GET /_sensor/blocks - Returns recent block events
 async fn sensor_blocks_handler(
     Query(params): Query<BlocksQuery>,
@@ -1462,9 +1472,11 @@ async fn sensor_trends_handler(State(state): State<AdminState>) -> impl IntoResp
     if response.success {
         if let Some(data) = response.data {
             return (StatusCode::OK, Json(serde_json::json!({
-                "signalCounts": data.category_count,
+                "signalCounts": data.signal_counts,
                 "totalSignals": data.total_signals,
-                "topSignals": data.top_signal_types
+                "topSignals": data.top_signal_types,
+                "timeRange": data.time_range,
+                "anomalyCount": data.anomaly_count
             })));
         }
     }
@@ -1476,6 +1488,52 @@ async fn sensor_trends_handler(State(state): State<AdminState>) -> impl IntoResp
         "signalCounts": {},
         "timeline": [],
         "topSignals": []
+    })))
+}
+
+/// GET /_sensor/signals - Returns intelligence signals from SignalManager
+async fn sensor_signals_handler(
+    Query(params): Query<SignalsQuery>,
+    State(state): State<AdminState>,
+) -> impl IntoResponse {
+    let limit = params.limit.unwrap_or(100).min(500);
+
+    let category = params.category.as_deref().and_then(|raw| {
+        match raw.to_lowercase().as_str() {
+            "attack" => Some(SignalCategory::Attack),
+            "anomaly" => Some(SignalCategory::Anomaly),
+            "behavior" => Some(SignalCategory::Behavior),
+            "intelligence" => Some(SignalCategory::Intelligence),
+            _ => None,
+        }
+    });
+
+    let response = state.handler.handle_signals(SignalQueryOptions {
+        category,
+        limit: Some(limit),
+        since_ms: params.since_ms,
+    });
+
+    if response.success {
+        if let Some(data) = response.data {
+            return (StatusCode::OK, Json(serde_json::json!({
+                "signals": data.signals,
+                "summary": data.summary
+            })));
+        }
+    }
+
+    if let Some(err) = response.error {
+        log::warn!("SignalManager not available: {}", err);
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "signals": [],
+        "summary": {
+            "total_signals": 0,
+            "by_category": {},
+            "top_signal_types": []
+        }
     })))
 }
 

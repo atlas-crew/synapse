@@ -496,6 +496,17 @@ impl ActorManager {
         }
     }
 
+    /// Touch an actor to update last seen timestamp.
+    pub fn touch_actor(&self, actor_id: &str) {
+        if !self.config.enabled {
+            return;
+        }
+
+        if let Some(mut entry) = self.actors.get_mut(actor_id) {
+            entry.touch();
+        }
+    }
+
     /// Get actor state by ID.
     pub fn get_actor(&self, actor_id: &str) -> Option<ActorState> {
         self.actors.get(actor_id).map(|entry| entry.value().clone())
