@@ -37,11 +37,16 @@ pub use rate_limiter::{RateLimiter, RateLimiterStats};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
+
+/// Default maximum concurrent mirror operations
+const DEFAULT_MAX_CONCURRENT_MIRRORS: usize = 100;
 
 /// Manager for shadow mirroring operations.
 ///
 /// Coordinates mirror decisions, rate limiting, and async delivery to honeypots.
+/// Uses a bounded queue (semaphore) to prevent memory exhaustion from slow honeypots.
 pub struct ShadowMirrorManager {
     /// Shadow mirroring configuration
     config: ShadowMirrorConfig,
@@ -51,6 +56,10 @@ pub struct ShadowMirrorManager {
     client: Arc<ShadowMirrorClient>,
     /// Sensor ID for payload attribution
     sensor_id: String,
+    /// Semaphore to bound concurrent mirror operations
+    mirror_semaphore: Arc<Semaphore>,
+    /// Maximum concurrent mirror operations
+    max_concurrent: usize,
     /// Total mirror attempts
     attempts: AtomicU64,
     /// Mirrors skipped due to risk score
@@ -59,18 +68,35 @@ pub struct ShadowMirrorManager {
     skipped_sampling: AtomicU64,
     /// Mirrors skipped due to rate limiting
     skipped_rate_limit: AtomicU64,
+    /// Mirrors dropped due to queue full (backpressure)
+    dropped_queue_full: AtomicU64,
     /// Mirrors sent successfully
     sent: AtomicU64,
 }
 
 impl ShadowMirrorManager {
-    /// Creates a new shadow mirror manager.
+    /// Creates a new shadow mirror manager with default concurrency limit.
     pub fn new(config: ShadowMirrorConfig, sensor_id: String) -> Self {
+        Self::with_max_concurrent(config, sensor_id, DEFAULT_MAX_CONCURRENT_MIRRORS)
+    }
+
+    /// Creates a new shadow mirror manager with a custom concurrency limit.
+    ///
+    /// # Arguments
+    /// * `config` - Shadow mirror configuration
+    /// * `sensor_id` - Sensor ID for payload attribution
+    /// * `max_concurrent` - Maximum concurrent mirror operations (prevents memory exhaustion)
+    pub fn with_max_concurrent(
+        config: ShadowMirrorConfig,
+        sensor_id: String,
+        max_concurrent: usize,
+    ) -> Self {
         let rate_limiter = Arc::new(RateLimiter::new(config.per_ip_rate_limit));
         let client = Arc::new(ShadowMirrorClient::new(
             config.hmac_secret.clone(),
             config.timeout(),
         ));
+        let mirror_semaphore = Arc::new(Semaphore::new(max_concurrent));
 
         info!(
             enabled = config.enabled,
@@ -79,7 +105,8 @@ impl ShadowMirrorManager {
             sampling = config.sampling_rate,
             per_ip_limit = config.per_ip_rate_limit,
             honeypots = config.honeypot_urls.len(),
-            "Shadow mirror manager initialized"
+            max_concurrent = max_concurrent,
+            "Shadow mirror manager initialized with bounded queue"
         );
 
         Self {
@@ -87,10 +114,13 @@ impl ShadowMirrorManager {
             rate_limiter,
             client,
             sensor_id,
+            mirror_semaphore,
+            max_concurrent,
             attempts: AtomicU64::new(0),
             skipped_risk: AtomicU64::new(0),
             skipped_sampling: AtomicU64::new(0),
             skipped_rate_limit: AtomicU64::new(0),
+            dropped_queue_full: AtomicU64::new(0),
             sent: AtomicU64::new(0),
         }
     }
@@ -157,10 +187,31 @@ impl ShadowMirrorManager {
         true
     }
 
-    /// Sends a mirror payload asynchronously (fire-and-forget).
+    /// Sends a mirror payload asynchronously (fire-and-forget) with bounded concurrency.
     ///
     /// Returns immediately without waiting for delivery to complete.
-    pub fn mirror_async(&self, payload: MirrorPayload) {
+    /// Uses a semaphore to limit concurrent operations and prevent memory exhaustion
+    /// when honeypots are slow or unresponsive. If the queue is full, the request
+    /// is dropped (backpressure) rather than blocking or causing unbounded growth.
+    ///
+    /// # Returns
+    /// `true` if the payload was queued for delivery, `false` if dropped due to backpressure.
+    pub fn mirror_async(&self, payload: MirrorPayload) -> bool {
+        // Try to acquire semaphore permit without blocking
+        let permit = match self.mirror_semaphore.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => {
+                // Queue is full - apply backpressure by dropping this request
+                self.dropped_queue_full.fetch_add(1, Ordering::Relaxed);
+                debug!(
+                    request_id = %payload.request_id,
+                    max_concurrent = self.max_concurrent,
+                    "Shadow mirror dropped: queue full (backpressure)"
+                );
+                return false;
+            }
+        };
+
         let client = Arc::clone(&self.client);
         let urls = self.config.honeypot_urls.clone();
         let timeout = self.config.timeout();
@@ -168,8 +219,11 @@ impl ShadowMirrorManager {
 
         self.sent.fetch_add(1, Ordering::Relaxed);
 
-        // Fire and forget - don't await, don't block
+        // Fire and forget - permit is released when task completes
         tokio::spawn(async move {
+            // Permit is held for the duration of this async block
+            let _permit = permit;
+
             if let Err(e) = client.send_to_honeypot(&urls, payload, timeout).await {
                 // Log but don't fail - this is best-effort
                 warn!(
@@ -178,7 +232,10 @@ impl ShadowMirrorManager {
                     "Shadow mirror delivery failed"
                 );
             }
+            // Permit is dropped here, releasing the semaphore slot
         });
+
+        true
     }
 
     /// Creates a mirror payload from request context.
@@ -268,11 +325,14 @@ impl ShadowMirrorManager {
             skipped_risk: self.skipped_risk.load(Ordering::Relaxed),
             skipped_sampling: self.skipped_sampling.load(Ordering::Relaxed),
             skipped_rate_limit: self.skipped_rate_limit.load(Ordering::Relaxed),
+            dropped_queue_full: self.dropped_queue_full.load(Ordering::Relaxed),
             sent: self.sent.load(Ordering::Relaxed),
             delivery_successes: client_stats.successes,
             delivery_failures: client_stats.failures,
             bytes_sent: client_stats.bytes_sent,
             tracked_ips: rate_limiter_stats.tracked_ips,
+            max_concurrent: self.max_concurrent,
+            queue_available: self.mirror_semaphore.available_permits(),
             min_risk_score: self.config.min_risk_score,
             max_risk_score: self.config.max_risk_score,
             sampling_rate: self.config.sampling_rate,
@@ -287,6 +347,7 @@ impl ShadowMirrorManager {
         self.skipped_risk.store(0, Ordering::Relaxed);
         self.skipped_sampling.store(0, Ordering::Relaxed);
         self.skipped_rate_limit.store(0, Ordering::Relaxed);
+        self.dropped_queue_full.store(0, Ordering::Relaxed);
         self.sent.store(0, Ordering::Relaxed);
         self.client.reset_stats();
         self.rate_limiter.reset();
@@ -316,6 +377,8 @@ pub struct ShadowMirrorStats {
     pub skipped_sampling: u64,
     /// Skipped due to per-IP rate limiting
     pub skipped_rate_limit: u64,
+    /// Dropped due to queue being full (backpressure)
+    pub dropped_queue_full: u64,
     /// Successfully queued for sending
     pub sent: u64,
     /// Successfully delivered to honeypot
@@ -326,6 +389,10 @@ pub struct ShadowMirrorStats {
     pub bytes_sent: u64,
     /// Number of IPs being rate-tracked
     pub tracked_ips: usize,
+    /// Maximum concurrent mirror operations allowed
+    pub max_concurrent: usize,
+    /// Current available slots in the queue
+    pub queue_available: usize,
     /// Configured minimum risk score
     pub min_risk_score: f32,
     /// Configured maximum risk score
@@ -524,5 +591,98 @@ mod tests {
         let stats = manager.stats();
         assert_eq!(stats.attempts, 0);
         assert_eq!(stats.sent, 0);
+    }
+
+    #[test]
+    fn test_bounded_queue_default_concurrency() {
+        let config = create_test_config();
+        let manager = ShadowMirrorManager::new(config, "sensor-01".to_string());
+
+        let stats = manager.stats();
+        assert_eq!(stats.max_concurrent, DEFAULT_MAX_CONCURRENT_MIRRORS);
+        assert_eq!(stats.queue_available, DEFAULT_MAX_CONCURRENT_MIRRORS);
+    }
+
+    #[test]
+    fn test_bounded_queue_custom_concurrency() {
+        let config = create_test_config();
+        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 50);
+
+        let stats = manager.stats();
+        assert_eq!(stats.max_concurrent, 50);
+        assert_eq!(stats.queue_available, 50);
+    }
+
+    #[tokio::test]
+    async fn test_bounded_queue_backpressure() {
+        let config = create_test_config();
+        // Create manager with very small queue to test backpressure
+        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 2);
+
+        // Create test payloads
+        let payload1 = manager.create_payload(
+            "req-1".to_string(),
+            "10.0.0.1".to_string(),
+            "GET".to_string(),
+            "/test".to_string(),
+            "site".to_string(),
+            50.0,
+            vec![],
+            None,
+            None,
+            None,
+            HashMap::new(),
+            None,
+        );
+        let payload2 = manager.create_payload(
+            "req-2".to_string(),
+            "10.0.0.1".to_string(),
+            "GET".to_string(),
+            "/test".to_string(),
+            "site".to_string(),
+            50.0,
+            vec![],
+            None,
+            None,
+            None,
+            HashMap::new(),
+            None,
+        );
+        let payload3 = manager.create_payload(
+            "req-3".to_string(),
+            "10.0.0.1".to_string(),
+            "GET".to_string(),
+            "/test".to_string(),
+            "site".to_string(),
+            50.0,
+            vec![],
+            None,
+            None,
+            None,
+            HashMap::new(),
+            None,
+        );
+
+        // First two should succeed (queue size = 2)
+        assert!(manager.mirror_async(payload1));
+        assert!(manager.mirror_async(payload2));
+
+        // Third should be dropped (backpressure)
+        assert!(!manager.mirror_async(payload3));
+
+        let stats = manager.stats();
+        assert_eq!(stats.sent, 2);
+        assert_eq!(stats.dropped_queue_full, 1);
+    }
+
+    #[test]
+    fn test_stats_includes_queue_metrics() {
+        let config = create_test_config();
+        let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 25);
+
+        let stats = manager.stats();
+        assert_eq!(stats.max_concurrent, 25);
+        assert_eq!(stats.queue_available, 25);
+        assert_eq!(stats.dropped_queue_full, 0);
     }
 }
