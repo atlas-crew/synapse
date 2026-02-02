@@ -3176,7 +3176,7 @@ async fn config_import_handler(
 ) -> impl IntoResponse {
     // Try to parse as YAML first, then JSON
     // SECURITY: Log internal parse errors but return sanitized message to client
-    let config: serde_json::Value = match serde_yaml::from_str(&body) {
+    let config_value: serde_json::Value = match serde_yaml::from_str(&body) {
         Ok(v) => v,
         Err(yaml_err) => match serde_json::from_str(&body) {
             Ok(v) => v,
@@ -3195,29 +3195,61 @@ async fn config_import_handler(
     };
 
     // Validate the configuration has expected structure
-    if config.get("sites").is_none() && config.get("server").is_none() {
+    if config_value.get("sites").is_none() && config_value.get("server").is_none() {
         return validation_error(
             "Configuration must contain 'sites' or 'server' section",
             None,
         );
     }
 
-    // For now, just validate - actual import would require config manager
-    // In a full implementation, this would apply the config via ConfigManager
-    if let Some(ref _config_mgr) = state.handler.config_manager() {
-        // Try to validate the config
-        info!("Config import received - validation passed");
-        (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "message": "Configuration validated successfully. Restart required to apply.",
-            "validated": true
-        })))
-    } else {
-        (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "message": "Configuration validated. ConfigManager not available - save to config.yaml manually.",
-            "validated": true
-        })))
+    // Convert JSON value to ConfigFile struct
+    let config_file: crate::config::ConfigFile = match serde_json::from_value(config_value) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Config import deserialization failed: {}", e);
+            return validation_error(
+                "Configuration structure is invalid. Check field names and types.",
+                Some(&e),
+            );
+        }
+    };
+
+    // Apply the configuration if ConfigManager is available
+    match state.handler.config_manager() {
+        Some(config_mgr) => {
+            match config_mgr.update_full_config(config_file) {
+                Ok(result) => {
+                    info!(
+                        "Config imported successfully: applied={}, persisted={}, warnings={}",
+                        result.applied, result.persisted, result.warnings.len()
+                    );
+                    (StatusCode::OK, Json(serde_json::json!({
+                        "success": true,
+                        "message": "Configuration imported and applied successfully.",
+                        "applied": result.applied,
+                        "persisted": result.persisted,
+                        "rebuild_required": result.rebuild_required,
+                        "warnings": result.warnings
+                    })))
+                }
+                Err(e) => {
+                    tracing::warn!("Config import application failed: {}", e);
+                    internal_error(
+                        "Failed to apply configuration. See server logs for details.",
+                        Some(&e),
+                    )
+                }
+            }
+        }
+        None => {
+            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+                "success": false,
+                "error": {
+                    "code": error_codes::SERVICE_UNAVAILABLE,
+                    "message": "ConfigManager not available. Configuration cannot be applied at runtime."
+                }
+            })))
+        }
     }
 }
 
