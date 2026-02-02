@@ -3,6 +3,7 @@
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -285,7 +286,8 @@ async fn connection_loop(
     let mut attempt = 0u32;
     let mut consecutive_failures = 0u32;
     let mut circuit_open_until: Option<Instant> = None;
-    let mut pending_signals: Vec<ThreatSignal> = Vec::new();
+    let mut pending_signals: VecDeque<ThreatSignal> = VecDeque::new();
+    let mut inflight_signals: VecDeque<ThreatSignal> = VecDeque::new();
 
     loop {
         // Check for shutdown
@@ -338,6 +340,7 @@ async fn connection_loop(
             &capabilities,
             &config_manager,
             &mut pending_signals,
+            &mut inflight_signals,
         )
         .await
         {
@@ -352,6 +355,7 @@ async fn connection_loop(
                 return;
             }
             ConnectionResult::Disconnected { had_connection } => {
+                requeue_inflight(&mut pending_signals, &mut inflight_signals);
                 if had_connection {
                     attempt = 0;
                     reconnect_delay = config.reconnect_delay_ms;
@@ -410,10 +414,24 @@ enum ConnectionResult {
     Stopped,
 }
 
-fn stash_pending(pending: &mut Vec<ThreatSignal>, batch: &mut Vec<ThreatSignal>) {
+fn stash_pending(pending: &mut VecDeque<ThreatSignal>, batch: &mut Vec<ThreatSignal>) {
     if !batch.is_empty() {
         pending.extend(batch.drain(..));
     }
+}
+
+fn requeue_inflight(
+    pending: &mut VecDeque<ThreatSignal>,
+    inflight: &mut VecDeque<ThreatSignal>,
+) {
+    if inflight.is_empty() {
+        return;
+    }
+
+    let mut combined = VecDeque::with_capacity(inflight.len() + pending.len());
+    combined.extend(inflight.drain(..));
+    combined.extend(pending.drain(..));
+    *pending = combined;
 }
 
 async fn connect_and_run(
@@ -427,7 +445,8 @@ async fn connect_and_run(
     tenant_id: &Arc<RwLock<Option<String>>>,
     capabilities: &Arc<RwLock<Vec<String>>>,
     config_manager: &Option<Arc<ConfigManager>>,
-    pending_signals: &mut Vec<ThreatSignal>,
+    pending_signals: &mut VecDeque<ThreatSignal>,
+    inflight_signals: &mut VecDeque<ThreatSignal>,
 ) -> ConnectionResult {
     let mut had_connection = false;
 
@@ -509,7 +528,7 @@ async fn connect_and_run(
 
     if !pending_signals.is_empty() {
         signal_batch.extend(pending_signals.drain(..));
-        if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
+        if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
             error!("Failed to send buffered signals: {}", e);
             stash_pending(pending_signals, &mut signal_batch);
             return ConnectionResult::Disconnected { had_connection };
@@ -531,7 +550,7 @@ async fn connect_and_run(
                     Some(sig) => {
                         signal_batch.push(sig);
                         if signal_batch.len() >= config.signal_batch_size {
-                            if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
+                            if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
                                 error!("Failed to send batch: {}", e);
                                 stash_pending(pending_signals, &mut signal_batch);
                                 return ConnectionResult::Disconnected { had_connection };
@@ -547,7 +566,7 @@ async fn connect_and_run(
             // Batch timer
             _ = batch_timer.tick() => {
                 if !signal_batch.is_empty() {
-                    if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, stats).await {
+                    if let Err(e) = send_batch(&mut ws_tx, &mut signal_batch, inflight_signals, stats).await {
                         error!("Failed to send batch: {}", e);
                         stash_pending(pending_signals, &mut signal_batch);
                         return ConnectionResult::Disconnected { had_connection };
@@ -560,7 +579,15 @@ async fn connect_and_run(
                 match msg {
                     Some(Ok(Message::Text(text))) => {
                         if let Ok(hub_msg) = HubMessage::from_json(&text) {
-                            handle_hub_message(hub_msg, blocklist, stats, config_manager, &mut ws_tx).await;
+                            handle_hub_message(
+                                hub_msg,
+                                blocklist,
+                                stats,
+                                config_manager,
+                                inflight_signals,
+                                &mut ws_tx,
+                            )
+                            .await;
                         }
                     }
                     Some(Ok(Message::Ping(data))) => {
@@ -612,6 +639,7 @@ async fn connect_and_run(
 async fn send_batch<S>(
     ws_tx: &mut futures_util::stream::SplitSink<S, Message>,
     batch: &mut Vec<ThreatSignal>,
+    inflight: &mut VecDeque<ThreatSignal>,
     stats: &Arc<InternalStats>,
 ) -> Result<(), HorizonError>
 where
@@ -622,8 +650,16 @@ where
         return Ok(());
     }
 
-    let signals = batch.clone();
+    let signals: Vec<ThreatSignal> = batch.drain(..).collect();
     let count = signals.len();
+
+    if count == 0 {
+        return Ok(());
+    }
+
+    for signal in &signals {
+        inflight.push_back(signal.clone());
+    }
 
     let msg = if count == 1 {
         SensorMessage::Signal {
@@ -638,7 +674,6 @@ where
         .await
         .map_err(|e| HorizonError::SendFailed(e.to_string()))?;
 
-    batch.clear();
     stats.batches_sent.fetch_add(1, Ordering::Relaxed);
     debug!("Sent batch of {} signals", count);
 
@@ -652,6 +687,7 @@ async fn handle_hub_message<S>(
     blocklist: &Arc<BlocklistCache>,
     stats: &Arc<InternalStats>,
     config_manager: &Option<Arc<ConfigManager>>,
+    inflight_signals: &mut VecDeque<ThreatSignal>,
     ws_tx: &mut futures_util::stream::SplitSink<S, Message>,
 ) where
     S: futures_util::Sink<Message> + Unpin,
@@ -660,6 +696,9 @@ async fn handle_hub_message<S>(
     match msg {
         HubMessage::SignalAck { sequence_id: _ } => {
             stats.signals_acked.fetch_add(1, Ordering::Relaxed);
+            if inflight_signals.pop_front().is_none() {
+                warn!("Received signal ack but no inflight signals were tracked");
+            }
         }
         HubMessage::BatchAck {
             count,
@@ -669,6 +708,17 @@ async fn handle_hub_message<S>(
                 .signals_acked
                 .fetch_add(count as u64, Ordering::Relaxed);
             debug!("Batch of {} signals acknowledged", count);
+            let mut remaining = count as usize;
+            while remaining > 0 {
+                if inflight_signals.pop_front().is_none() {
+                    warn!(
+                        "Received batch ack for {} signals but inflight queue was empty",
+                        count
+                    );
+                    break;
+                }
+                remaining -= 1;
+            }
         }
         HubMessage::Ping { timestamp: _ } => {
             // Handled by WebSocket ping/pong
