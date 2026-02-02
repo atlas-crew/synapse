@@ -1915,12 +1915,14 @@
       <button class="tab" data-tab="security">Security</button>
       <button class="tab" data-tab="api">API</button>
       <button class="tab" data-tab="lab">Lab</button>
+      <button class="tab" data-tab="logs">Logs</button>
       <button class="tab" data-tab="certs">Certs</button>
       <button class="tab" data-tab="features">Features</button>
       <button class="tab" data-tab="thresholds">Thresholds</button>
       <button class="tab" data-tab="access">Access</button>
       <button class="tab" data-tab="entities">Entities</button>
       <button class="tab" data-tab="campaigns">Campaigns</button>
+      <button class="tab" data-tab="system">System</button>
     </div>
 
     <!-- Status Tab -->
@@ -3078,6 +3080,93 @@
       </div>
     </div>
 
+    <!-- Logs Tab -->
+    <div id="logs" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Log Viewer</div>
+          <div class="card-actions">
+            <select id="logSourceFilter" onchange="loadLogs()" style="padding: 6px 12px; border-radius: 6px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary);">
+              <option value="">All Sources</option>
+              <option value="http">HTTP</option>
+              <option value="waf">WAF</option>
+              <option value="system">System</option>
+              <option value="access">Access</option>
+            </select>
+            <select id="logLevelFilter" onchange="loadLogs()" style="padding: 6px 12px; border-radius: 6px; background: var(--surface-inset); border: 1px solid var(--border-subtle); color: var(--text-primary); margin-left: 8px;">
+              <option value="">All Levels</option>
+              <option value="error">Error</option>
+              <option value="warn">Warning</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+            </select>
+            <button class="btn btn-secondary" onclick="loadLogs()" style="margin-left: 8px;">Refresh</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="logViewer" style="max-height: 600px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+            <div class="loading"><div class="spinner"></div>Loading logs...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- System Tab -->
+    <div id="system" class="tab-content">
+      <div class="stat-grid">
+        <div class="stat-card" data-accent="blue">
+          <div class="stat-value" id="sysHostname">-</div>
+          <div class="stat-label">Hostname</div>
+        </div>
+        <div class="stat-card" data-accent="green">
+          <div class="stat-value" id="sysOS">-</div>
+          <div class="stat-label">OS</div>
+        </div>
+        <div class="stat-card" data-accent="purple">
+          <div class="stat-value" id="sysKernel">-</div>
+          <div class="stat-label">Kernel</div>
+        </div>
+        <div class="stat-card" data-accent="orange">
+          <div class="stat-value" id="sysCPUs">-</div>
+          <div class="stat-label">CPUs</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Diagnostic Tools</div>
+        </div>
+        <div class="card-body">
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="downloadDiagnosticBundle()">
+              Download Diagnostic Bundle
+            </button>
+            <button class="btn btn-secondary" onclick="downloadConfigExport()">
+              Export Configuration
+            </button>
+            <button class="btn btn-secondary" onclick="document.getElementById('configImportFile').click()">
+              Import Configuration
+            </button>
+            <input type="file" id="configImportFile" accept=".yaml,.yml,.json" style="display: none;" onchange="importConfig(event)">
+          </div>
+          <p style="margin-top: 16px; color: var(--text-muted); font-size: 13px;">
+            The diagnostic bundle includes system info, WAF stats, recent logs, entities, and configuration.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Configuration Import</div>
+        </div>
+        <div class="card-body">
+          <div id="configImportStatus" style="display: none; padding: 12px; border-radius: 8px; margin-bottom: 16px;"></div>
+          <textarea id="configImportText" placeholder="Paste YAML or JSON configuration here..." style="width: 100%; height: 200px; padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--text-primary); resize: vertical;"></textarea>
+          <button class="btn btn-primary" onclick="importConfigFromText()" style="margin-top: 12px;">Validate & Import</button>
+        </div>
+      </div>
+    </div>
+
     <!-- WAF Lab Tab -->
     <div id="lab" class="tab-content">
       <div class="card">
@@ -3638,6 +3727,9 @@ Authorization: Bearer token123"></textarea>
         `;
       } catch (error) {
         document.getElementById('statusText').textContent = 'Error';
+        document.getElementById('healthGrid').innerHTML = '<div class="empty-state">Failed to load</div>';
+        document.getElementById('perfGrid').innerHTML = '<div class="empty-state">Failed to load</div>';
+        document.getElementById('systemGrid').innerHTML = '<div class="empty-state">Failed to load</div>';
         showToast('Failed to load status', 'error');
       }
     }
@@ -4402,6 +4494,137 @@ Authorization: Bearer token123"></textarea>
       showToast('Campaign resolution coming soon', 'info');
     }
 
+    // ==========================================================================
+    // Logs Tab Functions
+    // ==========================================================================
+
+    async function loadLogs() {
+      const sourceFilter = document.getElementById('logSourceFilter')?.value || '';
+      const levelFilter = document.getElementById('logLevelFilter')?.value || '';
+      const logViewer = document.getElementById('logViewer');
+
+      try {
+        let url = '/_sensor/logs?limit=500';
+        if (sourceFilter) url += `&source=${sourceFilter}`;
+        if (levelFilter) url += `&level=${levelFilter}`;
+
+        const data = await fetchApi(url);
+        const logs = data.data?.logs || [];
+
+        if (logs.length === 0) {
+          logViewer.innerHTML = '<div class="empty-state">No logs found</div>';
+          return;
+        }
+
+        logViewer.innerHTML = logs.map(log => {
+          const levelColor = {
+            error: 'var(--ac-red)',
+            warn: 'var(--ac-orange)',
+            info: 'var(--ac-blue)',
+            debug: 'var(--text-muted)'
+          }[log.level] || 'var(--text-primary)';
+
+          const sourceColor = {
+            http: 'var(--ac-sky-blue)',
+            waf: 'var(--ac-magenta)',
+            system: 'var(--ac-green)',
+            access: 'var(--ac-purple)'
+          }[log.source] || 'var(--text-muted)';
+
+          const time = new Date(log.timestamp).toLocaleTimeString();
+          return `
+            <div style="padding: 6px 0; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 12px;">
+              <span style="color: var(--text-muted); min-width: 80px;">${time}</span>
+              <span style="color: ${sourceColor}; min-width: 60px; text-transform: uppercase; font-size: 10px; font-weight: 600;">${log.source || 'system'}</span>
+              <span style="color: ${levelColor}; min-width: 50px; text-transform: uppercase; font-size: 10px; font-weight: 600;">${log.level}</span>
+              <span style="color: var(--text-primary); flex: 1;">${log.message}</span>
+            </div>
+          `;
+        }).join('');
+      } catch (error) {
+        logViewer.innerHTML = '<div class="empty-state">Failed to load logs</div>';
+      }
+    }
+
+    // ==========================================================================
+    // System Tab Functions
+    // ==========================================================================
+
+    async function loadSystemInfo() {
+      try {
+        const data = await fetchApi('/_sensor/system/overview');
+        const info = data.data || data;
+        document.getElementById('sysHostname').textContent = info.hostname || '-';
+        document.getElementById('sysOS').textContent = info.os || '-';
+        document.getElementById('sysKernel').textContent = info.kernel || '-';
+        document.getElementById('sysCPUs').textContent = info.cpus || '-';
+      } catch (error) {
+        console.warn('Failed to load system info:', error);
+      }
+    }
+
+    function downloadDiagnosticBundle() {
+      showToast('Generating diagnostic bundle...', 'info');
+      window.location.href = '/_sensor/diagnostic-bundle';
+    }
+
+    function downloadConfigExport() {
+      showToast('Exporting configuration...', 'info');
+      window.location.href = '/_sensor/config/export';
+    }
+
+    function importConfig(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const content = e.target.result;
+        document.getElementById('configImportText').value = content;
+        await importConfigFromText();
+      };
+      reader.readAsText(file);
+    }
+
+    async function importConfigFromText() {
+      const content = document.getElementById('configImportText').value.trim();
+      const statusDiv = document.getElementById('configImportStatus');
+
+      if (!content) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = 'var(--surface-inset)';
+        statusDiv.style.color = 'var(--ac-orange)';
+        statusDiv.textContent = 'Please enter or paste configuration content.';
+        return;
+      }
+
+      try {
+        const result = await fetchApi('/_sensor/config/import', {
+          method: 'POST',
+          body: content
+        });
+
+        statusDiv.style.display = 'block';
+        if (result.success) {
+          statusDiv.style.background = 'rgba(0, 177, 64, 0.1)';
+          statusDiv.style.color = 'var(--ac-green)';
+          statusDiv.textContent = result.message || 'Configuration validated successfully.';
+          showToast('Configuration imported successfully', 'success');
+        } else {
+          statusDiv.style.background = 'rgba(239, 51, 64, 0.1)';
+          statusDiv.style.color = 'var(--ac-red)';
+          statusDiv.textContent = result.error || 'Import failed.';
+          showToast('Configuration import failed', 'error');
+        }
+      } catch (error) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = 'rgba(239, 51, 64, 0.1)';
+        statusDiv.style.color = 'var(--ac-red)';
+        statusDiv.textContent = 'Failed to import: ' + error.message;
+        showToast('Configuration import failed', 'error');
+      }
+    }
+
     // Admin Actions
     async function testConfig() {
       try {
@@ -4901,7 +5124,7 @@ X-Forwarded-For: 192.168.1.100`,
 Host: api.example.com
 Content-Type: application/json
 
-{"comment": "<script>alert('xss')</script>"}`,
+{"comment": "<script>alert('xss')<\/script>"}`,
       traversal: `GET /api/files?path=../../../etc/passwd HTTP/1.1
 Host: api.example.com
 Authorization: Bearer token123`,
@@ -5364,30 +5587,40 @@ Content-Type: application/json
       updateBar('anomalyLength', 'anomalyLengthCount', 'length_anomaly');
     }
 
-    // Initialize
+    // Initialize - wrapped in try/catch to handle missing endpoints gracefully
     async function init() {
-      await loadStatus();
-      await loadSites();
-      await loadRules();
-      await loadSecurityStats();
-      await loadApiCatalog();
-      await loadFeatures();
-      await loadAllConfigs();
-      await loadThresholds();
-      await loadAccessList();
-      await loadCidrLists();
-      await loadEntities();
-      await loadCampaigns();
-      await loadCertificates();
-      await loadBotIndicators();
-      await loadHeaderProfiling();
+      const safeLoad = async (fn, name) => {
+        try {
+          await fn();
+        } catch (e) {
+          console.warn(`Failed to load ${name}:`, e.message);
+        }
+      };
+
+      await safeLoad(loadStatus, 'status');
+      await safeLoad(loadSites, 'sites');
+      await safeLoad(loadRules, 'rules');
+      await safeLoad(loadSecurityStats, 'security stats');
+      await safeLoad(loadApiCatalog, 'API catalog');
+      await safeLoad(loadFeatures, 'features');
+      await safeLoad(loadAllConfigs, 'configs');
+      await safeLoad(loadThresholds, 'thresholds');
+      await safeLoad(loadAccessList, 'access list');
+      await safeLoad(loadCidrLists, 'CIDR lists');
+      await safeLoad(loadEntities, 'entities');
+      await safeLoad(loadCampaigns, 'campaigns');
+      await safeLoad(loadCertificates, 'certificates');
+      await safeLoad(loadBotIndicators, 'bot indicators');
+      await safeLoad(loadHeaderProfiling, 'header profiling');
+      await safeLoad(loadLogs, 'logs');
+      await safeLoad(loadSystemInfo, 'system info');
 
       // Auto-refresh status every 10 seconds
-      setInterval(loadStatus, 10000);
+      setInterval(() => safeLoad(loadStatus, 'status'), 10000);
       // Auto-refresh security stats every 30 seconds
-      setInterval(loadSecurityStats, 30000);
+      setInterval(() => safeLoad(loadSecurityStats, 'security stats'), 30000);
       // Auto-refresh bot indicators every 30 seconds
-      setInterval(loadBotIndicators, 30000);
+      setInterval(() => safeLoad(loadBotIndicators, 'bot indicators'), 30000);
     }
 
     init();

@@ -3082,6 +3082,23 @@ fn main() {
     // Initialize logging
     env_logger::init();
 
+    // Check for dev/demo modes via CLI flags or environment variables
+    let args: Vec<String> = std::env::args().collect();
+
+    let dev_mode = args.contains(&"--dev".to_string())
+        || std::env::var("SYNAPSE_DEV").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+
+    let demo_mode = args.contains(&"--demo".to_string())
+        || std::env::var("SYNAPSE_DEMO").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+
+    if dev_mode {
+        synapse_pingora::admin_server::enable_dev_mode();
+    }
+
+    if demo_mode {
+        synapse_pingora::admin_server::enable_demo_mode();
+    }
+
     info!("Starting Synapse-Pingora PoC");
 
     // Load configuration - try multi-site first, fall back to legacy
