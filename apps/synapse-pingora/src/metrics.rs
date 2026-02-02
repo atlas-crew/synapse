@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 /// Metrics registry holding all metric collectors.
 #[derive(Debug, Default)]
@@ -46,7 +46,7 @@ pub struct DlpMetrics {
     /// Violations dropped due to buffer overflow
     pub violations_dropped: AtomicU64,
     /// Graph export durations in microseconds (for histogram)
-    pub graph_export_durations: Arc<RwLock<Vec<u64>>>,
+    pub graph_export_durations: Arc<RwLock<VecDeque<u64>>>,
 }
 
 impl DlpMetrics {
@@ -76,9 +76,9 @@ impl DlpMetrics {
         let mut durations = self.graph_export_durations.write();
         // Keep last 100 samples for histogram
         if durations.len() >= 100 {
-            durations.remove(0);
+            durations.pop_front();
         }
-        durations.push(duration_us);
+        durations.push_back(duration_us);
     }
 }
 
