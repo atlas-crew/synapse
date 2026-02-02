@@ -75,8 +75,58 @@ const prisma = new PrismaClient({
 const app = express();
 const httpServer = createServer(app);
 
-// Middleware
-app.use(helmet());
+// Middleware - Security headers with comprehensive protection
+app.use(helmet({
+  // Content Security Policy - restrict resource loading
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for error messages
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", 'wss:', 'ws:'], // Allow WebSocket connections
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  // Strict Transport Security - force HTTPS (1 year)
+  strictTransportSecurity: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  // Prevent MIME type sniffing
+  xContentTypeOptions: true,
+  // Prevent clickjacking
+  xFrameOptions: { action: 'deny' },
+  // Control referrer information
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  // Disable browser features we don't need
+  permissionsPolicy: {
+    features: {
+      accelerometer: [],
+      camera: [],
+      geolocation: [],
+      gyroscope: [],
+      magnetometer: [],
+      microphone: [],
+      payment: [],
+      usb: [],
+    },
+  },
+  // Remove X-Powered-By header (Express default)
+  xPoweredBy: false,
+  // Prevent DNS prefetching
+  xDnsPrefetchControl: { allow: false },
+  // Don't cache sensitive responses
+  noSniff: true,
+}));
 app.use(cors({
   origin: config.security.corsOrigins,
   credentials: true,
