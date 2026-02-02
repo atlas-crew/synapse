@@ -155,7 +155,7 @@ impl ProfileStore {
     /// Get or create a profile for a path.
     ///
     /// Normalizes the path to a template if dynamic segment detection is enabled.
-    pub fn get_or_create(&self, path: &str) -> dashmap::mapref::one::RefMut<String, EndpointProfile> {
+    pub fn get_or_create(&self, path: &str) -> dashmap::mapref::one::RefMut<'_, String, EndpointProfile> {
         let template = if self.config.enable_segment_detection {
             self.normalize_path(path)
         } else {
@@ -174,7 +174,7 @@ impl ProfileStore {
     }
 
     /// Get an existing profile (read-only).
-    pub fn get(&self, template: &str) -> Option<dashmap::mapref::one::Ref<String, EndpointProfile>> {
+    pub fn get(&self, template: &str) -> Option<dashmap::mapref::one::Ref<'_, String, EndpointProfile>> {
         self.profiles.get(template)
     }
 
@@ -315,6 +315,14 @@ impl ProfileStore {
     /// List all profile templates.
     pub fn list_templates(&self) -> Vec<String> {
         self.profiles.iter().map(|e| e.key().clone()).collect()
+    }
+
+    /// Get all profiles as a snapshot.
+    ///
+    /// Returns a clone of all profiles currently in storage.
+    /// Useful for persistence and state export.
+    pub fn get_profiles(&self) -> Vec<EndpointProfile> {
+        self.profiles.iter().map(|e| e.value().clone()).collect()
     }
 
     /// Get mature profiles (those with enough samples for detection).
