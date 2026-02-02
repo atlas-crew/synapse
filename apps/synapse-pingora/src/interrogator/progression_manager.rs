@@ -529,6 +529,11 @@ impl ProgressionManager {
         self.actor_states.len()
     }
 
+    /// Get cookie challenge name for validation.
+    pub fn cookie_name(&self) -> &str {
+        self.cookie_manager.config().cookie_name.as_str()
+    }
+
     /// Check if no actors are tracked
     pub fn is_empty(&self) -> bool {
         self.actor_states.is_empty()

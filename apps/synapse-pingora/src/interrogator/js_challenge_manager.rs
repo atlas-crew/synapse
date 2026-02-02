@@ -320,9 +320,10 @@ impl JsChallengeManager {
         <noscript>
             <p class="error">JavaScript is required to complete this verification.</p>
         </noscript>
-        <form id="challengeForm" method="POST" style="display: none;">
+        <form id="challengeForm" method="GET" style="display: none;">
+            <input type="hidden" name="synapse_challenge" value="js">
             <input type="hidden" name="challenge_id" value="{challenge_id}">
-            <input type="hidden" name="nonce" id="nonce" value="">
+            <input type="hidden" name="synapse_nonce" id="synapse_nonce" value="">
         </form>
     </div>
     <script>
@@ -360,7 +361,7 @@ impl JsChallengeManager {
 
                     if (hash.startsWith(EXPECTED_PREFIX)) {{
                         // Found solution!
-                        document.getElementById('nonce').value = nonce.toString();
+                        document.getElementById('synapse_nonce').value = nonce.toString();
                         document.getElementById('spinner').style.display = 'none';
                         progressEl.textContent = 'Verification complete! Redirecting...';
                         document.getElementById('challengeForm').submit();
