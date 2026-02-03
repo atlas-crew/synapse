@@ -116,6 +116,7 @@ const ConfigSectionSchema = z.enum([
   'tarpit',
   'travel',
   'entity',
+  'kernel',
 ]);
 
 const ConfigQuerySchema = z.object({

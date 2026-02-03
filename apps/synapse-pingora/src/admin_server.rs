@@ -11,8 +11,10 @@
 //! - GET /stats - Runtime statistics
 //! - GET /waf/stats - WAF statistics
 
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Instant;
 use std::num::NonZeroU32;
@@ -1196,6 +1198,7 @@ pub async fn start_admin_server(
         .route("/_sensor/config/tarpit", get(config_tarpit_get_handler).put(config_tarpit_put_handler))
         .route("/_sensor/config/travel", get(config_travel_get_handler).put(config_travel_put_handler))
         .route("/_sensor/config/entity", get(config_entity_get_handler).put(config_entity_put_handler))
+        .route("/_sensor/config/kernel", get(config_kernel_get_handler).put(config_kernel_put_handler))
         // Log viewer endpoints
         .route("/_sensor/logs", get(logs_handler))
         .route("/_sensor/logs/:source", get(logs_by_source_handler))
@@ -2790,6 +2793,19 @@ async fn sensor_stuffing_handler() -> impl IntoResponse {
 /// GET /_sensor/system/config - Returns system configuration
 async fn sensor_system_config_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let sites = state.handler.handle_list_sites();
+    let kernel_keys = parse_kernel_keys(None);
+    let mut kernel_params = HashMap::new();
+    let mut kernel_errors = HashMap::new();
+    for key in kernel_keys {
+        match read_sysctl_value(&key) {
+            Ok(value) => {
+                kernel_params.insert(key, value);
+            }
+            Err(err) => {
+                kernel_errors.insert(key, err);
+            }
+        }
+    }
 
     (StatusCode::OK, Json(serde_json::json!({
         "success": true,
@@ -2815,6 +2831,10 @@ async fn sensor_system_config_handler(State(state): State<AdminState>) -> impl I
                 "campaigns": false,
                 "actors": false,
                 "anomalies": false
+            },
+            "kernel": {
+                "parameters": kernel_params,
+                "errors": kernel_errors
             },
             "runtimeConfig": {
                 "risk": {
@@ -4987,6 +5007,288 @@ async fn config_entity_put_handler(
     (StatusCode::OK, Json(serde_json::json!({
         "success": true,
         "message": "Entity store configuration updated"
+    })))
+}
+
+// =============================================================================
+// Kernel (sysctl) Configuration
+// =============================================================================
+
+const DEFAULT_KERNEL_KEYS: &[&str] = &[
+    "net.core.somaxconn",
+    "net.ipv4.tcp_max_syn_backlog",
+    "net.ipv4.tcp_fin_timeout",
+    "net.ipv4.tcp_keepalive_time",
+    "vm.swappiness",
+];
+
+#[derive(Debug, Deserialize)]
+struct KernelConfigQuery {
+    keys: Option<String>,
+}
+
+#[derive(Debug)]
+struct KernelConfigPayload {
+    params: HashMap<String, String>,
+    persist: bool,
+    warnings: Vec<String>,
+}
+
+fn is_valid_sysctl_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+}
+
+fn is_valid_sysctl_value(value: &str) -> bool {
+    !value.trim().is_empty() && !value.contains('\n') && !value.contains('\r')
+}
+
+fn sysctl_path_for_key(key: &str) -> PathBuf {
+    PathBuf::from("/proc/sys").join(key.replace('.', "/"))
+}
+
+fn read_sysctl_value(key: &str) -> Result<String, String> {
+    if !is_valid_sysctl_key(key) {
+        return Err("invalid sysctl key".to_string());
+    }
+
+    if cfg!(target_os = "linux") {
+        let path = sysctl_path_for_key(key);
+        if path.exists() {
+            return std::fs::read_to_string(&path)
+                .map(|value| value.trim().to_string())
+                .map_err(|err| err.to_string());
+        }
+    }
+
+    let output = Command::new("sysctl")
+        .arg("-n")
+        .arg(key)
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+fn write_sysctl_value(key: &str, value: &str) -> Result<(), String> {
+    if !is_valid_sysctl_key(key) {
+        return Err("invalid sysctl key".to_string());
+    }
+    if !is_valid_sysctl_value(value) {
+        return Err("invalid sysctl value".to_string());
+    }
+
+    if cfg!(target_os = "linux") {
+        let path = sysctl_path_for_key(key);
+        if path.exists() {
+            return std::fs::write(&path, value)
+                .map_err(|err| err.to_string());
+        }
+    }
+
+    let assignment = format!("{}={}", key, value);
+    let output = Command::new("sysctl")
+        .arg("-w")
+        .arg(&assignment)
+        .output()
+        .map_err(|err| err.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
+fn parse_kernel_payload(payload: serde_json::Value) -> KernelConfigPayload {
+    let mut params = HashMap::new();
+    let mut warnings = Vec::new();
+    let mut persist = false;
+
+    match payload {
+        serde_json::Value::Object(mut obj) => {
+            if let Some(flag) = obj.remove("persist") {
+                persist = flag.as_bool().unwrap_or(false);
+            }
+
+            let params_value = obj
+                .remove("params")
+                .or_else(|| obj.remove("settings"))
+                .unwrap_or(serde_json::Value::Object(obj));
+
+            if let serde_json::Value::Object(map) = params_value {
+                for (key, value) in map {
+                    let string_value = match value {
+                        serde_json::Value::String(s) => s,
+                        serde_json::Value::Number(n) => n.to_string(),
+                        serde_json::Value::Bool(b) => b.to_string(),
+                        other => {
+                            warnings.push(format!("Skipping non-scalar value for {}", key));
+                            continue;
+                        }
+                    };
+                    params.insert(key, string_value);
+                }
+            } else {
+                warnings.push("Kernel config payload missing params object".to_string());
+            }
+        }
+        _ => {
+            warnings.push("Kernel config payload must be an object".to_string());
+        }
+    }
+
+    KernelConfigPayload {
+        params,
+        persist,
+        warnings,
+    }
+}
+
+fn parse_kernel_keys(query: Option<String>) -> Vec<String> {
+    if let Some(keys) = query {
+        let parsed: Vec<String> = keys
+            .split(',')
+            .map(|k| k.trim().to_string())
+            .filter(|k| !k.is_empty())
+            .collect();
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
+    DEFAULT_KERNEL_KEYS.iter().map(|k| (*k).to_string()).collect()
+}
+
+fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String> {
+    if params.is_empty() {
+        return Ok(());
+    }
+
+    let path = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH")
+        .unwrap_or_else(|_| "/etc/sysctl.d/synapse-pingora.conf".to_string());
+
+    let mut entries: HashMap<String, String> = HashMap::new();
+    if let Ok(contents) = std::fs::read_to_string(&path) {
+        for line in contents.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=') {
+                entries.insert(key.trim().to_string(), value.trim().to_string());
+            }
+        }
+    }
+
+    for (key, value) in params {
+        entries.insert(key.clone(), value.clone());
+    }
+
+    let mut lines = Vec::new();
+    lines.push("# Synapse Pingora managed sysctl settings".to_string());
+    let mut keys: Vec<_> = entries.keys().cloned().collect();
+    keys.sort();
+    for key in keys {
+        if let Some(value) = entries.get(&key) {
+            lines.push(format!("{} = {}", key, value));
+        }
+    }
+
+    std::fs::write(&path, lines.join("\n"))
+        .map_err(|err| format!("Failed to persist sysctl settings: {}", err))
+}
+
+/// GET /_sensor/config/kernel - Fetch kernel/sysctl parameters
+async fn config_kernel_get_handler(
+    Query(query): Query<KernelConfigQuery>,
+    State(_state): State<AdminState>,
+) -> impl IntoResponse {
+    let keys = parse_kernel_keys(query.keys);
+    let mut values = HashMap::new();
+    let mut errors = HashMap::new();
+
+    for key in keys {
+        match read_sysctl_value(&key) {
+            Ok(value) => {
+                values.insert(key, value);
+            }
+            Err(err) => {
+                errors.insert(key, err);
+            }
+        }
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "parameters": values,
+            "errors": errors
+        }
+    })))
+}
+
+/// PUT /_sensor/config/kernel - Update kernel/sysctl parameters
+async fn config_kernel_put_handler(
+    State(_state): State<AdminState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let parsed = parse_kernel_payload(payload);
+    if parsed.params.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "No kernel parameters provided",
+                "warnings": parsed.warnings
+            })),
+        );
+    }
+
+    let mut applied = HashMap::new();
+    let mut failed = HashMap::new();
+
+    for (key, value) in parsed.params {
+        if !is_valid_sysctl_key(&key) {
+            failed.insert(key, "invalid sysctl key".to_string());
+            continue;
+        }
+        if !is_valid_sysctl_value(&value) {
+            failed.insert(key, "invalid sysctl value".to_string());
+            continue;
+        }
+
+        match write_sysctl_value(&key, &value) {
+            Ok(()) => {
+                applied.insert(key, value);
+            }
+            Err(err) => {
+                failed.insert(key, err);
+            }
+        }
+    }
+
+    let mut persist_error = None;
+    if parsed.persist && !applied.is_empty() {
+        if let Err(err) = persist_kernel_params(&applied) {
+            persist_error = Some(err);
+        }
+    }
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": failed.is_empty() && persist_error.is_none(),
+        "data": {
+            "applied": applied,
+            "failed": failed,
+            "persisted": parsed.persist && persist_error.is_none(),
+            "persistError": persist_error
+        },
+        "warnings": parsed.warnings
     })))
 }
 

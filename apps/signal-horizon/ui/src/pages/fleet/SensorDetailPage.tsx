@@ -71,6 +71,27 @@ async function runDiagnostics(id: string) {
   return response.json();
 }
 
+async function fetchKernelConfig(id: string) {
+  const response = await fetch(`${API_BASE}/api/v1/synapse/${id}/config?section=kernel`, {
+    headers: authHeaders,
+  });
+  if (!response.ok) throw new Error('Failed to fetch kernel config');
+  return response.json();
+}
+
+async function updateKernelConfig(id: string, params: Record<string, string>, persist: boolean) {
+  const response = await fetch(`${API_BASE}/api/v1/synapse/${id}/config`, {
+    method: 'PUT',
+    headers: authHeaders,
+    body: JSON.stringify({
+      section: 'kernel',
+      config: { params, persist },
+    }),
+  });
+  if (!response.ok) throw new Error('Failed to update kernel config');
+  return response.json();
+}
+
 async function fetchPingoraConfig(id: string) {
   const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch Pingora config');
@@ -742,6 +763,12 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
     },
   };
 
+  const { data: remoteKernelConfig, isLoading: isKernelLoading, error: kernelError, refetch: refetchKernel, isFetching: isKernelFetching } = useQuery({
+    queryKey: ['fleet', 'sensor', id, 'config', 'kernel'],
+    queryFn: () => fetchKernelConfig(id),
+    enabled: !!id && configTab === 'kernel',
+  });
+
   // Load real Pingora config
   const { data: remotePingoraConfig, isLoading, error: pingoraError, refetch: refetchPingora, isFetching: isPingoraFetching } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'pingora'],
@@ -766,6 +793,10 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
     allow: [],
     deny: []
   });
+  const [kernelDraft, setKernelDraft] = useState<Record<string, string>>({});
+  const [persistKernel, setPersistKernel] = useState(false);
+
+  const kernelParams = (remoteKernelConfig?.data?.parameters || mockConfig.kernel) as Record<string, string>;
 
   // Sync local state when remote data loads
   useEffect(() => {
@@ -776,12 +807,27 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
     }
   }, [remotePingoraConfig]);
 
+  useEffect(() => {
+    if (kernelParams) {
+      setKernelDraft(kernelParams);
+    }
+  }, [kernelParams]);
+
   // Mutations
   const updateMutation = useMutation({
     mutationFn: (config: any) => updatePingoraConfig(id, config),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id, 'config', 'pingora'] });
       alert('Configuration updated and push initiated');
+    },
+  });
+
+  const updateKernelMutation = useMutation({
+    mutationFn: (params: Record<string, string>) => updateKernelConfig(id, params, persistKernel),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'sensor', id, 'config', 'kernel'] });
+      const appliedCount = Object.keys(result?.data?.applied || {}).length;
+      alert(`Kernel configuration applied (${appliedCount} parameters).`);
     },
   });
 
@@ -930,26 +976,66 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
       )}
 
       {configTab === 'kernel' && (
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-ink-primary mb-4">Kernel Parameters (sysctl)</h3>
+        <div className="bg-surface-card border border-border-subtle rounded-xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={persistKernel}
+                  onChange={(event) => setPersistKernel(event.target.checked)}
+                />
+                Persist changes
+              </label>
+              <button
+                className="px-3 py-1.5 text-xs rounded-lg border border-border-subtle text-ink-secondary hover:bg-surface-subtle"
+                onClick={() => refetchKernel()}
+                disabled={isKernelFetching}
+              >
+                Refresh
+              </button>
+              <button
+                className="px-3 py-1.5 text-xs rounded-lg bg-accent-primary text-white disabled:opacity-60"
+                onClick={() => updateKernelMutation.mutate(kernelDraft)}
+                disabled={updateKernelMutation.isPending || isKernelLoading}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+          {kernelError && (
+            <div className="text-sm text-status-error">Failed to load kernel config.</div>
+          )}
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-ink-muted">
                 <th className="pb-2">Parameter</th>
                 <th className="pb-2">Value</th>
-                <th className="pb-2"></th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(mockConfig.kernel).map(([key, value]) => (
+              {Object.entries(kernelDraft).map(([key, value]) => (
                 <tr key={key} className="border-t border-border-subtle">
                   <td className="py-3 font-mono text-ink-secondary">{key}</td>
-                  <td className="py-3 font-mono text-ink-primary">{value}</td>
-                  <td className="py-3 text-right">
-                    <button className="text-xs text-accent-primary hover:underline">Edit</button>
+                  <td className="py-3">
+                    <input
+                      className="w-full rounded-md border border-border-subtle bg-surface-subtle px-2 py-1 text-sm font-mono text-ink-primary"
+                      value={value ?? ''}
+                      onChange={(event) =>
+                        setKernelDraft((current) => ({ ...current, [key]: event.target.value }))
+                      }
+                    />
                   </td>
                 </tr>
               ))}
+              {Object.keys(kernelDraft).length === 0 && !isKernelLoading && (
+                <tr>
+                  <td className="py-4 text-sm text-ink-muted" colSpan={2}>
+                    No kernel parameters available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

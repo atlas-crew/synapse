@@ -276,7 +276,8 @@ export type SensorConfigSection =
   | 'crawler'
   | 'tarpit'
   | 'travel'
-  | 'entity';
+  | 'entity'
+  | 'kernel';
 
 export interface SensorConfigResponse {
   success?: boolean;
