@@ -65,7 +65,7 @@ marked.use({
         .replace(/\r/g, '&#13;')
         .replace(/\n/g, '&#10;');
       return `<div class="code-block-wrapper group relative">
-        <button class="copy-btn absolute top-3 right-3 p-2 rounded bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all" data-code="${escapedText}" aria-label="Copy code">
+        <button type="button" class="copy-btn absolute top-3 right-3 p-2 rounded bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all" data-code="${escapedText}" aria-label="Copy code to clipboard">
           <svg class="copy-icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <svg class="check-icon w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
         </button>
