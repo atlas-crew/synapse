@@ -868,7 +868,7 @@ fn collect_diagnostics(
     }
 
     let stats_value =
-        serde_json::to_value(ClientStats::from(stats)).unwrap_or_else(|_| serde_json::json!({}));
+        serde_json::to_value(ClientStats::from(stats.as_ref())).unwrap_or_else(|_| serde_json::json!({}));
 
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),

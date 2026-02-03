@@ -11,7 +11,7 @@
 //! - GET /stats - Runtime statistics
 //! - GET /waf/stats - WAF statistics
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::process::Command;
@@ -419,6 +419,7 @@ mod error_codes {
     pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
     pub const RATE_LIMIT_EXCEEDED: &str = "RATE_LIMIT_EXCEEDED";
     pub const UNAUTHORIZED: &str = "UNAUTHORIZED";
+    pub const FORBIDDEN: &str = "FORBIDDEN";
     pub const INSUFFICIENT_SCOPE: &str = "INSUFFICIENT_SCOPE";
 }
 
@@ -510,6 +511,16 @@ fn internal_error(
     )
 }
 
+/// Create a forbidden error response (403).
+fn forbidden_error(public_message: &str) -> Response {
+    sanitized_error(
+        StatusCode::FORBIDDEN,
+        error_codes::FORBIDDEN,
+        public_message,
+        None,
+    )
+}
+
 /// Create a not found error response (404).
 #[allow(dead_code)]
 fn not_found_error(resource_type: &str, _resource_id: &str) -> Response {
@@ -564,6 +575,8 @@ pub struct AdminState {
     pub admin_api_key: String,
     /// Scopes granted to the admin API key (defaults to ALL if not specified)
     pub admin_scopes: Vec<String>,
+    /// Allowed signal types for external sensor reporting.
+    pub signal_permissions: Arc<SignalPermissions>,
     /// Per-IP rate limiter for admin endpoints (100 req/min for admin, 1000 req/min for public)
     pub admin_rate_limiter: Arc<IpRateLimiter>,
     pub public_rate_limiter: Arc<IpRateLimiter>,
@@ -572,6 +585,45 @@ pub struct AdminState {
     /// SECURITY: This stricter rate limiter prevents brute-force attacks on the admin API key.
     /// After 5 failed auth attempts per minute per IP, further requests are blocked with 429.
     pub auth_failure_limiter: Arc<IpRateLimiter>,
+}
+
+/// Permissions for external sensor signals.
+#[derive(Clone, Debug)]
+pub struct SignalPermissions {
+    default_allowed: HashSet<String>,
+    per_sensor_allowed: HashMap<String, HashSet<String>>,
+}
+
+impl SignalPermissions {
+    fn default_allowed() -> HashSet<String> {
+        [
+            "honeypot_hit",
+            "trap_trigger",
+            "protocol_probe",
+            "dlp_match",
+        ]
+        .into_iter()
+        .map(|value| value.to_string())
+        .collect()
+    }
+
+    pub fn is_allowed(&self, sensor_id: &str, signal_type: &str) -> bool {
+        let normalized = signal_type.trim().to_lowercase();
+        if let Some(allowlist) = self.per_sensor_allowed.get(sensor_id) {
+            allowlist.contains(&normalized)
+        } else {
+            self.default_allowed.contains(&normalized)
+        }
+    }
+}
+
+impl Default for SignalPermissions {
+    fn default() -> Self {
+        Self {
+            default_allowed: Self::default_allowed(),
+            per_sensor_allowed: HashMap::new(),
+        }
+    }
 }
 
 /// Authentication middleware for privileged admin endpoints.
@@ -1055,6 +1107,7 @@ pub async fn start_admin_server(
         handler,
         admin_api_key,
         admin_scopes,
+        signal_permissions: Arc::new(SignalPermissions::default()),
         admin_rate_limiter,
         public_rate_limiter,
         auth_failure_limiter,
@@ -2040,11 +2093,24 @@ pub struct ApparatusRequest {
 async fn sensor_report_handler(
     State(state): State<AdminState>,
     Json(report): Json<ApparatusReport>,
-) -> impl IntoResponse {
+) -> Response {
     use crate::horizon::{ThreatSignal, SignalType, Severity};
 
+    let signal_type_raw = report.signal.signal_type.trim().to_lowercase();
+    if !state
+        .signal_permissions
+        .is_allowed(&report.sensor_id, &signal_type_raw)
+    {
+        warn!(
+            sensor_id = %report.sensor_id,
+            signal_type = %signal_type_raw,
+            "Rejected external signal type"
+        );
+        return forbidden_error("Signal type not permitted for sensor");
+    }
+
     // Map external signal type to internal SignalType
-    let signal_type = match report.signal.signal_type.as_str() {
+    let signal_type = match signal_type_raw.as_str() {
         "honeypot_hit" => SignalType::IpThreat, // Treat as generic threat for now
         "trap_trigger" => SignalType::BotSignature, // High confidence bot
         "protocol_probe" => SignalType::TemplateDiscovery, // Probing
@@ -2097,12 +2163,14 @@ async fn sensor_report_handler(
             "success": true,
             "id": uuid::Uuid::new_v4().to_string()
         })))
+            .into_response()
     } else {
         warn!("Signal manager not available for external report from {}", report.sensor_id);
         (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
             "success": false,
             "error": "Signal manager not configured"
         })))
+            .into_response()
     }
 }
 
@@ -5476,6 +5544,7 @@ mod tests {
     use axum::body::Body;
     use http::Request;
     use tower::util::ServiceExt;
+    use crate::intelligence::signal_manager::{SignalManager, SignalManagerConfig};
 
     fn create_test_app() -> Router {
         use governor::{Quota, RateLimiter};
@@ -5491,6 +5560,7 @@ mod tests {
             handler,
             admin_api_key: "test-key".to_string(),
             admin_scopes: scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
+            signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
             public_rate_limiter,
             auth_failure_limiter,
@@ -5508,6 +5578,32 @@ mod tests {
             .route("/", get(root_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
             .layer(middleware::from_fn(security_headers))
+            .with_state(state)
+    }
+
+    fn create_test_app_with_sensor_report() -> Router {
+        use governor::{Quota, RateLimiter};
+        use std::num::NonZeroU32;
+
+        let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
+        let handler = Arc::new(ApiHandler::builder().signal_manager(signal_manager).build());
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: "test-key".to_string(),
+            admin_scopes: scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
+            signal_permissions: Arc::new(SignalPermissions::default()),
+            admin_rate_limiter,
+            public_rate_limiter,
+            auth_failure_limiter,
+        };
+
+        Router::new()
+            .route("/_sensor/report", post(sensor_report_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
             .with_state(state)
     }
 
@@ -5651,6 +5747,78 @@ mod tests {
                     .uri("/")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_rejects_disallowed_signal_type() {
+        let app = create_test_app_with_sensor_report();
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": {
+                "ip": "10.0.0.1",
+                "fingerprint": null,
+                "sessionId": null
+            },
+            "signal": {
+                "type": "internal_only",
+                "severity": "high",
+                "details": {}
+            },
+            "request": null
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_allows_known_signal_type() {
+        let app = create_test_app_with_sensor_report();
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": {
+                "ip": "10.0.0.1",
+                "fingerprint": null,
+                "sessionId": null
+            },
+            "signal": {
+                "type": "honeypot_hit",
+                "severity": "high",
+                "details": {}
+            },
+            "request": null
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
             .await
@@ -6085,6 +6253,7 @@ mod tests {
             handler,
             admin_api_key: "test-key".to_string(),
             admin_scopes: scopes,
+            signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
             public_rate_limiter,
             auth_failure_limiter,
