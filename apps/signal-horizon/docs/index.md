@@ -60,6 +60,7 @@ permalink: /signal-horizon/
 | [Firmware Updates](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/firmware-updates.md) | Manage sensor firmware lifecycle |
 | [Capacity Planning](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/capacity-planning.md) | Plan fleet capacity and scaling |
 | [Drift Management](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/drift-management.md) | Detect and resolve config drift |
+| [Core Flow Diagrams](https://github.com/atlascrew/atlascrew-monorepo/blob/main/docs/tutorials/core-flow-diagrams.md) | Visual references for onboarding, filter chain, correlation, and DLP |
 
 ### Developer Guides
 

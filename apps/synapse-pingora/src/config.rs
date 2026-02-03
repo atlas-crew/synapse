@@ -644,7 +644,7 @@ impl ConfigLoader {
                 waf_threshold: site.waf.as_ref().and_then(|w| w.threshold),
                 waf_enabled: site.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
                 access_control: site.access_control.clone(),
-                headers: site.headers.clone(),
+                headers: site.headers.as_ref().map(|headers| headers.compile()),
                 shadow_mirror: site.shadow_mirror.clone(),
             })
             .collect()

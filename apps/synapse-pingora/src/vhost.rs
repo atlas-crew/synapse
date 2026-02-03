@@ -12,7 +12,8 @@ use regex::Regex;
 use tracing::{debug, warn};
 use unicase::Ascii;
 use ahash::RandomState;
-use crate::config::{AccessControlConfig, HeaderConfig};
+use crate::config::AccessControlConfig;
+use crate::headers::CompiledHeaderConfig;
 use crate::shadow::ShadowMirrorConfig;
 
 /// Configuration for a single virtual host site.
@@ -35,7 +36,7 @@ pub struct SiteConfig {
     /// Access control configuration (optional)
     pub access_control: Option<AccessControlConfig>,
     /// Header manipulation configuration (optional)
-    pub headers: Option<HeaderConfig>,
+    pub headers: Option<CompiledHeaderConfig>,
     /// Shadow mirroring configuration for honeypot delivery
     pub shadow_mirror: Option<ShadowMirrorConfig>,
 }
@@ -68,7 +69,7 @@ impl From<crate::config::SiteYamlConfig> for SiteConfig {
             waf_threshold: yaml.waf.as_ref().and_then(|w| w.threshold),
             waf_enabled: yaml.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
             access_control: yaml.access_control,
-            headers: yaml.headers,
+            headers: yaml.headers.as_ref().map(|headers| headers.compile()),
             shadow_mirror: yaml.shadow_mirror,
         }
     }

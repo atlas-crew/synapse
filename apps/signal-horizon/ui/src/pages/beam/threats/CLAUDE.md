@@ -7,9 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #2754 | 4:03 PM | ✅ | Committed Signal Horizon API and UI Security Enhancements | ~489 |
-| #2511 | 9:51 AM | 🔄 | ThreatActivityPage refactored inline chart to extracted TopThreatSourcesChart component | ~395 |
-| #2508 | 9:50 AM | ✅ | Added ChartTheme Imports to ThreatActivityPage | ~433 |
-| #2393 | 9:27 AM | 🔴 | Fixed Missing CartesianGrid Import in ThreatActivityPage | ~337 |
-| #2384 | 9:26 AM | 🔵 | ThreatActivityPage Missing CartesianGrid Import | ~405 |
+| #2509 | 9:51 AM | 🔄 | Extracted and Made Theme-Aware Two Chart Components in ThreatActivityPage | ~416 |
+| #2506 | 9:50 AM | 🔵 | ThreatActivityPage Contains Two Charts with Hard-Coded Dark Tooltips | ~363 |
 </claude-mem-context>
