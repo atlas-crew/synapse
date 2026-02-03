@@ -57,8 +57,16 @@ impl BlockLog {
         }
     }
 
+    fn read_events(&self) -> std::sync::RwLockReadGuard<'_, VecDeque<BlockEvent>> {
+        self.events.read().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn write_events(&self) -> std::sync::RwLockWriteGuard<'_, VecDeque<BlockEvent>> {
+        self.events.write().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     pub fn record(&self, event: BlockEvent) {
-        let mut events = self.events.write().expect("BlockLog lock poisoned");
+        let mut events = self.write_events();
         if events.len() >= self.max_size {
             events.pop_front();
         }
@@ -66,13 +74,13 @@ impl BlockLog {
     }
 
     pub fn recent(&self, limit: usize) -> Vec<BlockEvent> {
-        let events = self.events.read().expect("BlockLog lock poisoned");
+        let events = self.read_events();
         let take = limit.min(events.len());
         events.iter().rev().take(take).cloned().collect()
     }
 
     pub fn len(&self) -> usize {
-        self.events.read().expect("BlockLog lock poisoned").len()
+        self.read_events().len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -81,7 +89,7 @@ impl BlockLog {
 
     /// Clear all events
     pub fn clear(&self) {
-        self.events.write().expect("BlockLog lock poisoned").clear();
+        self.write_events().clear();
     }
 }
 
