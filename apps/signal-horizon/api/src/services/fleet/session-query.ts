@@ -48,6 +48,8 @@ export interface FleetSessionQueryServiceOptions {
   logger: Logger;
   /** Optional tunnel broker for sensor communication */
   tunnelBroker?: TunnelBroker;
+  /** Default timeout for sensor RPC calls in milliseconds */
+  defaultTimeoutMs?: number;
 }
 
 /**
@@ -57,11 +59,13 @@ export class FleetSessionQueryService {
   private readonly prisma: PrismaClient;
   private readonly logger: Logger;
   private readonly tunnelBroker?: TunnelBroker;
+  private readonly defaultTimeoutMs: number;
 
   constructor(options: FleetSessionQueryServiceOptions) {
     this.prisma = options.prisma;
     this.logger = options.logger.child({ service: 'FleetSessionQueryService' });
     this.tunnelBroker = options.tunnelBroker;
+    this.defaultTimeoutMs = options.defaultTimeoutMs ?? SENSOR_QUERY_TIMEOUT_MS;
   }
 
   /**
@@ -146,9 +150,10 @@ export class FleetSessionQueryService {
     sensorName: string,
     method: string,
     params: Record<string, unknown>,
-    timeoutMs: number = SENSOR_QUERY_TIMEOUT_MS
+    timeoutMs?: number
   ): Promise<SensorRpcResult<T>> {
     const startTime = Date.now();
+    const effectiveTimeoutMs = timeoutMs ?? this.defaultTimeoutMs;
 
     try {
       if (!this.tunnelBroker) {
@@ -182,7 +187,7 @@ export class FleetSessionQueryService {
             ...webReq,
           },
         },
-        timeoutMs
+        effectiveTimeoutMs
       );
 
       // Check for errors in sensor response payload

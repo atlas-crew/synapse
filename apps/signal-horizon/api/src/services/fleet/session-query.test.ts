@@ -180,4 +180,40 @@ describe('FleetSessionQueryService', () => {
       expect.any(Number)
     );
   });
+
+  it('uses configured default timeout for sensor RPC calls', async () => {
+    const sensorId = 'sensor-1';
+    const tenantId = 'tenant-1';
+    const customTimeout = 12_345;
+
+    service = new FleetSessionQueryService({
+      prisma: mockPrisma,
+      logger: createLogger(),
+      tunnelBroker: broker as unknown as TunnelBroker,
+      defaultTimeoutMs: customTimeout,
+    });
+
+    vi.mocked(mockPrisma.sensor.findMany).mockResolvedValue([
+      { id: sensorId, name: 'Sensor 1' }
+    ]);
+    broker.getSensorTunnelInfo.mockReturnValue({ connected: true });
+    broker.sendRequest.mockResolvedValue({
+      type: 'dashboard-response',
+      payload: {
+        status: 200,
+        data: {
+          sessions: [],
+          totalMatches: 0
+        }
+      }
+    });
+
+    await service.searchSessions(tenantId, {});
+
+    expect(broker.sendRequest).toHaveBeenCalledWith(
+      sensorId,
+      expect.any(Object),
+      customTimeout
+    );
+  });
 });
