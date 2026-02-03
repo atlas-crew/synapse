@@ -67,8 +67,17 @@ const logger = pino({
     ],
     censor: '[REDACTED]',
   },
+  // Note: messageFormat functions can't be serialized in Node.js 25+ worker threads
   transport: config.isDev
-    ? { target: 'pino-pretty', options: { colorize: true } }
+    ? {
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          levelFirst: true,
+          translateTime: 'HH:MM:ss.l',
+          ignore: 'pid,hostname',
+        },
+      }
     : undefined,
 });
 

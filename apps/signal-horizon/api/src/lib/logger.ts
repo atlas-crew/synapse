@@ -8,10 +8,13 @@ import pino from 'pino';
  */
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
+  // Note: messageFormat functions can't be serialized in Node.js 25+ worker threads
+  // Using simple pino-pretty config instead
   transport: process.env.NODE_ENV !== 'production' ? {
     target: 'pino-pretty',
     options: {
       colorize: true,
+      levelFirst: true,
       translateTime: 'HH:MM:ss Z',
       ignore: 'pid,hostname',
     },
