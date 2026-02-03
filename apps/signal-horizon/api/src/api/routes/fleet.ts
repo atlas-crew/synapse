@@ -1444,6 +1444,51 @@ const SensorLogsQuerySchema = z.object({
     }
   );
 
+  /**
+   * GET /api/v1/fleet/config/sync-status
+   * Get configuration sync status across all sensors
+   */
+  router.get('/config/sync-status', requireScope('config:read'), async (req, res) => {
+    try {
+      const auth = req.auth!;
+
+      // Get all sensors for the tenant
+      const sensors = await prisma.sensor.findMany({
+        where: auth.tenantId ? { tenantId: auth.tenantId } : undefined,
+        select: {
+          id: true,
+          connectionState: true,
+          configVersion: true,
+        },
+      });
+
+      const totalSensors = sensors.length;
+      const syncedSensors = sensors.filter(
+        (s) => s.connectionState === 'CONNECTED' && s.configVersion
+      ).length;
+      const outOfSyncSensors = sensors.filter(
+        (s) => s.connectionState === 'CONNECTED' && !s.configVersion
+      ).length;
+      const errorSensors = sensors.filter(
+        (s) => s.connectionState === 'ERROR'
+      ).length;
+
+      res.json({
+        totalSensors,
+        syncedSensors,
+        outOfSyncSensors,
+        errorSensors,
+        syncPercentage: totalSensors > 0 ? Math.round((syncedSensors / totalSensors) * 100) : 0,
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to get config sync status');
+      res.status(500).json({
+        error: 'Failed to get config sync status',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
   // ======================== Command Management ========================
 
   /**

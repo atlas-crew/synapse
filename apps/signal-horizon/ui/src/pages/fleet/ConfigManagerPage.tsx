@@ -5,7 +5,7 @@ import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 const authHeaders = { 'Authorization': `Bearer ${API_KEY}` };
 
