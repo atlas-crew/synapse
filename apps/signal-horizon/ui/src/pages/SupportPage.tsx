@@ -3,6 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-docker';
+import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
 
@@ -11,14 +22,56 @@ const authHeaders = {
   'Content-Type': 'application/json',
 };
 
-// Configure marked to handle mermaid blocks
+// Escape HTML entities for safe rendering
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Configure marked to handle mermaid blocks and syntax highlighting
 marked.use({
   renderer: {
     code({ text, lang }) {
       if (lang === 'mermaid') {
         return `<div class="mermaid">${text}</div>`;
       }
-      return `<pre><code class="language-${lang}">${text}</code></pre>`;
+
+      const languageAliases: Record<string, string> = {
+        sh: 'bash',
+        shell: 'bash',
+        yml: 'yaml',
+      };
+      const normalizedLanguage = (lang || 'text').toLowerCase();
+      const language = languageAliases[normalizedLanguage] ?? normalizedLanguage;
+      let highlighted: string;
+
+      try {
+        if (Prism.languages[language]) {
+          highlighted = Prism.highlight(text, Prism.languages[language], language);
+        } else {
+          highlighted = escapeHtml(text);
+        }
+      } catch {
+        highlighted = escapeHtml(text);
+      }
+
+      // Wrap with copy button container - data attribute holds the raw code for copying
+      const escapedText = escapeHtml(text)
+        .replace(/`/g, '&#96;')
+        .replace(/\r/g, '&#13;')
+        .replace(/\n/g, '&#10;');
+      return `<div class="code-block-wrapper group relative">
+        <button class="copy-btn absolute top-3 right-3 p-2 rounded bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white opacity-0 group-hover:opacity-100 transition-all" data-code="${escapedText}" aria-label="Copy code">
+          <svg class="copy-icon w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <svg class="check-icon w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+        <pre class="!mt-0 !rounded-t-none"><code class="language-${language}">${highlighted}</code></pre>
+        <div class="code-lang absolute top-0 left-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-800 rounded-tl">${language}</div>
+      </div>`;
     }
   }
 });
@@ -525,8 +578,23 @@ Track these metrics:
     const rawHtml = marked.parse(content) as string;
     return DOMPurify.sanitize(rawHtml, {
       // Allow mermaid diagram divs
-      ADD_TAGS: ['div'],
-      ADD_ATTR: ['class'],
+      ADD_TAGS: ['div', 'svg', 'path', 'rect', 'polyline'],
+      ADD_ATTR: [
+        'class',
+        'data-code',
+        'aria-label',
+        'viewBox',
+        'fill',
+        'stroke',
+        'stroke-width',
+        'd',
+        'points',
+        'x',
+        'y',
+        'width',
+        'height',
+        'rx',
+      ],
       // Allow safe URI schemes for links
       ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
     });
@@ -555,6 +623,50 @@ Track these metrics:
     }, 100);
 
     return () => clearTimeout(timer);
+  }, [htmlContent]);
+
+  // Handle copy button clicks
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const handleCopyClick = async (e: Event) => {
+      const btn = (e.target as HTMLElement).closest('.copy-btn') as HTMLButtonElement;
+      if (!btn) return;
+
+      const code = btn.dataset.code;
+      if (!code) return;
+
+      // Decode HTML entities
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = code;
+      const decodedCode = textarea.value;
+
+      try {
+        await navigator.clipboard.writeText(decodedCode);
+
+        // Show success state
+        const copyIcon = btn.querySelector('.copy-icon');
+        const checkIcon = btn.querySelector('.check-icon');
+        if (copyIcon && checkIcon) {
+          copyIcon.classList.add('hidden');
+          checkIcon.classList.remove('hidden');
+
+          setTimeout(() => {
+            copyIcon.classList.remove('hidden');
+            checkIcon.classList.add('hidden');
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    };
+
+    const container = containerRef.current;
+    container.addEventListener('click', handleCopyClick);
+
+    return () => {
+      container.removeEventListener('click', handleCopyClick);
+    };
   }, [htmlContent]);
 
   // Group docs by category

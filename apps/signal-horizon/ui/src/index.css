@@ -1411,4 +1411,135 @@
   .animation-delay-300 {
     animation-delay: 300ms;
   }
+
+  /* =========================================
+     PRISM SYNTAX HIGHLIGHTING
+     Navy-based code theme matching design system
+     ========================================= */
+
+  /* Code block wrapper */
+  .code-block-wrapper {
+    @apply relative rounded overflow-hidden my-6;
+  }
+
+  .code-block-wrapper pre {
+    @apply bg-ac-navy !m-0 overflow-x-auto;
+    padding: 2rem 1.5rem 1.5rem 1.5rem !important;
+  }
+
+  .code-block-wrapper code {
+    @apply font-mono text-[13px] leading-relaxed;
+    background: transparent !important;
+    color: #e2e8f0 !important;
+    padding: 0 !important;
+  }
+
+  /* Language badge */
+  .code-lang {
+    @apply absolute top-0 left-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider;
+    background: rgba(0, 30, 98, 0.9);
+    color: #64748b;
+    border-bottom-right-radius: 4px;
+  }
+
+  /* Copy button */
+  .copy-btn {
+    @apply absolute top-3 right-3 p-2 rounded;
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    opacity: 0;
+    transition: all 0.2s ease;
+  }
+
+  .code-block-wrapper:hover .copy-btn {
+    opacity: 1;
+  }
+
+  .copy-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #e2e8f0;
+  }
+
+  /* Prism token colors - Navy theme */
+  .token.comment,
+  .token.prolog,
+  .token.doctype,
+  .token.cdata {
+    color: #6b7a8c;
+    font-style: italic;
+  }
+
+  .token.punctuation {
+    color: #94a3b8;
+  }
+
+  .token.namespace {
+    opacity: 0.8;
+  }
+
+  .token.property,
+  .token.tag,
+  .token.boolean,
+  .token.number,
+  .token.constant,
+  .token.symbol,
+  .token.deleted {
+    color: #f472b6; /* Magenta-ish pink */
+  }
+
+  .token.selector,
+  .token.attr-name,
+  .token.string,
+  .token.char,
+  .token.builtin,
+  .token.inserted {
+    color: #86efac; /* Green */
+  }
+
+  .token.operator,
+  .token.entity,
+  .token.url,
+  .language-css .token.string,
+  .style .token.string {
+    color: #fbbf24; /* Yellow/amber */
+  }
+
+  .token.atrule,
+  .token.attr-value,
+  .token.keyword {
+    color: #60a5fa; /* Blue */
+  }
+
+  .token.function,
+  .token.class-name {
+    color: #c4b5fd; /* Purple/violet */
+  }
+
+  .token.regex,
+  .token.important,
+  .token.variable {
+    color: #fcd34d; /* Yellow */
+  }
+
+  .token.important,
+  .token.bold {
+    font-weight: bold;
+  }
+
+  .token.italic {
+    font-style: italic;
+  }
+
+  .token.entity {
+    cursor: help;
+  }
+
+  /* Line highlighting */
+  .line-highlight {
+    background: linear-gradient(to right, rgba(0, 87, 183, 0.2) 70%, transparent);
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
 }
