@@ -76,6 +76,25 @@ const SchemaChangesResponseSchema = z.object({
   offset: z.number(),
 });
 
+const EndpointTrendPointSchema = z.object({
+  date: z.string(),
+  count: z.number(),
+});
+
+const EndpointDriftTrendSchema = z.object({
+  endpoint: z.string(),
+  method: z.string(),
+  service: z.string(),
+  total: z.number(),
+  series: z.array(EndpointTrendPointSchema),
+});
+
+const EndpointDriftTrendsResponseSchema = z.object({
+  days: z.number(),
+  limit: z.number(),
+  trends: z.array(EndpointDriftTrendSchema),
+});
+
 const ApiEndpointSchema = z.object({
   id: z.string(),
   method: z.string(),
@@ -164,6 +183,14 @@ export interface SchemaChange {
   riskLevel: string;
   detectedAt: string;
   breaking: boolean;
+}
+
+export interface EndpointDriftTrend {
+  endpoint: string;
+  method: string;
+  service: string;
+  total: number;
+  series: Array<{ date: string; count: number }>;
 }
 
 export interface ApiEndpoint {
@@ -313,6 +340,29 @@ function generateDemoSchemaChanges(): SchemaChange[] {
   ];
 }
 
+function generateDemoEndpointDriftTrends(): EndpointDriftTrend[] {
+  const endpoints = [
+    { endpoint: '/api/v1/users', method: 'POST', service: 'user-service' },
+    { endpoint: '/api/v1/orders', method: 'GET', service: 'order-service' },
+    { endpoint: '/api/v1/auth/login', method: 'POST', service: 'auth-service' },
+  ];
+
+  const days = 7;
+  const dateKeys = Array.from({ length: days }, (_, i) => {
+    const date = new Date(Date.now() - (days - 1 - i) * 24 * 60 * 60 * 1000);
+    return date.toISOString().split('T')[0];
+  });
+
+  return endpoints.map((entry, index) => {
+    const series = dateKeys.map((date, offset) => ({
+      date,
+      count: Math.max(0, Math.round(4 + index * 2 + Math.sin(offset) * 3 + Math.random() * 4)),
+    }));
+    const total = series.reduce((sum, item) => sum + item.count, 0);
+    return { ...entry, total, series };
+  });
+}
+
 export interface PaginationState {
   offset: number;
   limit: number;
@@ -333,6 +383,7 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
   const [signals, setSignals] = useState<ApiSignal[]>([]);
   const [inventory, setInventory] = useState<FleetInventory | null>(null);
   const [schemaChanges, setSchemaChanges] = useState<SchemaChange[]>([]);
+  const [endpointDriftTrends, setEndpointDriftTrends] = useState<EndpointDriftTrend[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -380,6 +431,7 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
       ]);
       setInventory(generateDemoInventory());
       setSchemaChanges(generateDemoSchemaChanges());
+      setEndpointDriftTrends(generateDemoEndpointDriftTrends());
       setIsLoading(false);
       setLastUpdated(new Date());
       isFetchingRef.current = false;
@@ -388,12 +440,20 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
 
     try {
       setIsLoading(true);
-      const [statsData, endpointsData, signalsData, inventoryData, schemaChangesData] = await Promise.all([
+      const [
+        statsData,
+        endpointsData,
+        signalsData,
+        inventoryData,
+        schemaChangesData,
+        driftTrendsData,
+      ] = await Promise.all([
         apiFetch<unknown>('/api-intelligence/stats', { signal }),
         apiFetch<unknown>(`/api-intelligence/endpoints?limit=${pagination.limit}&offset=${pagination.offset}`, { signal }),
         apiFetch<unknown>('/api-intelligence/signals?limit=20', { signal }),
         apiFetch<unknown>('/api-intelligence/inventory', { signal }),
         apiFetch<unknown>('/api-intelligence/schema-changes?limit=20', { signal }),
+        apiFetch<unknown>('/api-intelligence/violations/trends/endpoints?days=7&limit=5', { signal }),
       ]);
 
       // Validate responses with Zod
@@ -432,6 +492,13 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
         throw new Error('Invalid schema changes response format');
       }
       setSchemaChanges(schemaChangesResult.data.changes);
+
+      const driftTrendsResult = EndpointDriftTrendsResponseSchema.safeParse(driftTrendsData);
+      if (!driftTrendsResult.success) {
+        console.error('Endpoint drift trends validation error:', driftTrendsResult.error);
+        throw new Error('Invalid endpoint drift trends response format');
+      }
+      setEndpointDriftTrends(driftTrendsResult.data.trends);
 
       setError(null);
       setLastUpdated(new Date());
@@ -484,6 +551,7 @@ export function useApiIntelligence(options: UseApiIntelligenceOptions = {}) {
     signals,
     inventory,
     schemaChanges,
+    endpointDriftTrends,
     isLoading,
     error,
     refetch,

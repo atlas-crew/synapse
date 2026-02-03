@@ -8,7 +8,6 @@ import { motion } from 'framer-motion';
 import {
   GitBranch,
   AlertTriangle,
-  CheckCircle,
   Plus,
   Minus,
   RefreshCw,
@@ -18,92 +17,54 @@ import {
   Filter,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-// import { useSchemaChanges } from '../../../stores/beamStore';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { useApiIntelligence } from '../../../hooks/useApiIntelligence';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 
 type ChangeType = 'added' | 'removed' | 'modified' | 'deprecated';
 
-// Demo data - schema changes
-const DEMO_SCHEMA_CHANGES = [
-  {
-    id: '1',
-    endpoint: '/api/v1/users',
-    method: 'POST',
-    service: 'user-service',
-    changeType: 'added' as ChangeType,
-    field: 'profile.preferences.notifications',
-    fieldType: 'object',
-    description: 'Added notification preferences to user profile',
-    detectedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    breaking: false,
-    acknowledged: false,
-  },
-  {
-    id: '2',
-    endpoint: '/api/v1/orders',
-    method: 'POST',
-    service: 'order-service',
-    changeType: 'modified' as ChangeType,
-    field: 'items[].quantity',
-    fieldType: 'integer → number',
-    description: 'Changed quantity from integer to float to support fractional units',
-    detectedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-    breaking: true,
-    acknowledged: true,
-  },
-  {
-    id: '3',
-    endpoint: '/api/v1/products/:id',
-    method: 'GET',
-    service: 'product-service',
-    changeType: 'added' as ChangeType,
-    field: 'inventory.warehouse_locations',
-    fieldType: 'array',
-    description: 'Added warehouse location tracking to product response',
-    detectedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    breaking: false,
-    acknowledged: true,
-  },
-  {
-    id: '4',
-    endpoint: '/api/v1/auth/login',
-    method: 'POST',
-    service: 'auth-service',
-    changeType: 'deprecated' as ChangeType,
-    field: 'remember_me',
-    fieldType: 'boolean',
-    description: 'Deprecated in favor of token-based session management',
-    detectedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    breaking: false,
-    acknowledged: false,
-  },
-  {
-    id: '5',
-    endpoint: '/api/v1/payments',
-    method: 'POST',
-    service: 'payment-service',
-    changeType: 'removed' as ChangeType,
-    field: 'legacy_payment_method',
-    fieldType: 'string',
-    description: 'Removed legacy payment method field after migration',
-    detectedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    breaking: true,
-    acknowledged: true,
-  },
-  {
-    id: '6',
-    endpoint: '/api/v1/search',
-    method: 'GET',
-    service: 'search-service',
-    changeType: 'added' as ChangeType,
-    field: 'filters.date_range',
-    fieldType: 'object',
-    description: 'Added date range filtering support',
-    detectedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    breaking: false,
-    acknowledged: true,
-  },
-];
+type SchemaChangeView = {
+  id: string;
+  endpoint: string;
+  method: string;
+  service: string;
+  changeType: ChangeType;
+  field: string;
+  fieldType: string;
+  description: string;
+  detectedAt: string;
+  breaking: boolean;
+  riskLevel: string;
+};
+
+const CHANGE_TYPE_MAP: Record<string, ChangeType> = {
+  added: 'added',
+  removed: 'removed',
+  modified: 'modified',
+  deprecated: 'deprecated',
+  field_added: 'added',
+  field_removed: 'removed',
+  type_changed: 'modified',
+};
+
+function normalizeChangeType(value: string): ChangeType {
+  return CHANGE_TYPE_MAP[value] ?? 'modified';
+}
+
+function formatFieldType(oldValue: string | null, newValue: string | null): string {
+  if (oldValue && newValue) {
+    return `${oldValue} → ${newValue}`;
+  }
+  return newValue ?? oldValue ?? 'n/a';
+}
 
 const CHANGE_TYPE_CONFIG: Record<ChangeType, { icon: React.ElementType; color: string; label: string }> = {
   added: { icon: Plus, color: 'text-green-400 bg-green-500/20', label: 'Added' },
@@ -119,6 +80,8 @@ const METHOD_COLORS: Record<string, string> = {
   PATCH: 'text-orange-400',
   DELETE: 'text-red-400',
 };
+
+const TREND_COLORS = ['#529EEC', '#D62598', '#E35205'];
 
 // Stat Card
 function StatCard({
@@ -174,7 +137,7 @@ function SchemaChangeCard({
   isExpanded,
   onToggle,
 }: {
-  change: typeof DEMO_SCHEMA_CHANGES[0];
+  change: SchemaChangeView;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -187,9 +150,7 @@ function SchemaChangeCard({
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
         'bg-surface-card border overflow-hidden transition-colors',
-        change.breaking && !change.acknowledged
-          ? 'border-red-500/50'
-          : 'border-border-subtle'
+        change.breaking ? 'border-red-500/50' : 'border-border-subtle'
       )}
     >
       <button
@@ -218,15 +179,6 @@ function SchemaChangeCard({
           {change.breaking && (
             <span className="px-2 py-0.5 text-xs font-medium text-red-400 bg-red-500/20">
               Breaking
-            </span>
-          )}
-          {change.acknowledged ? (
-            <span className="text-green-400">
-              <CheckCircle className="w-4 h-4" />
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 text-xs font-medium text-sky-400 bg-sky-500/20">
-              Unacknowledged
             </span>
           )}
           <span className="text-sm text-ink-secondary flex items-center gap-1">
@@ -258,17 +210,16 @@ function SchemaChangeCard({
                 <p className="text-ink-primary mt-1 capitalize">{change.changeType}</p>
               </div>
               <div>
+                <p className="text-sm text-ink-secondary">Risk Level</p>
+                <p className="text-ink-primary mt-1 capitalize">{change.riskLevel}</p>
+              </div>
+              <div>
                 <p className="text-sm text-ink-secondary">Detected</p>
                 <p className="text-ink-primary mt-1">
                   {new Date(change.detectedAt).toLocaleString()}
                 </p>
               </div>
             </div>
-            {!change.acknowledged && (
-              <button className="px-4 py-2 bg-horizon-600 hover:bg-horizon-500 text-ink-primary text-sm font-medium transition-colors">
-                Acknowledge Change
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -280,14 +231,26 @@ export default function SchemaChangesPage() {
   const [expandedChanges, setExpandedChanges] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [showBreakingOnly, setShowBreakingOnly] = useState(false);
-  const [showUnacknowledgedOnly, setShowUnacknowledgedOnly] = useState(false);
 
-  // Store integration will be added when backend is ready
-  // const storeChanges = useSchemaChanges();
-  const isLoading = false;
+  const { schemaChanges, endpointDriftTrends, isLoading } = useApiIntelligence();
 
-  // Use demo data for now
-  const allChanges = DEMO_SCHEMA_CHANGES;
+  const allChanges = useMemo<SchemaChangeView[]>(
+    () =>
+      schemaChanges.map((change) => ({
+        id: change.id,
+        endpoint: change.endpoint,
+        method: change.method,
+        service: change.service,
+        changeType: normalizeChangeType(change.changeType),
+        field: change.field,
+        fieldType: formatFieldType(change.oldValue, change.newValue),
+        description: `${change.service} (${change.riskLevel})`,
+        detectedAt: change.detectedAt,
+        breaking: change.breaking,
+        riskLevel: change.riskLevel,
+      })),
+    [schemaChanges]
+  );
 
   // Filter changes
   const filteredChanges = useMemo(() => {
@@ -301,25 +264,43 @@ export default function SchemaChangesPage() {
       result = result.filter((c) => c.breaking);
     }
 
-    if (showUnacknowledgedOnly) {
-      result = result.filter((c) => !c.acknowledged);
-    }
-
     return result;
-  }, [allChanges, typeFilter, showBreakingOnly, showUnacknowledgedOnly]);
+  }, [allChanges, typeFilter, showBreakingOnly]);
 
   // Calculate stats
   const stats = useMemo(() => {
     const total = allChanges.length;
     const breaking = allChanges.filter((c) => c.breaking).length;
-    const unacknowledged = allChanges.filter((c) => !c.acknowledged).length;
+    const highRisk = allChanges.filter((c) => ['high', 'critical'].includes(c.riskLevel.toLowerCase())).length;
     const thisWeek = allChanges.filter((c) => {
       const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       return new Date(c.detectedAt).getTime() > weekAgo;
     }).length;
 
-    return { total, breaking, unacknowledged, thisWeek };
+    return { total, breaking, highRisk, thisWeek };
   }, [allChanges]);
+
+  const topEndpointTrends = useMemo(() => endpointDriftTrends.slice(0, 3), [endpointDriftTrends]);
+
+  const trendLabels = useMemo(
+    () => topEndpointTrends.map((trend) => `${trend.method} ${trend.endpoint}`),
+    [topEndpointTrends]
+  );
+
+  const trendChartData = useMemo(() => {
+    const dateMap = new Map<string, Record<string, number | string>>();
+
+    topEndpointTrends.forEach((trend) => {
+      const key = `${trend.method} ${trend.endpoint}`;
+      trend.series.forEach((point) => {
+        const entry = dateMap.get(point.date) ?? { date: point.date };
+        entry[key] = point.count;
+        dateMap.set(point.date, entry);
+      });
+    });
+
+    return Array.from(dateMap.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }, [topEndpointTrends]);
 
   const toggleChange = (changeId: string) => {
     const newExpanded = new Set(expandedChanges);
@@ -362,8 +343,8 @@ export default function SchemaChangesPage() {
           color="text-red-400"
         />
         <StatCard
-          label="Unacknowledged"
-          value={stats.unacknowledged.toString()}
+          label="High Risk"
+          value={stats.highRisk.toString()}
           icon={Clock}
           color="text-sky-400"
         />
@@ -373,6 +354,46 @@ export default function SchemaChangesPage() {
           icon={RefreshCw}
           color="text-green-400"
         />
+      </div>
+
+      {/* Endpoint Drift Trends */}
+      <div className="card h-[320px]">
+        <div className="card-header">
+          <h2 className="font-medium text-ink-primary">Schema Drift Trends (Top Endpoints)</h2>
+        </div>
+        <div className="card-body h-full">
+          {trendChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendChartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0, 87, 183, 0.15)" />
+                <XAxis dataKey="date" stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#7B8FA8" fontSize={12} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#001544',
+                    borderColor: 'rgba(0, 87, 183, 0.4)',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                  }}
+                  labelStyle={{ color: '#FFFFFF' }}
+                />
+                {trendLabels.map((label, index) => (
+                  <Line
+                    key={label}
+                    type="monotone"
+                    dataKey={label}
+                    stroke={TREND_COLORS[index % TREND_COLORS.length]}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-ink-muted">
+              No drift trend data available.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -399,15 +420,6 @@ export default function SchemaChangesPage() {
             className="w-4 h-4 border-border-subtle bg-surface-card text-horizon-600 focus:ring-horizon-500"
           />
           <span className="text-sm text-ink-secondary">Breaking only</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showUnacknowledgedOnly}
-            onChange={(e) => setShowUnacknowledgedOnly(e.target.checked)}
-            className="w-4 h-4 border-border-subtle bg-surface-card text-horizon-600 focus:ring-horizon-500"
-          />
-          <span className="text-sm text-ink-secondary">Unacknowledged only</span>
         </label>
       </div>
 
