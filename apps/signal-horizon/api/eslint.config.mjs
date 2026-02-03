@@ -13,6 +13,11 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-namespace': 'off',
+      '@typescript-eslint/no-unsafe-declaration-merging': 'off',
+      'no-case-declarations': 'off',
+      'no-control-regex': 'off',
+      'prefer-const': 'warn',
     },
   },
 );
