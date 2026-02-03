@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use parking_lot::RwLock;
-use subtle::ConstantTimeEq;
 
 use crate::health::{HealthChecker, HealthResponse};
 use crate::metrics::MetricsRegistry;
@@ -109,6 +108,16 @@ pub struct ApiHandler {
     dlp_scanner: Option<Arc<DlpScanner>>,
     /// Signal Horizon client (Phase 6)
     horizon_client: Option<Arc<HorizonClient>>,
+}
+
+/// Timing-safe comparison of API keys without early exits.
+fn constant_time_eq(expected: &[u8], provided: &[u8]) -> bool {
+    let mut diff = expected.len() ^ provided.len();
+    for (idx, expected_byte) in expected.iter().enumerate() {
+        let provided_byte = provided.get(idx).copied().unwrap_or(0);
+        diff |= (expected_byte ^ provided_byte) as usize;
+    }
+    diff == 0
 }
 
 impl ApiHandler {
@@ -339,8 +348,7 @@ impl ApiHandler {
                 let expected_bytes = expected.as_bytes();
                 let provided_bytes = provided.as_bytes();
                 // Constant-time comparison: prevents timing attacks
-                expected_bytes.len() == provided_bytes.len()
-                    && bool::from(expected_bytes.ct_eq(provided_bytes))
+                constant_time_eq(expected_bytes, provided_bytes)
             }
             _ => false,
         }
