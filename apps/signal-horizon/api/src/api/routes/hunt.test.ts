@@ -173,4 +173,88 @@ describe('Hunt Routes', () => {
     const calledWith = vi.mocked(huntService.queryTimeline).mock.calls[0][0] as HuntQuery;
     expect(calledWith.tenantId).toBe('tenant-1');
   });
+
+  describe('Hunt query validation', () => {
+    const buildBaseQuery = () => {
+      const startTime = new Date(Date.now() - 60_000).toISOString();
+      const endTime = new Date().toISOString();
+
+      return { startTime, endTime, limit: 5, offset: 0 };
+    };
+
+    it('rejects SQL injection attempts in time parameters', async () => {
+      const baseQuery = buildBaseQuery();
+
+      const response = await request(app)
+        .post('/api/v1/hunt/query')
+        .send({
+          ...baseQuery,
+          startTime: `${baseQuery.startTime}' OR 1=1 --`,
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
+      expect(huntService.queryTimeline).not.toHaveBeenCalled();
+    });
+
+    it('rejects time-based blind injection payloads', async () => {
+      const baseQuery = buildBaseQuery();
+
+      const response = await request(app)
+        .post('/api/v1/hunt/query')
+        .send({
+          ...baseQuery,
+          endTime: `${baseQuery.endTime}; SELECT pg_sleep(5)`,
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
+      expect(huntService.queryTimeline).not.toHaveBeenCalled();
+    });
+
+    it('rejects NoSQL injection in filter parameters', async () => {
+      const baseQuery = buildBaseQuery();
+
+      const response = await request(app)
+        .post('/api/v1/hunt/query')
+        .send({
+          ...baseQuery,
+          sourceIps: [{ $ne: '198.51.100.10' }],
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
+      expect(huntService.queryTimeline).not.toHaveBeenCalled();
+    });
+
+    it('enforces pagination limit bounds', async () => {
+      const baseQuery = buildBaseQuery();
+
+      const response = await request(app)
+        .post('/api/v1/hunt/query')
+        .send({
+          ...baseQuery,
+          limit: 10001,
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
+      expect(huntService.queryTimeline).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid input shapes', async () => {
+      const baseQuery = buildBaseQuery();
+
+      const response = await request(app)
+        .post('/api/v1/hunt/query')
+        .send({
+          ...baseQuery,
+          anonFingerprint: 'abc123',
+        })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ error: 'Invalid query parameters' });
+      expect(huntService.queryTimeline).not.toHaveBeenCalled();
+    });
+  });
 });
