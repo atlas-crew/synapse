@@ -9,6 +9,7 @@
     "bench:scenarios": "node ../load-testing/scripts/bench-generate-scenarios.mjs",
     "bench:setup": "npm run bench:payloads && npm run bench:heavy && npm run bench:scenarios",
     "bench": "cargo bench",
-    "test": "cargo test"
+    "test": "cargo test",
+    "test-heavy": "cargo test --features heavy-tests -- --ignored --test-threads=1"
   }
 }

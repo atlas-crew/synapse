@@ -317,6 +317,22 @@ fn now_ms() -> u64 {
 mod tests {
     use super::*;
 
+    fn test_limit_usize(env_key: &str, default: usize, min: usize) -> usize {
+        std::env::var(env_key)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .map(|value| value.max(min).min(default))
+            .unwrap_or(default)
+    }
+
+    fn test_limit_u64(env_key: &str, default: u64, min: u64) -> u64 {
+        std::env::var(env_key)
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(|value| value.max(min).min(default))
+            .unwrap_or(default)
+    }
+
     fn test_config() -> SignalManagerConfig {
         SignalManagerConfig {
             bucket_size_ms: 1000, // 1 second buckets for testing
@@ -646,10 +662,20 @@ mod tests {
     // ========================================================================
 
     #[test]
+    #[cfg_attr(not(feature = "heavy-tests"), ignore)]
     fn test_bucket_eviction_respects_retention() {
+        let bucket_size_ms = 1000;
+        let retention_ms = test_limit_u64("SYNAPSE_TEST_RETENTION_MS", 3000, bucket_size_ms);
+        let bucket_count = test_limit_usize("SYNAPSE_TEST_BUCKET_COUNT", 5, 1);
+        let max_buckets = (retention_ms / bucket_size_ms).max(1) as usize;
+        eprintln!(
+            "test_bucket_eviction_respects_retention: bucket_count={}, retention_ms={}, max_buckets={}",
+            bucket_count, retention_ms, max_buckets
+        );
+
         let config = SignalManagerConfig {
-            bucket_size_ms: 1000,
-            retention_ms: 3000, // Only 3 buckets retained
+            bucket_size_ms,
+            retention_ms,
             max_signals_per_bucket: 100,
             max_query_results: 500,
         };
@@ -662,12 +688,12 @@ mod tests {
         {
             let mut store_lock = store.write();
             // Add 5 buckets manually
-            for i in 0..5 {
-                let mut bucket = SignalBucket::new(i * 1000, 1000);
+            for i in 0..bucket_count {
+                let mut bucket = SignalBucket::new((i as u64) * bucket_size_ms, bucket_size_ms);
                 bucket.add_signal(
                     Signal {
                         id: format!("sig_{}", i),
-                        timestamp_ms: i * 1000,
+                        timestamp_ms: (i as u64) * bucket_size_ms,
                         category: SignalCategory::Attack,
                         signal_type: format!("attack_{}", i),
                         entity_id: None,
@@ -678,14 +704,12 @@ mod tests {
                 );
                 store_lock.buckets.push_back(bucket);
             }
+            manager.evict_old_buckets(&mut store_lock);
+            assert!(store_lock.buckets.len() <= max_buckets);
         }
 
-        // After eviction, only 3 buckets should remain
-        manager.record_event(SignalCategory::Attack, "trigger_eviction", None, None, serde_json::json!({}));
-
         let summary = manager.summary();
-        // Should have signals from retained buckets plus the new one
-        assert!(summary.total_signals <= 4);
+        assert!(summary.total_signals <= max_buckets);
     }
 
     // ========================================================================

@@ -694,6 +694,14 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
 
+    fn test_limit_usize(env_key: &str, default: usize, min: usize) -> usize {
+        std::env::var(env_key)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .map(|value| value.max(min).min(default))
+            .unwrap_or(default)
+    }
+
     // ==================== Basic Operations Tests ====================
 
     #[test]
@@ -1432,11 +1440,22 @@ mod tests {
     // ==================== Large Scale Test ====================
 
     #[test]
+    #[cfg_attr(not(feature = "heavy-tests"), ignore)]
     fn test_large_scale_operations() {
         let index = FingerprintIndex::new();
 
-        // Add 10,000 entities across 100 fingerprint groups
-        for i in 0..10000 {
+        let total_entities = test_limit_usize("SYNAPSE_TEST_MAX_ENTITIES", 10_000, 100);
+        let ja4_groups = test_limit_usize("SYNAPSE_TEST_MAX_JA4_GROUPS", 100, 1)
+            .min(total_entities);
+        let combined_groups = test_limit_usize("SYNAPSE_TEST_MAX_COMBINED_GROUPS", 50, 1)
+            .min(total_entities);
+        eprintln!(
+            "test_large_scale_operations: total_entities={}, ja4_groups={}, combined_groups={}",
+            total_entities, ja4_groups, combined_groups
+        );
+
+        // Add entities across fingerprint groups
+        for i in 0..total_entities {
             let ip = format!(
                 "{}.{}.{}.{}",
                 i / 256 / 256 / 256,
@@ -1444,26 +1463,31 @@ mod tests {
                 (i / 256) % 256,
                 i % 256
             );
-            let ja4 = format!("ja4_group_{}", i % 100);
-            let combined = format!("combined_group_{}", i % 50);
+            let ja4 = format!("ja4_group_{}", i % ja4_groups);
+            let combined = format!("combined_group_{}", i % combined_groups);
             index.update_entity(&ip, Some(&ja4), Some(&combined));
         }
 
-        assert_eq!(index.len(), 10000);
+        assert_eq!(index.len(), total_entities);
 
         let stats = index.stats();
-        assert_eq!(stats.ja4_fingerprints, 100);
-        assert_eq!(stats.combined_fingerprints, 50);
-        assert_eq!(stats.largest_ja4_group, 100); // 10000 / 100 groups = 100 per group
-        assert_eq!(stats.largest_combined_group, 200); // 10000 / 50 groups = 200 per group
+        assert_eq!(stats.ja4_fingerprints, ja4_groups);
+        assert_eq!(stats.combined_fingerprints, combined_groups);
 
-        // All JA4 groups should be above threshold of 50
-        let groups = index.get_ja4_groups_above_threshold(50);
-        assert_eq!(groups.len(), 100);
+        let expected_largest_ja4 = (total_entities + ja4_groups - 1) / ja4_groups;
+        let expected_largest_combined =
+            (total_entities + combined_groups - 1) / combined_groups;
+        assert_eq!(stats.largest_ja4_group, expected_largest_ja4);
+        assert_eq!(stats.largest_combined_group, expected_largest_combined);
 
-        // All combined groups should be above threshold of 100
-        let combined_groups = index.get_combined_groups_above_threshold(100);
-        assert_eq!(combined_groups.len(), 50);
+        let ja4_threshold = (expected_largest_ja4 / 2).max(1);
+        let groups = index.get_ja4_groups_above_threshold(ja4_threshold);
+        assert_eq!(groups.len(), ja4_groups);
+
+        let combined_threshold = (expected_largest_combined / 2).max(1);
+        let combined_groups_above =
+            index.get_combined_groups_above_threshold(combined_threshold);
+        assert_eq!(combined_groups_above.len(), combined_groups);
     }
 
     // ==================== Capacity Limit Tests ====================

@@ -644,6 +644,14 @@ pub fn analyze_ja4h(fingerprint: &Ja4hFingerprint) -> Ja4hAnalysis {
 mod tests {
     use super::*;
 
+    fn test_limit_usize(env_key: &str, default: usize, min: usize) -> usize {
+        std::env::var(env_key)
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .map(|value| value.max(min).min(default))
+            .unwrap_or(default)
+    }
+
     fn header(name: &str, value: &str) -> (HeaderName, HeaderValue) {
         let header_name = HeaderName::from_bytes(name.as_bytes()).expect("valid header name");
         let header_value = HeaderValue::from_str(value).expect("valid header value");
@@ -1020,12 +1028,18 @@ mod tests {
     // ==================== Performance Benchmark Hints ====================
 
     #[test]
+    #[cfg_attr(not(feature = "heavy-tests"), ignore)]
     fn test_ja4_parsing_performance() {
         // This test verifies that parsing is fast by running many iterations
         let input = "t13d1516h2_8daaf6152771_e5627efa2ab1";
+        let iterations = test_limit_usize("SYNAPSE_TEST_PERF_ITERATIONS", 10_000, 100);
+        eprintln!(
+            "test_ja4_parsing_performance: iterations={}",
+            iterations
+        );
         let start = std::time::Instant::now();
 
-        for _ in 0..10000 {
+        for _ in 0..iterations {
             let _ = parse_ja4_from_header(Some(input));
         }
 
@@ -1036,6 +1050,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "heavy-tests"), ignore)]
     fn test_ja4h_generation_performance() {
         let headers = vec![
             header("Accept", "text/html"),
@@ -1051,7 +1066,13 @@ mod tests {
 
         let start = std::time::Instant::now();
 
-        for _ in 0..10000 {
+        let iterations = test_limit_usize("SYNAPSE_TEST_PERF_ITERATIONS", 10_000, 100);
+        eprintln!(
+            "test_ja4h_generation_performance: iterations={}",
+            iterations
+        );
+
+        for _ in 0..iterations {
             let _ = generate_ja4h(&request);
         }
 
