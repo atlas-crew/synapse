@@ -1818,7 +1818,7 @@ async fn sensor_blocks_handler(
 async fn sensor_rules_handler(
     Query(params): Query<RulesQuery>,
     State(state): State<AdminState>,
-) -> impl IntoResponse {
+) -> Response {
     let Some(config_mgr) = state.handler.config_manager() else {
         return service_unavailable("ConfigManager");
     };
@@ -1843,6 +1843,7 @@ async fn sensor_rules_handler(
         "rules": rules_page,
         "total": total
     })))
+        .into_response()
 }
 
 /// POST /_sensor/rules - Create a new rule

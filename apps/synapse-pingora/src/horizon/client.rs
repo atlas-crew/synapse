@@ -98,14 +98,14 @@ impl From<&InternalStats> for ClientStats {
 /// WebSocket client for Signal Horizon Hub.
 pub struct HorizonClient {
     config: HorizonConfig,
-    state: RwLock<ConnectionState>,
+    state: Arc<RwLock<ConnectionState>>,
     blocklist: Arc<BlocklistCache>,
     stats: Arc<InternalStats>,
     metrics_provider: Arc<dyn MetricsProvider>,
     signal_tx: Option<mpsc::Sender<ThreatSignal>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
-    tenant_id: RwLock<Option<String>>,
-    capabilities: RwLock<Vec<String>>,
+    tenant_id: Arc<RwLock<Option<String>>>,
+    capabilities: Arc<RwLock<Vec<String>>>,
     config_manager: Option<Arc<ConfigManager>>,
 }
 
@@ -114,7 +114,7 @@ impl HorizonClient {
     pub fn new(config: HorizonConfig) -> Self {
         Self {
             config,
-            state: RwLock::new(ConnectionState::Disconnected),
+            state: Arc::new(RwLock::new(ConnectionState::Disconnected)),
             blocklist: Arc::new(BlocklistCache::new()),
             stats: Arc::new(InternalStats {
                 signals_sent: AtomicU64::new(0),
@@ -127,8 +127,8 @@ impl HorizonClient {
             metrics_provider: Arc::new(NoopMetricsProvider),
             signal_tx: None,
             shutdown_tx: None,
-            tenant_id: RwLock::new(None),
-            capabilities: RwLock::new(Vec::new()),
+            tenant_id: Arc::new(RwLock::new(None)),
+            capabilities: Arc::new(RwLock::new(Vec::new())),
             config_manager: None,
         }
     }
@@ -167,28 +167,25 @@ impl HorizonClient {
 
         // Spawn connection task
         let config = self.config.clone();
-        let state = Arc::new(RwLock::new(ConnectionState::Disconnected));
-        let state_clone = Arc::clone(&state);
+        let state = Arc::clone(&self.state);
         let blocklist = Arc::clone(&self.blocklist);
         let stats = Arc::clone(&self.stats);
         let metrics_provider = Arc::clone(&self.metrics_provider);
-        let tenant_id = Arc::new(RwLock::new(None::<String>));
-        let tenant_id_clone = Arc::clone(&tenant_id);
-        let capabilities = Arc::new(RwLock::new(Vec::<String>::new()));
-        let capabilities_clone = Arc::clone(&capabilities);
+        let tenant_id = Arc::clone(&self.tenant_id);
+        let capabilities = Arc::clone(&self.capabilities);
         let config_manager = self.config_manager.clone();
 
         tokio::spawn(async move {
             connection_loop(
                 config,
-                state_clone,
+                state,
                 blocklist,
                 stats,
                 metrics_provider,
                 signal_rx,
                 shutdown_rx,
-                tenant_id_clone,
-                capabilities_clone,
+                tenant_id,
+                capabilities,
                 config_manager,
             )
             .await;
