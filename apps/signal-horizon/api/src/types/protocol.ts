@@ -306,6 +306,26 @@ export interface HubErrorMessage {
 }
 
 /**
+ * Fleet command message sent to sensors.
+ * Mirrors CommandSender payload shape for hub→sensor commands.
+ */
+export type HubCommandType =
+  | 'push_config'
+  | 'push_rules'
+  | 'restart'
+  | 'collect_diagnostics'
+  | 'update'
+  | 'sync_blocklist';
+
+export interface HubCommandMessage {
+  type: HubCommandType;
+  /** Unique command identifier for tracking and acknowledgment */
+  commandId: string;
+  /** Command payload */
+  payload: Record<string, unknown>;
+}
+
+/**
  * Union of all valid hub-to-sensor message types.
  */
 export type HubToSensorMessage =
@@ -316,7 +336,8 @@ export type HubToSensorMessage =
   | HubBlocklistSnapshotMessage
   | HubBlocklistPushMessage
   | HubPingMessage
-  | HubErrorMessage;
+  | HubErrorMessage
+  | HubCommandMessage;
 
 // =============================================================================
 // Dashboard Protocol (Outbound Push)

@@ -682,6 +682,35 @@ where
 
 use super::types::CommandAckPayload;
 
+async fn send_command_ack<S>(
+    ws_tx: &mut futures_util::stream::SplitSink<S, Message>,
+    command_id: String,
+    result: Result<Option<serde_json::Value>, String>,
+) where
+    S: futures_util::Sink<Message> + Unpin,
+    <S as futures_util::Sink<Message>>::Error: std::fmt::Display,
+{
+    let (success, message, result_value) = match result {
+        Ok(result_value) => (true, None, result_value),
+        Err(message) => (false, Some(message), None),
+    };
+
+    let ack = SensorMessage::CommandAck {
+        payload: CommandAckPayload {
+            command_id,
+            success,
+            message,
+            result: result_value,
+        },
+    };
+
+    if let Ok(json) = ack.to_json() {
+        if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
+            error!("Failed to send command ack: {}", e);
+        }
+    }
+}
+
 async fn handle_hub_message<S>(
     msg: HubMessage,
     blocklist: &Arc<BlocklistCache>,
@@ -753,47 +782,123 @@ async fn handle_hub_message<S>(
             // ... (legacy handling if needed, but PushConfig handles it better)
         }
         HubMessage::PushConfig { command_id, payload } => {
-            info!("Received PushConfig command (id: {}, version: {})", command_id, payload.version);
-            
+            let version = payload.version.clone().unwrap_or_else(|| "unknown".to_string());
+            info!("Received PushConfig command (id: {}, version: {})", command_id, version);
+
             let result = if let Some(manager) = config_manager {
-                match serde_json::from_value::<crate::config::ConfigFile>(payload.config) {
-                    Ok(new_config) => {
-                        match manager.update_full_config(new_config) {
-                            Ok(_) => {
-                                info!("Applied config update v{}", payload.version);
-                                Ok(())
-                            },
+                if let Some(config_value) = payload.config.as_ref() {
+                    match serde_json::from_value::<crate::config::ConfigFile>(config_value.clone()) {
+                        Ok(new_config) => match manager.update_full_config(new_config) {
+                            Ok(result) => {
+                                info!("Applied config update v{}", version);
+                                Ok(Some(serde_json::json!({
+                                    "applied": result.applied,
+                                    "persisted": result.persisted,
+                                    "rebuild_required": result.rebuild_required,
+                                    "warnings": result.warnings,
+                                })))
+                            }
                             Err(e) => {
-                                error!("Failed to apply config update v{}: {}", payload.version, e);
+                                error!("Failed to apply config update v{}: {}", version, e);
                                 Err(e.to_string())
                             }
+                        },
+                        Err(e) => {
+                            error!("Failed to parse config update v{}: {}", version, e);
+                            Err(e.to_string())
                         }
                     }
-                    Err(e) => {
-                        error!("Failed to parse config update v{}: {}", payload.version, e);
-                        Err(e.to_string())
-                    }
+                } else if let Some(action) = payload.action.as_deref() {
+                    Err(format!(
+                        "push_config action '{}' not supported via hub",
+                        action
+                    ))
+                } else {
+                    Err("push_config payload missing config".to_string())
                 }
             } else {
                 warn!("Config update received but no ConfigManager available");
                 Err("ConfigManager not available".to_string())
             };
 
-            // Send Ack
-            let ack = SensorMessage::CommandAck {
-                payload: CommandAckPayload {
-                    command_id,
-                    success: result.is_ok(),
-                    message: result.err(),
-                    result: None,
-                },
+            send_command_ack(ws_tx, command_id, result).await;
+        }
+        HubMessage::PushRules { command_id, payload } => {
+            info!("Received PushRules command (id: {})", command_id);
+
+            let result = if let Some(manager) = config_manager {
+                let rules_value = payload.get("rules").unwrap_or(&payload);
+                if !rules_value.is_array() {
+                    Err("push_rules payload missing rules array".to_string())
+                } else {
+                    match serde_json::to_vec(rules_value) {
+                        Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes) {
+                            Ok(count) => {
+                                info!("Applied push_rules: {} rules loaded", count);
+                                Ok(Some(serde_json::json!({ "rules_loaded": count })))
+                            }
+                            Err(e) => {
+                                error!("Failed to apply push_rules: {}", e);
+                                Err(e.to_string())
+                            }
+                        },
+                        Err(e) => {
+                            error!("Failed to serialize push_rules payload: {}", e);
+                            Err(e.to_string())
+                        }
+                    }
+                }
+            } else {
+                warn!("PushRules received but no ConfigManager available");
+                Err("ConfigManager not available".to_string())
             };
 
-            if let Ok(json) = ack.to_json() {
-                if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
-                    error!("Failed to send command ack: {}", e);
+            send_command_ack(ws_tx, command_id, result).await;
+        }
+        HubMessage::Restart { command_id, payload: _ } => {
+            warn!("Restart command not supported via hub (id: {})", command_id);
+            send_command_ack(
+                ws_tx,
+                command_id,
+                Err("restart not supported via hub".to_string()),
+            )
+            .await;
+        }
+        HubMessage::CollectDiagnostics { command_id, payload: _ } => {
+            warn!(
+                "CollectDiagnostics command not supported via hub (id: {})",
+                command_id
+            );
+            send_command_ack(
+                ws_tx,
+                command_id,
+                Err("collect_diagnostics not supported via hub".to_string()),
+            )
+            .await;
+        }
+        HubMessage::Update { command_id, payload: _ } => {
+            warn!("Update command not supported via hub (id: {})", command_id);
+            send_command_ack(
+                ws_tx,
+                command_id,
+                Err("update not supported via hub".to_string()),
+            )
+            .await;
+        }
+        HubMessage::SyncBlocklist { command_id, payload: _ } => {
+            info!("Received SyncBlocklist command (id: {})", command_id);
+            let result = match SensorMessage::BlocklistSync.to_json() {
+                Ok(json) => {
+                    if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
+                        Err(format!("Failed to request blocklist sync: {}", e))
+                    } else {
+                        Ok(None)
+                    }
                 }
-            }
+                Err(e) => Err(format!("Failed to serialize blocklist sync: {}", e)),
+            };
+
+            send_command_ack(ws_tx, command_id, result).await;
         }
         HubMessage::RulesUpdate { rules, version } => {
             info!("Received rules update (version: {})", version);
@@ -825,20 +930,12 @@ async fn handle_hub_message<S>(
             };
 
             // Send Ack for rules update
-            let ack = SensorMessage::CommandAck {
-                payload: CommandAckPayload {
-                    command_id: format!("rules_update_{}", version),
-                    success: result.is_ok(),
-                    message: result.err(),
-                    result: None,
-                },
-            };
-
-            if let Ok(json) = ack.to_json() {
-                if let Err(e) = ws_tx.send(Message::Text(json.into())).await {
-                    error!("Failed to send rules update ack: {}", e);
-                }
-            }
+            send_command_ack(
+                ws_tx,
+                format!("rules_update_{}", version),
+                result.map(|count| Some(serde_json::json!({ "rules_loaded": count }))),
+            )
+            .await;
         }
         HubMessage::AuthSuccess { tenant_id, sensor_id, capabilities } => {
             info!("Auth success: tenant={} sensor={} capabilities={:?}", tenant_id, sensor_id, capabilities);

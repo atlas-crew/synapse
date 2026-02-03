@@ -184,8 +184,14 @@ impl SensorMessage {
 /// Configuration payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigPayload {
-    pub config: serde_json::Value,
-    pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub component: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
 }
 
 /// Messages from hub to sensor.
@@ -253,6 +259,41 @@ pub enum HubMessage {
         #[serde(rename = "commandId")]
         command_id: String,
         payload: ConfigPayload,
+    },
+    /// Push Rules Command (via CommandSender)
+    #[serde(rename = "push_rules")]
+    PushRules {
+        #[serde(rename = "commandId")]
+        command_id: String,
+        payload: serde_json::Value,
+    },
+    /// Restart Command (via CommandSender)
+    #[serde(rename = "restart")]
+    Restart {
+        #[serde(rename = "commandId")]
+        command_id: String,
+        payload: serde_json::Value,
+    },
+    /// Collect Diagnostics Command (via CommandSender)
+    #[serde(rename = "collect_diagnostics")]
+    CollectDiagnostics {
+        #[serde(rename = "commandId")]
+        command_id: String,
+        payload: serde_json::Value,
+    },
+    /// Update Command (via CommandSender)
+    #[serde(rename = "update")]
+    Update {
+        #[serde(rename = "commandId")]
+        command_id: String,
+        payload: serde_json::Value,
+    },
+    /// Sync Blocklist Command (via CommandSender)
+    #[serde(rename = "sync_blocklist")]
+    SyncBlocklist {
+        #[serde(rename = "commandId")]
+        command_id: String,
+        payload: serde_json::Value,
     },
 }
 
@@ -346,6 +387,20 @@ mod tests {
                 assert_eq!(capabilities, vec!["signals"]);
             }
             _ => panic!("Expected AuthSuccess"),
+        }
+    }
+
+    #[test]
+    fn test_hub_message_push_rules_deserialization() {
+        let json = r#"{"type":"push_rules","commandId":"cmd-1","payload":{"rules":[]}}"#;
+        let msg = HubMessage::from_json(json).unwrap();
+
+        match msg {
+            HubMessage::PushRules { command_id, payload } => {
+                assert_eq!(command_id, "cmd-1");
+                assert!(payload.get("rules").is_some());
+            }
+            _ => panic!("Expected PushRules"),
         }
     }
 
