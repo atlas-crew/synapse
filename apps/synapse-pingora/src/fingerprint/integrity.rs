@@ -72,37 +72,39 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
     let mut any_truncated = false;
 
     for (name, value) in request.headers {
-        let lower_name = name.to_lowercase();
-        match lower_name.as_str() {
+        let Ok(value_str) = value.to_str() else {
+            continue;
+        };
+        match name.as_str() {
             "user-agent" => {
-                let (truncated, was_truncated) = truncate_header(value, MAX_USER_AGENT_LENGTH);
+                let (truncated, was_truncated) = truncate_header(value_str, MAX_USER_AGENT_LENGTH);
                 ua = truncated;
                 any_truncated |= was_truncated;
             },
             "sec-ch-ua" => {
-                let (truncated, was_truncated) = truncate_header(value, MAX_SEC_CH_UA_LENGTH);
+                let (truncated, was_truncated) = truncate_header(value_str, MAX_SEC_CH_UA_LENGTH);
                 sec_ch_ua = truncated;
                 any_truncated |= was_truncated;
                 result.has_client_hints = true;
             },
             "sec-fetch-site" => {
-                let (truncated, was_truncated) = truncate_header(value, MAX_HEADER_LENGTH);
+                let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 sec_fetch_site = truncated;
                 any_truncated |= was_truncated;
                 result.has_fetch_metadata = true;
             },
             "sec-fetch-mode" => {
-                let (truncated, was_truncated) = truncate_header(value, MAX_HEADER_LENGTH);
+                let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 sec_fetch_mode = truncated;
                 any_truncated |= was_truncated;
             },
             "referer" => {
-                let (truncated, was_truncated) = truncate_header(value, MAX_HEADER_LENGTH);
+                let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 referer = truncated;
                 any_truncated |= was_truncated;
             },
             "host" => {
-                let (truncated, was_truncated) = truncate_header(value, MAX_HEADER_LENGTH);
+                let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 host = truncated;
                 any_truncated |= was_truncated;
             },
@@ -157,7 +159,12 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
         }
 
         // "navigate" mode usually implies a document request
-        if sec_fetch_mode == "navigate" && request.headers.iter().any(|(n, v)| n.eq_ignore_ascii_case("sec-fetch-dest") && v != "document") {
+        if sec_fetch_mode == "navigate"
+            && request.headers.iter().any(|(name, value)| {
+                name.as_str() == "sec-fetch-dest"
+                    && value.to_str().ok().map(|v| v != "document").unwrap_or(false)
+            })
+        {
              // Not always true (e.g. frames), but worth noting for correlation
         }
     }
@@ -475,8 +482,8 @@ pub fn analyze_integrity_with_ja4(
         let user_agent = request
             .headers
             .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("user-agent"))
-            .map(|(_, value)| value.as_str())
+            .find(|(name, _)| name.as_str() == "user-agent")
+            .and_then(|(_, value)| value.to_str().ok())
             .unwrap_or("");
 
         let ja4_analysis = analyze_ja4_spoofing(ja4, user_agent);
@@ -501,11 +508,21 @@ pub fn analyze_integrity_with_ja4(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use http::header::{HeaderName, HeaderValue};
+
+    fn header(name: &str, value: &str) -> (HeaderName, HeaderValue) {
+        let header_name = HeaderName::from_bytes(name.as_bytes()).expect("valid header name");
+        let header_value = HeaderValue::from_str(value).expect("valid header value");
+        (header_name, header_value)
+    }
 
     #[test]
     fn test_chrome_missing_hints() {
         let headers = vec![
-            ("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string()),
+            header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ),
         ];
         let req = HttpHeaders {
             headers: &headers,
@@ -522,8 +539,11 @@ mod tests {
     #[test]
     fn test_consistent_chrome() {
         let headers = vec![
-            ("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string()),
-            ("Sec-CH-UA".to_string(), "\"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"".to_string()),
+            header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ),
+            header("Sec-CH-UA", "\"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\""),
         ];
         let req = HttpHeaders {
             headers: &headers,
@@ -541,7 +561,7 @@ mod tests {
         // Create a User-Agent longer than MAX_USER_AGENT_LENGTH
         let oversized_ua = "A".repeat(MAX_USER_AGENT_LENGTH + 100);
         let headers = vec![
-            ("User-Agent".to_string(), oversized_ua),
+            header("User-Agent", &oversized_ua),
         ];
         let req = HttpHeaders {
             headers: &headers,
@@ -712,8 +732,11 @@ mod tests {
     #[test]
     fn test_analyze_integrity_with_ja4() {
         let headers = vec![
-            ("User-Agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string()),
-            ("Sec-CH-UA".to_string(), "\"Chromium\";v=\"120\"".to_string()),
+            header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ),
+            header("Sec-CH-UA", "\"Chromium\";v=\"120\""),
         ];
         let req = HttpHeaders {
             headers: &headers,

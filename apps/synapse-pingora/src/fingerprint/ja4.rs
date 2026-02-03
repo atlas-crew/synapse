@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use sha2::{Sha256, Digest};
 use std::collections::{HashMap, HashSet};
+use http::header::{HeaderName, HeaderValue};
 
 // ============================================================================
 // Types
@@ -287,7 +288,7 @@ pub fn parse_ja4_from_header(header: Option<&str>) -> Option<Ja4Fingerprint> {
 /// HTTP headers representation for JA4H generation
 pub struct HttpHeaders<'a> {
     /// All headers as (name, value) pairs
-    pub headers: &'a [(String, String)],
+    pub headers: &'a [(HeaderName, HeaderValue)],
     /// HTTP method (GET, POST, etc.)
     pub method: &'a str,
     /// HTTP version string ("1.0", "1.1", "2.0", "3.0")
@@ -324,11 +325,13 @@ pub fn generate_ja4h(request: &HttpHeaders<'_>) -> Ja4hFingerprint {
     let mut accept_lang_value: Option<&str> = None;
 
     for (name, value) in request.headers.iter() {
-        let lower_name = name.to_lowercase();
-        match lower_name.as_str() {
-            "cookie" => cookie_value = Some(value.as_str()),
-            "referer" => referer_value = Some(value.as_str()),
-            "accept-language" => accept_lang_value = Some(value.as_str()),
+        let Ok(value_str) = value.to_str() else {
+            continue;
+        };
+        match name.as_str() {
+            "cookie" => cookie_value = Some(value_str),
+            "referer" => referer_value = Some(value_str),
+            "accept-language" => accept_lang_value = Some(value_str),
             _ => {}
         }
     }
@@ -416,11 +419,11 @@ fn extract_accept_lang(header: Option<&str>) -> String {
 /// - Sort alphabetically
 /// - Join with commas
 /// - SHA256, take first 12 chars
-fn hash_headers(headers: &[(String, String)]) -> String {
-    let mut names: Vec<String> = headers
+fn hash_headers(headers: &[(HeaderName, HeaderValue)]) -> String {
+    let mut names: Vec<&str> = headers
         .iter()
-        .map(|(name, _)| name.to_lowercase())
-        .filter(|name| !EXCLUDED_HEADERS.contains(name.as_str()))
+        .map(|(name, _)| name.as_str())
+        .filter(|name| !EXCLUDED_HEADERS.contains(*name))
         .collect();
 
     if names.is_empty() {
@@ -641,6 +644,12 @@ pub fn analyze_ja4h(fingerprint: &Ja4hFingerprint) -> Ja4hAnalysis {
 mod tests {
     use super::*;
 
+    fn header(name: &str, value: &str) -> (HeaderName, HeaderValue) {
+        let header_name = HeaderName::from_bytes(name.as_bytes()).expect("valid header name");
+        let header_value = HeaderValue::from_str(value).expect("valid header value");
+        (header_name, header_value)
+    }
+
     // ==================== JA4 Parsing Tests ====================
 
     #[test]
@@ -716,8 +725,8 @@ mod tests {
     #[test]
     fn test_generate_ja4h_basic() {
         let headers = vec![
-            ("Accept".to_string(), "text/html".to_string()),
-            ("User-Agent".to_string(), "Mozilla/5.0".to_string()),
+            header("Accept", "text/html"),
+            header("User-Agent", "Mozilla/5.0"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -738,8 +747,8 @@ mod tests {
     #[test]
     fn test_generate_ja4h_with_cookie() {
         let headers = vec![
-            ("Cookie".to_string(), "session=abc123; user=test".to_string()),
-            ("Accept".to_string(), "text/html".to_string()),
+            header("Cookie", "session=abc123; user=test"),
+            header("Accept", "text/html"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -759,8 +768,8 @@ mod tests {
     #[test]
     fn test_generate_ja4h_with_referer() {
         let headers = vec![
-            ("Referer".to_string(), "https://example.com".to_string()),
-            ("Accept".to_string(), "text/html".to_string()),
+            header("Referer", "https://example.com"),
+            header("Accept", "text/html"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -777,7 +786,7 @@ mod tests {
     #[test]
     fn test_generate_ja4h_accept_language() {
         let headers = vec![
-            ("Accept-Language".to_string(), "en-US,en;q=0.9,fr;q=0.8".to_string()),
+            header("Accept-Language", "en-US,en;q=0.9,fr;q=0.8"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -792,7 +801,7 @@ mod tests {
     #[test]
     fn test_generate_ja4h_french_language() {
         let headers = vec![
-            ("Accept-Language".to_string(), "fr-FR,fr;q=0.9,en;q=0.8".to_string()),
+            header("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.8"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -807,7 +816,7 @@ mod tests {
     #[test]
     fn test_generate_ja4h_http_versions() {
         for (version, expected) in [("1.0", 10), ("1.1", 11), ("2.0", 20), ("3.0", 30)] {
-            let headers = vec![];
+            let headers: Vec<(HeaderName, HeaderValue)> = Vec::new();
             let request = HttpHeaders {
                 headers: &headers,
                 method: "GET",
@@ -833,7 +842,7 @@ mod tests {
         ];
 
         for (method, expected) in methods {
-            let headers = vec![];
+            let headers: Vec<(HeaderName, HeaderValue)> = Vec::new();
             let request = HttpHeaders {
                 headers: &headers,
                 method,
@@ -849,7 +858,7 @@ mod tests {
     #[test]
     fn test_extract_client_fingerprint_with_ja4() {
         let headers = vec![
-            ("Accept".to_string(), "text/html".to_string()),
+            header("Accept", "text/html"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -869,7 +878,7 @@ mod tests {
     #[test]
     fn test_extract_client_fingerprint_without_ja4() {
         let headers = vec![
-            ("Accept".to_string(), "text/html".to_string()),
+            header("Accept", "text/html"),
         ];
         let request = HttpHeaders {
             headers: &headers,
@@ -1029,10 +1038,10 @@ mod tests {
     #[test]
     fn test_ja4h_generation_performance() {
         let headers = vec![
-            ("Accept".to_string(), "text/html".to_string()),
-            ("User-Agent".to_string(), "Mozilla/5.0".to_string()),
-            ("Accept-Language".to_string(), "en-US".to_string()),
-            ("Cookie".to_string(), "session=abc; user=test".to_string()),
+            header("Accept", "text/html"),
+            header("User-Agent", "Mozilla/5.0"),
+            header("Accept-Language", "en-US"),
+            header("Cookie", "session=abc; user=test"),
         ];
         let request = HttpHeaders {
             headers: &headers,

@@ -22,6 +22,7 @@
 
 use async_trait::async_trait;
 use bytes::Bytes;
+use http::header::{HeaderName, HeaderValue, AUTHORIZATION, COOKIE, USER_AGENT};
 // WAF engine types (integrated Synapse WAF engine)
 use synapse_pingora::waf::{
     Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest,
@@ -871,14 +872,16 @@ impl DetectionEngine {
     /// The timeout is configurable via `server.waf_regex_timeout_ms` in the config file.
     /// Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).
     #[inline]
-    pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> DetectionResult {
+    pub fn analyze(method: &str, uri: &str, headers: &[HeaderSnapshot], body: Option<&[u8]>, client_ip: &str) -> DetectionResult {
         let start = Instant::now();
 
         // Build Synapse Request
-        let synapse_headers: Vec<SynapseHeader> = headers
-            .iter()
-            .map(|(name, value)| SynapseHeader::new(name, value))
-            .collect();
+        let mut synapse_headers = Vec::with_capacity(headers.len());
+        for (name, value) in headers {
+            if let Ok(value_str) = value.to_str() {
+                synapse_headers.push(SynapseHeader::new(name.as_str(), value_str));
+            }
+        }
 
         let request = SynapseRequest {
             method,
@@ -958,6 +961,8 @@ fn categorize_rule_id(rule_id: u32) -> String {
 /// Result from async DLP scan task
 pub type DlpScanResult = (usize, String, u64); // (match_count, types, scan_time_us)
 
+type HeaderSnapshot = (HeaderName, HeaderValue);
+
 /// Per-request context flowing through all Pingora hooks
 pub struct RequestContext {
     /// Start time for the request (for logging)
@@ -971,7 +976,7 @@ pub struct RequestContext {
     /// Multi-site: Matched site configuration for this request
     matched_site: Option<SiteConfig>,
     /// Request headers (cached for late body inspection)
-    headers: Vec<(String, String)>,
+    headers: Vec<HeaderSnapshot>,
     /// Client IP (extracted from headers or connection)
     client_ip: Option<String>,
     /// Total body size seen (for body inspection)
@@ -1469,14 +1474,12 @@ impl SynapseProxy {
     }
 
     /// Extract headers as Vec for detection engine
-    fn extract_headers(session: &Session) -> Vec<(String, String)> {
+    fn extract_headers(session: &Session) -> Vec<HeaderSnapshot> {
         let headers = &session.req_header().headers;
         let mut result = Vec::with_capacity(headers.len());
         
         for (name, value) in headers {
-             if let Ok(v) = value.to_str() {
-                 result.push((name.to_string(), v.to_string()));
-             }
+            result.push((name.clone(), value.clone()));
         }
         result
     }
@@ -2132,13 +2135,14 @@ impl ProxyHttp for SynapseProxy {
             _ => "1.1",
         };
 
-        let http_headers = HttpHeaders {
-            headers: &headers,
-            method,
-            http_version: http_version_str,
+        let fingerprint = {
+            let http_headers = HttpHeaders {
+                headers: &headers,
+                method,
+                http_version: http_version_str,
+            };
+            extract_client_fingerprint(ja4_header, &http_headers)
         };
-
-        let fingerprint = extract_client_fingerprint(ja4_header, &http_headers);
 
         // Log fingerprint info for debugging and validation
         if let Some(ref ja4) = fingerprint.ja4 {
@@ -2162,7 +2166,13 @@ impl ProxyHttp for SynapseProxy {
         // Phase 9: Crawler Verification
         // Verify user-agent against known crawler signatures and DNS
         if self.crawler_detector.is_enabled() {
-            if let Some(user_agent) = headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("user-agent")).map(|(_, v)| v) {
+            if let Some(user_agent) = headers.iter().find_map(|(name, value)| {
+                if name == &USER_AGENT {
+                    value.to_str().ok()
+                } else {
+                    None
+                }
+            }) {
                 if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
                     let crawler_result = self.crawler_detector.verify(user_agent, ip_addr).await;
                     
@@ -2208,9 +2218,6 @@ impl ProxyHttp for SynapseProxy {
                 }
             }
         }
-
-        // Cache headers for late body inspection
-        ctx.headers = headers.clone();
 
         // Run detection using the Synapse WAF engine (headers only initially)
         let result = DetectionEngine::analyze(method, &uri, &headers, None, client_ip);
@@ -2340,7 +2347,14 @@ impl ProxyHttp for SynapseProxy {
             }
 
             // 3. Analyze Header Integrity (Client Hints / User-Agent consistency)
-            let integrity = analyze_integrity(&http_headers);
+            let integrity = {
+                let http_headers = HttpHeaders {
+                    headers: &headers,
+                    method,
+                    http_version: http_version_str,
+                };
+                analyze_integrity(&http_headers)
+            };
             if integrity.suspicion_score > 0 {
                 warn!(
                     "Header Integrity Violation from {}: score={}, issues={:?}",
@@ -2434,23 +2448,24 @@ impl ProxyHttp for SynapseProxy {
         // ===== Phase 5: Session State Management =====
         // Validate session tokens and detect potential hijacking via JA4 fingerprint binding
         // Extract session token from Cookie or Authorization header
-        let session_token = headers.iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("cookie"))
-            .and_then(|(_, value)| {
+        let session_token = headers
+            .iter()
+            .find(|(name, _)| name == &COOKIE)
+            .and_then(|(_, value)| value.to_str().ok())
+            .and_then(|cookie_value| {
                 // Extract session cookie (common patterns: session, sessionid, JSESSIONID, etc.)
-                value.split(';')
+                cookie_value
+                    .split(';')
                     .map(|s| s.trim())
                     .find(|cookie| {
                         let lower = cookie.to_lowercase();
-                        lower.starts_with("session=") ||
-                        lower.starts_with("sessionid=") ||
-                        lower.starts_with("jsessionid=") ||
-                        lower.starts_with("phpsessid=") ||
-                        lower.starts_with("sid=")
+                        lower.starts_with("session=")
+                            || lower.starts_with("sessionid=")
+                            || lower.starts_with("jsessionid=")
+                            || lower.starts_with("phpsessid=")
+                            || lower.starts_with("sid=")
                     })
-                    .map(|cookie| {
-                        cookie.splitn(2, '=').nth(1).unwrap_or("").to_string()
-                    })
+                    .map(|cookie| cookie.splitn(2, '=').nth(1).unwrap_or("").to_string())
             });
 
         if let Some(token) = session_token {
@@ -2503,16 +2518,21 @@ impl ProxyHttp for SynapseProxy {
         // ===== Phase 9: Trends Signal Recording =====
         // Record request signals for anomaly detection (fingerprint changes, velocity, etc.)
         {
-            let user_agent = headers.iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("user-agent"))
-                .map(|(_, v)| v.as_str());
-            let authorization = headers.iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("authorization"))
-                .map(|(_, v)| v.as_str());
-            let session_id = headers.iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case("cookie"))
-                .and_then(|(_, v)| {
-                    v.split(';')
+            let user_agent = headers
+                .iter()
+                .find(|(name, _)| name == &USER_AGENT)
+                .and_then(|(_, value)| value.to_str().ok());
+            let authorization = headers
+                .iter()
+                .find(|(name, _)| name == &AUTHORIZATION)
+                .and_then(|(_, value)| value.to_str().ok());
+            let session_id = headers
+                .iter()
+                .find(|(name, _)| name == &COOKIE)
+                .and_then(|(_, value)| value.to_str().ok())
+                .and_then(|cookie_value| {
+                    cookie_value
+                        .split(';')
                         .map(|s| s.trim())
                         .find(|c| c.to_lowercase().starts_with("session"))
                         .map(|c| c.to_string())
@@ -2806,7 +2826,15 @@ impl ProxyHttp for SynapseProxy {
                     .with_ja4(ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.clone())))
                     .with_ja4h(ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.clone()))
                     .with_rules(result.matched_rules.iter().map(|r| format!("rule_{}", r)).collect())
-                    .with_headers(headers.iter().cloned().collect());
+                    .with_headers(
+                        headers
+                            .iter()
+                            .filter_map(|(name, value)| {
+                                let value_str = value.to_str().ok()?;
+                                Some((name.as_str().to_string(), value_str.to_string()))
+                            })
+                            .collect(),
+                    );
 
                     // Fire and forget - returns immediately, async delivery in background
                     shadow_manager.mirror_async(payload);
@@ -2819,6 +2847,9 @@ impl ProxyHttp for SynapseProxy {
             }
         }
         // ===== End Shadow Mirroring =====
+
+        // Cache headers for late body inspection
+        ctx.headers = headers;
 
         ctx.detection = Some(detection);
 
@@ -4484,7 +4515,15 @@ fn main() {
 
     // Register WAF evaluation callback for dry-run testing (Phase 2: Lab View)
     register_evaluate_callback(|method, uri, headers, body, client_ip| {
-        let result = DetectionEngine::analyze(method, uri, headers, body, client_ip);
+        let header_snapshots: Vec<HeaderSnapshot> = headers
+            .iter()
+            .filter_map(|(name, value)| {
+                let header_name = HeaderName::from_bytes(name.as_bytes()).ok()?;
+                let header_value = HeaderValue::from_str(value).ok()?;
+                Some((header_name, header_value))
+            })
+            .collect();
+        let result = DetectionEngine::analyze(method, uri, &header_snapshots, body, client_ip);
         EvaluationResult {
             blocked: result.blocked,
             risk_score: result.risk_score,
@@ -4713,6 +4752,12 @@ mod tests {
 
     const TEST_IP: &str = "192.168.1.100";
 
+    fn header(name: &str, value: &str) -> HeaderSnapshot {
+        let header_name = HeaderName::from_bytes(name.as_bytes()).expect("valid header name");
+        let header_value = HeaderValue::from_str(value).expect("valid header value");
+        (header_name, header_value)
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     // Engine Health Tests
     // ────────────────────────────────────────────────────────────────────────
@@ -4758,7 +4803,7 @@ mod tests {
         let result = DetectionEngine::analyze(
             "POST",
             "/api/users",
-            &[("content-type".to_string(), "application/json".to_string())],
+            &[header("content-type", "application/json")],
             None,
             TEST_IP,
         );
@@ -4771,7 +4816,10 @@ mod tests {
         let result = DetectionEngine::analyze(
             "GET",
             "/api/data",
-            &[("user-agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64)".to_string())],
+            &[header(
+                "user-agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            )],
             None,
             TEST_IP,
         );
@@ -4870,7 +4918,7 @@ mod tests {
             let result = DetectionEngine::analyze(
                 "GET",
                 "/api/users?id=1 UNION SELECT password FROM users--",
-                &[("user-agent".to_string(), "Mozilla/5.0".to_string())],
+                &[header("user-agent", "Mozilla/5.0")],
                 None,
                 TEST_IP,
             );
@@ -4916,7 +4964,7 @@ mod tests {
             let result = DetectionEngine::analyze(
                 "GET",
                 &format!("/api/users/{}", i),
-                &[("user-agent".to_string(), "Mozilla/5.0".to_string())],
+                &[header("user-agent", "Mozilla/5.0")],
                 None,
                 TEST_IP,
             );

@@ -374,7 +374,7 @@ pub struct EvalContext<'a> {
     pub ip: &'a str,
     pub method: &'a str,
     pub url: &'a str,
-    pub headers: HashMap<String, String>,
+    pub headers: HashMap<String, &'a str>,
     pub args: Vec<String>,
     pub arg_entries: Vec<ArgEntry>,
     pub body_text: Option<&'a str>,
@@ -397,7 +397,7 @@ impl<'a> EvalContext<'a> {
         // Build headers map (lowercase keys)
         let mut headers = HashMap::new();
         for h in &req.headers {
-            headers.insert(h.name.to_ascii_lowercase(), h.value.to_string());
+            headers.insert(h.name.to_ascii_lowercase(), h.value);
         }
 
         // Parse query string into args and arg_entries

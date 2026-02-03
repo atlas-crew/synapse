@@ -1025,11 +1025,7 @@ impl Engine {
         } else {
             return false;
         };
-        let content_type = ctx
-            .headers
-            .get("content-type")
-            .map(|s| s.as_str())
-            .unwrap_or("");
+        let content_type = ctx.headers.get("content-type").copied().unwrap_or("");
         let Some(boundary) = extract_multipart_boundary(content_type) else {
             return false;
         };
@@ -1175,7 +1171,7 @@ fn compute_available_features(ctx: &EvalContext) -> u16 {
     out
 }
 
-fn compute_request_header_mask(index: &RuleIndex, headers: &HashMap<String, String>) -> u64 {
+fn compute_request_header_mask(index: &RuleIndex, headers: &HashMap<String, &str>) -> u64 {
     let mut mask = 0u64;
     for (bit, header) in index.header_bits.iter().enumerate() {
         if bit >= 64 {
@@ -1188,12 +1184,12 @@ fn compute_request_header_mask(index: &RuleIndex, headers: &HashMap<String, Stri
     mask
 }
 
-fn get_header_value<'a>(headers: &'a HashMap<String, String>, field: &str) -> Option<&'a str> {
+fn get_header_value<'a>(headers: &'a HashMap<String, &'a str>, field: &str) -> Option<&'a str> {
     let key = field.to_ascii_lowercase();
     headers
         .get(&key)
-        .map(|s| s.as_str())
-        .or_else(|| headers.get(field).map(|s| s.as_str()))
+        .copied()
+        .or_else(|| headers.get(field).copied())
 }
 
 fn eval_contains(match_value: Option<&MatchValue>, value: Option<&str>) -> bool {
