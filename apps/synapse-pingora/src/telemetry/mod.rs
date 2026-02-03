@@ -461,6 +461,7 @@ impl TelemetryClient {
             request
                 .bearer_auth(key)
                 .header("X-API-Key", key)
+                .header("X-Admin-Key", key)
         } else {
             request
         }

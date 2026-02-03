@@ -6,6 +6,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { Logger } from 'pino';
 import { config } from '../config.js';
+import { safeCompare } from '../lib/safe-compare.js';
 import type { ClickHouseRetryBuffer, ClickHouseService, HttpTransactionRow } from '../storage/clickhouse/index.js';
 
 export interface TelemetryRouterOptions {
@@ -35,9 +36,15 @@ function getHeader(req: { header: (name: string) => string | undefined }, name: 
   return value && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function getApiKey(req: { header: (name: string) => string | undefined }, apiKeyHeader: string): string | undefined {
-  const headerKey = getHeader(req, apiKeyHeader);
-  if (headerKey) return headerKey;
+function getApiKey(
+  req: { header: (name: string) => string | undefined },
+  apiKeyHeader: string
+): string | undefined {
+  const headers = [apiKeyHeader, 'X-Admin-Key'];
+  for (const header of headers) {
+    const headerKey = getHeader(req, header);
+    if (headerKey) return headerKey;
+  }
 
   const auth = getHeader(req, 'authorization');
   if (auth && auth.toLowerCase().startsWith('bearer ')) {
@@ -166,11 +173,14 @@ export function createTelemetryRouter(
       return res.status(503).json({ error: 'clickhouse_disabled' });
     }
 
-    if (config.telemetry.apiKey) {
-      const providedKey = getApiKey(req, config.security.apiKeyHeader);
-      if (!providedKey || providedKey !== config.telemetry.apiKey) {
-        return res.status(401).json({ error: 'unauthorized' });
-      }
+    if (!config.telemetry.apiKey) {
+      log.error('Telemetry API key not configured; rejecting /_sensor/report');
+      return res.status(503).json({ error: 'telemetry_key_missing' });
+    }
+
+    const providedKey = getApiKey(req, config.security.apiKeyHeader);
+    if (!providedKey || !safeCompare(providedKey, config.telemetry.apiKey)) {
+      return res.status(401).json({ error: 'unauthorized' });
     }
 
     const tenantId = getHeader(req, 'x-tenant-id') ?? getHeader(req, 'x-tenant') ?? DEFAULT_TENANT_ID;
