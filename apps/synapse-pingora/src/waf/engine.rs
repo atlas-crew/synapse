@@ -18,6 +18,14 @@ pub const DEFAULT_EVAL_TIMEOUT: Duration = Duration::from_millis(50);
 /// Maximum timeout allowed (prevents disabling protection).
 pub const MAX_EVAL_TIMEOUT: Duration = Duration::from_millis(500);
 
+/// Maximum compiled regex size (ReDoS protection).
+/// 10MB limit prevents catastrophic memory/CPU usage from pathological patterns.
+const REGEX_SIZE_LIMIT: usize = 10 * (1 << 20);
+
+/// Maximum DFA size for regex matching (ReDoS protection).
+/// Limits the state machine size to prevent exponential blowup.
+const REGEX_DFA_SIZE_LIMIT: usize = 10 * (1 << 20);
+
 use crate::waf::index::{
     build_rule_index, get_candidate_rule_indices, method_to_mask, CandidateCache,
     CandidateCacheKey, RuleIndex, REQ_ARGS, REQ_ARG_ENTRIES, REQ_BODY, REQ_JSON,
@@ -452,6 +460,8 @@ impl Engine {
         for pattern in patterns {
             let compiled = RegexBuilder::new(&pattern)
                 .multi_line(true)
+                .size_limit(REGEX_SIZE_LIMIT)
+                .dfa_size_limit(REGEX_DFA_SIZE_LIMIT)
                 .build()
                 .map_err(|e| WafError::RegexError(format!("'{pattern}': {e}")))?;
             self.regex_cache.insert(pattern, compiled);
@@ -463,6 +473,8 @@ impl Engine {
             let pattern = format!(r"(?i)\b{}\b", regex::escape(&word));
             let compiled = RegexBuilder::new(&pattern)
                 .multi_line(true)
+                .size_limit(REGEX_SIZE_LIMIT)
+                .dfa_size_limit(REGEX_DFA_SIZE_LIMIT)
                 .build()
                 .map_err(|e| WafError::RegexError(format!("word '{word}': {e}")))?;
             self.word_regex_cache.insert(word, compiled);
