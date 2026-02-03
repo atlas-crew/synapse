@@ -65,6 +65,7 @@ permalink: /signal-horizon/
 | Guide | Description |
 |-------|-------------|
 | [API Key Management](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/tutorials/api-key-management.md) | Create and manage API keys |
+| [Threat Investigation API](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/tutorials/threat-investigation-api.md) | Investigate threats via REST endpoints |
 | [Synapse Rules](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/tutorials/synapse-rules.md) | Write custom detection rules |
 | [Rule Authoring Flow](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/rule-authoring-flow.md) | Rule creation workflow |
 | [API Intelligence](https://github.com/atlascrew/atlascrew-monorepo/blob/main/apps/signal-horizon/docs/guides/api-intelligence.md) | Schema learning and violation detection |
