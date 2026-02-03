@@ -1452,22 +1452,22 @@ const SensorLogsQuerySchema = z.object({
     try {
       const auth = req.auth!;
 
-      // Get all sensors for the tenant
+      // Get all sensors for the tenant with their sync state
       const sensors = await prisma.sensor.findMany({
         where: auth.tenantId ? { tenantId: auth.tenantId } : undefined,
         select: {
           id: true,
           connectionState: true,
-          configVersion: true,
+          syncState: true,
         },
       });
 
       const totalSensors = sensors.length;
       const syncedSensors = sensors.filter(
-        (s) => s.connectionState === 'CONNECTED' && s.configVersion
+        (s) => s.connectionState === 'CONNECTED' && s.syncState?.lastSyncSuccess
       ).length;
       const outOfSyncSensors = sensors.filter(
-        (s) => s.connectionState === 'CONNECTED' && !s.configVersion
+        (s) => s.connectionState === 'CONNECTED' && !s.syncState?.lastSyncSuccess
       ).length;
       const errorSensors = sensors.filter(
         (s) => s.connectionState === 'ERROR'

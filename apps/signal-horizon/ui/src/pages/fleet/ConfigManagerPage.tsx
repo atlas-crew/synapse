@@ -31,7 +31,8 @@ interface SyncStatus {
 async function fetchTemplates(): Promise<ConfigTemplate[]> {
   const response = await fetch(`${API_BASE}/api/v1/fleet/config/templates`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch templates');
-  return response.json();
+  const data = await response.json();
+  return data.templates || [];
 }
 
 async function fetchSyncStatus(): Promise<SyncStatus> {
