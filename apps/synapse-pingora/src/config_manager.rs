@@ -1089,8 +1089,18 @@ impl ConfigManager {
 
         let payload = serde_json::to_vec_pretty(rules)
             .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize rules: {}", e)))?;
-        fs::write(&path, payload)
+
+        let wal_path = path.with_extension("wal");
+        append_wal_entry(&wal_path, serde_json::json!({
+            "timestamp_ms": current_timestamp_ms(),
+            "type": "rules_update",
+            "rules": rules,
+        }))?;
+
+        write_file_with_fsync(&path, &payload)
             .map_err(|e| ConfigManagerError::Persistence(format!("failed to write rules: {}", e)))?;
+
+        clear_wal(&wal_path)?;
 
         info!(path = %path.display(), "persisted rules");
         Ok(())
@@ -1122,12 +1132,96 @@ impl ConfigManager {
         let yaml = serde_yaml::to_string(&*config)
             .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize config: {}", e)))?;
 
-        std::fs::write(path, yaml)
+        write_file_with_fsync(path, yaml.as_bytes())
             .map_err(|e| ConfigManagerError::Persistence(format!("failed to write config: {}", e)))?;
 
         info!(path = %path.display(), "persisted configuration");
         Ok(())
     }
+}
+
+fn current_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn append_wal_entry(
+    path: &std::path::Path,
+    entry: serde_json::Value,
+) -> Result<(), ConfigManagerError> {
+    use std::io::Write;
+    let Some(parent) = path.parent() else {
+        return Err(ConfigManagerError::Persistence("invalid WAL path".to_string()));
+    };
+
+    if let Err(err) = fs::create_dir_all(parent) {
+        return Err(ConfigManagerError::Persistence(format!(
+            "failed to create WAL directory: {}",
+            err
+        )));
+    }
+
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to open WAL file: {}",
+            err
+        )))?;
+
+    let payload = serde_json::to_vec(&entry)
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to serialize WAL entry: {}",
+            err
+        )))?;
+    file.write_all(&payload)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to persist WAL entry: {}",
+            err
+        )))?;
+
+    Ok(())
+}
+
+fn write_file_with_fsync(path: &std::path::Path, contents: &[u8]) -> Result<(), std::io::Error> {
+    use std::io::Write;
+
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)?;
+    file.write_all(contents)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn clear_wal(path: &std::path::Path) -> Result<(), ConfigManagerError> {
+    use std::io::Write;
+
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to open WAL file: {}",
+            err
+        )))?;
+    file.write_all(b"")
+        .and_then(|_| file.sync_all())
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to clear WAL file: {}",
+            err
+        )))?;
+    Ok(())
 }
 
 #[cfg(test)]

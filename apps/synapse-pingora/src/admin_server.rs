@@ -24,6 +24,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use sysinfo::{System, Networks, Disks};
 use crate::intelligence::{SignalCategory, SignalQueryOptions};
+use crate::signals::adapter::SignalAdapter;
 
 // Type aliases for profile/schema data accessors
 // These are callbacks that the binary (main.rs) can set to provide real data
@@ -408,9 +409,18 @@ pub mod scopes {
     pub const SERVICE_MANAGE: &str = "service:manage";
     /// Sensitive sensor data access (campaigns, DLP, correlation graphs)
     pub const SENSOR_READ: &str = "sensor:read";
+    /// Write access for sensor reports and signals
+    pub const SENSOR_WRITE: &str = "sensor:write";
 
     /// All available scopes
-    pub const ALL: &[&str] = &[ADMIN_READ, ADMIN_WRITE, CONFIG_WRITE, SERVICE_MANAGE, SENSOR_READ];
+    pub const ALL: &[&str] = &[
+        ADMIN_READ,
+        ADMIN_WRITE,
+        CONFIG_WRITE,
+        SERVICE_MANAGE,
+        SENSOR_READ,
+        SENSOR_WRITE,
+    ];
 }
 
 // =============================================================================
@@ -532,6 +542,20 @@ fn forbidden_error(public_message: &str) -> Response {
     )
 }
 
+/// Create a rate limit exceeded error response (429).
+fn rate_limit_error(retry_after_secs: u64) -> Response {
+    let mut problem = ProblemDetails::new(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
+    problem.code = Some(error_codes::RATE_LIMIT_EXCEEDED.to_string());
+    problem.retry_after_secs = Some(retry_after_secs);
+
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(header::RETRY_AFTER, retry_after_secs.to_string())],
+        Json(problem),
+    )
+        .into_response()
+}
+
 /// Create a not found error response (404).
 #[allow(dead_code)]
 fn not_found_error(resource_type: &str, _resource_id: &str) -> Response {
@@ -577,6 +601,7 @@ async fn update_config_handler(
 
 /// Per-IP rate limiter type using governor
 type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, governor::clock::DefaultClock>;
+type StringRateLimiter = RateLimiter<String, DefaultKeyedStateStore<String>, governor::clock::DefaultClock>;
 
 /// Admin server state shared across handlers.
 #[derive(Clone)]
@@ -591,6 +616,8 @@ pub struct AdminState {
     /// Per-IP rate limiter for admin endpoints (100 req/min for admin, 1000 req/min for public)
     pub admin_rate_limiter: Arc<IpRateLimiter>,
     pub public_rate_limiter: Arc<IpRateLimiter>,
+    /// Per-sensor rate limiter for signal ingestion (100 reports/min per sensor)
+    pub report_rate_limiter: Arc<StringRateLimiter>,
     /// Per-IP rate limiter for authentication failures (5 failures per minute).
     ///
     /// SECURITY: This stricter rate limiter prevents brute-force attacks on the admin API key.
@@ -863,6 +890,15 @@ async fn require_sensor_read(
     check_scope(&state, scopes::SENSOR_READ, request, next).await
 }
 
+/// Scope-checking middleware for sensor:write scope.
+async fn require_sensor_write(
+    State(state): State<AdminState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, Response> {
+    check_scope(&state, scopes::SENSOR_WRITE, request, next).await
+}
+
 /// Scope-checking middleware for admin:read scope.
 async fn require_admin_read(
     State(state): State<AdminState>,
@@ -1113,6 +1149,10 @@ pub async fn start_admin_server(
     let auth_failure_limiter = Arc::new(RateLimiter::keyed(Quota::per_minute(
         NonZeroU32::new(5).unwrap_or(NonZeroU32::MIN),
     )));
+    // SECURITY: Limit external signal ingestion to 100 reports/minute per sensor (labs-8csv)
+    let report_rate_limiter = Arc::new(RateLimiter::keyed(Quota::per_minute(
+        NonZeroU32::new(100).unwrap_or(NonZeroU32::MIN),
+    )));
 
     let state = AdminState {
         handler,
@@ -1121,6 +1161,7 @@ pub async fn start_admin_server(
         signal_permissions: Arc::new(SignalPermissions::default()),
         admin_rate_limiter,
         public_rate_limiter,
+        report_rate_limiter,
         auth_failure_limiter,
     };
 
@@ -1182,7 +1223,17 @@ pub async fn start_admin_server(
         .route("/_sensor/actors/:actor_id", get(sensor_actor_detail_handler))
         .route("/_sensor/actors/:actor_id/timeline", get(sensor_actor_timeline_handler))
         .route("/_sensor/sessions/:session_id", get(sensor_session_detail_handler))
+        .route("/_sensor/entities", get(sensor_entities_handler))
+        .route("/_sensor/status", get(sensor_status_handler))
+        .route("/_sensor/config", get(sensor_config_handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_read))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+    // Routes requiring sensor:write scope (ingestion)
+    let sensor_write_routes = Router::new()
+        .route("/_sensor/report", post(sensor_report_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_write))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
@@ -1212,10 +1263,7 @@ pub async fn start_admin_server(
         .route("/waf/stats", get(waf_stats_handler))
         .route("/debug/profiles", get(profiles_handler))
         // Dashboard compatibility routes (/_sensor/ prefix)
-        .route("/_sensor/status", get(sensor_status_handler))
-        .route("/_sensor/config", get(sensor_config_handler))
         .route("/_sensor/health", get(health_handler))
-        .route("/_sensor/entities", get(sensor_entities_handler))
         .route("/_sensor/entities/release-all", post(sensor_release_all_handler))
         .route("/_sensor/entities/:ip", delete(sensor_release_entity_handler))
         .route("/_sensor/metrics/reset", post(sensor_metrics_reset_handler))
@@ -1224,7 +1272,6 @@ pub async fn start_admin_server(
         .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/signals", get(sensor_signals_handler))
-        .route("/_sensor/report", post(sensor_report_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
         .route("/_sensor/campaigns", get(sensor_campaigns_handler))
         .route("/_sensor/campaigns/:id", get(sensor_campaign_detail_handler))
@@ -1284,6 +1331,7 @@ pub async fn start_admin_server(
         .merge(config_write_routes)
         .merge(service_manage_routes)
         .merge(sensor_read_routes)
+        .merge(sensor_write_routes)
         .merge(admin_read_routes)
         .merge(debugger_routes)
         .merge(authenticated_routes)
@@ -2067,105 +2115,221 @@ async fn sensor_signals_handler(
     })))
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// External threat report format from Apparatus/Cutlass sensors.
+///
+/// This format is used by the `/_sensor/report` endpoint to ingest signals
+/// from deception tools and traffic generators.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ApparatusReport {
+    /// Unique identifier for the sensor reporting the threat.
     #[serde(rename = "sensorId")]
     pub sensor_id: String,
+    /// ISO 8601 formatted timestamp of the event.
     pub timestamp: String,
+    /// Optional sensor software version for compatibility mapping.
+    pub version: Option<String>,
+    /// Context about the actor (client) that triggered the signal.
     pub actor: ApparatusActor,
+    /// Details about the threat signal itself.
     pub signal: ApparatusSignal,
+    /// Optional HTTP request context if the signal was triggered by a specific request.
     pub request: Option<ApparatusRequest>,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// Context about the actor (client) associated with a threat report.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ApparatusActor {
+    /// IP address of the client.
     pub ip: String,
+    /// Browser or device fingerprint if available.
     pub fingerprint: Option<String>,
+    /// Unique session identifier from the application layer.
     #[serde(rename = "sessionId")]
     pub session_id: Option<String>,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// Details about a threat signal.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ApparatusSignal {
+    /// Signal type identifier (e.g., "honeypot_hit", "dlp_match").
+    /// Mapped to internal `SignalType` via `SignalAdapter`.
     #[serde(rename = "type")]
     pub signal_type: String,
+    /// Threat severity level ("low", "medium", "high", "critical").
     pub severity: String,
+    /// Arbitrary structured data providing additional context for the signal.
     pub details: serde_json::Value,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+/// HTTP request context associated with a threat report.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ApparatusRequest {
+    /// HTTP method (e.g., "GET", "POST").
     pub method: String,
+    /// URL path of the request.
     pub path: String,
+    /// Optional HTTP headers relevant to the threat.
     pub headers: Option<HashMap<String, String>>,
+}
+
+impl ApparatusReport {
+    pub fn validate(&self) -> Result<(), String> {
+        // Validate sensor_id
+        if self.sensor_id.is_empty() || self.sensor_id.len() > 64 {
+            return Err("Invalid sensorId length".to_string());
+        }
+        if !self.sensor_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+            return Err("Invalid characters in sensorId".to_string());
+        }
+
+        // Validate timestamp (ISO 8601-ish)
+        if self.timestamp.len() > 64 {
+            return Err("Invalid timestamp length".to_string());
+        }
+
+        // Validate actor
+        self.actor.validate()?;
+
+        // Validate signal
+        self.signal.validate()?;
+
+        // Validate request if present
+        if let Some(ref req) = self.request {
+            req.validate()?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ApparatusActor {
+    pub fn validate(&self) -> Result<(), String> {
+        // Validate IP
+        if self.ip.parse::<IpAddr>().is_err() {
+            return Err(format!("Invalid IP address: {}", self.ip));
+        }
+
+        // Validate fingerprint if present
+        if let Some(ref fp) = self.fingerprint {
+            if fp.len() > 256 {
+                return Err("Fingerprint too long".to_string());
+            }
+        }
+
+        // Validate sessionId if present
+        if let Some(ref sid) = self.session_id {
+            if sid.len() > 128 {
+                return Err("SessionId too long".to_string());
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl ApparatusSignal {
+    pub fn validate(&self) -> Result<(), String> {
+        // Validate signal_type
+        if self.signal_type.is_empty() || self.signal_type.len() > 64 {
+            return Err("Invalid signal type length".to_string());
+        }
+        if !self.signal_type.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+            return Err("Invalid characters in signal type".to_string());
+        }
+
+        // Validate severity
+        match self.severity.to_lowercase().as_str() {
+            "low" | "medium" | "high" | "critical" => {}
+            _ => return Err(format!("Invalid severity: {}", self.severity)),
+        }
+
+        // Details is a serde_json::Value, check if it's too large or deeply nested
+        // Simple size check: serialize and check length
+        let serialized = serde_json::to_string(&self.details).unwrap_or_default();
+        if serialized.len() > 1024 * 10 { // 10KB limit for details
+            return Err("Details payload too large".to_string());
+        }
+
+        Ok(())
+    }
+}
+
+impl ApparatusRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.method.len() > 10 {
+            return Err("Invalid HTTP method length".to_string());
+        }
+        if self.path.len() > 2048 {
+            return Err("Path too long".to_string());
+        }
+        // Limit headers count
+        if let Some(ref headers) = self.headers {
+            if headers.len() > 50 {
+                return Err("Too many headers".to_string());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 thread_local! {
-    static FORCE_METADATA_SERIALIZE_ERROR: Cell<bool> = Cell::new(false);
-}
-
-fn map_signal_type(signal_type: &str, sensor_id: &str) -> crate::horizon::SignalType {
-    use crate::horizon::SignalType;
-    match signal_type {
-        "honeypot_hit" => SignalType::IpThreat, // Treat as generic threat for now
-        "trap_trigger" => SignalType::BotSignature, // High confidence bot
-        "protocol_probe" => SignalType::TemplateDiscovery, // Probing
-        "dlp_match" => SignalType::SchemaViolation, // Abuse
-        other => {
-            warn!(
-                sensor_id = %sensor_id,
-                signal_type = %other,
-                "Unknown external signal type; mapping to IpThreat"
-            );
-            SignalType::IpThreat
-        }
-    }
-}
-
-fn map_severity(severity: &str) -> crate::horizon::Severity {
-    use crate::horizon::Severity;
-    match severity.to_lowercase().as_str() {
-        "low" => Severity::Low,
-        "medium" => Severity::Medium,
-        "high" => Severity::High,
-        "critical" => Severity::Critical,
-        _ => Severity::Medium,
-    }
+    static FORCE_METADATA_SERIALIZE_ERROR: std::cell::Cell<bool> = std::cell::Cell::new(false);
 }
 
 fn serialize_report_metadata(report: &ApparatusReport) -> serde_json::Value {
     #[cfg(test)]
     if FORCE_METADATA_SERIALIZE_ERROR.with(|flag| flag.get()) {
-        let err = <serde_json::Error as serde::ser::Error>::custom(
-            "forced metadata serialization error",
+        warn!(
+            sensor_id = %report.sensor_id,
+            "Forced metadata serialization error for testing"
         );
-        return handle_metadata_error(report, err);
+        return serde_json::json!({});
     }
 
-    let serialized = serde_json::to_value(report);
-
-    match serialized {
-        Ok(value) => value,
-        Err(err) => handle_metadata_error(report, err),
-    }
-}
-
-fn handle_metadata_error(report: &ApparatusReport, err: serde_json::Error) -> serde_json::Value {
-    warn!(
-        sensor_id = %report.sensor_id,
-        error = %err,
-        "Failed to serialize external report metadata"
-    );
-    serde_json::json!({})
+    serde_json::to_value(report).unwrap_or_else(|err| {
+        warn!(
+            sensor_id = %report.sensor_id,
+            error = %err,
+            "Failed to serialize external report metadata"
+        );
+        serde_json::json!({})
+    })
 }
 
 /// POST /_sensor/report - Ingest external threat signals (e.g. from Apparatus/Cutlass)
+/// Ingest external threat signals from sensors.
+///
+/// This endpoint allows external components like Apparatus (Cutlass) to report
+/// threat detections (honeypot hits, DLP matches, etc.) to the central Hub.
+///
+/// # Security
+/// - Requires `X-Admin-Key` authentication.
+/// - Subject to per-sensor rate limiting (100 reports/min).
+/// - Validates all input fields for length and character constraints.
+///
+/// # Behavior
+/// 1. Validates the incoming `ApparatusReport`.
+/// 2. Maps external signal types to internal ones using `SignalAdapter`.
+/// 3. Dispatches the signal to Signal Horizon Hub (fleet intelligence) and
+///    the local SignalManager (dashboard visibility) in parallel.
+/// 4. Returns 200 OK on success, or appropriate error codes (400, 401, 429, 503).
+#[tracing::instrument(skip(state, report), fields(sensor_id = %report.sensor_id, signal_type = %report.signal.signal_type))]
 async fn sensor_report_handler(
     State(state): State<AdminState>,
     Json(report): Json<ApparatusReport>,
 ) -> Response {
     use crate::horizon::ThreatSignal;
+
+    // Validate input fields (labs-itup)
+    if let Err(err) = report.validate() {
+        warn!(
+            sensor_id = %report.sensor_id,
+            error = %err,
+            "Validation failed for external threat report"
+        );
+        return validation_error(&err, None);
+    }
 
     let signal_type_raw = report.signal.signal_type.trim().to_lowercase();
     if !state
@@ -2180,11 +2344,21 @@ async fn sensor_report_handler(
         return forbidden_error("Signal type not permitted for sensor");
     }
 
-    // Map external signal type to internal SignalType
-    let signal_type = map_signal_type(&signal_type_raw, &report.sensor_id);
+    // Rate limit per sensor (labs-8csv)
+    if let Err(not_until) = state.report_rate_limiter.check_key(&report.sensor_id) {
+        let retry_after = not_until.wait_time_from(governor::clock::Clock::now(
+            &governor::clock::DefaultClock::default(),
+        ));
+        warn!(
+            sensor_id = %report.sensor_id,
+            "Signal ingestion rate limit exceeded"
+        );
+        return rate_limit_error(retry_after.as_secs().max(1));
+    }
 
-    // Map severity
-    let severity = map_severity(&report.signal.severity);
+    // Map external signal to internal types using version-aware adapter
+    let signal_type = SignalAdapter::map_type(&report);
+    let severity = SignalAdapter::map_severity(&report.signal.severity);
 
     // Create threat signal
     let mut signal = ThreatSignal::new(signal_type, severity)
@@ -2199,38 +2373,38 @@ async fn sensor_report_handler(
     let metadata = serialize_report_metadata(&report);
     signal = signal.with_metadata(metadata.clone());
 
-    // Dispatch to Signal Horizon (Fleet Intelligence)
-    if let Err(err) = state.handler.dispatch_horizon_signal(signal.clone()) {
-        warn!("Failed to dispatch signal to horizon: {}", err);
-    }
-
-    // Dispatch to SignalManager (Local Dashboard)
-    if let Some(manager) = state.handler.signal_manager() {
-        use crate::intelligence::SignalCategory;
-        
-        manager.record_event(
+    // Dispatch using unified dispatcher facade (labs-pdb2)
+    match state
+        .handler
+        .signal_dispatcher()
+        .dispatch(
+            signal,
             SignalCategory::Intelligence,
-            report.signal.signal_type.clone(),
-            Some(report.actor.ip.clone()),
+            &report.sensor_id,
             Some(format!("External threat reported by {}", report.sensor_id)),
-            metadata
-        );
-        
-        info!("Received external threat report from {}: {} ({})", 
-            report.sensor_id, report.signal.signal_type, report.actor.ip);
-
-        (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "id": uuid::Uuid::new_v4().to_string()
-        })))
-            .into_response()
-    } else {
-        warn!("Signal manager not available for external report from {}", report.sensor_id);
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "success": false,
-            "error": "Signal manager not configured"
-        })))
-            .into_response()
+            metadata,
+        )
+        .await
+    {
+        Ok(_) => {
+            (StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "id": uuid::Uuid::new_v4().to_string()
+            })))
+                .into_response()
+        }
+        Err(err) => {
+            warn!(
+                sensor_id = %report.sensor_id,
+                error = %err,
+                "Signal dispatch failed"
+            );
+            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+                "success": false,
+                "error": err
+            })))
+                .into_response()
+        }
     }
 }
 
@@ -5468,6 +5642,7 @@ fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String>
 
     let path = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH")
         .unwrap_or_else(|_| "/etc/sysctl.d/synapse-pingora.conf".to_string());
+    let wal_path = std::path::Path::new(&path).with_extension("wal");
 
     let mut entries: HashMap<String, String> = HashMap::new();
     if let Ok(contents) = std::fs::read_to_string(&path) {
@@ -5496,8 +5671,76 @@ fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String>
         }
     }
 
-    std::fs::write(&path, lines.join("\n"))
-        .map_err(|err| format!("Failed to persist sysctl settings: {}", err))
+    append_sysctl_wal(&wal_path, params)?;
+    write_file_with_fsync(std::path::Path::new(&path), &lines.join("\n"))
+        .map_err(|err| format!("Failed to persist sysctl settings: {}", err))?;
+    clear_wal(&wal_path)?;
+    Ok(())
+}
+
+fn current_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn append_sysctl_wal(path: &std::path::Path, params: &HashMap<String, String>) -> Result<(), String> {
+    use std::io::Write;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("Failed to create WAL directory: {}", err))?;
+    }
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|err| format!("Failed to open WAL file: {}", err))?;
+
+    let payload = serde_json::json!({
+        "timestamp_ms": current_timestamp_ms(),
+        "type": "sysctl_update",
+        "params": params,
+    });
+    let serialized = serde_json::to_vec(&payload)
+        .map_err(|err| format!("Failed to serialize WAL entry: {}", err))?;
+    file.write_all(&serialized)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|err| format!("Failed to persist WAL entry: {}", err))?;
+
+    Ok(())
+}
+
+fn write_file_with_fsync(path: &std::path::Path, contents: &str) -> Result<(), std::io::Error> {
+    use std::io::Write;
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)?;
+    file.write_all(contents.as_bytes())?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn clear_wal(path: &std::path::Path) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)
+        .map_err(|err| format!("Failed to open WAL file: {}", err))?;
+    file.write_all(b"")
+        .and_then(|_| file.sync_all())
+        .map_err(|err| format!("Failed to clear WAL file: {}", err))?;
+    Ok(())
 }
 
 /// GET /_sensor/config/kernel - Fetch kernel/sysctl parameters
@@ -5617,6 +5860,7 @@ mod tests {
         let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
         let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
         let state = AdminState {
             handler,
@@ -5625,6 +5869,7 @@ mod tests {
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
             public_rate_limiter,
+            report_rate_limiter,
             auth_failure_limiter,
         };
 
@@ -5653,6 +5898,7 @@ mod tests {
         let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
         let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
         let state = AdminState {
             handler,
@@ -5661,6 +5907,7 @@ mod tests {
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
             public_rate_limiter,
+            report_rate_limiter,
             auth_failure_limiter,
         };
 
@@ -5920,19 +6167,37 @@ mod tests {
 
     #[test]
     fn test_signal_type_mapping() {
-        assert!(matches!(map_signal_type("honeypot_hit", "sensor-1"), SignalType::IpThreat));
-        assert!(matches!(map_signal_type("trap_trigger", "sensor-1"), SignalType::BotSignature));
-        assert!(matches!(map_signal_type("protocol_probe", "sensor-1"), SignalType::TemplateDiscovery));
-        assert!(matches!(map_signal_type("dlp_match", "sensor-1"), SignalType::SchemaViolation));
+        use crate::signals::adapter::SignalAdapter;
+        
+        let mut report = ApparatusReport {
+            sensor_id: "sensor-1".to_string(),
+            timestamp: "2026-02-03T00:00:00Z".to_string(),
+            version: Some("1.0.0".to_string()),
+            actor: ApparatusActor { ip: "1.2.3.4".to_string(), fingerprint: None, session_id: None },
+            signal: ApparatusSignal { signal_type: "honeypot_hit".to_string(), severity: "high".to_string(), details: serde_json::json!({}) },
+            request: None,
+        };
+
+        assert!(matches!(SignalAdapter::map_type(&report), SignalType::IpThreat));
+        
+        report.signal.signal_type = "trap_trigger".to_string();
+        assert!(matches!(SignalAdapter::map_type(&report), SignalType::BotSignature));
+        
+        report.signal.signal_type = "protocol_probe".to_string();
+        assert!(matches!(SignalAdapter::map_type(&report), SignalType::TemplateDiscovery));
+        
+        report.signal.signal_type = "dlp_match".to_string();
+        assert!(matches!(SignalAdapter::map_type(&report), SignalType::SchemaViolation));
     }
 
     #[test]
     fn test_severity_mapping() {
-        assert!(matches!(map_severity("low"), Severity::Low));
-        assert!(matches!(map_severity("medium"), Severity::Medium));
-        assert!(matches!(map_severity("high"), Severity::High));
-        assert!(matches!(map_severity("critical"), Severity::Critical));
-        assert!(matches!(map_severity("unknown"), Severity::Medium));
+        use crate::signals::adapter::SignalAdapter;
+        assert!(matches!(SignalAdapter::map_severity("low"), Severity::Low));
+        assert!(matches!(SignalAdapter::map_severity("medium"), Severity::Medium));
+        assert!(matches!(SignalAdapter::map_severity("high"), Severity::High));
+        assert!(matches!(SignalAdapter::map_severity("critical"), Severity::Critical));
+        assert!(matches!(SignalAdapter::map_severity("unknown"), Severity::Medium));
     }
 
     #[tokio::test]
@@ -6038,6 +6303,67 @@ mod tests {
         let signals = manager.list_signals(SignalQueryOptions::default());
         assert!(!signals.is_empty());
         assert!(signals[0].metadata.as_object().map(|m| m.is_empty()).unwrap_or(false));
+    }
+
+    #[test]
+    fn test_apparatus_report_validation() {
+        let valid_report = ApparatusReport {
+            sensor_id: "valid-sensor".to_string(),
+            timestamp: "2026-02-03T00:00:00Z".to_string(),
+            version: Some("1.0.0".to_string()),
+            actor: ApparatusActor {
+                ip: "1.2.3.4".to_string(),
+                fingerprint: Some("valid-fp".to_string()),
+                session_id: Some("valid-session".to_string()),
+            },
+            signal: ApparatusSignal {
+                signal_type: "honeypot_hit".to_string(),
+                severity: "high".to_string(),
+                details: serde_json::json!({"key": "value"}),
+            },
+            request: Some(ApparatusRequest {
+                method: "GET".to_string(),
+                path: "/api/test".to_string(),
+                headers: Some(HashMap::new()),
+            }),
+        };
+
+        assert!(valid_report.validate().is_ok());
+
+        // Test invalid sensor_id
+        let mut report = valid_report.clone();
+        report.sensor_id = "invalid sensor!".to_string();
+        assert!(report.validate().is_err());
+
+        // Test invalid IP
+        let mut report = valid_report.clone();
+        report.actor.ip = "not-an-ip".to_string();
+        assert!(report.validate().is_err());
+
+        // Test long fingerprint
+        let mut report = valid_report.clone();
+        report.actor.fingerprint = Some("a".repeat(300));
+        assert!(report.validate().is_err());
+
+        // Test long signal_type
+        let mut report = valid_report.clone();
+        report.signal.signal_type = "a".repeat(100);
+        assert!(report.validate().is_err());
+
+        // Test invalid severity
+        let mut report = valid_report.clone();
+        report.signal.severity = "extreme".to_string();
+        assert!(report.validate().is_err());
+
+        // Test large details
+        let mut report = valid_report.clone();
+        report.signal.details = serde_json::json!({"data": "a".repeat(20000)});
+        assert!(report.validate().is_err());
+
+        // Test long path
+        let mut report = valid_report.clone();
+        report.request.as_mut().unwrap().path = "a".repeat(3000);
+        assert!(report.validate().is_err());
     }
 
     // =========================================================================
@@ -6461,6 +6787,7 @@ mod tests {
         let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
         let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
         let state = AdminState {
             handler,
@@ -6469,6 +6796,7 @@ mod tests {
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
             public_rate_limiter,
+            report_rate_limiter,
             auth_failure_limiter,
         };
 
