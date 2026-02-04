@@ -106,6 +106,7 @@ use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
 
 // Phase 9: Signal Horizon Hub integration (fleet-wide threat intelligence)
 use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, SignalType, Severity};
+use synapse_pingora::tunnel::{TunnelClient, TunnelConfig};
 
 // Phase 9: Payload Profiling (bandwidth tracking and anomaly detection)
 use synapse_pingora::payload::{PayloadManager, PayloadConfig};
@@ -194,6 +195,8 @@ pub struct Config {
     #[serde(default)]
     pub horizon: HorizonConfig,
     #[serde(default)]
+    pub tunnel: TunnelConfig,
+    #[serde(default)]
     pub payload: PayloadConfig,
     #[serde(default)]
     pub trends: TrendsConfig,
@@ -213,6 +216,7 @@ impl Default for Config {
             dlp: DlpConfig::default(),
             crawler: CrawlerConfig::default(),
             horizon: HorizonConfig::default(),
+            tunnel: TunnelConfig::default(),
             payload: PayloadConfig::default(),
             trends: TrendsConfig::default(),
         }
@@ -4300,6 +4304,33 @@ fn main() {
     let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
     if telemetry_client.is_enabled() {
         telemetry_client.start_background_flush();
+    }
+
+    // Start Signal Horizon tunnel client (remote operations)
+    if config.tunnel.enabled {
+        let tunnel_config = config.tunnel.clone();
+        info!("Tunnel client enabled (url: {})", tunnel_config.url);
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    error!("Failed to create tunnel runtime: {}", err);
+                    return;
+                }
+            };
+
+            rt.block_on(async move {
+                let mut tunnel_client = TunnelClient::new(tunnel_config);
+                if let Err(e) = tunnel_client.start().await {
+                    error!("Failed to start tunnel client: {}", e);
+                    return;
+                }
+                std::future::pending::<()>().await;
+            });
+        });
     }
 
     // Create shared CampaignManager for threat correlation (mutable for initialization)

@@ -85,6 +85,7 @@ pub mod profiler;
 // Phase 9: Risk-Server Port (Payload, Crawler, Trends, Horizon)
 pub mod crawler;
 pub mod horizon;
+pub mod tunnel;
 pub mod payload;
 pub mod trends;
 
