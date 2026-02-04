@@ -468,6 +468,68 @@ describe('SynapseProxyService', () => {
       await service.listBlocks(sensorId, tenantId, { type: 'IP', limit: 5, offset: 10 });
     });
 
+    it('getPayloadStats fetches and caches results', async () => {
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe('/_sensor/payload/stats');
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { ok: true } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      const first = await service.getPayloadStats(sensorId, tenantId);
+      const second = await service.getPayloadStats(sensorId, tenantId);
+
+      expect(first).toEqual({ ok: true });
+      expect(second).toEqual({ ok: true });
+      expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
+    });
+
+    it('listProfiles fetches and caches results', async () => {
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe('/api/profiles');
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { profiles: [] } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      const first = await service.listProfiles(sensorId, tenantId);
+      const second = await service.listProfiles(sensorId, tenantId);
+
+      expect(first).toEqual({ profiles: [] });
+      expect(second).toEqual({ profiles: [] });
+      expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
+    });
+
+    it('getProfile encodes template path', async () => {
+      const template = '/api/v1/users/{id}';
+      const encoded = encodeURIComponent(template);
+
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe(`/api/profiles/${encoded}`);
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { template } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      const result = await service.getProfile(sensorId, tenantId, template);
+      expect(result).toEqual({ template });
+    });
+
     it('evaluateRequest performs POST', async () => {
       const evalData = { method: 'GET', path: '/', headers: {}, clientIp: '1.1.1.1' };
       broker.sendToSensor.mockImplementation((_id, message) => {

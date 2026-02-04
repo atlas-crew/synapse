@@ -68,6 +68,10 @@ const CampaignFilterSchema = PaginationSchema.extend({
   status: z.string().optional(),
 });
 
+const ProfileTemplateSchema = z.object({
+  template: z.string().min(1).max(2048),
+});
+
 const AddBlockSchema = z.object({
   type: z.enum(['IP', 'FINGERPRINT', 'CIDR', 'USER_AGENT']),
   value: z.string().min(1),
@@ -984,6 +988,147 @@ export function createSynapseRoutes(
         res.json(session);
       } catch (error) {
         handleError(req, res, error, 'getSession');
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Payload Endpoints
+  // ==========================================================================
+
+  /**
+   * GET /synapse/:sensorId/payload/stats
+   * Get payload stats summary
+   */
+  router.get(
+    '/:sensorId/payload/stats',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const stats = await synapseProxy.getPayloadStats(sensorId, tenantId);
+        res.json(stats);
+      } catch (error) {
+        handleError(req, res, error, 'getPayloadStats');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/payload/endpoints
+   * Get payload endpoints breakdown
+   */
+  router.get(
+    '/:sensorId/payload/endpoints',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const endpoints = await synapseProxy.getPayloadEndpoints(sensorId, tenantId);
+        res.json(endpoints);
+      } catch (error) {
+        handleError(req, res, error, 'getPayloadEndpoints');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/payload/anomalies
+   * Get payload anomalies summary
+   */
+  router.get(
+    '/:sensorId/payload/anomalies',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const anomalies = await synapseProxy.getPayloadAnomalies(sensorId, tenantId);
+        res.json(anomalies);
+      } catch (error) {
+        handleError(req, res, error, 'getPayloadAnomalies');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/payload/bandwidth
+   * Get payload bandwidth summary
+   */
+  router.get(
+    '/:sensorId/payload/bandwidth',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const bandwidth = await synapseProxy.getPayloadBandwidth(sensorId, tenantId);
+        res.json(bandwidth);
+      } catch (error) {
+        handleError(req, res, error, 'getPayloadBandwidth');
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Profiles Endpoints
+  // ==========================================================================
+
+  /**
+   * GET /synapse/:sensorId/profiles
+   * List endpoint profiles
+   */
+  router.get(
+    '/:sensorId/profiles',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const profiles = await synapseProxy.listProfiles(sensorId, tenantId);
+        res.json(profiles);
+      } catch (error) {
+        handleError(req, res, error, 'listProfiles');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/profiles/:template
+   * Get profile detail by template
+   */
+  router.get(
+    '/:sensorId/profiles/:template(*)',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, template } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = ProfileTemplateSchema.safeParse({ template });
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid template parameter',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const profile = await synapseProxy.getProfile(
+          sensorId,
+          tenantId,
+          parsed.data.template
+        );
+        res.json(profile);
+      } catch (error) {
+        handleError(req, res, error, 'getProfile');
       }
     }
   );

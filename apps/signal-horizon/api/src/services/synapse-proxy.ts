@@ -285,6 +285,14 @@ export interface SensorConfigResponse {
   message?: string;
 }
 
+export type PayloadStatsResponse = Record<string, unknown>;
+export type PayloadEndpointsResponse = Record<string, unknown>;
+export type PayloadAnomaliesResponse = Record<string, unknown>;
+export type PayloadBandwidthResponse = Record<string, unknown>;
+
+export type ProfileListResponse = Record<string, unknown>;
+export type ProfileDetailResponse = Record<string, unknown>;
+
 export interface SynapseProxyRequest {
   requestId: string;
   endpoint: string;
@@ -334,6 +342,8 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/system',
   '/_sensor/signals',
   '/_sensor/trends',
+  '/api/profiles',
+  '/api/profiles/',
 ] as const;
 
 /** Sensor ID format validation */
@@ -1107,6 +1117,140 @@ export class SynapseProxyService extends EventEmitter {
   }
 
   /**
+   * Get payload stats summary
+   */
+  async getPayloadStats(
+    sensorId: string,
+    tenantId: string
+  ): Promise<PayloadStatsResponse> {
+    const cacheKey = `payload:${sensorId}:stats`;
+    const cached = this.getFromCache<PayloadStatsResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<PayloadStatsResponse>(
+      sensorId,
+      tenantId,
+      '/_sensor/payload/stats',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get payload endpoints breakdown
+   */
+  async getPayloadEndpoints(
+    sensorId: string,
+    tenantId: string
+  ): Promise<PayloadEndpointsResponse> {
+    const cacheKey = `payload:${sensorId}:endpoints`;
+    const cached = this.getFromCache<PayloadEndpointsResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<PayloadEndpointsResponse>(
+      sensorId,
+      tenantId,
+      '/_sensor/payload/endpoints',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get payload anomalies summary
+   */
+  async getPayloadAnomalies(
+    sensorId: string,
+    tenantId: string
+  ): Promise<PayloadAnomaliesResponse> {
+    const cacheKey = `payload:${sensorId}:anomalies`;
+    const cached = this.getFromCache<PayloadAnomaliesResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<PayloadAnomaliesResponse>(
+      sensorId,
+      tenantId,
+      '/_sensor/payload/anomalies',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get payload bandwidth summary
+   */
+  async getPayloadBandwidth(
+    sensorId: string,
+    tenantId: string
+  ): Promise<PayloadBandwidthResponse> {
+    const cacheKey = `payload:${sensorId}:bandwidth`;
+    const cached = this.getFromCache<PayloadBandwidthResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<PayloadBandwidthResponse>(
+      sensorId,
+      tenantId,
+      '/_sensor/payload/bandwidth',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * List endpoint profiles
+   */
+  async listProfiles(
+    sensorId: string,
+    tenantId: string
+  ): Promise<ProfileListResponse> {
+    const cacheKey = `profiles:${sensorId}`;
+    const cached = this.getFromCache<ProfileListResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<ProfileListResponse>(
+      sensorId,
+      tenantId,
+      '/api/profiles',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get profile detail by template
+   */
+  async getProfile(
+    sensorId: string,
+    tenantId: string,
+    template: string
+  ): Promise<ProfileDetailResponse> {
+    const encodedTemplate = encodeURIComponent(template);
+    const cacheKey = `profiles:${sensorId}:${encodedTemplate}`;
+    const cached = this.getFromCache<ProfileDetailResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<ProfileDetailResponse>(
+      sensorId,
+      tenantId,
+      `/api/profiles/${encodedTemplate}`,
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
    * Evaluate a request against the sensor's rules
    */
   async evaluateRequest(
@@ -1228,7 +1372,18 @@ export class SynapseProxyService extends EventEmitter {
    */
   clearSensorCache(sensorId: string): void {
     const sanitizedSensorId = sensorId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions', 'campaigns', 'config'];
+    const prefixes = [
+      'status',
+      'entities',
+      'blocks',
+      'rules',
+      'actors',
+      'sessions',
+      'campaigns',
+      'config',
+      'payload',
+      'profiles',
+    ];
     for (const prefix of prefixes) {
       this.invalidateCache(`${prefix}:${sanitizedSensorId}`);
     }
