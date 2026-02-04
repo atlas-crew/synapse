@@ -769,6 +769,18 @@ export class TunnelBroker extends EventEmitter {
       }
     }
 
+    // Direct send to sensor tunnel if sessionId is actually a sensorId
+    const tunnel = this.legacyTunnels.get(sessionId);
+    if (tunnel && tunnel.socket.readyState === WebSocket.OPEN) {
+      try {
+        tunnel.socket.send(JSON.stringify(message));
+        return true;
+      } catch (error) {
+        this.logger.error({ error, sensorId: sessionId }, 'Failed to send direct to sensor');
+        return false;
+      }
+    }
+
     return false;
   }
 
@@ -1198,6 +1210,56 @@ export class TunnelBroker extends EventEmitter {
   private handleLegacySensorMessage(sensorId: string, data: unknown): void {
     try {
       const message = this.parseMessage(data);
+
+      const rawMessage = message as unknown as Record<string, unknown>;
+      const channel = rawMessage.channel;
+      if (typeof channel === 'string') {
+        const handler = this.channelHandlers.get(channel as TunnelChannel);
+        if (handler) {
+          const validation = validateTunnelMessage(rawMessage);
+          if (validation.success) {
+            const tunnel = this.legacyTunnels.get(sensorId);
+            const now = Date.now();
+            const clientWs = {
+              readyState: WebSocket.CLOSED,
+              send: () => undefined,
+              close: () => undefined,
+              on: () => undefined,
+            } as unknown as WebSocket;
+            const systemSession: ChannelSession = {
+              sessionId: validation.data.sessionId,
+              channel: validation.data.channel,
+              clientWs,
+              sensorWs: null,
+              sensorId,
+              tenantId: tunnel?.tenantId ?? 'unknown',
+              userId: 'system',
+              state: 'active',
+              createdAt: now,
+              lastActivityAt: now,
+              clientSequenceId: 0,
+              sensorSequenceId: 0,
+              messagesSent: 0,
+              messagesReceived: 0,
+              bytesTransferred: 0,
+              messageTimestamps: [],
+              bytesInWindow: 0,
+              windowStart: now,
+              cleanupTimeout: null,
+            };
+
+            void handler(systemSession, validation.data);
+            this.emit('message-routed', validation.data.sessionId, validation.data.channel, 'sensor-to-client');
+            return;
+          }
+
+          this.logger.warn(
+            { sensorId, errors: validation.errors },
+            'Invalid channel message from sensor'
+          );
+          return;
+        }
+      }
 
       // Check if this is a response to a pending request (e.g., bandwidth stats)
       if (this.handleSensorResponse(sensorId, message)) {

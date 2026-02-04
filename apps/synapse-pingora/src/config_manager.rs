@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
 
 use crate::access::AccessListManager;
@@ -648,6 +649,25 @@ impl ConfigManager {
     pub fn get_full_config(&self) -> ConfigFile {
         let config = self.config.read();
         config.clone()
+    }
+
+    /// Computes a stable hash of the current configuration for diagnostics.
+    pub fn config_hash(&self) -> String {
+        let config = self.config.read();
+        let payload = serde_json::to_vec(&*config).unwrap_or_default();
+        let mut hasher = Sha256::new();
+        hasher.update(payload);
+        let digest = format!("{:x}", hasher.finalize());
+        digest.get(..16).unwrap_or(&digest).to_string()
+    }
+
+    /// Returns the current rules hash (or computes one if not cached).
+    pub fn rules_hash(&self) -> String {
+        if let Some(hash) = self.rules_hash.as_ref() {
+            return hash.read().clone();
+        }
+        let rules = self.rules_store.read();
+        rules::rules_hash(&rules)
     }
 
     /// Updates the full configuration (hot reload).

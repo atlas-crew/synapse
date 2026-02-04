@@ -115,6 +115,7 @@ use synapse_pingora::tunnel::{
     publish_waf_log,
     TunnelClient,
     TunnelConfig,
+    TunnelDiagService,
     TunnelLogService,
     TunnelShellService,
 };
@@ -4406,39 +4407,6 @@ fn main() {
         telemetry_client.start_background_flush();
     }
 
-    // Start Signal Horizon tunnel client (remote operations)
-    if config.tunnel.enabled {
-        let tunnel_config = config.tunnel.clone();
-        info!("Tunnel client enabled (url: {})", tunnel_config.url);
-        std::thread::spawn(move || {
-            let rt = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(rt) => rt,
-                Err(err) => {
-                    error!("Failed to create tunnel runtime: {}", err);
-                    return;
-                }
-            };
-
-            rt.block_on(async move {
-                let mut tunnel_client = TunnelClient::new(tunnel_config);
-                if let Err(e) = tunnel_client.start().await {
-                    error!("Failed to start tunnel client: {}", e);
-                    return;
-                }
-                if let Some(handle) = tunnel_client.handle() {
-                    tokio::spawn(TunnelShellService::new(handle.clone()).run());
-                    tokio::spawn(TunnelLogService::new(handle).run());
-                } else {
-                    warn!("Tunnel client handle unavailable; shell/log services disabled");
-                }
-                std::future::pending::<()>().await;
-            });
-        });
-    }
-
     // Create shared CampaignManager for threat correlation (mutable for initialization)
     let mut campaign_manager_raw = CampaignManager::new();
     
@@ -4530,6 +4498,53 @@ fn main() {
     }
 
     info!("ActorManager initialized with default config");
+
+    // Start Signal Horizon tunnel client (remote operations)
+    if config.tunnel.enabled {
+        let tunnel_config = config.tunnel.clone();
+        let health = Arc::clone(&health_checker);
+        let metrics = Arc::clone(&metrics_registry);
+        let actor_manager = Arc::clone(&shared_actor_manager);
+        let config_manager = config_manager.clone();
+        info!("Tunnel client enabled (url: {})", tunnel_config.url);
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    error!("Failed to create tunnel runtime: {}", err);
+                    return;
+                }
+            };
+
+            rt.block_on(async move {
+                let mut tunnel_client = TunnelClient::new(tunnel_config);
+                if let Err(e) = tunnel_client.start().await {
+                    error!("Failed to start tunnel client: {}", e);
+                    return;
+                }
+                if let Some(handle) = tunnel_client.handle() {
+                    tokio::spawn(TunnelShellService::new(handle.clone()).run());
+                    tokio::spawn(TunnelLogService::new(handle.clone()).run());
+                    tokio::spawn(
+                        TunnelDiagService::new(
+                            handle,
+                            health,
+                            metrics,
+                            actor_manager,
+                            config_manager,
+                        )
+                        .run(),
+                    );
+                } else {
+                    warn!("Tunnel client handle unavailable; shell/log/diag services disabled");
+                }
+                std::future::pending::<()>().await;
+            });
+        });
+    }
 
     // Restore profiles from snapshot if available (API endpoint behavioral baselines)
     if let Some(ref snapshot) = loaded_snapshot {

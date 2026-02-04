@@ -26,6 +26,8 @@ pub struct MetricsRegistry {
     profiling_metrics: ProfilingMetrics,
     /// DLP metrics (P1 observability fix)
     dlp_metrics: DlpMetrics,
+    /// Signal dispatch metrics (labs-4gsj)
+    signal_dispatch_metrics: SignalDispatchMetrics,
     /// Backend health metrics
     backend_metrics: Arc<RwLock<HashMap<String, BackendMetrics>>>,
     /// Registry start time for uptime calculation
@@ -79,6 +81,44 @@ impl DlpMetrics {
             durations.pop_front();
         }
         durations.push_back(duration_us);
+    }
+}
+
+/// Signal dispatch metrics for observability (labs-4gsj).
+#[derive(Debug, Default)]
+pub struct SignalDispatchMetrics {
+    /// Total signal dispatch attempts
+    pub total: AtomicU64,
+    /// Successful signal dispatches
+    pub success: AtomicU64,
+    /// Failed signal dispatches (local or remote errors)
+    pub failure: AtomicU64,
+    /// Timed out signal dispatches
+    pub timeout: AtomicU64,
+    /// Dispatch latency histogram
+    pub latencies: LatencyHistogram,
+}
+
+impl SignalDispatchMetrics {
+    /// Record a dispatch attempt
+    pub fn record_attempt(&self) {
+        self.total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a dispatch success
+    pub fn record_success(&self, latency_us: u64) {
+        self.success.fetch_add(1, Ordering::Relaxed);
+        self.latencies.observe(latency_us);
+    }
+
+    /// Record a dispatch failure
+    pub fn record_failure(&self) {
+        self.failure.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record a dispatch timeout
+    pub fn record_timeout(&self) {
+        self.timeout.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -510,9 +550,48 @@ impl LatencyHistogram {
             self.sum_us.load(Ordering::Relaxed) as f64 / count as f64
         }
     }
+
+    /// Returns an approximate percentile latency in microseconds.
+    pub fn percentile_us(&self, percentile: f64) -> u64 {
+        let count = self.count.load(Ordering::Relaxed);
+        if count == 0 {
+            return 0;
+        }
+
+        let mut pct = percentile;
+        if pct.is_nan() {
+            pct = 0.0;
+        }
+        if pct < 0.0 {
+            pct = 0.0;
+        } else if pct > 1.0 {
+            pct = 1.0;
+        }
+
+        let target = ((count as f64) * pct).ceil().max(1.0) as u64;
+        let mut cumulative = 0u64;
+
+        for (i, boundary) in self.buckets.iter().enumerate() {
+            cumulative += self.counts[i].load(Ordering::Relaxed);
+            if cumulative >= target {
+                return *boundary;
+            }
+        }
+
+        *self.buckets.last().unwrap_or(&0)
+    }
+
+    /// Resets all counts to zero.
+    pub fn reset(&self) {
+        for count in &self.counts {
+            count.store(0, Ordering::Relaxed);
+        }
+        self.sum_us.store(0, Ordering::Relaxed);
+        self.count.store(0, Ordering::Relaxed);
+    }
 }
 
-/// Sliding window counter for time-based metrics (e.g., requests per minute).
+/// Windowed counter for tracking metrics over time.
 /// Maintains per-second buckets for the configured window duration.
 #[derive(Debug)]
 pub struct WindowedCounter {
@@ -737,6 +816,27 @@ impl MetricsRegistry {
     /// Returns the number of requests in the last minute.
     pub fn requests_last_minute(&self) -> u64 {
         self.windowed_requests.count()
+    }
+
+    /// Returns the total number of requests.
+    pub fn total_requests(&self) -> u64 {
+        self.request_counts.total.load(Ordering::Relaxed)
+    }
+
+    /// Returns the total number of error responses (4xx + 5xx).
+    pub fn error_requests(&self) -> u64 {
+        self.request_counts
+            .client_error_4xx
+            .load(Ordering::Relaxed)
+            + self
+                .request_counts
+                .server_error_5xx
+                .load(Ordering::Relaxed)
+    }
+
+    /// Returns latency percentile in milliseconds.
+    pub fn latency_percentile_ms(&self, percentile: f64) -> f64 {
+        self.latencies.percentile_us(percentile) as f64 / 1000.0
     }
 
     /// Returns the average latency in milliseconds over the last minute.
@@ -1090,7 +1190,58 @@ impl MetricsRegistry {
             self.dlp_metrics.violations_dropped.load(Ordering::Relaxed)
         ));
 
-        // Uptime
+        // Signal dispatch metrics (labs-4gsj)
+        output.push_str("# HELP synapse_signal_dispatch_total Total signal dispatch attempts\n");
+        output.push_str("# TYPE synapse_signal_dispatch_total counter\n");
+        output.push_str(&format!(
+            "synapse_signal_dispatch_total {}\n",
+            self.signal_dispatch_metrics.total.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_signal_dispatch_success Successful signal dispatches\n");
+        output.push_str("# TYPE synapse_signal_dispatch_success counter\n");
+        output.push_str(&format!(
+            "synapse_signal_dispatch_success {}\n",
+            self.signal_dispatch_metrics.success.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_signal_dispatch_failure Failed signal dispatches\n");
+        output.push_str("# TYPE synapse_signal_dispatch_failure counter\n");
+        output.push_str(&format!(
+            "synapse_signal_dispatch_failure {}\n",
+            self.signal_dispatch_metrics.failure.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_signal_dispatch_timeout Timed out signal dispatches\n");
+        output.push_str("# TYPE synapse_signal_dispatch_timeout counter\n");
+        output.push_str(&format!(
+            "synapse_signal_dispatch_timeout {}\n",
+            self.signal_dispatch_metrics.timeout.load(Ordering::Relaxed)
+        ));
+
+        output.push_str("# HELP synapse_signal_dispatch_duration_us Signal dispatch duration in microseconds\n");
+        output.push_str("# TYPE synapse_signal_dispatch_duration_us histogram\n");
+        let mut cumulative_dispatch = 0u64;
+        for (i, &boundary) in self.signal_dispatch_metrics.latencies.buckets.iter().enumerate() {
+            cumulative_dispatch += self.signal_dispatch_metrics.latencies.counts[i].load(Ordering::Relaxed);
+            output.push_str(&format!(
+                "synapse_signal_dispatch_duration_us_bucket{{le=\"{}\"}} {}\n",
+                boundary, cumulative_dispatch
+            ));
+        }
+        output.push_str(&format!(
+            "synapse_signal_dispatch_duration_us_bucket{{le=\"+Inf\"}} {}\n",
+            self.signal_dispatch_metrics.latencies.count.load(Ordering::Relaxed)
+        ));
+        output.push_str(&format!(
+            "synapse_signal_dispatch_duration_us_sum {}\n",
+            self.signal_dispatch_metrics.latencies.sum_us.load(Ordering::Relaxed)
+        ));
+        output.push_str(&format!(
+            "synapse_signal_dispatch_duration_us_count {}\n",
+            self.signal_dispatch_metrics.latencies.count.load(Ordering::Relaxed)
+        ));
+
         output.push_str("# HELP synapse_uptime_seconds Service uptime in seconds\n");
         output.push_str("# TYPE synapse_uptime_seconds gauge\n");
         output.push_str(&format!("synapse_uptime_seconds {}\n", self.uptime_secs()));
@@ -1150,13 +1301,27 @@ impl MetricsRegistry {
         self.dlp_metrics.violations_dropped.store(0, Ordering::Relaxed);
         self.dlp_metrics.graph_export_durations.write().clear();
 
-        // Reset backend metrics
-        self.backend_metrics.write().clear();
+        // Reset signal dispatch metrics
+        self.signal_dispatch_metrics.total.store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics.success.store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics.failure.store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics.timeout.store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics.latencies.reset();
     }
 
-    /// Get DLP metrics for recording (P1 fix).
+    /// Returns a reference to the DLP metrics.
     pub fn dlp_metrics(&self) -> &DlpMetrics {
         &self.dlp_metrics
+    }
+
+    /// Returns a reference to the signal dispatch metrics.
+    pub fn signal_dispatch_metrics(&self) -> &SignalDispatchMetrics {
+        &self.signal_dispatch_metrics
+    }
+
+    /// Returns a reference to the profiling metrics.
+    pub fn profiling_metrics(&self) -> &ProfilingMetrics {
+        &self.profiling_metrics
     }
 }
 

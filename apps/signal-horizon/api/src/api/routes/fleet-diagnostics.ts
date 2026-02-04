@@ -230,7 +230,7 @@ export function createFleetDiagnosticsRoutes(
       };
 
       // Send through tunnel broker
-      const sent = tunnelBroker.sendToSensor(requestId, message);
+      const sent = tunnelBroker.sendToSensor(sensorId, message);
       if (!sent) {
         pendingRequests.delete(requestId);
         clearTimeout(timeoutHandle);

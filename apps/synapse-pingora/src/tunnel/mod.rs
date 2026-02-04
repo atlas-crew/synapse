@@ -6,6 +6,7 @@
 mod client;
 mod config;
 mod error;
+mod diag;
 mod logs;
 mod shell;
 mod types;
@@ -13,6 +14,7 @@ mod types;
 pub use client::{TunnelClient, TunnelClientHandle, TunnelClientStats};
 pub use config::TunnelConfig;
 pub use error::TunnelError;
+pub use diag::TunnelDiagService;
 pub use logs::{
     publish_access_log, publish_internal_log, publish_waf_log, TunnelLogService,
 };
