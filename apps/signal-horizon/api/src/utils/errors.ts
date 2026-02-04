@@ -23,11 +23,19 @@ export function isError(error: unknown): error is Error {
 }
 
 /**
- * Extract error message safely from unknown error
+ * Extract error message safely from unknown error.
+ * Now includes recursive root cause extraction (labs-mmft.24).
  */
 export function getErrorMessage(error: unknown): string {
   if (isErrorWithMessage(error)) {
-    return error.message;
+    let message = error.message;
+    
+    // Support standard error causes (labs-mmft.24)
+    if (error instanceof Error && error.cause) {
+      message += ` (Cause: ${getErrorMessage(error.cause)})`;
+    }
+    
+    return message;
   }
   if (typeof error === 'string') {
     return error;

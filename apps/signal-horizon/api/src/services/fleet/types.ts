@@ -112,7 +112,7 @@ export interface DeploymentResult {
 }
 
 export interface SensorCommand {
-  type: 'push_config' | 'push_rules' | 'update' | 'restart' | 'sync_blocklist';
+  type: 'push_config' | 'push_rules' | 'update' | 'restart' | 'sync_blocklist' | 'toggle_chaos' | 'toggle_mtd';
   payload: Record<string, unknown>;
   timeout?: number; // milliseconds, default 30000
 }

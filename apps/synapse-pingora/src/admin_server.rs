@@ -1168,6 +1168,10 @@ pub async fn start_admin_server(
     // Initialize metrics history with current values
     record_metrics_sample();
 
+    if let Err(err) = recover_sysctl_wal() {
+        warn!("Failed to recover sysctl WAL: {}", err);
+    }
+
     // Add startup log entries
     record_log("info", format!("Synapse-Pingora admin server starting on {}", addr));
     record_log("info", "WAF engine initialized with 237 detection rules".to_string());
@@ -1251,6 +1255,18 @@ pub async fn start_admin_server(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
+    let kernel_config_read_routes = Router::new()
+        .route("/_sensor/config/kernel", get(config_kernel_get_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+    let kernel_config_write_routes = Router::new()
+        .route("/_sensor/config/kernel", put(config_kernel_put_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
     // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
@@ -1326,7 +1342,6 @@ pub async fn start_admin_server(
         .route("/_sensor/config/tarpit", get(config_tarpit_get_handler).put(config_tarpit_put_handler))
         .route("/_sensor/config/travel", get(config_travel_get_handler).put(config_travel_put_handler))
         .route("/_sensor/config/entity", get(config_entity_get_handler).put(config_entity_put_handler))
-        .route("/_sensor/config/kernel", get(config_kernel_get_handler).put(config_kernel_put_handler))
         // Log viewer endpoints moved to admin_read_routes (require admin:read)
         // Diagnostic bundle export
         .route("/_sensor/diagnostic-bundle", get(diagnostic_bundle_handler))
@@ -1346,6 +1361,8 @@ pub async fn start_admin_server(
         .merge(sensor_write_routes)
         .merge(rules_read_routes)
         .merge(rules_write_routes)
+        .merge(kernel_config_read_routes)
+        .merge(kernel_config_write_routes)
         .merge(admin_read_routes)
         .merge(debugger_routes)
         .merge(authenticated_routes)
@@ -5649,17 +5666,9 @@ fn parse_kernel_keys(query: Option<String>) -> Vec<String> {
     DEFAULT_KERNEL_KEYS.iter().map(|k| (*k).to_string()).collect()
 }
 
-fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String> {
-    if params.is_empty() {
-        return Ok(());
-    }
-
-    let path = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH")
-        .unwrap_or_else(|_| "/etc/sysctl.d/synapse-pingora.conf".to_string());
-    let wal_path = std::path::Path::new(&path).with_extension("wal");
-
-    let mut entries: HashMap<String, String> = HashMap::new();
-    if let Ok(contents) = std::fs::read_to_string(&path) {
+fn load_sysctl_entries(path: &std::path::Path) -> HashMap<String, String> {
+    let mut entries = HashMap::new();
+    if let Ok(contents) = std::fs::read_to_string(path) {
         for line in contents.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -5670,11 +5679,10 @@ fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String>
             }
         }
     }
+    entries
+}
 
-    for (key, value) in params {
-        entries.insert(key.clone(), value.clone());
-    }
-
+fn build_sysctl_config_lines(entries: &HashMap<String, String>) -> String {
     let mut lines = Vec::new();
     lines.push("# Synapse Pingora managed sysctl settings".to_string());
     let mut keys: Vec<_> = entries.keys().cloned().collect();
@@ -5684,9 +5692,27 @@ fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String>
             lines.push(format!("{} = {}", key, value));
         }
     }
+    lines.join("\n")
+}
+
+fn persist_kernel_params(params: &HashMap<String, String>) -> Result<(), String> {
+    if params.is_empty() {
+        return Ok(());
+    }
+
+    let path = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH")
+        .unwrap_or_else(|_| "/etc/sysctl.d/synapse-pingora.conf".to_string());
+    let path = std::path::Path::new(&path);
+    let wal_path = path.with_extension("wal");
+
+    let mut entries = load_sysctl_entries(path);
+    for (key, value) in params {
+        entries.insert(key.clone(), value.clone());
+    }
 
     append_sysctl_wal(&wal_path, params)?;
-    write_file_with_fsync(std::path::Path::new(&path), &lines.join("\n"))
+    let contents = build_sysctl_config_lines(&entries);
+    write_file_with_fsync(path, &contents)
         .map_err(|err| format!("Failed to persist sysctl settings: {}", err))?;
     clear_wal(&wal_path)?;
     Ok(())
@@ -5726,6 +5752,70 @@ fn append_sysctl_wal(path: &std::path::Path, params: &HashMap<String, String>) -
         .and_then(|_| file.sync_all())
         .map_err(|err| format!("Failed to persist WAL entry: {}", err))?;
 
+    Ok(())
+}
+
+fn parse_sysctl_wal_params(value: &serde_json::Value) -> Option<HashMap<String, String>> {
+    if value.get("type").and_then(|t| t.as_str()) != Some("sysctl_update") {
+        return None;
+    }
+    let params = value.get("params")?.as_object()?;
+    let mut parsed = HashMap::new();
+    for (key, value) in params {
+        let string_value = match value {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Number(n) => n.to_string(),
+            serde_json::Value::Bool(b) => b.to_string(),
+            _ => continue,
+        };
+        parsed.insert(key.clone(), string_value);
+    }
+    if parsed.is_empty() { None } else { Some(parsed) }
+}
+
+fn recover_sysctl_wal() -> Result<(), String> {
+    let path = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH")
+        .unwrap_or_else(|_| "/etc/sysctl.d/synapse-pingora.conf".to_string());
+    let path = std::path::Path::new(&path);
+    let wal_path = path.with_extension("wal");
+
+    if !wal_path.exists() {
+        return Ok(());
+    }
+
+    let contents = std::fs::read_to_string(&wal_path)
+        .map_err(|err| format!("Failed to read WAL file: {}", err))?;
+    if contents.trim().is_empty() {
+        return Ok(());
+    }
+
+    let mut last_params: Option<HashMap<String, String>> = None;
+    for line in contents.lines() {
+        let value: serde_json::Value = match serde_json::from_str(line) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!("Skipping invalid sysctl WAL entry: {}", err);
+                continue;
+            }
+        };
+        if let Some(params) = parse_sysctl_wal_params(&value) {
+            last_params = Some(params);
+        }
+    }
+
+    let Some(params) = last_params else {
+        return Ok(());
+    };
+
+    let mut entries = load_sysctl_entries(path);
+    for (key, value) in params {
+        entries.insert(key, value);
+    }
+
+    let contents = build_sysctl_config_lines(&entries);
+    write_file_with_fsync(path, &contents)
+        .map_err(|err| format!("Failed to recover sysctl settings: {}", err))?;
+    clear_wal(&wal_path)?;
     Ok(())
 }
 
@@ -5863,6 +5953,7 @@ mod tests {
     use http::Request;
     use tower::util::ServiceExt;
     use std::num::NonZeroU32;
+    use tempfile::tempdir;
     use crate::horizon::{SignalType, Severity};
     use crate::intelligence::signal_manager::{SignalManager, SignalManagerConfig};
     use crate::intelligence::SignalQueryOptions;
@@ -5962,6 +6053,44 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn test_recover_sysctl_wal_merges_entries() {
+        let dir = tempdir().unwrap();
+        let config_path = dir.path().join("sysctl.conf");
+        let wal_path = config_path.with_extension("wal");
+
+        std::fs::write(&config_path, "net.ipv4.tcp_syncookies = 1\n").unwrap();
+        let wal_entry = serde_json::json!({
+            "timestamp_ms": 1,
+            "type": "sysctl_update",
+            "params": {
+                "net.ipv4.tcp_syncookies": "0",
+                "net.ipv4.ip_forward": "1"
+            }
+        });
+        std::fs::write(&wal_path, format!("{}\n", wal_entry)).unwrap();
+
+        let previous = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH").ok();
+        std::env::set_var("SYNAPSE_SYSCTL_CONFIG_PATH", config_path.to_string_lossy().to_string());
+
+        let result = recover_sysctl_wal();
+
+        if let Some(value) = previous {
+            std::env::set_var("SYNAPSE_SYSCTL_CONFIG_PATH", value);
+        } else {
+            std::env::remove_var("SYNAPSE_SYSCTL_CONFIG_PATH");
+        }
+
+        result.unwrap();
+
+        let contents = std::fs::read_to_string(&config_path).unwrap();
+        assert!(contents.contains("net.ipv4.tcp_syncookies = 0"));
+        assert!(contents.contains("net.ipv4.ip_forward = 1"));
+
+        let wal_contents = std::fs::read_to_string(&wal_path).unwrap();
+        assert!(wal_contents.trim().is_empty());
     }
 
     #[tokio::test]
@@ -6293,7 +6422,7 @@ mod tests {
             .unwrap();
 
         let status = response.status();
-        let body = to_bytes(response.into_body()).await.unwrap();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(status, StatusCode::BAD_REQUEST);

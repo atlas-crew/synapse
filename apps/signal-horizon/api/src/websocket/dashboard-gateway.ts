@@ -14,6 +14,7 @@ import type {
   CampaignAlert,
   ThreatAlert,
   BlocklistUpdate,
+  SharingPreference,
 } from '../types/protocol.js';
 import {
   validateDashboardMessage,
@@ -24,6 +25,7 @@ import { WebSocketRateLimiter } from '../lib/ws-rate-limiter.js';
 interface DashboardConnection {
   id: string;
   tenantId: string | null; // null = fleet admin view (requires fleet:admin scope)
+  sharingPreference: SharingPreference | null;
   isAuthenticated: boolean;
   isFleetAdmin: boolean; // Can access all tenant data
   ws: WebSocket;
@@ -143,6 +145,7 @@ export class DashboardGateway {
     const conn: DashboardConnection = {
       id: connectionId,
       tenantId: null,
+      sharingPreference: null,
       isAuthenticated: false,
       isFleetAdmin: false,
       ws,
@@ -322,6 +325,7 @@ export class DashboardGateway {
       // Update connection with auth info
       conn.isAuthenticated = true;
       conn.tenantId = apiKeyRecord.tenantId;
+      conn.sharingPreference = apiKeyRecord.tenant.sharingPreference as SharingPreference;
       conn.isFleetAdmin = apiKeyRecord.scopes.includes('fleet:admin');
       conn.apiKeyId = apiKeyRecord.id; // Store for revalidation (WS2-002)
 
@@ -360,19 +364,23 @@ export class DashboardGateway {
     if (!conn.isAuthenticated) return;
 
     try {
-      // Build tenant filter based on permissions
-      // Fleet admins can see all data; regular users only see their tenant + cross-tenant
+      // Build tenant filter based on permissions and sharing preferences
+      // Fleet admins can see all data; regular users only see their tenant + cross-tenant (if opted in)
+      const canReceive = conn.isFleetAdmin ||
+        conn.sharingPreference === 'CONTRIBUTE_AND_RECEIVE' ||
+        conn.sharingPreference === 'RECEIVE_ONLY';
+
       const tenantFilter = conn.isFleetAdmin
         ? undefined // No filter = see all
         : conn.tenantId
-          ? { OR: [{ tenantId: conn.tenantId }, { isCrossTenant: true }] }
-          : { isCrossTenant: true }; // Fallback: only cross-tenant if no tenantId
+          ? { OR: [{ tenantId: conn.tenantId }, ...(canReceive ? [{ isCrossTenant: true }] : [])] }
+          : (canReceive ? { isCrossTenant: true } : { id: 'none' });
 
       const threatTenantFilter = conn.isFleetAdmin
         ? undefined
         : conn.tenantId
-          ? { OR: [{ tenantId: conn.tenantId }, { isFleetThreat: true }] }
-          : { isFleetThreat: true };
+          ? { OR: [{ tenantId: conn.tenantId }, ...(canReceive ? [{ isFleetThreat: true }] : [])] }
+          : (canReceive ? { isFleetThreat: true } : { id: 'none' });
 
       const sensorTenantFilter = conn.isFleetAdmin
         ? undefined
@@ -535,36 +543,58 @@ export class DashboardGateway {
    * Broadcast campaign alert to authenticated dashboards
    */
   broadcastCampaignAlert(alert: CampaignAlert): void {
-    this.broadcast('campaigns', {
-      type: 'campaign-alert',
-      data: alert,
-      timestamp: Date.now(),
-      sequenceId: this.nextSequenceId(),
-    });
+    this.broadcast(
+      'campaigns',
+      {
+        type: 'campaign-alert',
+        data: alert,
+        timestamp: Date.now(),
+        sequenceId: this.nextSequenceId(),
+      },
+      {
+        tenantId: alert.campaign.tenantId,
+        isFleetEvent: alert.campaign.isCrossTenant,
+      }
+    );
   }
 
   /**
    * Broadcast threat alert to dashboards
    */
   broadcastThreatAlert(alert: ThreatAlert): void {
-    this.broadcast('threats', {
-      type: 'threat-alert',
-      data: alert,
-      timestamp: Date.now(),
-      sequenceId: this.nextSequenceId(),
-    });
+    this.broadcast(
+      'threats',
+      {
+        type: 'threat-alert',
+        data: alert,
+        timestamp: Date.now(),
+        sequenceId: this.nextSequenceId(),
+      },
+      {
+        tenantId: alert.threat.tenantId,
+        isFleetEvent: alert.threat.isFleetThreat,
+      }
+    );
   }
 
   /**
    * Broadcast blocklist update
    */
   broadcastBlocklistUpdate(update: { updates: BlocklistUpdate[]; campaign?: string }): void {
-    this.broadcast('blocklist', {
-      type: 'blocklist-update',
-      data: update,
-      timestamp: Date.now(),
-      sequenceId: this.nextSequenceId(),
-    });
+    // Determine if this is a fleet-wide block (source: FLEET_INTEL)
+    // For now, we treat FLEET_INTEL blocks as fleet events
+    const isFleetEvent = update.updates.some((u) => u.source === 'FLEET_INTEL');
+
+    this.broadcast(
+      'blocklist',
+      {
+        type: 'blocklist-update',
+        data: update,
+        timestamp: Date.now(),
+        sequenceId: this.nextSequenceId(),
+      },
+      { isFleetEvent }
+    );
   }
 
   /**
@@ -591,13 +621,41 @@ export class DashboardGateway {
   }
 
   /**
-   * Broadcast to authenticated connections subscribed to a topic
+   * Broadcast to authenticated connections subscribed to a topic with tenant isolation
+   * and sharing preference enforcement.
    */
-  private broadcast(topic: string, message: Record<string, unknown>): void {
+  private broadcast(
+    topic: string,
+    message: Record<string, unknown>,
+    options: { tenantId?: string; isFleetEvent?: boolean } = {}
+  ): void {
     const payload = JSON.stringify(message);
 
     for (const conn of this.connections.values()) {
-      if (conn.isAuthenticated && conn.subscriptions.has(topic)) {
+      if (!conn.isAuthenticated || !conn.subscriptions.has(topic)) {
+        continue;
+      }
+
+      // 1. Fleet Admin always gets everything
+      if (conn.isFleetAdmin) {
+        this.safeSend(conn, payload);
+        continue;
+      }
+
+      // 2. Handle Fleet Events (cross-tenant campaigns, fleet threats)
+      if (options.isFleetEvent) {
+        const canReceive =
+          conn.sharingPreference === 'CONTRIBUTE_AND_RECEIVE' ||
+          conn.sharingPreference === 'RECEIVE_ONLY';
+
+        if (canReceive) {
+          this.safeSend(conn, payload);
+        }
+        continue;
+      }
+
+      // 3. Handle Tenant-Specific Events
+      if (options.tenantId === conn.tenantId) {
         this.safeSend(conn, payload);
       }
     }

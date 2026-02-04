@@ -347,8 +347,21 @@ export class Aggregator {
    * 2. Async write to ClickHouse (historical analytics, non-blocking)
    */
   private async storeSignal(signal: IncomingSignal): Promise<EnrichedSignal> {
+    // Fetch tenant to get sharing preference for policy enforcement
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: signal.tenantId },
+      select: { sharingPreference: true },
+    });
+
+    const sharingPreference = tenant?.sharingPreference ?? 'CONTRIBUTE_AND_RECEIVE';
+
     // Generate anonymized fingerprint for cross-tenant intelligence
-    const anonFingerprint = signal.fingerprint
+    // Skip anonymization if tenant is ISOLATED or RECEIVE_ONLY (privacy-first)
+    const canContribute =
+      sharingPreference === 'CONTRIBUTE_AND_RECEIVE' ||
+      sharingPreference === 'CONTRIBUTE_ONLY';
+
+    const anonFingerprint = signal.fingerprint && canContribute
       ? await this.anonymizeFingerprint(signal.fingerprint)
       : undefined;
 
@@ -402,6 +415,7 @@ export class Aggregator {
       anonFingerprint,
       id: stored.id,
       threatScore,
+      sharingPreference,
     };
   }
 

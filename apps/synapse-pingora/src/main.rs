@@ -669,6 +669,11 @@ impl Config {
             info!("TLS configuration validated successfully");
         }
 
+        config
+            .tunnel
+            .validate()
+            .map_err(|e| format!("Tunnel configuration validation failed: {}", e))?;
+
         Ok(config)
     }
 
@@ -1206,6 +1211,13 @@ pub struct SynapseProxy {
 }
 
 impl SynapseProxy {
+    /// Start all background maintenance tasks for proxy-internal managers.
+    pub fn start_background_tasks(&self) {
+        self.tarpit_manager.clone().start_background_tasks();
+        self.progression_manager.clone().start_background_tasks();
+        info!("SynapseProxy internal background tasks started");
+    }
+
     pub async fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
         let crawler_detector = build_crawler_detector(CrawlerConfig::default()).await;
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
@@ -4296,8 +4308,17 @@ fn main() {
 
     info!("Starting Synapse-Pingora PoC");
 
-    // Load configuration - try multi-site first, fall back to legacy
-    let config = Config::load_or_default();
+    // Load configuration - honor CLI path first, fall back to defaults
+    let config = match Config::load(&cli.config) {
+        Ok(config) => {
+            info!("Loaded configuration from {}", cli.config);
+            config
+        }
+        Err(err) => {
+            warn!("Failed to load {}: {}", cli.config, err);
+            Config::load_or_default()
+        }
+    };
     let multisite_config = try_load_multisite_config();
     let rules_path = if config.detection.rules_path.trim().is_empty() {
         None
@@ -4308,7 +4329,12 @@ fn main() {
     // Compute and cache config hash for heartbeat reporting
     // This allows Signal Horizon to detect configuration drift between sensors
     // We hash the raw config file bytes rather than serializing the parsed config
-    let config_paths = ["config.yaml", "config.yml", "/etc/synapse-pingora/config.yaml"];
+    let config_paths = [
+        cli.config.as_str(),
+        "config.yaml",
+        "config.yml",
+        "/etc/synapse-pingora/config.yaml",
+    ];
     for path in &config_paths {
         if let Ok(config_bytes) = std::fs::read(path) {
             let _ = CONFIG_HASH.set(compute_hash(&config_bytes));
@@ -4924,6 +4950,13 @@ fn main() {
             Arc::clone(&shared_signal_manager),
         )
     };
+
+    // Phase 5 & 9: Start all shared background maintenance tasks
+    // These tasks handle risk decay, state cleanup, and correlation cycles
+    shared_actor_manager.clone().start_background_tasks();
+    shared_session_manager.clone().start_background_tasks();
+    campaign_manager.clone().start_background_worker();
+    proxy.start_background_tasks();
 
     let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
 

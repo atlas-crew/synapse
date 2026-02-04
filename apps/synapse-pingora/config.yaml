@@ -3,7 +3,7 @@ server:
   listen: "127.0.0.1:6190"
   admin_listen: "127.0.0.1:6192"
   workers: 0
-  waf_threshold: 75
+  waf_threshold: 1
   waf_enabled: true
   # Trust localhost for X-Forwarded-For/X-Real-IP spoofing in demos
   trusted_proxies:

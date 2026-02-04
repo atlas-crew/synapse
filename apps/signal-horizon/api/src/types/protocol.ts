@@ -559,6 +559,19 @@ export type ThreatSignal = {
 );
 
 /**
+ * Tenant sharing preference for collective defense.
+ * - CONTRIBUTE_AND_RECEIVE: Full participation in fleet intelligence
+ * - RECEIVE_ONLY: Benefit from fleet intel without sharing signals
+ * - CONTRIBUTE_ONLY: Share signals without receiving fleet-wide blocks
+ * - ISOLATED: No intelligence sharing in either direction
+ */
+export type SharingPreference =
+  | 'CONTRIBUTE_AND_RECEIVE'
+  | 'RECEIVE_ONLY'
+  | 'CONTRIBUTE_ONLY'
+  | 'ISOLATED';
+
+/**
  * ThreatSignal enriched with tenant/sensor context after ingestion.
  * Used internally by aggregator, correlator, and broadcaster.
  *
@@ -579,6 +592,8 @@ export type EnrichedSignal = ThreatSignal & {
   id?: string;
   /** Threat score from ThreatService (0-100) */
   threatScore?: number;
+  /** Tenant sharing preference for collective defense */
+  sharingPreference?: SharingPreference;
 };
 
 /**
@@ -683,6 +698,8 @@ export interface CampaignAlert {
     isCrossTenant: boolean;
     tenantsAffected: number;
     confidence: number;
+    /** Optional tenant owner (undefined for cross-tenant campaigns) */
+    tenantId?: string;
   };
   /** Alert timestamp in milliseconds */
   timestamp: number;
@@ -722,7 +739,7 @@ export interface Threat {
   isFleetThreat: boolean;
   /** First detection timestamp */
   firstSeenAt: Date;
-  /** Most recent detection timestamp */
+  /** Most recent activity timestamp */
   lastSeenAt: Date;
 }
 
@@ -737,6 +754,8 @@ export interface ThreatAlert {
     indicator: string;
     riskScore: number;
     isFleetThreat: boolean;
+    /** Optional tenant owner (undefined for fleet-wide threats) */
+    tenantId?: string;
   };
   /** Alert timestamp in milliseconds */
   timestamp: number;

@@ -1,0 +1,79 @@
+{
+  "name": "synapse-pingora",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/synapse-pingora/src",
+  "projectType": "application",
+  "tags": ["scope:synapse", "type:sensor", "lang:rust"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo build --release",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "build:dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo build",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "RUST_LOG=info,synapse_pingora=debug cargo run --bin synapse-pingora -- --dev",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "test:heavy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test --features heavy-tests",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo clippy -- -D warnings",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "fmt": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo fmt",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "fmt:check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo fmt -- --check",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "bench": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo bench",
+        "cwd": "apps/synapse-pingora"
+      }
+    },
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo clean",
+        "cwd": "apps/synapse-pingora"
+      }
+    }
+  }
+}

@@ -685,6 +685,19 @@ Environment variables take precedence over config file values.
 
 ---
 
+## Tunnel Preflight Requirements
+
+When enabling the Signal Horizon tunnel, ensure these values are provided (via config file or deployment-time env injection):
+
+- `SYNAPSE_SERVER_URL`: must start with `ws://` or `wss://`
+- `SYNAPSE_ADMIN_KEY`: minimum 32 characters
+- `SENSOR_ID`: non-empty
+- `heartbeat_interval_ms`: 1000-600000 ms
+- `reconnect_delay_ms`: 100-300000 ms
+- `SYNAPSE_CA_BUNDLE` (optional): path to PEM bundle for tunnel TLS verification
+
+---
+
 ## Validation Errors
 
 Common validation errors and solutions:

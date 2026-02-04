@@ -6,6 +6,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { Logger } from 'pino';
 import { requireTelemetryJwt } from './middleware/telemetry-jwt.js';
+import type { INonceStore } from '../middleware/replay-protection.js';
 import type {
   ClickHouseRetryBuffer,
   ClickHouseService,
@@ -17,6 +18,7 @@ import type {
 export interface TelemetryRouterOptions {
   clickhouse?: ClickHouseService | null;
   retryBuffer?: ClickHouseRetryBuffer | null;
+  idempotencyStore?: INonceStore | null;
 }
 
 type TelemetryEventPayload = Record<string, unknown>;
@@ -49,6 +51,13 @@ interface ParsedTelemetry {
 
 const DEFAULT_SITE = '_default';
 
+/**
+ * Normalizes a value to a finite number.
+ * Handles both numeric and string inputs from various sensor versions. (labs-mmft.26)
+ * 
+ * @param value - The value to normalize
+ * @param fallback - Fallback value if normalization fails
+ */
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -60,14 +69,24 @@ function normalizeNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/**
+ * Normalizes a value to a string, ensuring it is non-empty.
+ */
 function normalizeString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
 }
 
+/**
+ * Normalizes an optional string value.
+ */
 function normalizeOptionalString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
+/**
+ * Normalizes an optional numeric value.
+ * Useful for fields that can be null in the database.
+ */
 function normalizeOptionalNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -299,6 +318,27 @@ export function createTelemetryRouter(
     }
 
     const { tenantId, sensorId } = authContext;
+
+    // Check for idempotency if batch_id is present (labs-mmft.14)
+    const body = req.body as Record<string, unknown>;
+    const batchId = normalizeOptionalString(body.batch_id || body.batchId);
+    if (batchId && options.idempotencyStore) {
+      const timestamp = normalizeNumber(body.timestamp_ms || body.created_at_ms, Date.now());
+      const isNew = await options.idempotencyStore.checkAndAdd(batchId, timestamp, {
+        clientIp: req.ip,
+        path: req.path,
+      });
+
+      if (!isNew) {
+        log.info({ batchId, tenantId, sensorId }, 'Ignoring duplicate telemetry batch');
+        return res.status(202).json({
+          received: 0,
+          inserted: 0,
+          ignored: 0,
+          duplicate: true,
+        });
+      }
+    }
 
     const { rows, logRows, signalRows, received, ignored } = parseTelemetryPayload(req.body, tenantId, sensorId, log);
 

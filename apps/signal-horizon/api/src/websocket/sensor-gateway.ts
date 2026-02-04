@@ -24,6 +24,7 @@ import type { CommandSender } from '../protocols/command-sender.js';
 import type {
   ThreatSignal,
   BlocklistEntry,
+  SharingPreference,
 } from '../types/protocol.js';
 import {
   validateSensorMessage,
@@ -38,6 +39,7 @@ interface SensorConnection {
   id: string;
   sensorId: string;
   tenantId: string;
+  sharingPreference: SharingPreference;
   ws: WebSocket;
   connectedAt: number;
   lastHeartbeat: number;
@@ -56,10 +58,37 @@ interface SensorGatewayConfig {
   rateLimitMessages?: number;
   /** Rate limit window in milliseconds (default: 1000ms) */
   rateLimitWindowMs?: number;
+  /** Optional compatibility constraints for sensor versions */
+  compatibility?: {
+    minVersion?: string;
+    maxVersion?: string;
+  };
 }
 
 /** Interval for token revalidation (WS2-002) - 5 minutes */
 const TOKEN_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
+
+type Semver = {
+  major: number;
+  minor: number;
+  patch: number;
+};
+
+function parseSemver(input: string): Semver | null {
+  const match = input.trim().match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  };
+}
+
+function compareSemver(left: Semver, right: Semver): number {
+  if (left.major !== right.major) return left.major - right.major;
+  if (left.minor !== right.minor) return left.minor - right.minor;
+  return left.patch - right.patch;
+}
 
 /**
  * Simple sliding window rate limiter
@@ -227,6 +256,7 @@ export class SensorGateway {
       id: connectionId,
       sensorId: '', // Set after auth
       tenantId: '', // Set after auth
+      sharingPreference: 'CONTRIBUTE_AND_RECEIVE', // Default until auth
       ws,
       connectedAt: Date.now(),
       lastHeartbeat: Date.now(),
@@ -406,6 +436,17 @@ export class SensorGateway {
 
       clearTimeout(authTimeout);
 
+      const compatibilityCheck = this.checkVersionCompatibility(version);
+      if (!compatibilityCheck.ok) {
+        this.logger.warn(
+          { sensorId, version, error: compatibilityCheck.error },
+          'Sensor version incompatible'
+        );
+        this.send(conn, { type: 'auth-failed', error: compatibilityCheck.error });
+        conn.ws.close(4003, 'Unsupported sensor version');
+        return;
+      }
+
       // SECURITY: Check for existing registered sensor by name for this tenant
       const existingSensor = await this.prisma.sensor.findUnique({
         where: {
@@ -521,6 +562,7 @@ export class SensorGateway {
       // Update connection with auth info
       conn.sensorId = sensor.id;
       conn.tenantId = apiKeyRecord.tenantId;
+      conn.sharingPreference = apiKeyRecord.tenant.sharingPreference as SharingPreference;
       conn.apiKeyId = apiKeyRecord.id; // Store for revalidation (WS2-002)
 
       // Register connection with command sender for outbound commands
@@ -562,6 +604,45 @@ export class SensorGateway {
       this.logger.error({ error }, 'Sensor auth failed');
       this.send(conn, { type: 'auth-failed', error: 'Auth error' });
     }
+  }
+
+  private checkVersionCompatibility(version: string): { ok: boolean; error?: string } {
+    const minVersion = this.config.compatibility?.minVersion;
+    const maxVersion = this.config.compatibility?.maxVersion;
+
+    if (!minVersion && !maxVersion) {
+      return { ok: true };
+    }
+
+    const parsed = parseSemver(version);
+    if (!parsed) {
+      return {
+        ok: false,
+        error: `Unsupported sensor version ${version}. Expected semver (e.g. 1.2.3).`,
+      };
+    }
+
+    if (minVersion) {
+      const minParsed = parseSemver(minVersion);
+      if (minParsed && compareSemver(parsed, minParsed) < 0) {
+        return {
+          ok: false,
+          error: `Unsupported sensor version ${version}. Minimum supported version is ${minVersion}.`,
+        };
+      }
+    }
+
+    if (maxVersion) {
+      const maxParsed = parseSemver(maxVersion);
+      if (maxParsed && compareSemver(parsed, maxParsed) > 0) {
+        return {
+          ok: false,
+          error: `Unsupported sensor version ${version}. Maximum supported version is ${maxVersion}.`,
+        };
+      }
+    }
+
+    return { ok: true };
   }
 
   /**
@@ -689,10 +770,18 @@ export class SensorGateway {
   }
 
   private async handleBlocklistSync(conn: SensorConnection): Promise<void> {
-    // Fetch blocklist entries for this tenant + fleet-wide blocks
+    // Determine if tenant can receive fleet-wide blocks
+    const canReceive =
+      conn.sharingPreference === 'CONTRIBUTE_AND_RECEIVE' ||
+      conn.sharingPreference === 'RECEIVE_ONLY';
+
+    // Fetch blocklist entries for this tenant + fleet-wide blocks (if allowed)
     const entries = await this.prisma.blocklistEntry.findMany({
       where: {
-        OR: [{ tenantId: conn.tenantId }, { tenantId: null }],
+        OR: [
+          { tenantId: conn.tenantId },
+          ...(canReceive ? [{ tenantId: null as unknown as string }] : []),
+        ],
         propagationStatus: { not: 'FAILED' },
       },
       select: {
@@ -962,5 +1051,29 @@ export class SensorGateway {
         tenantId: c.tenantId,
         signalsReceived: c.signalsReceived,
       }));
+  }
+
+  /**
+   * Broadcast blocklist updates to all connected sensors.
+   * Honors SharingPreference for each connection (receivers only).
+   */
+  broadcastBlocklistPush(updates: BlocklistUpdate[]): void {
+    const sequenceId = this.nextSequenceId();
+
+    for (const conn of this.connections.values()) {
+      if (!conn.sensorId) continue;
+
+      const canReceive =
+        conn.sharingPreference === 'CONTRIBUTE_AND_RECEIVE' ||
+        conn.sharingPreference === 'RECEIVE_ONLY';
+
+      if (canReceive) {
+        this.send(conn, {
+          type: 'blocklist-push',
+          updates,
+          sequenceId,
+        });
+      }
+    }
   }
 }

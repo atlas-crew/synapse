@@ -54,6 +54,8 @@ pub struct AuthCoverageSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<String>,
     pub endpoints: Vec<EndpointSummary>,
+    #[serde(default)]
+    pub dropped_endpoints: u64,
 }
 
 #[cfg(test)]
@@ -96,6 +98,7 @@ mod tests {
                     },
                 },
             ],
+            dropped_endpoints: 0,
         };
         
         let json = serde_json::to_string(&summary).unwrap();

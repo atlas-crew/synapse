@@ -24,14 +24,30 @@ import {
   CreatePolicyTemplateSchema,
   UpdatePolicyTemplateSchema,
   ApplyPolicyTemplateSchema,
+  type PolicyTemplate,
 } from '../../services/fleet/policy-template-types.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
+import { SecurityAuditService } from '../../services/audit/security-audit.js';
+
+function toPolicyTemplateAuditValues(template: PolicyTemplate): Record<string, unknown> {
+  return {
+    name: template.name,
+    description: template.description ?? null,
+    severity: template.severity,
+    config: template.config,
+    metadata: template.metadata,
+    isDefault: template.isDefault,
+    isActive: template.isActive,
+    version: template.version,
+  };
+}
 
 // ======================== Route Handler ========================
 
 export interface FleetPolicyRoutesOptions {
   fleetCommander?: FleetCommander;
   policyService?: PolicyTemplateService;
+  securityAuditService?: SecurityAuditService;
 }
 
 /**
@@ -45,6 +61,7 @@ export function createFleetPolicyRoutes(
   const router = Router();
   // Use shared service if provided, otherwise create local instance
   const policyService = options.policyService ?? new PolicyTemplateService(prisma, logger);
+  const auditService = options.securityAuditService ?? new SecurityAuditService(prisma, logger);
 
   // Set fleet commander if available
   if (options.fleetCommander) {
@@ -154,6 +171,13 @@ export function createFleetPolicyRoutes(
 
         const template = await policyService.createTemplate(auth.tenantId, input);
 
+        await auditService.logConfigCreated(
+          req,
+          'policy_template',
+          template.id,
+          toPolicyTemplateAuditValues(template)
+        );
+
         res.status(201).json(template);
       } catch (error) {
         logger.error({ error }, 'Failed to create policy template');
@@ -182,7 +206,21 @@ export function createFleetPolicyRoutes(
         const { id } = req.params;
         const input = req.body as z.infer<typeof UpdatePolicyTemplateSchema>;
 
+        const previous = await policyService.getTemplate(auth.tenantId, id);
+        if (!previous) {
+          res.status(404).json({ error: 'Policy template not found' });
+          return;
+        }
+
         const template = await policyService.updateTemplate(auth.tenantId, id, input);
+
+        await auditService.logConfigUpdated(
+          req,
+          'policy_template',
+          id,
+          toPolicyTemplateAuditValues(previous),
+          toPolicyTemplateAuditValues(template)
+        );
 
         res.json(template);
       } catch (error) {
@@ -228,7 +266,20 @@ export function createFleetPolicyRoutes(
         const auth = req.auth!;
         const { id } = req.params;
 
+        const previous = await policyService.getTemplate(auth.tenantId, id);
+        if (!previous) {
+          res.status(404).json({ error: 'Policy template not found' });
+          return;
+        }
+
         await policyService.deleteTemplate(auth.tenantId, id);
+
+        await auditService.logConfigDeleted(
+          req,
+          'policy_template',
+          id,
+          toPolicyTemplateAuditValues(previous)
+        );
 
         res.status(204).send();
       } catch (error) {
@@ -330,6 +381,13 @@ export function createFleetPolicyRoutes(
         const { name } = req.body as z.infer<typeof CloneTemplateSchema>;
 
         const template = await policyService.cloneTemplate(auth.tenantId, id, name);
+
+        await auditService.logConfigCreated(
+          req,
+          'policy_template',
+          template.id,
+          toPolicyTemplateAuditValues(template)
+        );
 
         res.status(201).json(template);
       } catch (error) {

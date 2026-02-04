@@ -345,6 +345,26 @@ impl ViolationType {
             ViolationType::ArrayTypeMismatch => "array_type_mismatch",
         }
     }
+
+    /// Get default severity for this violation type.
+    pub fn default_severity(&self) -> ViolationSeverity {
+        match self {
+            ViolationType::UnexpectedField => ViolationSeverity::Medium,
+            ViolationType::MissingField => ViolationSeverity::Low,
+            ViolationType::TypeMismatch => ViolationSeverity::High,
+            ViolationType::StringTooShort => ViolationSeverity::Low,
+            ViolationType::StringTooLong => ViolationSeverity::Medium,
+            ViolationType::PatternMismatch => ViolationSeverity::Medium,
+            ViolationType::NumberTooSmall => ViolationSeverity::Low,
+            ViolationType::NumberTooLarge => ViolationSeverity::Medium,
+            ViolationType::ArrayTypeMismatch => ViolationSeverity::High,
+        }
+    }
+
+    /// Get default risk score contribution for this violation type.
+    pub fn default_score(&self) -> u8 {
+        self.default_severity().score()
+    }
 }
 
 /// Severity level for violations.
@@ -426,10 +446,11 @@ impl SchemaViolation {
 
     /// Create an unexpected field violation.
     pub fn unexpected_field(field: &str) -> Self {
+        let v_type = ViolationType::UnexpectedField;
         Self::new(
             field.to_string(),
-            ViolationType::UnexpectedField,
-            ViolationSeverity::Medium,
+            v_type,
+            v_type.default_severity(),
             "field not in schema".to_string(),
             "present".to_string(),
         )
@@ -437,10 +458,11 @@ impl SchemaViolation {
 
     /// Create a missing field violation.
     pub fn missing_field(field: &str) -> Self {
+        let v_type = ViolationType::MissingField;
         Self::new(
             field.to_string(),
-            ViolationType::MissingField,
-            ViolationSeverity::Low,
+            v_type,
+            v_type.default_severity(),
             "present".to_string(),
             "missing".to_string(),
         )
@@ -448,10 +470,11 @@ impl SchemaViolation {
 
     /// Create a type mismatch violation.
     pub fn type_mismatch(field: &str, expected: FieldType, actual: FieldType) -> Self {
+        let v_type = ViolationType::TypeMismatch;
         Self::new(
             field.to_string(),
-            ViolationType::TypeMismatch,
-            ViolationSeverity::High,
+            v_type,
+            v_type.default_severity(),
             expected.as_str().to_string(),
             actual.as_str().to_string(),
         )
@@ -459,10 +482,11 @@ impl SchemaViolation {
 
     /// Create a pattern mismatch violation.
     pub fn pattern_mismatch(field: &str, expected: PatternType, actual: Option<PatternType>) -> Self {
+        let v_type = ViolationType::PatternMismatch;
         Self::new(
             field.to_string(),
-            ViolationType::PatternMismatch,
-            ViolationSeverity::Medium,
+            v_type,
+            v_type.default_severity(),
             expected.as_str().to_string(),
             actual.map_or("unknown".to_string(), |p| p.as_str().to_string()),
         )
@@ -470,10 +494,11 @@ impl SchemaViolation {
 
     /// Create a string too short violation.
     pub fn string_too_short(field: &str, expected_min: u32, actual: u32) -> Self {
+        let v_type = ViolationType::StringTooShort;
         Self::new(
             field.to_string(),
-            ViolationType::StringTooShort,
-            ViolationSeverity::Low,
+            v_type,
+            v_type.default_severity(),
             format!(">= {}", expected_min),
             format!("{}", actual),
         )
@@ -481,10 +506,11 @@ impl SchemaViolation {
 
     /// Create a string too long violation.
     pub fn string_too_long(field: &str, expected_max: u32, actual: u32) -> Self {
+        let v_type = ViolationType::StringTooLong;
         Self::new(
             field.to_string(),
-            ViolationType::StringTooLong,
-            ViolationSeverity::Medium,
+            v_type,
+            v_type.default_severity(),
             format!("<= {}", expected_max),
             format!("{}", actual),
         )
@@ -492,10 +518,11 @@ impl SchemaViolation {
 
     /// Create a number too small violation.
     pub fn number_too_small(field: &str, expected_min: f64, actual: f64) -> Self {
+        let v_type = ViolationType::NumberTooSmall;
         Self::new(
             field.to_string(),
-            ViolationType::NumberTooSmall,
-            ViolationSeverity::Low,
+            v_type,
+            v_type.default_severity(),
             format!(">= {}", expected_min),
             format!("{}", actual),
         )
@@ -503,10 +530,11 @@ impl SchemaViolation {
 
     /// Create a number too large violation.
     pub fn number_too_large(field: &str, expected_max: f64, actual: f64) -> Self {
+        let v_type = ViolationType::NumberTooLarge;
         Self::new(
             field.to_string(),
-            ViolationType::NumberTooLarge,
-            ViolationSeverity::Medium,
+            v_type,
+            v_type.default_severity(),
             format!("<= {}", expected_max),
             format!("{}", actual),
         )

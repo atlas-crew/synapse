@@ -1016,6 +1016,10 @@ impl ConfigManager {
             return Ok(0);
         };
 
+        if let Err(err) = recover_rules_from_wal(&path) {
+            warn!("Failed to recover rules WAL: {}", err);
+        }
+
         if !path.exists() {
             return Ok(0);
         }
@@ -1149,6 +1153,74 @@ fn current_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn recover_rules_from_wal(path: &std::path::Path) -> Result<bool, ConfigManagerError> {
+    let wal_path = path.with_extension("wal");
+    if !wal_path.exists() {
+        return Ok(false);
+    }
+
+    let contents = fs::read_to_string(&wal_path)
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to read WAL file: {}",
+            err
+        )))?;
+    if contents.trim().is_empty() {
+        return Ok(false);
+    }
+
+    let mut last_rules: Option<Vec<StoredRule>> = None;
+    for line in contents.lines() {
+        let value: serde_json::Value = match serde_json::from_str(line) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!("Skipping invalid WAL entry: {}", err);
+                continue;
+            }
+        };
+        if value.get("type").and_then(|t| t.as_str()) != Some("rules_update") {
+            continue;
+        }
+        let rules_value = value.get("rules").cloned().unwrap_or(serde_json::Value::Null);
+        match serde_json::from_value::<Vec<StoredRule>>(rules_value) {
+            Ok(rules) if !rules.is_empty() => {
+                last_rules = Some(rules);
+            }
+            Ok(_) => {}
+            Err(err) => {
+                warn!("Skipping WAL rules entry: {}", err);
+            }
+        }
+    }
+
+    let Some(rules) = last_rules else {
+        return Ok(false);
+    };
+
+    if let Some(parent) = path.parent() {
+        if let Err(err) = fs::create_dir_all(parent) {
+            return Err(ConfigManagerError::Persistence(format!(
+                "failed to create rules directory: {}",
+                err
+            )));
+        }
+    }
+
+    let payload = serde_json::to_vec_pretty(&rules)
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to serialize WAL rules: {}",
+            err
+        )))?;
+
+    write_file_with_fsync(path, &payload)
+        .map_err(|err| ConfigManagerError::Persistence(format!(
+            "failed to apply WAL rules: {}",
+            err
+        )))?;
+    clear_wal(&wal_path)?;
+    info!(path = %path.display(), "recovered rules from WAL");
+    Ok(true)
+}
+
 fn append_wal_entry(
     path: &std::path::Path,
     entry: serde_json::Value,
@@ -1227,6 +1299,7 @@ fn clear_wal(path: &std::path::Path) -> Result<(), ConfigManagerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::waf::{MatchCondition, MatchValue, WafRule};
 
     #[test]
     fn test_mutation_result_builder() {
@@ -1289,5 +1362,61 @@ mod tests {
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("api.example.com"));
         assert!(json.contains("\"threshold\":70"));
+    }
+
+    fn test_rule(id: u32) -> StoredRule {
+        StoredRule {
+            rule: WafRule {
+                id,
+                description: format!("rule-{}", id),
+                contributing_score: None,
+                risk: None,
+                blocking: None,
+                matches: vec![MatchCondition {
+                    kind: "match".to_string(),
+                    match_value: Some(MatchValue::Str("test".to_string())),
+                    op: None,
+                    field: None,
+                    direction: None,
+                    field_type: None,
+                    name: None,
+                    selector: None,
+                    cleanup_after: None,
+                    count: None,
+                    timeframe: None,
+                }],
+            },
+            meta: RuleMetadata::default(),
+        }
+    }
+
+    #[test]
+    fn test_recover_rules_from_wal_overwrites_rules_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let rules_path = dir.path().join("rules.json");
+        let wal_path = rules_path.with_extension("wal");
+
+        let old_rules = vec![test_rule(1)];
+        let new_rules = vec![test_rule(42)];
+
+        fs::write(&rules_path, serde_json::to_vec_pretty(&old_rules).unwrap()).unwrap();
+
+        let wal_entry = serde_json::json!({
+            "timestamp_ms": 1,
+            "type": "rules_update",
+            "rules": new_rules,
+        });
+        fs::write(&wal_path, format!("{}\n", wal_entry)).unwrap();
+
+        let recovered = recover_rules_from_wal(&rules_path).unwrap();
+        assert!(recovered);
+
+        let persisted: Vec<StoredRule> =
+            serde_json::from_slice(&fs::read(&rules_path).unwrap()).unwrap();
+        assert_eq!(persisted.len(), 1);
+        assert_eq!(persisted[0].rule.id, 42);
+
+        let wal_contents = fs::read_to_string(&wal_path).unwrap();
+        assert!(wal_contents.trim().is_empty());
     }
 }

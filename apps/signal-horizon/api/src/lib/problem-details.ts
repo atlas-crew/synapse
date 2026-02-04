@@ -8,6 +8,8 @@ export interface ProblemDetails {
   detail: string;
   instance?: string;
   code?: string;
+  hint?: string;
+  context?: unknown;
   details?: unknown;
   cause?: unknown;
   retryAfterSeconds?: number;
@@ -18,6 +20,8 @@ export interface ProblemDetailsOptions {
   title?: string;
   instance?: string;
   code?: string;
+  hint?: string;
+  context?: unknown;
   details?: unknown;
   cause?: unknown;
   retryAfterSeconds?: number;
@@ -37,6 +41,8 @@ export function buildProblemDetails(
     detail,
     instance: options.instance,
     code: options.code,
+    hint: options.hint,
+    context: options.context,
     details: options.details,
     cause: options.cause,
     retryAfterSeconds: options.retryAfterSeconds,

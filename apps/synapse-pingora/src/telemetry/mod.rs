@@ -228,7 +228,14 @@ impl TelemetryBuffer {
     pub async fn push(&self, event: TimestampedEvent) -> bool {
         let mut events = self.events.lock().await;
         if events.len() >= self.max_size {
-            self.dropped.fetch_add(1, Ordering::SeqCst);
+            let dropped = self.dropped.fetch_add(1, Ordering::SeqCst);
+            if dropped % 100 == 0 {
+                warn!(
+                    event_type = ?event.event.event_type(),
+                    total_dropped = dropped + 1,
+                    "Telemetry buffer overflow, dropping event"
+                );
+            }
             return false;
         }
         events.push(event);

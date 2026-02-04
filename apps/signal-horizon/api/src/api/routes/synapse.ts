@@ -228,6 +228,18 @@ export function createSynapseRoutes(
     return 'LOW';
   }
 
+  function enforceAdminForKernel(section: string, req: Request, res: Response): boolean {
+    if (section !== 'kernel') {
+      return true;
+    }
+
+    let allowed = false;
+    requireRole('admin')(req, res, () => {
+      allowed = true;
+    });
+    return allowed;
+  }
+
   function parseTimestamp(value?: string | null): number {
     if (!value) return Date.now();
     const parsed = Date.parse(value);
@@ -310,6 +322,7 @@ export function createSynapseRoutes(
   router.put(
     '/:sensorId/config',
     requireScope('fleet:write'),
+    requireRole('operator'),
     async (req: Request, res: Response): Promise<void> => {
       const { sensorId } = req.params;
       const tenantId = req.auth!.tenantId;
@@ -325,6 +338,9 @@ export function createSynapseRoutes(
 
       try {
         const { section, config } = parsed.data;
+        if (!enforceAdminForKernel(section, req, res)) {
+          return;
+        }
         const result = await synapseProxy.updateSensorConfig(
           sensorId,
           tenantId,
@@ -345,6 +361,7 @@ export function createSynapseRoutes(
   router.put(
     '/config',
     requireScope('fleet:write'),
+    requireRole('operator'),
     async (req: Request, res: Response): Promise<void> => {
       const tenantId = req.auth!.tenantId;
 
@@ -358,6 +375,9 @@ export function createSynapseRoutes(
       }
 
       const { section, config, sensorIds } = parsed.data;
+      if (!enforceAdminForKernel(section, req, res)) {
+        return;
+      }
       const targets = sensorIds?.length
         ? sensorIds
         : synapseProxy.listActiveSensors(tenantId);

@@ -419,33 +419,69 @@ impl TarpitManager {
         count
     }
 
-    /// Run decay on all states.
+    /// Start background tasks (decay, cleanup).
     ///
-    /// Reduces delay levels for IPs that have been idle.
-    /// Call this periodically (e.g., every minute).
-    pub fn decay_all(&self) {
+    /// Spawns a background task that periodically runs maintenance.
+    pub fn start_background_tasks(self: Arc<Self>) {
+        let manager = self.clone();
+        
+        tokio::spawn(async move {
+            // Run decay every minute
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            
+            loop {
+                interval.tick().await;
+                manager.decay_all().await;
+            }
+        });
+    }
+
+    /// Run decay on all states with chunked processing to avoid blocking.
+    ///
+    /// Reduces delay levels for IPs that have been idle and removes expired states.
+    pub async fn decay_all(&self) {
         let now = now_ms();
         let decay_threshold = self.config.decay_threshold_ms;
         let cleanup_threshold = self.config.cleanup_threshold_ms;
-        let mut to_remove = Vec::new();
+        
+        // Collect actions to perform to avoid holding locks during long iteration.
+        // (IP, should_remove)
+        let mut actions = Vec::new();
 
-        for mut entry in self.states.iter_mut() {
-            let state = entry.value_mut();
+        // 1. Identify states that need decay or cleanup (read-only iteration)
+        for entry in self.states.iter() {
+            let state = entry.value();
             let idle_time = now.saturating_sub(state.last_tarpit_at);
 
             if idle_time > cleanup_threshold {
-                // Mark for removal
-                to_remove.push(state.ip.clone());
+                actions.push((entry.key().clone(), true));
             } else if idle_time > decay_threshold && state.delay_level > 1 {
-                // Reduce delay level
-                state.delay_level = (state.delay_level - 1).max(1);
+                actions.push((entry.key().clone(), false));
             }
         }
 
-        // Remove old states
-        for ip in to_remove {
-            if self.states.remove(&ip).is_some() {
-                self.total_evicted.fetch_add(1, Ordering::Relaxed);
+        // 2. Apply actions in chunks to avoid blocking the executor
+        const CHUNK_SIZE: usize = 100;
+        for (i, (ip, remove)) in actions.into_iter().enumerate() {
+            if remove {
+                if self.states.remove(&ip).is_some() {
+                    self.total_evicted.fetch_add(1, Ordering::Relaxed);
+                }
+            } else {
+                // Double-check conditions under mutable lock
+                if let Some(mut entry) = self.states.get_mut(&ip) {
+                    let state = entry.value_mut();
+                    let idle_time = now.saturating_sub(state.last_tarpit_at);
+                    if idle_time > decay_threshold && state.delay_level > 1 {
+                        let decay_periods = (idle_time / decay_threshold) as u32;
+                        state.delay_level = state.delay_level.saturating_sub(decay_periods).max(1);
+                    }
+                }
+            }
+
+            // Yield to other tasks every CHUNK_SIZE operations
+            if (i + 1) % CHUNK_SIZE == 0 {
+                tokio::task::yield_now().await;
             }
         }
     }

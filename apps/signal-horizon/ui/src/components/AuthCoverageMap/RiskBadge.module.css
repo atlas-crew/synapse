@@ -1,0 +1,28 @@
+.riskBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.high {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.medium {
+  background: #ffe0b2;
+  color: #e65100;
+}
+
+.low {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.unknown {
+  background: #e0e0e0;
+  color: #666;
+}

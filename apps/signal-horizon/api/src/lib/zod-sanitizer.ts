@@ -9,6 +9,7 @@
 import { ZodError, type ZodSchema } from 'zod';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { sendProblem } from './problem-details.js';
+import { ErrorCatalog } from './errors.js';
 
 export interface SanitizeOptions {
   /** Run in production mode (hide field names and messages) */
@@ -133,17 +134,23 @@ export function createValidationMiddleware<T>(
     }
 
     if (production) {
+      const entry = ErrorCatalog.VALIDATION_ERROR;
       sendProblem(res, statusCode, genericMessage, {
-        code: 'VALIDATION_ERROR',
+        code: entry.code,
+        hint: entry.hint,
         instance: req.originalUrl,
+        context: { source },
       });
       return;
     }
 
+    const entry = ErrorCatalog.VALIDATION_ERROR;
     sendProblem(res, statusCode, sanitizeZodError(result.error, { production: false }), {
-      code: 'VALIDATION_ERROR',
+      code: entry.code,
+      hint: entry.hint,
       instance: req.originalUrl,
       details: { source },
+      context: { source },
     });
   };
 }
@@ -189,17 +196,23 @@ export function createCombinedValidation(
       }
 
       if (production) {
+        const entry = ErrorCatalog.VALIDATION_ERROR;
         sendProblem(res, statusCode, genericMessage, {
-          code: 'VALIDATION_ERROR',
+          code: entry.code,
+          hint: entry.hint,
           instance: req.originalUrl,
+          context: { sources: errors.map((err) => err.source) },
         });
         return;
       }
 
+      const entry = ErrorCatalog.VALIDATION_ERROR;
       sendProblem(res, statusCode, genericMessage, {
-        code: 'VALIDATION_ERROR',
+        code: entry.code,
+        hint: entry.hint,
         instance: req.originalUrl,
         details: errors,
+        context: { sources: errors.map((err) => err.source) },
       });
       return;
     }

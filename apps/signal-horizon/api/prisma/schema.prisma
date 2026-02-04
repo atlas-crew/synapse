@@ -33,6 +33,13 @@ model Tenant {
   warRoomActivities WarRoomActivity[]
   playbooks         Playbook[]
 
+  // Intel relations
+  sensorIntelActors    SensorIntelActor[]
+  sensorIntelSessions   SensorIntelSession[]
+  sensorIntelCampaigns SensorIntelCampaign[]
+  sensorIntelProfiles  SensorIntelProfile[]
+  sensorPayloadSnapshots SensorPayloadSnapshot[]
+
   // Beam relations
   beamEndpoints      Endpoint[]      @relation("TenantEndpoints")
   beamRules          CustomerRule[]  @relation("TenantRules")
@@ -136,6 +143,13 @@ model Sensor {
   apiKeys           SensorApiKey[]
   diagnosticBundles DiagnosticBundle[]
   updateHistory     SensorUpdate[]
+
+  // Intel relations
+  sensorIntelActors    SensorIntelActor[]
+  sensorIntelSessions   SensorIntelSession[]
+  sensorIntelCampaigns SensorIntelCampaign[]
+  sensorIntelProfiles  SensorIntelProfile[]
+  sensorPayloadSnapshots SensorPayloadSnapshot[]
 
   // Beam relations
   beamEndpoints       Endpoint[]       @relation("SensorEndpoints")

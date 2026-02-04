@@ -200,7 +200,7 @@ export class SecurityAuditService {
           tenantId: context.tenantId,
           userId: context.userId,
           action: input.action,
-          resource: 'playbook',
+          resource: resourceType,
           resourceId: input.resourceId,
           details: JSON.parse(JSON.stringify(event)),
           ipAddress: context.ipAddress,

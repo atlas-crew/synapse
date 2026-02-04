@@ -1,0 +1,80 @@
+.authCoverageMap {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 32px;
+}
+
+.header h1 {
+  font-family: 'Rubik', sans-serif;
+  font-weight: 400;
+  font-size: 28px;
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.subtitle {
+  color: #666;
+  font-size: 16px;
+  margin: 0;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+.errorState {
+  padding: 40px;
+  text-align: center;
+  color: #c62828;
+  background: #fff8f8;
+  border: 1px solid #ffcdd2;
+  margin: 24px;
+}
+
+.errorState button {
+  margin-top: 16px;
+  padding: 8px 16px;
+  background: #c62828;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.allEndpoints {
+  margin-top: 40px;
+}
+
+.allEndpoints h2 {
+  font-family: 'Rubik', sans-serif;
+  font-weight: 400;
+  font-size: 20px;
+  margin: 0 0 16px 0;
+  color: #333;
+}
+
+.controls {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.searchInput {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+}
+
+.filterSelect, .sortSelect {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-size: 14px;
+}

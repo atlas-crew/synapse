@@ -42,14 +42,14 @@ log_info() {
 
 log_pass() {
     echo -e "${GREEN}[PASS]${NC} $1"
-    ((PASSED++))
-    ((TOTAL++))
+    PASSED=$((PASSED + 1))
+    TOTAL=$((TOTAL + 1))
 }
 
 log_fail() {
     echo -e "${RED}[FAIL]${NC} $1"
-    ((FAILED++))
-    ((TOTAL++))
+    FAILED=$((FAILED + 1))
+    TOTAL=$((TOTAL + 1))
 }
 
 log_warn() {

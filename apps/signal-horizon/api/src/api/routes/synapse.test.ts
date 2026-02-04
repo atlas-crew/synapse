@@ -1,7 +1,7 @@
 /**
  * Synapse Routes Test Suite
  *
- * Focused RBAC tests for /synapse/:sensorId/rules endpoints.
+ * Focused RBAC tests for /synapse/:sensorId/rules and config endpoints.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -46,6 +46,20 @@ const baseRuleResponse: Rule = {
   ...baseRulePayload,
 };
 
+const baseConfigPayload = {
+  section: 'dlp' as const,
+  config: {
+    enabled: true,
+  },
+};
+
+const kernelConfigPayload = {
+  section: 'kernel' as const,
+  config: {
+    'net.ipv4.tcp_max_syn_backlog': 2048,
+  },
+};
+
 const injectAuth = (scopes: string[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     req.auth = {
@@ -60,9 +74,12 @@ const injectAuth = (scopes: string[]) => {
   };
 };
 
-describe('Synapse Rules RBAC', () => {
+describe('Synapse RBAC', () => {
   let app: Express;
-  let synapseProxy: Pick<SynapseProxyService, 'listRules' | 'addRule' | 'updateRule' | 'deleteRule'>;
+  let synapseProxy: Pick<
+    SynapseProxyService,
+    'listRules' | 'addRule' | 'updateRule' | 'deleteRule' | 'updateSensorConfig'
+  >;
 
   const buildApp = (scopes?: string[]) => {
     const expressApp = express();
@@ -83,6 +100,7 @@ describe('Synapse Rules RBAC', () => {
         name: 'Updated Rule',
       }),
       deleteRule: vi.fn().mockResolvedValue(undefined),
+      updateSensorConfig: vi.fn().mockResolvedValue({ success: true }),
     };
     app = buildApp(['fleet:read']);
   });
@@ -262,5 +280,114 @@ describe('Synapse Rules RBAC', () => {
       .expect(204);
 
     expect(synapseProxy.deleteRule).toHaveBeenCalledWith('sensor-1', 'tenant-1', 'rule-1');
+  });
+
+  it('rejects unauthenticated PUT /synapse/:sensorId/config', async () => {
+    const unauthApp = buildApp();
+
+    const res = await request(unauthApp)
+      .put('/synapse/sensor-1/config')
+      .send(baseConfigPayload)
+      .expect(401);
+
+    expect(res.body).toMatchObject({
+      code: 'AUTH_REQUIRED',
+    });
+  });
+
+  it('rejects PUT /synapse/:sensorId/config without fleet:write scope', async () => {
+    const limitedApp = buildApp(['fleet:read']);
+
+    const res = await request(limitedApp)
+      .put('/synapse/sensor-1/config')
+      .send(baseConfigPayload)
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'INSUFFICIENT_SCOPE',
+    });
+  });
+
+  it('allows PUT /synapse/:sensorId/config for operator role', async () => {
+    const operatorApp = buildApp(['fleet:write']);
+
+    const res = await request(operatorApp)
+      .put('/synapse/sensor-1/config')
+      .send(baseConfigPayload)
+      .expect(200);
+
+    expect(res.body).toMatchObject({ success: true });
+    expect(synapseProxy.updateSensorConfig).toHaveBeenCalledWith(
+      'sensor-1',
+      'tenant-1',
+      'dlp',
+      baseConfigPayload.config
+    );
+  });
+
+  it('rejects PUT /synapse/:sensorId/config kernel updates for non-admin role', async () => {
+    const operatorApp = buildApp(['fleet:write']);
+
+    const res = await request(operatorApp)
+      .put('/synapse/sensor-1/config')
+      .send(kernelConfigPayload)
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'INSUFFICIENT_ROLE',
+    });
+  });
+
+  it('allows PUT /synapse/:sensorId/config kernel updates for admin role', async () => {
+    const adminApp = buildApp(['fleet:write', 'fleet:admin']);
+
+    const res = await request(adminApp)
+      .put('/synapse/sensor-1/config')
+      .send(kernelConfigPayload)
+      .expect(200);
+
+    expect(res.body).toMatchObject({ success: true });
+    expect(synapseProxy.updateSensorConfig).toHaveBeenCalledWith(
+      'sensor-1',
+      'tenant-1',
+      'kernel',
+      kernelConfigPayload.config
+    );
+  });
+
+  it('rejects PUT /synapse/config kernel updates for non-admin role', async () => {
+    const operatorApp = buildApp(['fleet:write']);
+
+    const res = await request(operatorApp)
+      .put('/synapse/config')
+      .send({
+        ...kernelConfigPayload,
+        sensorIds: ['sensor-1'],
+      })
+      .expect(403);
+
+    expect(res.body).toMatchObject({
+      code: 'INSUFFICIENT_ROLE',
+    });
+  });
+
+  it('allows PUT /synapse/config kernel updates for admin role', async () => {
+    const adminApp = buildApp(['fleet:write', 'fleet:admin']);
+
+    const res = await request(adminApp)
+      .put('/synapse/config')
+      .send({
+        ...kernelConfigPayload,
+        sensorIds: ['sensor-1'],
+      })
+      .expect(200);
+
+    expect(res.body).toMatchObject({ success: true });
+    expect(synapseProxy.updateSensorConfig).toHaveBeenCalledWith(
+      'sensor-1',
+      'tenant-1',
+      'kernel',
+      kernelConfigPayload.config
+    );
   });
 });

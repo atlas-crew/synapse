@@ -53,8 +53,12 @@ impl TunnelDiagService {
                 envelope = rx.recv() => {
                     match envelope {
                         Ok(envelope) => self.handle_message(envelope).await,
-                        Err(err) => {
-                            warn!("Diag service channel closed: {}", err);
+                        Err(broadcast::error::RecvError::Lagged(count)) => {
+                            warn!("Diag service lagged by {} messages", count);
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            warn!("Diag service channel closed");
                             break;
                         }
                     }

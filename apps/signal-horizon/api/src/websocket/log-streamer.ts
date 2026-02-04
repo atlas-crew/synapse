@@ -17,7 +17,7 @@ import type {
   LogFilter,
   LogEntryMessage,
 } from '../types/tunnel.js';
-import { createSafeRegex } from '../lib/regex-validator.js';
+import { createSafeRegex, testRegexWithTimeout } from '../lib/regex-validator.js';
 
 // =============================================================================
 // Types
@@ -398,7 +398,11 @@ export class LogStreamer extends EventEmitter {
         this.logger.warn({ regex: filter.regex }, 'Rejected unsafe or invalid regex in filter');
         return { passes: false, reason: 'regex_invalid_or_unsafe' };
       }
-      if (!regex.test(entry.message)) {
+      const matchResult = testRegexWithTimeout(regex, entry.message);
+      if (matchResult === null) {
+        return { passes: false, reason: 'regex_execution_error' };
+      }
+      if (!matchResult) {
         return { passes: false, reason: 'regex_no_match' };
       }
     }
@@ -533,6 +537,7 @@ export class LogStreamer extends EventEmitter {
       system: 0,
       sensor: 0,
       access: 0,
+      waf: 0,
       error: 0,
       audit: 0,
       security: 0,

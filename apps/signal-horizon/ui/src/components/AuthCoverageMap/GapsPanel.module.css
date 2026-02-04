@@ -1,0 +1,85 @@
+.gapsPanel {
+  background: #fff8f8;
+  border: 1px solid #ffcdd2;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.gapsPanel.empty {
+  background: #f1f8e9;
+  border-color: #c5e1a5;
+}
+
+.gapsPanel.empty h2 {
+  color: #2e7d32;
+}
+
+.gapsPanel h2 {
+  font-family: 'Rubik', sans-serif;
+  font-weight: 400;
+  color: #c62828;
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.description {
+  color: #666;
+  margin: 0 0 16px 0;
+  font-size: 14px;
+}
+
+.gapsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gapItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+}
+
+.method {
+  font-family: monospace;
+  font-weight: 600;
+  color: #0057B7;
+  min-width: 60px;
+}
+
+.path {
+  font-family: monospace;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats {
+  color: #666;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.viewBtn {
+  background: #0057B7;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.viewBtn:hover {
+  background: #004494;
+}
+
+.showMore {
+  margin-top: 12px;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+}

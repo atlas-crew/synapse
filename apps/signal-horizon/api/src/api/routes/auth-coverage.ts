@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { AuthCoverageAggregator } from '../../services/auth-coverage-aggregator.js';
 import { RiskLevel } from '../../schemas/auth-coverage.js';
 import { requireScope } from '../middleware/auth.js';
-import { AuthCoverageDemoGenerator } from '../../services/auth-coverage-demo.js';
 
 export function createAuthCoverageRoutes(aggregator: AuthCoverageAggregator): Router {
   const router = Router();
@@ -10,14 +9,11 @@ export function createAuthCoverageRoutes(aggregator: AuthCoverageAggregator): Ro
   /**
    * GET /api/v1/auth-coverage
    * Get all endpoint stats with optional filtering
-   * Query param: ?demo=true for demo data (documentation/screenshots)
    */
   router.get('/', requireScope('auth-coverage:read'), (req: Request, res: Response) => {
-    const { risk, sort, limit, tenant, demo } = req.query;
+    const { risk, sort, limit, tenant } = req.query;
 
-    let stats = demo === 'true'
-      ? AuthCoverageDemoGenerator.generateDemoEndpoints()
-      : aggregator.getAllEndpointStats(tenant as string | undefined);
+    let stats = aggregator.getAllEndpointStats(tenant as string | undefined);
     
     // Filter by risk level
     if (risk && ['low', 'medium', 'high', 'unknown'].includes(risk as string)) {
@@ -60,33 +56,19 @@ export function createAuthCoverageRoutes(aggregator: AuthCoverageAggregator): Ro
   /**
    * GET /api/v1/auth-coverage/summary
    * Get coverage summary stats
-   * Query param: ?demo=true for demo data (documentation/screenshots)
    */
   router.get('/summary', requireScope('auth-coverage:read'), (req: Request, res: Response) => {
-    const { tenant, demo } = req.query;
-
-    if (demo === 'true') {
-      return res.json(AuthCoverageDemoGenerator.generateDemoSummary());
-    }
-
+    const { tenant } = req.query;
     res.json(aggregator.getSummary(tenant as string | undefined));
   });
   
   /**
    * GET /api/v1/auth-coverage/gaps
    * Get endpoints with auth gaps (high/medium risk)
-   * Query param: ?demo=true for demo data (documentation/screenshots)
    */
   router.get('/gaps', requireScope('auth-coverage:read'), (req: Request, res: Response) => {
-    const { tenant, demo } = req.query;
-
-    let gaps;
-    if (demo === 'true') {
-      const allEndpoints = AuthCoverageDemoGenerator.generateDemoEndpoints();
-      gaps = allEndpoints.filter(e => e.riskLevel === 'high' || e.riskLevel === 'medium');
-    } else {
-      gaps = aggregator.getAuthGaps(tenant as string | undefined);
-    }
+    const { tenant } = req.query;
+    const gaps = aggregator.getAuthGaps(tenant as string | undefined);
 
     res.json({
       gaps,

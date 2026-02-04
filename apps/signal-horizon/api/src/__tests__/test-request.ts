@@ -29,9 +29,9 @@ import type { Express } from 'express';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-interface TestResponse {
+export interface TestResponse<T = any> {
   status: number;
-  body: unknown;
+  body: T;
   headers: Record<string, string>;
 }
 
@@ -168,7 +168,7 @@ class MockResponse extends EventEmitter {
   }
 }
 
-class TestRequest {
+class TestRequest<T = any> {
   private headers: Record<string, string> = {};
   private payload: unknown;
   private expectedStatus?: number;
@@ -194,15 +194,15 @@ class TestRequest {
     return this;
   }
 
-  then<TResult1 = TestResponse, TResult2 = never>(
-    onfulfilled?: ((value: TestResponse) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = TestResponse<T>, TResult2 = never>(
+    onfulfilled?: ((value: TestResponse<T>) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
     return this.execute().then(onfulfilled, onrejected);
   }
 
-  private async execute(): Promise<TestResponse> {
-    const response = await dispatchRequest(this.app, this.method, this.path, this.headers, this.payload);
+  private async execute(): Promise<TestResponse<T>> {
+    const response = await dispatchRequest<T>(this.app, this.method, this.path, this.headers, this.payload);
 
     if (this.expectedStatus !== undefined && response.status !== this.expectedStatus) {
       throw new Error(`Expected status ${this.expectedStatus} but received ${response.status}`);
@@ -212,19 +212,19 @@ class TestRequest {
   }
 }
 
-function dispatchRequest(
+function dispatchRequest<T = any>(
   app: Express,
   method: HttpMethod,
   path: string,
   headers: Record<string, string>,
   payload?: unknown
-): Promise<TestResponse> {
+): Promise<TestResponse<T>> {
   return new Promise((resolve, reject) => {
     const req = createMockRequest(method, path, { ...headers }, payload) as any;
     const res = new MockResponse(resolve) as any;
 
     try {
-      app.handle(req, res, (err: unknown) => {
+      (app as any).handle(req, res, (err: unknown) => {
         if (err) {
           reject(err);
         }
@@ -237,10 +237,10 @@ function dispatchRequest(
 
 export default function request(app: Express) {
   return {
-    get: (path: string) => new TestRequest(app, 'GET', path),
-    post: (path: string) => new TestRequest(app, 'POST', path),
-    put: (path: string) => new TestRequest(app, 'PUT', path),
-    patch: (path: string) => new TestRequest(app, 'PATCH', path),
-    delete: (path: string) => new TestRequest(app, 'DELETE', path),
+    get: <T = any>(path: string) => new TestRequest<T>(app, 'GET', path),
+    post: <T = any>(path: string) => new TestRequest<T>(app, 'POST', path),
+    put: <T = any>(path: string) => new TestRequest<T>(app, 'PUT', path),
+    patch: <T = any>(path: string) => new TestRequest<T>(app, 'PATCH', path),
+    delete: <T = any>(path: string) => new TestRequest<T>(app, 'DELETE', path),
   };
 }

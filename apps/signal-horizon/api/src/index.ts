@@ -23,6 +23,8 @@ import { HuntService } from './services/hunt/index.js';
 import { APIIntelligenceService } from './services/api-intelligence/index.js';
 import { createApiRouter } from './api/routes/index.js';
 import { ClickHouseService, ClickHouseRetryBuffer } from './storage/clickhouse/index.js';
+import { FileRetryStore } from './storage/clickhouse/persistent-store.js';
+import path from 'node:path';
 // Fleet management services
 import { WarRoomService, type WarRoomConfig } from './services/warroom/index.js';
 import { AutomatedPlaybookTrigger } from './services/warroom/automated-trigger.js';
@@ -52,10 +54,12 @@ import {
   updateTunnelSession,
 } from './websocket/tunnel-session-store.js';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { computeHmac } from './lib/safe-compare.js';
 // Security middleware
 import { jsonDepthLimit } from './middleware/json-depth.js';
 import { requestId } from './middleware/request-id.js';
+import { enforceHttps } from './middleware/security.js';
 import { createTelemetryRouter } from './api/telemetry.js';
 import { AuthCoverageAggregator } from './services/auth-coverage-aggregator.js';
 import { createAuthCoverageRoutes } from './api/routes/auth-coverage.js';
@@ -101,6 +105,9 @@ const httpServer = createServer(app);
 // Request ID middleware - must be first for tracing
 // Accepts X-Request-ID header or generates UUID v4
 app.use(requestId());
+
+// Enforce HTTPS in production (labs-mmft.4)
+app.use(enforceHttps);
 
 // Middleware - Security headers with comprehensive protection
 app.use(helmet({
@@ -256,6 +263,31 @@ interface TunnelMessage {
   timestamp: string;
 }
 
+interface TunnelAuthSuccessPayload {
+  sensorId: string;
+  sensorName?: string;
+  tenantId: string;
+  capabilities: TunnelCapability[];
+}
+
+function buildTunnelAuthSignaturePayload(params: {
+  payload: TunnelAuthSuccessPayload;
+  sessionId: string;
+  timestamp: string;
+}): string {
+  const capabilities = [...params.payload.capabilities].sort().join(',');
+  const sensorName = params.payload.sensorName ?? '';
+  return [
+    'type=auth-success',
+    `sensorId=${params.payload.sensorId}`,
+    `tenantId=${params.payload.tenantId}`,
+    `sessionId=${params.sessionId}`,
+    `timestamp=${params.timestamp}`,
+    `capabilities=${capabilities}`,
+    `sensorName=${sensorName}`,
+  ].join('\n');
+}
+
 /**
  * Handle incoming sensor tunnel connection with authentication
  */
@@ -343,15 +375,28 @@ function handleTunnelSensorConnection(
       authenticated = true;
       clearTimeout(authTimeout);
 
+      const sessionId = randomUUID();
+      const timestamp = new Date().toISOString();
+      const authPayload: TunnelAuthSuccessPayload = {
+        sensorId: sensor.id,
+        sensorName: sensor.name,
+        tenantId,
+        capabilities,
+      };
+      const signaturePayload = buildTunnelAuthSignaturePayload({
+        payload: authPayload,
+        sessionId,
+        timestamp,
+      });
+      const signature = computeHmac('sha256', apiKey, signaturePayload);
+
       // Send success response
       ws.send(JSON.stringify({
         type: 'auth-success',
-        payload: {
-          sensorId: sensor.id,
-          sensorName: sensor.name,
-          tenantId,
-        },
-        timestamp: new Date().toISOString(),
+        payload: authPayload,
+        sessionId,
+        timestamp,
+        signature,
       }));
 
       // Hand off to TunnelBroker for connection management
@@ -473,14 +518,18 @@ async function start() {
   if (config.clickhouse.enabled) {
     clickhouse = new ClickHouseService(config.clickhouse, logger);
     try {
-      await clickhouse.ping();
-      logger.info('Connected to ClickHouse for historical analytics');
+      const isHealthy = await clickhouse.ping();
+      if (isHealthy) {
+        logger.info('Connected to ClickHouse for historical analytics');
+      } else {
+        logger.warn('ClickHouse connection failed at startup - service will retry in background');
+      }
     } catch (error) {
       logger.warn(
         { error },
-        'ClickHouse connection failed - historical queries will be unavailable'
+        'ClickHouse connection failed - historical queries will be unavailable until reachable'
       );
-      clickhouse = null;
+      // We keep the instance so health checks report 'disconnected' instead of 'disabled' (labs-mmft.25)
     }
   } else {
     logger.info('ClickHouse disabled - using PostgreSQL only (demo mode)');
@@ -488,8 +537,10 @@ async function start() {
 
   // Initialize telemetry ingestion routes (requires ClickHouse)
   if (clickhouse?.isEnabled()) {
-    telemetryRetryBuffer = new ClickHouseRetryBuffer(clickhouse, logger);
-    telemetryRetryBuffer.start();
+    const storePath = path.resolve(process.cwd(), 'data/telemetry-retry.json');
+    const persistentStore = new FileRetryStore(storePath, logger);
+    telemetryRetryBuffer = new ClickHouseRetryBuffer(clickhouse, logger, {}, persistentStore);
+    await telemetryRetryBuffer.start();
   }
   const telemetryRouter = createTelemetryRouter(logger, {
     clickhouse,
@@ -551,6 +602,10 @@ async function start() {
     defaultTimeoutMs: 30000,
     maxRetries: 3,
     timeoutCheckIntervalMs: 5000,
+    commandFeatures: {
+      toggleChaos: config.fleetCommands.enableToggleChaos,
+      toggleMtd: config.fleetCommands.enableToggleMtd,
+    },
   });
   ruleDistributor = new RuleDistributor(prisma, logger);
   impossibleTravelService = new ImpossibleTravelService(prisma, logger);
@@ -631,6 +686,7 @@ async function start() {
     path: config.websocket.sensorPath,
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxSensorConnections,
+    compatibility: config.sensorCompatibility,
   }, authCoverageAggregator);
 
   dashboardGateway = new DashboardGateway(prisma, logger, {
@@ -641,6 +697,7 @@ async function start() {
 
   // Wire up broadcaster to dashboard gateway and war room service
   broadcaster.setDashboardGateway(dashboardGateway);
+  broadcaster.setSensorGateway(sensorGateway);
   broadcaster.setWarRoomService(warRoomService);
   warRoomService.setDashboardGateway(dashboardGateway);
 

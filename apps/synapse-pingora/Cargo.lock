@@ -3271,6 +3271,7 @@ dependencies = [
  "hmac",
  "html-escape",
  "http 1.4.0",
+ "http-body-util",
  "humantime-serde",
  "idna 1.1.0",
  "instant",
@@ -3291,6 +3292,8 @@ dependencies = [
  "portable-pty",
  "regex",
  "reqwest",
+ "rustls",
+ "rustls-pemfile",
  "schemars",
  "serde",
  "serde_json",
@@ -3310,6 +3313,7 @@ dependencies = [
  "unicase",
  "urlencoding",
  "uuid",
+ "webpki-roots 0.26.11",
  "zeroize",
 ]
 

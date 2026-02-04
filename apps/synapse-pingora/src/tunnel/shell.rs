@@ -118,8 +118,12 @@ impl TunnelShellService {
                 message = rx.recv() => {
                     match message {
                         Ok(message) => self.handle_message(message).await,
-                        Err(err) => {
-                            warn!("Shell service channel closed: {}", err);
+                        Err(broadcast::error::RecvError::Lagged(count)) => {
+                            warn!("Shell service lagged by {} messages", count);
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            warn!("Shell service channel closed");
                             break;
                         }
                     }
@@ -217,7 +221,7 @@ impl TunnelShellService {
             .unwrap_or(DEFAULT_ROWS);
 
         if let Some(session) = self.sessions.get(&session_id) {
-            if let Err(err) = session.master.lock().unwrap().resize(PtySize {
+            if let Err(err) = session.master.lock().unwrap_or_else(|p| p.into_inner()).resize(PtySize {
                 rows,
                 cols,
                 pixel_width: 0,
@@ -331,7 +335,7 @@ impl TunnelShellService {
             loop {
                 let status = {
                     if let Some(entry) = sessions.get(&session_id) {
-                        let mut child = entry.child.lock().unwrap();
+                        let mut child = entry.child.lock().unwrap_or_else(|p| p.into_inner());
                         match child.try_wait() {
                             Ok(Some(status)) => Some(Ok(status)),
                             Ok(None) => None,
@@ -384,7 +388,7 @@ impl TunnelShellService {
         let sanitized = filter_dangerous_escapes(&decoded);
 
         if let Some(session) = self.sessions.get(session_id) {
-            let mut writer = session.writer.lock().unwrap();
+            let mut writer = session.writer.lock().unwrap_or_else(|p| p.into_inner());
             writer
                 .write_all(&sanitized)
                 .map_err(|err| format!("failed to write to pty: {}", err))?;
@@ -399,7 +403,7 @@ impl TunnelShellService {
 
     fn end_session(&self, session_id: &str, reason: &str) {
         if let Some((_, session)) = self.sessions.remove(session_id) {
-            let mut child = session.child.lock().unwrap();
+            let mut child = session.child.lock().unwrap_or_else(|p| p.into_inner());
             if let Err(err) = child.kill() {
                 warn!("Failed to kill shell session {}: {}", session_id, err);
             }

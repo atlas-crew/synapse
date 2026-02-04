@@ -59,6 +59,10 @@ const envSchema = z.object({
   WS_MAX_SENSOR_CONNECTIONS: positiveIntString(1, 10000).catch(1000),
   WS_MAX_DASHBOARD_CONNECTIONS: positiveIntString(1, 1000).catch(100),
 
+  // Sensor compatibility (optional)
+  SENSOR_MIN_VERSION: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format').optional(),
+  SENSOR_MAX_VERSION: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format').optional(),
+
   // Aggregator
   SIGNAL_BATCH_SIZE: positiveIntString(1, 10000).catch(100),
   SIGNAL_BATCH_TIMEOUT_MS: positiveIntString(100, 60000).catch(5000), // 100ms - 60s
@@ -94,6 +98,10 @@ const envSchema = z.object({
   SENSOR_BRIDGE_SENSOR_NAME: z.string().default('Synapse Pingora WAF'),
   SENSOR_BRIDGE_HEARTBEAT_MS: positiveIntString(5000, 120000).catch(15000), // 5s - 2min
 
+  // Fleet command feature flags
+  FLEET_COMMAND_TOGGLE_CHAOS_ENABLED: booleanString('false'),
+  FLEET_COMMAND_TOGGLE_MTD_ENABLED: booleanString('false'),
+
   // ClickHouse (optional - for historical data)
   CLICKHOUSE_ENABLED: booleanString('false'),
   CLICKHOUSE_HOST: z.string().default('localhost'),
@@ -103,6 +111,25 @@ const envSchema = z.object({
   CLICKHOUSE_PASSWORD: z.string().default('clickhouse'),
   CLICKHOUSE_COMPRESSION: booleanString('true'),
   CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 100).catch(10),
+}).refine((data) => {
+  // Production-only security checks (labs-mmft.6)
+  if (data.NODE_ENV === 'production') {
+    if (!data.JWT_SECRET) return false;
+  }
+  return true;
+}, {
+  message: 'JWT_SECRET is required in production mode',
+  path: ['JWT_SECRET'],
+}).refine((data) => {
+  if (data.NODE_ENV === 'production' && data.CLICKHOUSE_ENABLED) {
+    // We allow 'clickhouse' default but it's strongly discouraged
+    // A better way is to not have a default in production
+    return data.CLICKHOUSE_PASSWORD !== 'clickhouse';
+  }
+  return true;
+}, {
+  message: 'Insecure default CLICKHOUSE_PASSWORD is not allowed in production',
+  path: ['CLICKHOUSE_PASSWORD'],
 });
 
 function loadConfig() {
@@ -155,6 +182,11 @@ function loadConfig() {
       maxDashboardConnections: env.WS_MAX_DASHBOARD_CONNECTIONS, // Already parsed
     },
 
+    sensorCompatibility: {
+      minVersion: env.SENSOR_MIN_VERSION,
+      maxVersion: env.SENSOR_MAX_VERSION,
+    },
+
     aggregator: {
       batchSize: env.SIGNAL_BATCH_SIZE, // Already parsed
       batchTimeoutMs: env.SIGNAL_BATCH_TIMEOUT_MS, // Already parsed
@@ -196,6 +228,11 @@ function loadConfig() {
       sensorId: env.SENSOR_BRIDGE_SENSOR_ID,
       sensorName: env.SENSOR_BRIDGE_SENSOR_NAME,
       heartbeatIntervalMs: env.SENSOR_BRIDGE_HEARTBEAT_MS,
+    },
+
+    fleetCommands: {
+      enableToggleChaos: env.FLEET_COMMAND_TOGGLE_CHAOS_ENABLED,
+      enableToggleMtd: env.FLEET_COMMAND_TOGGLE_MTD_ENABLED,
     },
 
     // ClickHouse for historical data (optional)

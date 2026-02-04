@@ -92,6 +92,9 @@ ipnet = "2.9"                                      # IP network/CIDR handling
 
 # Signal Horizon integration (risk-server port)
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }  # WebSocket client
+rustls = "0.22"
+rustls-pemfile = "1"
+webpki-roots = "0.26"
 
 # System monitoring
 sysinfo = "0.32"        # CPU, memory, network, process metrics
@@ -118,6 +121,7 @@ heavy-tests = []
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+http-body-util = "0.1"
 tempfile = "3"
 serial_test = "3"
 

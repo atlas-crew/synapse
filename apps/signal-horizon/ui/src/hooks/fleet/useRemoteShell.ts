@@ -18,7 +18,7 @@ const API_KEY = import.meta.env.VITE_API_KEY || import.meta.env.VITE_HORIZON_API
 
 /** Default reconnection options */
 const DEFAULT_RECONNECT_OPTIONS: ShellReconnectOptions = {
-  maxAttempts: 5,
+  maxAttempts: 10,
   baseDelay: 1000,
   maxDelay: 30000,
 };
@@ -67,6 +67,8 @@ export interface UseRemoteShellReturn {
   isReconnecting: boolean;
   /** Current reconnection attempt number */
   reconnectAttempt: number;
+  /** Max reconnection attempts */
+  maxReconnectAttempts: number;
   /** Error message if any */
   error: string | null;
 }
@@ -107,6 +109,23 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
   const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCleaningUpRef = useRef(false);
   const pendingInitOptionsRef = useRef<ShellInitOptions | null>(null);
+  const manualCloseSocketRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const isReconnectingRef = useRef(false);
+  const connectInternalRef = useRef<
+    ((initOptions?: ShellInitOptions, isReconnectAttempt?: boolean) => void) | null
+  >(null);
+
+  const setReconnectState = useCallback((nextAttempt: number, nextIsReconnecting: boolean) => {
+    reconnectAttemptRef.current = nextAttempt;
+    isReconnectingRef.current = nextIsReconnecting;
+    setReconnectAttempt(nextAttempt);
+    setIsReconnecting(nextIsReconnecting);
+  }, []);
+
+  const resetReconnectState = useCallback(() => {
+    setReconnectState(0, false);
+  }, [setReconnectState]);
 
   /**
    * Clear all timers
@@ -134,6 +153,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     clearTimers();
 
     if (wsRef.current) {
+      manualCloseSocketRef.current = wsRef.current;
       wsRef.current.onopen = null;
       wsRef.current.onmessage = null;
       wsRef.current.onclose = null;
@@ -185,14 +205,14 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
 
           case 'shell-ready':
             setStatus('connected');
-            setReconnectAttempt(0);
-            setIsReconnecting(false);
+            resetReconnectState();
             setupSessionTimeouts();
             onReady?.();
             break;
 
           case 'shell-exit':
             setStatus('disconnected');
+            resetReconnectState();
             cleanup();
             onExit?.(message.payload?.code ?? 0);
             break;
@@ -201,6 +221,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
             const errorMsg = message.payload?.error || 'Unknown shell error';
             setError(errorMsg);
             setStatus('error');
+            resetReconnectState();
             onError?.(errorMsg);
             break;
 
@@ -218,7 +239,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         }
       }
     },
-    [cleanup, onData, onError, onExit, onReady, setupSessionTimeouts]
+    [cleanup, onData, onError, onExit, onReady, resetReconnectState, setupSessionTimeouts]
   );
 
   /**
@@ -227,17 +248,18 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
   const scheduleReconnect = useCallback(() => {
     if (isCleaningUpRef.current) return;
 
-    const nextAttempt = reconnectAttempt + 1;
+    const nextAttempt = reconnectAttemptRef.current + 1;
     if (nextAttempt > reconnectConfig.maxAttempts) {
       setError('Max reconnection attempts reached');
       setStatus('error');
-      setIsReconnecting(false);
+      resetReconnectState();
       onError?.('Max reconnection attempts reached');
       return;
     }
 
-    setIsReconnecting(true);
-    setReconnectAttempt(nextAttempt);
+    setError(null);
+    setStatus('connecting');
+    setReconnectState(nextAttempt, true);
 
     const delay = Math.min(
       reconnectConfig.baseDelay * Math.pow(2, nextAttempt - 1),
@@ -249,10 +271,10 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     reconnectTimeoutRef.current = setTimeout(() => {
       if (!isCleaningUpRef.current) {
         // Reconnect with the same init options
-        connectInternal(pendingInitOptionsRef.current || undefined);
+        connectInternalRef.current?.(pendingInitOptionsRef.current || undefined, true);
       }
     }, delay);
-  }, [reconnectAttempt, reconnectConfig, onError]);
+  }, [onError, reconnectConfig, resetReconnectState, setReconnectState]);
 
   const sessionUrlRef = useRef<string | null>(null);
 
@@ -291,7 +313,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
    * Internal connect function
    */
   const connectInternal = useCallback(
-    async (initOptions?: ShellInitOptions) => {
+    async (initOptions?: ShellInitOptions, isReconnectAttempt = false) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         return;
       }
@@ -323,6 +345,11 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
           setSession(newSession);
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : 'Failed to create session';
+          if (isReconnectAttempt) {
+            console.warn('[RemoteShell] Reconnect session failed:', errorMsg);
+            scheduleReconnect();
+            return;
+          }
           setError(errorMsg);
           setStatus('error');
           onError?.(errorMsg);
@@ -360,29 +387,37 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
           const errorMsg = 'WebSocket connection error';
           setError(errorMsg);
           setStatus('error');
+          resetReconnectState();
           onError?.(errorMsg);
         };
 
         ws.onclose = (event) => {
           console.log('[RemoteShell] WebSocket closed:', event.code, event.reason);
+          const wasManualClose = manualCloseSocketRef.current === ws;
+          if (wasManualClose) {
+            manualCloseSocketRef.current = null;
+          }
           wsRef.current = null;
 
           if (!isCleaningUpRef.current) {
             setStatus('disconnected');
 
-            // Attempt reconnection unless it was a clean close
-            if (event.code !== 1000 && event.code !== 1001) {
-              // Clear session so reconnect creates a fresh tunnel session
-              setSession(null);
-              sessionUrlRef.current = null;
-              scheduleReconnect();
+            if (wasManualClose) {
+              resetReconnectState();
+              return;
             }
+
+            // Clear session so reconnect creates a fresh tunnel session
+            setSession(null);
+            sessionUrlRef.current = null;
+            scheduleReconnect();
           }
         };
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to create WebSocket';
         setError(errorMsg);
         setStatus('error');
+        resetReconnectState();
         onError?.(errorMsg);
       }
     },
@@ -392,22 +427,26 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
       createWebSocket,
       handleMessage,
       onError,
+      resetReconnectState,
       scheduleReconnect,
       sensorId,
       session?.id,
     ]
   );
 
+  useEffect(() => {
+    connectInternalRef.current = connectInternal;
+  }, [connectInternal]);
+
   /**
    * Connect to the remote shell
    */
   const connect = useCallback(
     (initOptions?: ShellInitOptions) => {
-      setReconnectAttempt(0);
-      setIsReconnecting(false);
+      resetReconnectState();
       void connectInternal(initOptions);
     },
-    [connectInternal]
+    [connectInternal, resetReconnectState]
   );
 
   /**
@@ -416,10 +455,10 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
   const disconnect = useCallback(() => {
     isCleaningUpRef.current = true;
     clearTimers();
-    setReconnectAttempt(0);
-    setIsReconnecting(false);
+    resetReconnectState();
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      manualCloseSocketRef.current = wsRef.current;
       wsRef.current.close(1000, 'Client disconnect');
     }
 
@@ -430,7 +469,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     sessionUrlRef.current = null;
     pendingInitOptionsRef.current = null;
     isCleaningUpRef.current = false;
-  }, [cleanup, clearTimers]);
+  }, [cleanup, clearTimers, resetReconnectState]);
 
   /**
    * Send input to the shell (base64 encoded)
@@ -496,6 +535,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     session,
     isReconnecting,
     reconnectAttempt,
+    maxReconnectAttempts: reconnectConfig.maxAttempts,
     error,
   };
 }

@@ -19,10 +19,15 @@ import { rateLimiters } from '../../middleware/rate-limiter.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
+import { CommandFeatureDisabledError } from '../../services/fleet/fleet-commander.js';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 import { SensorConfigService } from '../../services/sensorConfigService.js';
 import { SensorConfigController } from '../../controllers/sensorConfigController.js';
 import type { ClickHouseService } from '../../storage/clickhouse/index.js';
+import { SecurityAuditService } from '../../services/audit/security-audit.js';
+import type { ConfigTemplate } from '../../services/fleet/types.js';
+import { ErrorCatalog } from '../../lib/errors.js';
+import { sendProblem } from '../../lib/problem-details.js';
 
 // ======================== Validation Schemas ========================
 
@@ -75,6 +80,12 @@ const UpdateConfigTemplateBodySchema = CreateConfigTemplateBodySchema.partial();
 const PushConfigBodySchema = z.object({
   templateId: z.string(),
   sensorIds: z.string().array().min(1),
+});
+
+const ConfigAuditQuerySchema = z.object({
+  resourceId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 /** Valid command types for fleet operations */
@@ -130,6 +141,20 @@ const SafeUrlSchema = z.string()
     },
     { message: 'URL must use http or https protocol' }
   );
+
+const CONFIG_AUDIT_ACTIONS = ['CONFIG_CREATED', 'CONFIG_UPDATED', 'CONFIG_DELETED'] as const;
+
+function toConfigTemplateAuditValues(template: ConfigTemplate): Record<string, unknown> {
+  return {
+    name: template.name,
+    description: template.description ?? null,
+    environment: template.environment,
+    config: template.config,
+    hash: template.hash,
+    version: template.version,
+    isActive: template.isActive,
+  };
+}
 
 /**
  * Type-specific payload schemas for fleet commands.
@@ -328,17 +353,20 @@ export function createFleetRoutes(
     fleetCommander?: FleetCommander;
     ruleDistributor?: RuleDistributor;
     clickhouse?: ClickHouseService | null;
+    securityAuditService?: SecurityAuditService;
   }
 ): Router {
   const router = Router();
   const { fleetAggregator, configManager, fleetCommander, ruleDistributor, clickhouse } =
     options;
 
+  const auditService = options.securityAuditService ?? new SecurityAuditService(prisma, logger);
+
   // Initialize Sensor Config Controller
   // We assume fleetCommander is available for sensor config operations
   // If not, the controller will fail gracefully or we can guard routes
   const sensorConfigService = fleetCommander 
-    ? new SensorConfigService(prisma, logger, fleetCommander) 
+    ? new SensorConfigService(prisma, logger, fleetCommander, auditService) 
     : null;
   const sensorConfigController = sensorConfigService 
     ? new SensorConfigController(sensorConfigService) 
@@ -1139,7 +1167,13 @@ const SensorLogsQuerySchema = z.object({
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       if (!sensorConfigController) {
-        return res.status(503).json({ error: 'Sensor config service not available' });
+        const entry = ErrorCatalog.SERVICE_UNAVAILABLE;
+        return sendProblem(res, entry.status, 'Sensor config service not available', {
+          code: entry.code,
+          hint: entry.hint,
+          instance: req.originalUrl,
+          context: { operation: 'getConfig' },
+        });
       }
       return sensorConfigController.getConfig(req, res);
     }
@@ -1157,7 +1191,13 @@ const SensorLogsQuerySchema = z.object({
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       if (!sensorConfigController) {
-        return res.status(503).json({ error: 'Sensor config service not available' });
+        const entry = ErrorCatalog.SERVICE_UNAVAILABLE;
+        return sendProblem(res, entry.status, 'Sensor config service not available', {
+          code: entry.code,
+          hint: entry.hint,
+          instance: req.originalUrl,
+          context: { operation: 'updateConfig' },
+        });
       }
       return sensorConfigController.updateConfig(req, res);
     }
@@ -1327,6 +1367,13 @@ const SensorLogsQuerySchema = z.object({
           isActive: true,
         });
 
+        await auditService.logConfigCreated(
+          req,
+          'config_template',
+          template.id,
+          toConfigTemplateAuditValues(template)
+        );
+
         res.status(201).json(template);
       } catch (error) {
         logger.error({ error }, 'Failed to create config template');
@@ -1399,12 +1446,21 @@ const SensorLogsQuerySchema = z.object({
           typeof UpdateConfigTemplateBodySchema
         >;
 
-        const template = await configManager.updateTemplate(id, updates);
-
-        if (!template) {
+        const previous = await configManager.getTemplate(id);
+        if (!previous) {
           res.status(404).json({ error: 'Template not found' });
           return;
         }
+
+        const template = await configManager.updateTemplate(id, updates);
+
+        await auditService.logConfigUpdated(
+          req,
+          'config_template',
+          id,
+          toConfigTemplateAuditValues(previous),
+          toConfigTemplateAuditValues(template)
+        );
 
         res.json(template);
       } catch (error) {
@@ -1437,12 +1493,79 @@ const SensorLogsQuerySchema = z.object({
         }
 
         const { id } = req.params;
+        const previous = await configManager.getTemplate(id);
+        if (!previous) {
+          res.status(404).json({ error: 'Template not found' });
+          return;
+        }
+
         await configManager.deleteTemplate(id);
+        await auditService.logConfigDeleted(
+          req,
+          'config_template',
+          id,
+          toConfigTemplateAuditValues(previous)
+        );
         res.status(204).send();
       } catch (error) {
         logger.error({ error }, 'Failed to delete config template');
         res.status(500).json({
           error: 'Failed to delete config template',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/fleet/config/audit
+   * List recent configuration audit events
+   */
+  router.get(
+    '/config/audit',
+    requireScope('config:read'),
+    validateQuery(ConfigAuditQuerySchema),
+    async (req, res) => {
+      try {
+        const auth = req.auth!;
+        const { resourceId, limit, offset } = req.query as z.infer<
+          typeof ConfigAuditQuerySchema
+        >;
+
+        const where = {
+          tenantId: auth.tenantId,
+          action: { in: [...CONFIG_AUDIT_ACTIONS] },
+          ...(resourceId ? { resourceId } : {}),
+        };
+
+        const [logs, total] = await Promise.all([
+          prisma.auditLog.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+          }),
+          prisma.auditLog.count({ where }),
+        ]);
+
+        res.json({
+          logs: logs.map((log) => ({
+            id: log.id,
+            action: log.action,
+            resource: log.resource,
+            resourceId: log.resourceId,
+            userId: log.userId,
+            createdAt: log.createdAt,
+            details: log.details,
+          })),
+          total,
+          limit,
+          offset,
+        });
+      } catch (error) {
+        logger.error({ error }, 'Failed to list config audit logs');
+        res.status(500).json({
+          error: 'Failed to list config audit logs',
           message: getErrorMessage(error),
         });
       }
@@ -1635,6 +1758,13 @@ const SensorLogsQuerySchema = z.object({
           commands,
         });
       } catch (error) {
+        if (error instanceof CommandFeatureDisabledError) {
+          res.status(409).json({
+            error: 'Command type disabled',
+            message: error.message,
+          });
+          return;
+        }
         logger.error({ error }, 'Failed to send commands');
         res.status(500).json({
           error: 'Failed to send commands',

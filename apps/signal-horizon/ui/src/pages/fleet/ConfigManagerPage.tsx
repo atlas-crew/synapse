@@ -28,6 +28,23 @@ interface SyncStatus {
   syncPercentage: number;
 }
 
+interface ConfigAuditLog {
+  id: string;
+  action: 'CONFIG_CREATED' | 'CONFIG_UPDATED' | 'CONFIG_DELETED';
+  resource?: string;
+  resourceId?: string | null;
+  userId?: string | null;
+  createdAt: string;
+  details?: Record<string, unknown>;
+}
+
+interface ConfigAuditResponse {
+  logs: ConfigAuditLog[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 async function fetchTemplates(): Promise<ConfigTemplate[]> {
   const response = await fetch(`${API_BASE}/api/v1/fleet/config/templates`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch templates');
@@ -38,6 +55,14 @@ async function fetchTemplates(): Promise<ConfigTemplate[]> {
 async function fetchSyncStatus(): Promise<SyncStatus> {
   const response = await fetch(`${API_BASE}/api/v1/fleet/config/sync-status`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch sync status');
+  return response.json();
+}
+
+async function fetchConfigAudit(): Promise<ConfigAuditResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/config/audit?limit=25&offset=0`, {
+    headers: authHeaders,
+  });
+  if (!response.ok) throw new Error('Failed to fetch config audit logs');
   return response.json();
 }
 
@@ -83,6 +108,17 @@ export function ConfigManagerPage() {
     refetchInterval: isDemoMode ? false : 10000,
   });
 
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ['fleet', 'config', 'audit', isDemoMode ? scenario : 'live'],
+    queryFn: () => {
+      if (isDemoMode) {
+        return { logs: [], total: 0, limit: 25, offset: 0 };
+      }
+      return fetchConfigAudit();
+    },
+    refetchInterval: isDemoMode ? false : 15000,
+  });
+
   const pushMutation = useMutation({
     mutationFn: ({ templateId, sensorIds }: { templateId: string; sensorIds: string[] }) =>
       pushConfig(templateId, sensorIds),
@@ -95,6 +131,21 @@ export function ConfigManagerPage() {
     production: 'bg-ac-red/10 text-ac-red border-ac-red/30',
     staging: 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
     dev: 'bg-ac-blue/10 text-ac-blue border-ac-blue/30',
+  };
+
+  const auditLogs = auditData?.logs ?? [];
+  const formatAuditAction = (action: ConfigAuditLog['action']) =>
+    action.replace('CONFIG_', '').toLowerCase();
+
+  const resolveResourceLabel = (log: ConfigAuditLog) => {
+    const details = log.details as { details?: { resourceType?: string } } | undefined;
+    const resourceType = details?.details?.resourceType;
+    return (resourceType ?? log.resource ?? 'configuration').replace(/_/g, ' ');
+  };
+
+  const resolveChangeCount = (log: ConfigAuditLog) => {
+    const details = log.details as { details?: { changeCount?: number; changes?: unknown[] } } | undefined;
+    return details?.details?.changeCount ?? details?.details?.changes?.length ?? 0;
   };
 
   return (
@@ -230,6 +281,53 @@ export function ConfigManagerPage() {
                 </div>
               </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Audit Trail */}
+      <div className="card">
+        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-ink-primary">Configuration Audit Trail</h2>
+            <p className="text-xs text-ink-muted">Recent config changes across the fleet</p>
+          </div>
+          <span className="text-xs text-ink-muted">
+            {auditData?.total ?? auditLogs.length} events
+          </span>
+        </div>
+
+        {isDemoMode ? (
+          <div className="p-6 text-sm text-ink-muted">Audit trail is disabled in demo mode.</div>
+        ) : auditLoading ? (
+          <div className="p-6 text-sm text-ink-muted">Loading audit trail...</div>
+        ) : auditLogs.length === 0 ? (
+          <div className="p-6 text-sm text-ink-muted">No configuration changes recorded yet.</div>
+        ) : (
+          <div className="divide-y divide-border-subtle">
+            {auditLogs.map((log) => {
+              const changeCount = resolveChangeCount(log);
+              const summary = `${resolveResourceLabel(log)} ${formatAuditAction(log.action)}`;
+              return (
+                <div key={log.id} className="p-4 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-ink-primary">{summary}</div>
+                    <div className="text-xs text-ink-muted">
+                      {log.resourceId ? (
+                        <span className="font-mono">{log.resourceId}</span>
+                      ) : (
+                        <span>unknown resource</span>
+                      )}
+                      {changeCount > 0 && <span> • {changeCount} changes</span>}
+                      <span> • {log.userId ?? 'system'}</span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-ink-muted">
+                    {new Date(log.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

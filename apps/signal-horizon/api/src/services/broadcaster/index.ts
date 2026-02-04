@@ -6,6 +6,7 @@
 import type { PrismaClient, Campaign } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { DashboardGateway } from '../../websocket/dashboard-gateway.js';
+import type { SensorGateway } from '../../websocket/sensor-gateway.js';
 import type { WarRoomService } from '../warroom/index.js';
 import type {
   EnrichedSignal,
@@ -26,6 +27,7 @@ export class Broadcaster {
   // Config will be used for push delay and cache eviction in future phases
   private _config: BroadcasterConfig;
   private dashboardGateway: DashboardGateway | null = null;
+  private sensorGateway: SensorGateway | null = null;
 
   // In-memory blocklist cache for fast lookup
   private blocklistCache: Map<string, BlocklistUpdate> = new Map();
@@ -47,6 +49,10 @@ export class Broadcaster {
 
   setDashboardGateway(gateway: DashboardGateway): void {
     this.dashboardGateway = gateway;
+  }
+
+  setSensorGateway(gateway: SensorGateway): void {
+    this.sensorGateway = gateway;
   }
 
   setWarRoomService(service: WarRoomService): void {
@@ -72,6 +78,7 @@ export class Broadcaster {
         isCrossTenant: campaign.isCrossTenant,
         tenantsAffected: campaign.tenantsAffected,
         confidence: campaign.confidence,
+        tenantId: campaign.tenantId ?? undefined,
       },
       timestamp: Date.now(),
     });
@@ -193,12 +200,14 @@ export class Broadcaster {
       }
     }
 
-    // Broadcast blocklist updates to dashboards
+    // Broadcast blocklist updates to dashboards and sensors
     if (blocks.length > 0) {
       this.dashboardGateway?.broadcastBlocklistUpdate({
         updates: blocks,
         campaign: campaign.id,
       });
+
+      this.sensorGateway?.broadcastBlocklistPush(blocks);
 
       // Update cache
       for (const block of blocks) {
@@ -207,7 +216,7 @@ export class Broadcaster {
 
       this.logger.info(
         { campaignId: campaign.id, blockCount: blocks.length },
-        'Created blocklist entries from campaign'
+        'Created and pushed blocklist entries from campaign'
       );
     }
   }
@@ -223,6 +232,7 @@ export class Broadcaster {
         indicator: threat.indicator,
         riskScore: threat.riskScore,
         isFleetThreat: threat.isFleetThreat,
+        tenantId: threat.tenantId ?? undefined,
       },
       timestamp: Date.now(),
     });

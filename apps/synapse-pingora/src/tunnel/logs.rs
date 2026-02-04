@@ -317,8 +317,12 @@ impl TunnelLogService {
                 message = rx.recv() => {
                     match message {
                         Ok(envelope) => self.handle_message(envelope).await,
-                        Err(err) => {
-                            warn!("Log service channel closed: {}", err);
+                        Err(broadcast::error::RecvError::Lagged(count)) => {
+                            warn!("Log service lagged by {} messages", count);
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            warn!("Log service channel closed");
                             break;
                         }
                     }

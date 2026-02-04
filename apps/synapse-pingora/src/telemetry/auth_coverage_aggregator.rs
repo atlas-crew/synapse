@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::time::interval;
@@ -14,8 +15,10 @@ pub struct AuthCoverageAggregator {
     sensor_id: String,
     tenant_id: Option<String>,
     counts: Arc<RwLock<HashMap<String, EndpointCounts>>>,
+    dropped_endpoints: AtomicU64,
     emitter: Arc<dyn SignalEmitter>,
     flush_interval: Duration,
+    max_endpoints: usize,
 }
 
 impl AuthCoverageAggregator {
@@ -29,9 +32,17 @@ impl AuthCoverageAggregator {
             sensor_id,
             tenant_id,
             counts: Arc::new(RwLock::new(HashMap::new())),
+            dropped_endpoints: AtomicU64::new(0),
             emitter,
             flush_interval: Duration::from_secs(flush_interval_secs),
+            max_endpoints: 1000, // Default limit
         }
+    }
+
+    /// Set the maximum number of endpoints to track
+    pub fn with_max_endpoints(mut self, max_endpoints: usize) -> Self {
+        self.max_endpoints = max_endpoints;
+        self
     }
     
     /// Record a request (called from response filter, must be fast)
@@ -41,8 +52,20 @@ impl AuthCoverageAggregator {
         response_class: ResponseClass,
         has_auth_header: bool,
     ) {
-        let mut counts = self.counts.write().unwrap();
-        let entry = counts.entry(endpoint.to_string()).or_default();
+        let mut counts = self.counts.write().unwrap_or_else(|p| p.into_inner());
+        
+        // If at limit and endpoint is new, merge into "OTHER"
+        // Account for "OTHER" entry by using saturating_sub(1)
+        let target_endpoint = if counts.contains_key(endpoint) {
+            endpoint
+        } else if counts.len() < self.max_endpoints.saturating_sub(1) {
+            endpoint
+        } else {
+            self.dropped_endpoints.fetch_add(1, Ordering::Relaxed);
+            "OTHER"
+        };
+
+        let entry = counts.entry(target_endpoint.to_string()).or_default();
         
         entry.total += 1;
         
@@ -82,11 +105,13 @@ impl AuthCoverageAggregator {
     async fn flush(&self) {
         // Swap out current counts atomically
         let counts = {
-            let mut guard = self.counts.write().unwrap();
+            let mut guard = self.counts.write().unwrap_or_else(|p| p.into_inner());
             std::mem::take(&mut *guard)
         };
         
-        if counts.is_empty() {
+        let dropped_endpoints = self.dropped_endpoints.swap(0, Ordering::SeqCst);
+        
+        if counts.is_empty() && dropped_endpoints == 0 {
             return; // Nothing to send
         }
         
@@ -101,6 +126,7 @@ impl AuthCoverageAggregator {
                 .into_iter()
                 .map(|(endpoint, counts)| EndpointSummary { endpoint, counts })
                 .collect(),
+            dropped_endpoints,
         };
         
         if let Ok(payload) = serde_json::to_value(&summary) {
@@ -111,7 +137,7 @@ impl AuthCoverageAggregator {
     /// Get current endpoint count (for testing/debugging)
     #[cfg(test)]
     pub fn endpoint_count(&self) -> usize {
-        self.counts.read().unwrap().len()
+        self.counts.read().unwrap_or_else(|p| p.into_inner()).len()
     }
     
     /// Force flush (for testing)
@@ -198,5 +224,27 @@ mod tests {
         
         aggregator.flush().await;
         assert_eq!(emitter.count(), 0);
+    }
+
+    #[test]
+    fn test_max_endpoints_limit() {
+        let emitter = MockEmitter::new();
+        let aggregator = AuthCoverageAggregator::new(
+            "test-sensor".to_string(),
+            None,
+            emitter.clone() as Arc<dyn SignalEmitter>, 
+            60,
+        ).with_max_endpoints(2);
+        
+        aggregator.record("EP1", ResponseClass::Success, true);
+        aggregator.record("EP2", ResponseClass::Success, true);
+        aggregator.record("EP3", ResponseClass::Success, true);
+        
+        assert_eq!(aggregator.endpoint_count(), 2);
+        
+        let counts = aggregator.counts.read().unwrap_or_else(|p| p.into_inner());
+        assert!(counts.contains_key("EP1"));
+        assert!(counts.contains_key("OTHER"));
+        assert!(!counts.contains_key("EP3"));
     }
 }

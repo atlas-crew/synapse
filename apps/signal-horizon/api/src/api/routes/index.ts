@@ -9,6 +9,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { createAuthMiddleware } from '../middleware/auth.js';
+import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { contentTypeValidation } from '../../middleware/content-type.js';
 import { csrfProtection, csrfTokenHandler, ensureCsrfToken } from '../../middleware/csrf.js';
 import { createCampaignRoutes } from './campaigns.js';
@@ -23,6 +24,7 @@ import { createBeamRouter } from './beam/index.js';
 import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
+import { createTenantRoutes } from './tenant.js';
 import { createSynapseRoutes } from './synapse.js';
 import { createAPIIntelligenceRoutes } from './api-intelligence.js';
 import { createFleetControlRoutes } from './fleet-control.js';
@@ -95,6 +97,9 @@ export function createApiRouter(
   // Ensure CSRF cookie exists on all requests (sets cookie if missing)
   router.use(ensureCsrfToken());
 
+  // Apply global rate limiting to all authenticated routes (labs-mmft.7)
+  router.use(rateLimiters.global);
+
   // All API routes require authentication
   router.use(authMiddleware);
 
@@ -155,6 +160,10 @@ export function createApiRouter(
   router.use('/management', createManagementRoutes(prisma, logger));
   logger.info('Management routes mounted at /api/v1/management');
 
+  // Mount Tenant routes for settings
+  router.use('/tenant', createTenantRoutes(prisma, logger));
+  logger.info('Tenant routes mounted at /api/v1/tenant');
+
   // Mount Onboarding routes for sensor registration
   router.use('/onboarding', createOnboardingRoutes(prisma, logger));
   logger.info('Onboarding routes mounted at /api/v1/onboarding');
@@ -196,6 +205,7 @@ export function createApiRouter(
   router.use('/fleet/policies', createFleetPolicyRoutes(prisma, logger, {
     fleetCommander: options.fleetCommander,
     policyService: options.policyService,
+    securityAuditService: options.securityAuditService,
   }));
   logger.info('Fleet Policy routes mounted at /api/v1/fleet/policies');
 

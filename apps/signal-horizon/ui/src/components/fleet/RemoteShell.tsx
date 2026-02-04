@@ -142,6 +142,7 @@ export function RemoteShell({
     session,
     isReconnecting,
     reconnectAttempt,
+    maxReconnectAttempts,
     error,
   } = useRemoteShell({
     sensorId,
@@ -297,7 +298,9 @@ export function RemoteShell({
       },
       connecting: {
         icon: <Loader2 className="w-4 h-4 animate-spin" />,
-        text: isReconnecting ? `Reconnecting (${reconnectAttempt}/5)...` : 'Connecting...',
+        text: isReconnecting
+          ? `Reconnecting (${reconnectAttempt}/${maxReconnectAttempts})...`
+          : 'Connecting...',
         className: 'text-ink-secondary',
       },
       disconnected: {
@@ -418,7 +421,7 @@ export function RemoteShell({
               <Loader2 className="w-8 h-8 animate-spin text-accent-primary" />
               <p className="text-sm text-ink-secondary">
                 {isReconnecting
-                  ? `Reconnecting to ${sensorName}... (attempt ${reconnectAttempt}/5)`
+                  ? `Reconnecting to ${sensorName}... (attempt ${reconnectAttempt}/${maxReconnectAttempts})`
                   : `Establishing connection to ${sensorName}...`}
               </p>
             </div>

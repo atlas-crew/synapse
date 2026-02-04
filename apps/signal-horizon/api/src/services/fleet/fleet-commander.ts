@@ -27,6 +27,21 @@ export interface FleetCommanderConfig {
    * Default: 5000 (5 seconds)
    */
   timeoutCheckIntervalMs?: number;
+
+  /**
+   * Feature flags for command types
+   */
+  commandFeatures?: {
+    toggleChaos?: boolean;
+    toggleMtd?: boolean;
+  };
+}
+
+export class CommandFeatureDisabledError extends Error {
+  constructor(commandType: string) {
+    super(`Command type ${commandType} is disabled by feature flag`);
+    this.name = 'CommandFeatureDisabledError';
+  }
 }
 
 /**
@@ -42,6 +57,7 @@ export class FleetCommander extends EventEmitter {
   private config: Required<FleetCommanderConfig>;
   private timeoutCheckInterval: NodeJS.Timeout | null = null;
   private commandSender: CommandSender | null = null;
+  private commandFeatures: { toggleChaos: boolean; toggleMtd: boolean };
 
   constructor(prisma: PrismaClient, logger: Logger, config: FleetCommanderConfig = {}) {
     super();
@@ -51,6 +67,11 @@ export class FleetCommander extends EventEmitter {
       defaultTimeoutMs: config.defaultTimeoutMs ?? 30000, // 30 seconds
       maxRetries: config.maxRetries ?? 3,
       timeoutCheckIntervalMs: config.timeoutCheckIntervalMs ?? 5000, // 5 seconds
+      commandFeatures: config.commandFeatures ?? {},
+    };
+    this.commandFeatures = {
+      toggleChaos: config.commandFeatures?.toggleChaos ?? false,
+      toggleMtd: config.commandFeatures?.toggleMtd ?? false,
     };
 
     // Start timeout checker
@@ -94,6 +115,8 @@ export class FleetCommander extends EventEmitter {
    * @throws Error if the sensor does not belong to the tenant
    */
   async sendCommand(tenantId: string, sensorId: string, command: SensorCommand): Promise<string> {
+    this.ensureCommandEnabled(command.type);
+
     // SECURITY: Validate tenant ownership of the sensor before sending command
     const sensor = await this.prisma.sensor.findUnique({
       where: { id: sensorId },
@@ -153,6 +176,15 @@ export class FleetCommander extends EventEmitter {
     }
 
     return created.id;
+  }
+
+  private ensureCommandEnabled(commandType: SensorCommand['type'] | CommandType): void {
+    if (commandType === 'toggle_chaos' && !this.commandFeatures.toggleChaos) {
+      throw new CommandFeatureDisabledError(commandType);
+    }
+    if (commandType === 'toggle_mtd' && !this.commandFeatures.toggleMtd) {
+      throw new CommandFeatureDisabledError(commandType);
+    }
   }
 
   /**

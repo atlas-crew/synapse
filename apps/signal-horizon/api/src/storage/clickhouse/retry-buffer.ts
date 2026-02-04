@@ -43,22 +43,13 @@ export const DEFAULT_RETRY_CONFIG: RetryBufferConfig = {
 /** Types of buffered items */
 type BufferItemType = 'signal' | 'campaign' | 'blocklist' | 'transaction' | 'log';
 
-/** Union of all possible data types that can be buffered */
-type BufferedData =
-  | SignalEventRow[]
-  | CampaignHistoryRow
-  | BlocklistHistoryRow[]
-  | HttpTransactionRow[]
-  | LogEntryRow[];
-
-/** Buffered item with retry metadata */
-interface BufferedItem<T extends BufferedData> {
-  type: BufferItemType;
-  data: T;
-  attempts: number;
-  nextRetryAt: number;
-  addedAt: number;
-}
+/** Buffered item with retry metadata - uses discriminated union for type safety (labs-mmft.22) */
+type BufferedItem =
+  | { type: 'signal'; data: SignalEventRow[]; attempts: number; nextRetryAt: number; addedAt: number }
+  | { type: 'campaign'; data: CampaignHistoryRow; attempts: number; nextRetryAt: number; addedAt: number }
+  | { type: 'blocklist'; data: BlocklistHistoryRow[]; attempts: number; nextRetryAt: number; addedAt: number }
+  | { type: 'transaction'; data: HttpTransactionRow[]; attempts: number; nextRetryAt: number; addedAt: number }
+  | { type: 'log'; data: LogEntryRow[]; attempts: number; nextRetryAt: number; addedAt: number };
 
 /** Statistics for the retry buffer */
 export interface RetryBufferStats {
@@ -72,6 +63,12 @@ export interface RetryBufferStats {
   bufferUtilization: number;
 }
 
+/** Interface for optional persistent storage of retry buffer (labs-mmft.8) */
+export interface IRetryPersistentStore {
+  save(items: BufferedItem[]): Promise<void>;
+  load(): Promise<BufferedItem[]>;
+}
+
 /**
  * Reliable ClickHouse ingestion with automatic retries.
  *
@@ -80,17 +77,19 @@ export interface RetryBufferStats {
  * - Exponential backoff retry logic
  * - Memory-bounded queue with drop-oldest eviction
  * - Statistics for monitoring
+ * - Persistent storage support (labs-mmft.8)
  */
 export class ClickHouseRetryBuffer {
   private clickhouse: ClickHouseService;
   private logger: Logger;
   private config: RetryBufferConfig;
+  private persistentStore: IRetryPersistentStore | null = null;
 
   /** 
    * Internal buffer of items awaiting retry.
-   * Uses BufferedData union to maintain type safety across different event types.
+   * Uses discriminated union to maintain type safety across different event types.
    */
-  private buffer: BufferedItem<BufferedData>[] = [];
+  private buffer: BufferedItem[] = [];
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private isProcessing = false;
 
@@ -103,25 +102,40 @@ export class ClickHouseRetryBuffer {
   constructor(
     clickhouse: ClickHouseService,
     logger: Logger,
-    config: Partial<RetryBufferConfig> = {}
+    config: Partial<RetryBufferConfig> = {},
+    persistentStore: IRetryPersistentStore | null = null
   ) {
     this.clickhouse = clickhouse;
     this.logger = logger.child({ component: 'clickhouse-retry-buffer' });
     this.config = { ...DEFAULT_RETRY_CONFIG, ...config };
+    this.persistentStore = persistentStore;
   }
 
   /**
    * Start the background retry processor
    */
-  start(): void {
+  async start(): Promise<void> {
     if (this.retryTimer) return;
+
+    // Load from persistent store if available (labs-mmft.8)
+    if (this.persistentStore) {
+      try {
+        const loadedItems = await this.persistentStore.load();
+        if (loadedItems.length > 0) {
+          this.logger.info({ count: loadedItems.length }, 'Loaded telemetry items from persistent store');
+          this.buffer = [...loadedItems, ...this.buffer].slice(0, this.config.maxBufferSize);
+        }
+      } catch (error) {
+        this.logger.error({ error }, 'Failed to load telemetry items from persistent store');
+      }
+    }
 
     this.retryTimer = setInterval(() => {
       void this.processRetries();
     }, this.config.retryIntervalMs);
 
     this.logger.info(
-      { config: this.config },
+      { config: this.config, persistent: !!this.persistentStore },
       'ClickHouse retry buffer started'
     );
   }
@@ -129,10 +143,20 @@ export class ClickHouseRetryBuffer {
   /**
    * Stop the background retry processor
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.retryTimer) {
       clearInterval(this.retryTimer);
       this.retryTimer = null;
+    }
+
+    // Save to persistent store if available (labs-mmft.8)
+    if (this.persistentStore && this.buffer.length > 0) {
+      try {
+        await this.persistentStore.save(this.buffer);
+        this.logger.info({ count: this.buffer.length }, 'Saved telemetry items to persistent store');
+      } catch (error) {
+        this.logger.error({ error }, 'Failed to save telemetry items to persistent store');
+      }
     }
   }
 
@@ -151,7 +175,7 @@ export class ClickHouseRetryBuffer {
         { error, count: signals.length },
         'Signal events write failed, buffering for retry'
       );
-      this.bufferForRetry('signal', signals);
+      this.bufferForRetry({ type: 'signal', data: signals });
       return false;
     }
   }
@@ -168,7 +192,7 @@ export class ClickHouseRetryBuffer {
         { error, campaignId: event.campaign_id },
         'Campaign event write failed, buffering for retry'
       );
-      this.bufferForRetry('campaign', event);
+      this.bufferForRetry({ type: 'campaign', data: event });
       return false;
     }
   }
@@ -187,7 +211,7 @@ export class ClickHouseRetryBuffer {
         { error, count: events.length },
         'Blocklist events write failed, buffering for retry'
       );
-      this.bufferForRetry('blocklist', events);
+      this.bufferForRetry({ type: 'blocklist', data: events });
       return false;
     }
   }
@@ -206,7 +230,7 @@ export class ClickHouseRetryBuffer {
         { error, count: events.length },
         'HTTP transaction write failed, buffering for retry'
       );
-      this.bufferForRetry('transaction', events);
+      this.bufferForRetry({ type: 'transaction', data: events });
       return false;
     }
   }
@@ -225,7 +249,7 @@ export class ClickHouseRetryBuffer {
         { error, count: events.length },
         'Sensor log write failed, buffering for retry'
       );
-      this.bufferForRetry('log', events);
+      this.bufferForRetry({ type: 'log', data: events });
       return false;
     }
   }
@@ -233,7 +257,7 @@ export class ClickHouseRetryBuffer {
   /**
    * Buffer an item for retry
    */
-  private bufferForRetry<T>(type: BufferItemType, data: T): void {
+  private bufferForRetry(item: Pick<BufferedItem, 'type' | 'data'>): void {
     const now = Date.now();
 
     // Check buffer capacity
@@ -242,20 +266,35 @@ export class ClickHouseRetryBuffer {
       const evicted = this.buffer.shift();
       if (evicted) {
         this.droppedItems++;
-        this.logger.warn(
-          { type: evicted.type, attempts: evicted.attempts },
-          'Buffer full, dropping oldest item'
-        );
+        this.logToDeadLetterQueue(evicted, 'buffer_overflow');
       }
     }
 
     this.buffer.push({
-      type,
-      data,
+      ...item,
       attempts: 1, // Already tried once
       nextRetryAt: now + this.config.initialDelayMs,
       addedAt: now,
-    });
+    } as BufferedItem);
+  }
+
+  /**
+   * Log an item to the "Dead Letter Queue" (currently a high-priority log entry)
+   * to prevent silent data loss.
+   */
+  private logToDeadLetterQueue(item: BufferedItem, reason: string, error?: unknown): void {
+    this.logger.error({
+      dlq: true,
+      reason,
+      itemType: item.type,
+      attempts: item.attempts,
+      addedAt: new Date(item.addedAt).toISOString(),
+      error: error instanceof Error ? error.message : error,
+      // Include data for potential manual recovery, but limit size
+      dataCount: Array.isArray(item.data) ? item.data.length : 1,
+      // Only include full data in debug mode or for small payloads to avoid log flooding
+      payload: this.config.maxBufferSize < 1000 ? item.data : undefined
+    }, 'Telemetry item moved to Dead Letter Queue');
   }
 
   /**
@@ -283,14 +322,17 @@ export class ClickHouseRetryBuffer {
       for (const item of readyItems) {
         this.totalAttempts++;
 
+        let timerId: NodeJS.Timeout | undefined;
         try {
           // Add timeout to individual retry to prevent stalling the background process
           const retryTimeoutMs = 10000; // 10s timeout
+          const timeoutPromise = new Promise((_, reject) => {
+            timerId = setTimeout(() => reject(new Error(`Retry timed out after ${retryTimeoutMs}ms`)), retryTimeoutMs);
+          });
+
           await Promise.race([
             this.retryItem(item),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error(`Retry timed out after ${retryTimeoutMs}ms`)), retryTimeoutMs)
-            )
+            timeoutPromise
           ]);
 
           // Success - remove from buffer
@@ -310,10 +352,7 @@ export class ClickHouseRetryBuffer {
               this.buffer.splice(index, 1);
             }
             this.droppedItems++;
-            this.logger.error(
-              { type: item.type, attempts: item.attempts, error },
-              'Max retries exceeded, dropping item'
-            );
+            this.logToDeadLetterQueue(item, 'max_retries_exceeded', error);
           } else {
             // Schedule next retry with exponential backoff
             const delay = Math.min(
@@ -326,6 +365,10 @@ export class ClickHouseRetryBuffer {
               'Scheduled retry with backoff'
             );
           }
+        } finally {
+          if (timerId) {
+            clearTimeout(timerId);
+          }
         }
       }
     } finally {
@@ -336,23 +379,24 @@ export class ClickHouseRetryBuffer {
   /**
    * Retry a single buffered item.
    * Dispatches to the appropriate ClickHouse service method based on item type.
+   * Type narrowing is automatic due to discriminated union (labs-mmft.22).
    */
-  private async retryItem(item: BufferedItem<BufferedData>): Promise<void> {
+  private async retryItem(item: BufferedItem): Promise<void> {
     switch (item.type) {
       case 'signal':
-        await this.clickhouse.insertSignalEvents(item.data as SignalEventRow[]);
+        await this.clickhouse.insertSignalEvents(item.data);
         break;
       case 'campaign':
-        await this.clickhouse.insertCampaignEvent(item.data as CampaignHistoryRow);
+        await this.clickhouse.insertCampaignEvent(item.data);
         break;
       case 'blocklist':
-        await this.clickhouse.insertBlocklistEvents(item.data as BlocklistHistoryRow[]);
+        await this.clickhouse.insertBlocklistEvents(item.data);
         break;
       case 'transaction':
-        await this.clickhouse.insertHttpTransactions(item.data as HttpTransactionRow[]);
+        await this.clickhouse.insertHttpTransactions(item.data);
         break;
       case 'log':
-        await this.clickhouse.insertLogEntries(item.data as LogEntryRow[]);
+        await this.clickhouse.insertLogEntries(item.data);
         break;
     }
   }
