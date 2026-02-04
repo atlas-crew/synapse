@@ -1691,6 +1691,21 @@ impl SynapseProxy {
     }
 }
 
+fn record_auth_coverage(
+    auth_coverage: &AuthCoverageAggregator,
+    method: &str,
+    path: &str,
+    has_auth_header: bool,
+    status: u16,
+) {
+    let endpoint = endpoint_key(method, path);
+    auth_coverage.record(
+        &endpoint,
+        ResponseClass::from_status(status),
+        has_auth_header,
+    );
+}
+
 #[async_trait]
 impl ProxyHttp for SynapseProxy {
     type CTX = RequestContext;
@@ -1722,6 +1737,8 @@ impl ProxyHttp for SynapseProxy {
             dlp_scan_time_us: 0,
             response_content_type: None,
             request_path: None,
+            request_method: None,
+            has_auth_header: false,
             actor_id: None,
             actor_risk_score: 0.0,
             challenge_cookie: None,
@@ -1992,6 +2009,8 @@ impl ProxyHttp for SynapseProxy {
         let uri = req_header.uri.to_string();
         let headers = Self::extract_headers(session);
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+        ctx.request_method = Some(method.to_string());
+        ctx.has_auth_header = has_auth_header(req_header);
 
         // Record endpoint hit for API profiling/discovery
         let path = req_header.uri.path();
@@ -3373,6 +3392,18 @@ impl ProxyHttp for SynapseProxy {
             if let Some(ref header_config) = site.headers {
                 headers::apply_response_headers(upstream_response, header_config.response());
             }
+        }
+
+        if let (Some(ref method), Some(ref path)) =
+            (ctx.request_method.as_ref(), ctx.request_path.as_ref())
+        {
+            record_auth_coverage(
+                &self.auth_coverage,
+                method,
+                path,
+                ctx.has_auth_header,
+                upstream_response.status.as_u16(),
+            );
         }
         Ok(())
     }
@@ -5275,6 +5306,78 @@ tls:
         let response = proxy.health_checker.check();
         assert_eq!(response.status, synapse_pingora::health::HealthStatus::Healthy,
             "Proxy should have healthy status by default");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_auth_coverage_emits_summary() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Mutex;
+        use std::time::Duration;
+
+        struct MockEmitter {
+            emits: AtomicUsize,
+            payloads: Mutex<Vec<serde_json::Value>>,
+        }
+
+        impl MockEmitter {
+            fn new() -> Arc<Self> {
+                Arc::new(Self {
+                    emits: AtomicUsize::new(0),
+                    payloads: Mutex::new(Vec::new()),
+                })
+            }
+
+            fn count(&self) -> usize {
+                self.emits.load(Ordering::SeqCst)
+            }
+
+            fn last_payload(&self) -> Option<serde_json::Value> {
+                self.payloads.lock().unwrap().last().cloned()
+            }
+        }
+
+        #[async_trait]
+        impl SignalEmitter for MockEmitter {
+            async fn emit(&self, signal_type: &str, payload: serde_json::Value) {
+                if signal_type == "auth_coverage_summary" {
+                    self.emits.fetch_add(1, Ordering::SeqCst);
+                    self.payloads.lock().unwrap().push(payload);
+                }
+            }
+        }
+
+        let emitter = MockEmitter::new();
+        let aggregator = Arc::new(AuthCoverageAggregator::new(
+            "test-sensor".to_string(),
+            None,
+            emitter.clone() as Arc<dyn SignalEmitter>,
+            60,
+        ));
+
+        aggregator.clone().start_flush_task();
+        record_auth_coverage(aggregator.as_ref(), "GET", "/api/users/123", true, 401);
+
+        tokio::time::advance(Duration::from_secs(60)).await;
+        tokio::task::yield_now().await;
+        assert_eq!(emitter.count(), 1);
+
+        let payload = emitter.last_payload().expect("payload emitted");
+        let endpoints = payload
+            .get("endpoints")
+            .and_then(|value| value.as_array())
+            .expect("endpoints array");
+        let endpoint = endpoints[0]
+            .get("endpoint")
+            .and_then(|value| value.as_str())
+            .expect("endpoint string");
+        assert_eq!(endpoint, "GET /api/users/{id}");
+
+        let counts = endpoints[0]
+            .get("counts")
+            .and_then(|value| value.as_object())
+            .expect("counts object");
+        assert_eq!(counts.get("with_auth").and_then(|v| v.as_u64()), Some(1));
+        assert_eq!(counts.get("unauthorized").and_then(|v| v.as_u64()), Some(1));
     }
 
     #[test]

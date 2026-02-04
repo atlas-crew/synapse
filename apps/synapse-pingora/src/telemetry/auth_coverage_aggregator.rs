@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::time::interval;
+use tracing::warn;
 
 use crate::signals::auth_coverage::{
     AuthCoverageSummary, EndpointCounts, EndpointSummary, ResponseClass,
@@ -61,9 +62,13 @@ impl AuthCoverageAggregator {
     
     /// Start background flush task
     pub fn start_flush_task(self: Arc<Self>) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            warn!("Auth coverage flush task skipped (no Tokio runtime)");
+            return;
+        };
         let aggregator = self.clone();
-        
-        tokio::spawn(async move {
+
+        handle.spawn(async move {
             let mut ticker = interval(aggregator.flush_interval);
             
             loop {
