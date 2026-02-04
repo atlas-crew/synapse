@@ -8,7 +8,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Logger } from 'pino';
-import { requireScope } from '../middleware/auth.js';
+import { requireScope, requireRole } from '../middleware/auth.js';
 import { sendProblem } from '../../lib/problem-details.js';
 import {
   SynapseProxyService,
@@ -577,6 +577,7 @@ export function createSynapseRoutes(
   router.get(
     '/:sensorId/rules',
     requireScope('fleet:read'),
+    requireRole('viewer'),
     async (req: Request, res: Response): Promise<void> => {
       const { sensorId } = req.params;
       const tenantId = req.auth!.tenantId;
@@ -606,6 +607,7 @@ export function createSynapseRoutes(
   router.post(
     '/:sensorId/rules',
     requireScope('fleet:write'),
+    requireRole('admin'),
     async (req: Request, res: Response): Promise<void> => {
       const { sensorId } = req.params;
       const tenantId = req.auth!.tenantId;
@@ -642,6 +644,7 @@ export function createSynapseRoutes(
   router.put(
     '/:sensorId/rules/:ruleId',
     requireScope('fleet:write'),
+    requireRole('admin'),
     async (req: Request, res: Response): Promise<void> => {
       const { sensorId, ruleId } = req.params;
       const tenantId = req.auth!.tenantId;
@@ -672,6 +675,7 @@ export function createSynapseRoutes(
   router.delete(
     '/:sensorId/rules/:ruleId',
     requireScope('fleet:write'),
+    requireRole('admin'),
     async (req: Request, res: Response): Promise<void> => {
       const { sensorId, ruleId } = req.params;
       const tenantId = req.auth!.tenantId;

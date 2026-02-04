@@ -1237,6 +1237,20 @@ pub async fn start_admin_server(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
+    // Rules endpoints (defense-in-depth RBAC)
+    let rules_read_routes = Router::new()
+        .route("/_sensor/rules", get(sensor_rules_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
+    let rules_write_routes = Router::new()
+        .route("/_sensor/rules", post(sensor_rules_create_handler))
+        .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+
     // Routes requiring admin:read scope (console access)
     let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
@@ -1268,8 +1282,6 @@ pub async fn start_admin_server(
         .route("/_sensor/entities/:ip", delete(sensor_release_entity_handler))
         .route("/_sensor/metrics/reset", post(sensor_metrics_reset_handler))
         .route("/_sensor/blocks", get(sensor_blocks_handler))
-        .route("/_sensor/rules", get(sensor_rules_handler).post(sensor_rules_create_handler))
-        .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/signals", get(sensor_signals_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
@@ -1332,6 +1344,8 @@ pub async fn start_admin_server(
         .merge(service_manage_routes)
         .merge(sensor_read_routes)
         .merge(sensor_write_routes)
+        .merge(rules_read_routes)
+        .merge(rules_write_routes)
         .merge(admin_read_routes)
         .merge(debugger_routes)
         .merge(authenticated_routes)
