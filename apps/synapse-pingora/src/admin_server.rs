@@ -378,6 +378,9 @@ use tower_http::cors::CorsLayer;
 use tracing::{info, warn};
 use subtle::ConstantTimeEq;
 
+#[cfg(test)]
+use std::cell::Cell;
+
 use crate::api::{ApiHandler, ApiResponse};
 use crate::waf::{TraceEvent, TraceSink};
 
@@ -2089,12 +2092,72 @@ pub struct ApparatusRequest {
     pub headers: Option<HashMap<String, String>>,
 }
 
+#[cfg(test)]
+thread_local! {
+    static FORCE_METADATA_SERIALIZE_ERROR: Cell<bool> = Cell::new(false);
+}
+
+fn map_signal_type(signal_type: &str, sensor_id: &str) -> crate::horizon::SignalType {
+    use crate::horizon::SignalType;
+    match signal_type {
+        "honeypot_hit" => SignalType::IpThreat, // Treat as generic threat for now
+        "trap_trigger" => SignalType::BotSignature, // High confidence bot
+        "protocol_probe" => SignalType::TemplateDiscovery, // Probing
+        "dlp_match" => SignalType::SchemaViolation, // Abuse
+        other => {
+            warn!(
+                sensor_id = %sensor_id,
+                signal_type = %other,
+                "Unknown external signal type; mapping to IpThreat"
+            );
+            SignalType::IpThreat
+        }
+    }
+}
+
+fn map_severity(severity: &str) -> crate::horizon::Severity {
+    use crate::horizon::Severity;
+    match severity.to_lowercase().as_str() {
+        "low" => Severity::Low,
+        "medium" => Severity::Medium,
+        "high" => Severity::High,
+        "critical" => Severity::Critical,
+        _ => Severity::Medium,
+    }
+}
+
+fn serialize_report_metadata(report: &ApparatusReport) -> serde_json::Value {
+    #[cfg(test)]
+    if FORCE_METADATA_SERIALIZE_ERROR.with(|flag| flag.get()) {
+        let err = <serde_json::Error as serde::ser::Error>::custom(
+            "forced metadata serialization error",
+        );
+        return handle_metadata_error(report, err);
+    }
+
+    let serialized = serde_json::to_value(report);
+
+    match serialized {
+        Ok(value) => value,
+        Err(err) => handle_metadata_error(report, err),
+    }
+}
+
+fn handle_metadata_error(report: &ApparatusReport, err: serde_json::Error) -> serde_json::Value {
+    warn!(
+        sensor_id = %report.sensor_id,
+        error = %err,
+        "Failed to serialize external report metadata"
+    );
+    serde_json::json!({})
+}
+
 /// POST /_sensor/report - Ingest external threat signals (e.g. from Apparatus/Cutlass)
 async fn sensor_report_handler(
     State(state): State<AdminState>,
     Json(report): Json<ApparatusReport>,
 ) -> Response {
-    use crate::horizon::{ThreatSignal, SignalType, Severity};
+    use crate::horizon::ThreatSignal;
 
     let signal_type_raw = report.signal.signal_type.trim().to_lowercase();
     if !state
@@ -2110,29 +2173,10 @@ async fn sensor_report_handler(
     }
 
     // Map external signal type to internal SignalType
-    let signal_type = match signal_type_raw.as_str() {
-        "honeypot_hit" => SignalType::IpThreat, // Treat as generic threat for now
-        "trap_trigger" => SignalType::BotSignature, // High confidence bot
-        "protocol_probe" => SignalType::TemplateDiscovery, // Probing
-        "dlp_match" => SignalType::SchemaViolation, // Abuse
-        other => {
-            warn!(
-                sensor_id = %report.sensor_id,
-                signal_type = %other,
-                "Unknown external signal type; mapping to IpThreat"
-            );
-            SignalType::IpThreat
-        }
-    };
+    let signal_type = map_signal_type(&signal_type_raw, &report.sensor_id);
 
     // Map severity
-    let severity = match report.signal.severity.to_lowercase().as_str() {
-        "low" => Severity::Low,
-        "medium" => Severity::Medium,
-        "high" => Severity::High,
-        "critical" => Severity::Critical,
-        _ => Severity::Medium,
-    };
+    let severity = map_severity(&report.signal.severity);
 
     // Create threat signal
     let mut signal = ThreatSignal::new(signal_type, severity)
@@ -2144,17 +2188,7 @@ async fn sensor_report_handler(
     }
 
     // Embed full report as metadata
-    let metadata = match serde_json::to_value(&report) {
-        Ok(value) => value,
-        Err(err) => {
-            warn!(
-                sensor_id = %report.sensor_id,
-                error = %err,
-                "Failed to serialize external report metadata"
-            );
-            serde_json::json!({})
-        }
-    };
+    let metadata = serialize_report_metadata(&report);
     signal = signal.with_metadata(metadata.clone());
 
     // Dispatch to Signal Horizon (Fleet Intelligence)
@@ -5562,7 +5596,9 @@ mod tests {
     use axum::body::Body;
     use http::Request;
     use tower::util::ServiceExt;
+    use crate::horizon::{SignalType, Severity};
     use crate::intelligence::signal_manager::{SignalManager, SignalManagerConfig};
+    use crate::intelligence::SignalQueryOptions;
 
     fn create_test_app() -> Router {
         use governor::{Quota, RateLimiter};
@@ -5599,11 +5635,12 @@ mod tests {
             .with_state(state)
     }
 
-    fn create_test_app_with_sensor_report() -> Router {
+    fn create_test_app_with_sensor_report() -> (Router, Arc<SignalManager>) {
         use governor::{Quota, RateLimiter};
         use std::num::NonZeroU32;
 
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
+        let signal_manager_ref = Arc::clone(&signal_manager);
         let handler = Arc::new(ApiHandler::builder().signal_manager(signal_manager).build());
         let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
         let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
@@ -5619,10 +5656,12 @@ mod tests {
             auth_failure_limiter,
         };
 
-        Router::new()
+        let router = Router::new()
             .route("/_sensor/report", post(sensor_report_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .with_state(state)
+            .with_state(state);
+
+        (router, signal_manager_ref)
     }
 
     #[tokio::test]
@@ -5775,7 +5814,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sensor_report_rejects_disallowed_signal_type() {
-        let app = create_test_app_with_sensor_report();
+        let (app, _manager) = create_test_app_with_sensor_report();
 
         let payload = serde_json::json!({
             "sensorId": "sensor-1",
@@ -5811,7 +5850,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sensor_report_allows_known_signal_type() {
-        let app = create_test_app_with_sensor_report();
+        let (app, _manager) = create_test_app_with_sensor_report();
 
         let payload = serde_json::json!({
             "sensorId": "sensor-1",
@@ -5843,6 +5882,154 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_requires_auth() {
+        let (app, _manager) = create_test_app_with_sensor_report();
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": { "ip": "10.0.0.1" },
+            "signal": { "type": "honeypot_hit", "severity": "high", "details": {} }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_signal_type_mapping() {
+        assert!(matches!(map_signal_type("honeypot_hit", "sensor-1"), SignalType::IpThreat));
+        assert!(matches!(map_signal_type("trap_trigger", "sensor-1"), SignalType::BotSignature));
+        assert!(matches!(map_signal_type("protocol_probe", "sensor-1"), SignalType::TemplateDiscovery));
+        assert!(matches!(map_signal_type("dlp_match", "sensor-1"), SignalType::SchemaViolation));
+    }
+
+    #[test]
+    fn test_severity_mapping() {
+        assert!(matches!(map_severity("low"), Severity::Low));
+        assert!(matches!(map_severity("medium"), Severity::Medium));
+        assert!(matches!(map_severity("high"), Severity::High));
+        assert!(matches!(map_severity("critical"), Severity::Critical));
+        assert!(matches!(map_severity("unknown"), Severity::Medium));
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_records_metadata() {
+        let (app, manager) = create_test_app_with_sensor_report();
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": {
+                "ip": "10.0.0.1",
+                "fingerprint": "fp-123",
+                "sessionId": "session-1"
+            },
+            "signal": {
+                "type": "honeypot_hit",
+                "severity": "high",
+                "details": { "key": "value" }
+            }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let signals = manager.list_signals(SignalQueryOptions::default());
+        assert!(!signals.is_empty());
+        let metadata = &signals[0].metadata;
+        assert_eq!(metadata["actor"]["fingerprint"], "fp-123");
+        assert_eq!(metadata["actor"]["sessionId"], "session-1");
+        assert_eq!(metadata["signal"]["severity"], "high");
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_ignores_horizon_client_error() {
+        let (app, manager) = create_test_app_with_sensor_report();
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": { "ip": "10.0.0.1" },
+            "signal": { "type": "honeypot_hit", "severity": "high", "details": {} }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let signals = manager.list_signals(SignalQueryOptions::default());
+        assert!(!signals.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_metadata_serialization_error() {
+        let (app, manager) = create_test_app_with_sensor_report();
+
+        FORCE_METADATA_SERIALIZE_ERROR.with(|flag| flag.set(true));
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": { "ip": "10.0.0.1" },
+            "signal": { "type": "honeypot_hit", "severity": "high", "details": {} }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        FORCE_METADATA_SERIALIZE_ERROR.with(|flag| flag.set(false));
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let signals = manager.list_signals(SignalQueryOptions::default());
+        assert!(!signals.is_empty());
+        assert!(signals[0].metadata.as_object().map(|m| m.is_empty()).unwrap_or(false));
     }
 
     // =========================================================================
