@@ -46,6 +46,8 @@ export interface Command {
 export class CommandSender extends EventEmitter {
   private commands = new Map<string, Command>();
   private sensorConnections = new Map<string, WebSocket>();
+  private sensorQueues = new Map<string, string[]>();
+  private inflightCommands = new Map<string, string>();
   private timeoutHandles = new Map<string, NodeJS.Timeout>();
   private cleanupInterval: NodeJS.Timeout | null = null;
   private config: CommandSenderConfig;
@@ -71,6 +73,8 @@ export class CommandSender extends EventEmitter {
       clearTimeout(handle);
     }
     this.timeoutHandles.clear();
+    this.sensorQueues.clear();
+    this.inflightCommands.clear();
   }
 
   registerConnection(sensorId: string, ws: WebSocket): void {
@@ -126,7 +130,8 @@ export class CommandSender extends EventEmitter {
     };
 
     this.commands.set(id, command);
-    this.trySendCommand(command);
+    this.enqueueCommand(command);
+    this.trySendNext(sensorId);
     return id;
   }
 
@@ -145,6 +150,7 @@ export class CommandSender extends EventEmitter {
     }
     if (oldest) {
       this.commands.delete(oldest.id);
+      this.removeFromQueue(sensorId, oldest.id);
       this.evictedCommands++;
       this.emit('command-evicted', oldest);
       return true;
@@ -167,6 +173,7 @@ export class CommandSender extends EventEmitter {
     }
     if (oldest) {
       this.commands.delete(oldest.id);
+      this.removeFromQueue(oldest.sensorId, oldest.id);
       this.evictedCommands++;
       this.emit('command-evicted', oldest);
       return true;
@@ -174,15 +181,63 @@ export class CommandSender extends EventEmitter {
     return false;
   }
 
+  private getSensorQueue(sensorId: string): string[] {
+    const existing = this.sensorQueues.get(sensorId);
+    if (existing) {
+      return existing;
+    }
+    const queue: string[] = [];
+    this.sensorQueues.set(sensorId, queue);
+    return queue;
+  }
+
+  private enqueueCommand(cmd: Command): void {
+    const queue = this.getSensorQueue(cmd.sensorId);
+    queue.push(cmd.id);
+  }
+
+  private removeFromQueue(sensorId: string, commandId: string): void {
+    const queue = this.sensorQueues.get(sensorId);
+    if (!queue) return;
+    const index = queue.indexOf(commandId);
+    if (index >= 0) {
+      queue.splice(index, 1);
+    }
+    if (queue.length === 0) {
+      this.sensorQueues.delete(sensorId);
+    }
+  }
+
+  private trySendNext(sensorId: string): void {
+    if (this.inflightCommands.has(sensorId)) return;
+    const queue = this.sensorQueues.get(sensorId);
+    if (!queue || queue.length === 0) return;
+
+    const nextId = queue[0];
+    const cmd = this.commands.get(nextId);
+    if (!cmd) {
+      queue.shift();
+      this.trySendNext(sensorId);
+      return;
+    }
+
+    if (cmd.status !== 'pending' && cmd.status !== 'sent') {
+      queue.shift();
+      this.trySendNext(sensorId);
+      return;
+    }
+
+    this.trySendCommand(cmd);
+  }
+
   handleResponse(commandId: string, success: boolean, error?: string): void {
     const cmd = this.commands.get(commandId);
     if (!cmd) return;
 
-    this.clearCommandTimeout(commandId);
-    cmd.completedAt = Date.now();
-    cmd.status = success ? 'success' : 'failed';
-    if (error) cmd.error = error;
+    if (['success', 'failed', 'timeout'].includes(cmd.status)) return;
 
+    const status = success ? 'success' : 'failed';
+    this.finalizeCommand(cmd, status, error);
     this.emit(success ? 'command-complete' : 'command-failed', cmd);
   }
 
@@ -190,6 +245,11 @@ export class CommandSender extends EventEmitter {
     const ws = this.sensorConnections.get(cmd.sensorId);
     if (!ws || ws.readyState !== 1) return; // WebSocket.OPEN = 1
 
+    const inflight = this.inflightCommands.get(cmd.sensorId);
+    if (inflight && inflight !== cmd.id) return;
+    if (['success', 'failed', 'timeout'].includes(cmd.status)) return;
+
+    this.inflightCommands.set(cmd.sensorId, cmd.id);
     cmd.attempts++;
     cmd.sentAt = Date.now();
     cmd.status = 'sent';
@@ -205,17 +265,24 @@ export class CommandSender extends EventEmitter {
   }
 
   private setCommandTimeout(cmd: Command): void {
+    this.clearCommandTimeout(cmd.id);
     const handle = setTimeout(() => {
-      if (cmd.status === 'sent') {
-        if (cmd.attempts < cmd.maxAttempts) {
-          this.trySendCommand(cmd);
-        } else {
-          cmd.status = 'timeout';
-          cmd.error = `Timed out after ${cmd.maxAttempts} attempts`;
-          cmd.completedAt = Date.now();
-          this.emit('command-timeout', cmd);
-        }
+      if (cmd.status !== 'sent') return;
+
+      const ws = this.sensorConnections.get(cmd.sensorId);
+      const wsReady = !!ws && ws.readyState === 1;
+      if (!wsReady) {
+        this.setCommandTimeout(cmd);
+        return;
       }
+
+      if (cmd.attempts < cmd.maxAttempts) {
+        this.trySendCommand(cmd);
+        return;
+      }
+
+      this.finalizeCommand(cmd, 'timeout', `Timed out after ${cmd.maxAttempts} attempts`);
+      this.emit('command-timeout', cmd);
     }, cmd.timeoutMs);
 
     this.timeoutHandles.set(cmd.id, handle);
@@ -227,6 +294,18 @@ export class CommandSender extends EventEmitter {
       clearTimeout(handle);
       this.timeoutHandles.delete(cmdId);
     }
+  }
+
+  private finalizeCommand(cmd: Command, status: CommandStatus, error?: string): void {
+    this.clearCommandTimeout(cmd.id);
+    cmd.completedAt = Date.now();
+    cmd.status = status;
+    if (error) cmd.error = error;
+    this.removeFromQueue(cmd.sensorId, cmd.id);
+    if (this.inflightCommands.get(cmd.sensorId) === cmd.id) {
+      this.inflightCommands.delete(cmd.sensorId);
+    }
+    this.trySendNext(cmd.sensorId);
   }
 
   private getTimeout(type: CommandType): number {
@@ -247,11 +326,18 @@ export class CommandSender extends EventEmitter {
   }
 
   private flushPendingCommands(sensorId: string): void {
-    for (const cmd of this.commands.values()) {
-      if (cmd.sensorId === sensorId && cmd.status === 'pending') {
-        this.trySendCommand(cmd);
+    const queue = this.sensorQueues.get(sensorId);
+    if (!queue || queue.length === 0) {
+      const pending = Array.from(this.commands.values())
+        .filter((cmd) => cmd.sensorId === sensorId && cmd.status === 'pending')
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((cmd) => cmd.id);
+      if (pending.length > 0) {
+        this.sensorQueues.set(sensorId, pending);
       }
     }
+
+    this.trySendNext(sensorId);
   }
 
   private cleanupOldCommands(): void {
@@ -263,12 +349,17 @@ export class CommandSender extends EventEmitter {
       if (['success', 'failed', 'timeout'].includes(cmd.status) && cmd.completedAt) {
         if (now - cmd.completedAt > completedTTL) {
           this.commands.delete(id);
+          this.removeFromQueue(cmd.sensorId, id);
+          if (this.inflightCommands.get(cmd.sensorId) === id) {
+            this.inflightCommands.delete(cmd.sensorId);
+          }
         }
       }
       // Evict pending commands that have exceeded pendingTTL
       else if (cmd.status === 'pending') {
         if (now - cmd.createdAt > this.config.pendingTTL) {
           this.commands.delete(id);
+          this.removeFromQueue(cmd.sensorId, id);
           this.evictedCommands++;
           this.emit('command-evicted', { ...cmd, reason: 'ttl_expired' });
         }
@@ -281,9 +372,16 @@ export class CommandSender extends EventEmitter {
   }
 
   getPendingCommands(sensorId: string): Command[] {
-    return Array.from(this.commands.values()).filter(
-      (c) => c.sensorId === sensorId && c.status === 'pending'
-    );
+    const queue = this.sensorQueues.get(sensorId);
+    if (!queue || queue.length === 0) {
+      return Array.from(this.commands.values()).filter(
+        (c) => c.sensorId === sensorId && c.status === 'pending'
+      );
+    }
+
+    return queue
+      .map((id) => this.commands.get(id))
+      .filter((cmd): cmd is Command => !!cmd && cmd.status === 'pending');
   }
 
   getStats(): {
@@ -342,9 +440,7 @@ export class CommandSender extends EventEmitter {
     const cmd = this.commands.get(commandId);
     if (!cmd || cmd.status !== 'pending') return false;
 
-    cmd.status = 'failed';
-    cmd.error = 'Cancelled';
-    cmd.completedAt = Date.now();
+    this.finalizeCommand(cmd, 'failed', 'Cancelled');
     this.emit('command-failed', cmd);
     return true;
   }
@@ -355,6 +451,8 @@ export class CommandSender extends EventEmitter {
     }
     this.timeoutHandles.clear();
     this.commands.clear();
+    this.sensorQueues.clear();
+    this.inflightCommands.clear();
   }
 
   /** Reset statistics (for testing) */

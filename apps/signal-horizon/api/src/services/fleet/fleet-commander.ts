@@ -286,28 +286,46 @@ export class FleetCommander extends EventEmitter {
    * Mark command as sent
    */
   async markCommandSent(commandId: string): Promise<void> {
-    await this.prisma.fleetCommand.update({
-      where: { id: commandId },
+    const updated = await this.prisma.fleetCommand.updateMany({
+      where: { id: commandId, status: { in: ['pending', 'sent'] } },
       data: {
         status: 'sent',
         sentAt: new Date(),
         attempts: { increment: 1 },
       },
     });
+
+    if (updated.count === 0) {
+      this.logger.debug({ commandId }, 'Skipping markCommandSent (already updated)');
+    }
   }
 
   /**
    * Mark command as successful
    */
   async markCommandSuccess(commandId: string, result?: Record<string, unknown>): Promise<void> {
-    const command = await this.prisma.fleetCommand.update({
-      where: { id: commandId },
+    const updated = await this.prisma.fleetCommand.updateMany({
+      where: { id: commandId, status: { in: ['pending', 'sent'] } },
       data: {
         status: 'success',
         result: result as Prisma.InputJsonValue | undefined,
         completedAt: new Date(),
       },
     });
+
+    if (updated.count === 0) {
+      this.logger.debug({ commandId }, 'Skipping markCommandSuccess (already updated)');
+      return;
+    }
+
+    const command = await this.prisma.fleetCommand.findUnique({
+      where: { id: commandId },
+    });
+
+    if (!command) {
+      this.logger.warn({ commandId }, 'Command missing after success update');
+      return;
+    }
 
     this.logger.info({ commandId, sensorId: command.sensorId }, 'Command succeeded');
 
@@ -327,7 +345,9 @@ export class FleetCommander extends EventEmitter {
       where: { id: commandId },
     });
 
-    if (!command) {
+    if (!command) return;
+    if (!['pending', 'sent'].includes(command.status)) {
+      this.logger.debug({ commandId, status: command.status }, 'Skipping markCommandFailed (already completed)');
       return;
     }
 
@@ -339,26 +359,35 @@ export class FleetCommander extends EventEmitter {
       );
 
       // Reset to pending for retry
-      await this.prisma.fleetCommand.update({
-        where: { id: commandId },
+      const updated = await this.prisma.fleetCommand.updateMany({
+        where: { id: commandId, status: { in: ['pending', 'sent'] }, attempts: { lt: this.config.maxRetries } },
         data: {
           status: 'pending',
           error,
         },
       });
 
+      if (updated.count === 0) {
+        this.logger.debug({ commandId }, 'Retry update skipped (already updated)');
+      }
+
       return;
     }
 
     // Max retries reached, mark as permanently failed
-    await this.prisma.fleetCommand.update({
-      where: { id: commandId },
+    const updated = await this.prisma.fleetCommand.updateMany({
+      where: { id: commandId, status: { in: ['pending', 'sent'] } },
       data: {
         status: 'failed',
         error,
         completedAt: new Date(),
       },
     });
+
+    if (updated.count === 0) {
+      this.logger.debug({ commandId }, 'Permanent failure update skipped (already updated)');
+      return;
+    }
 
     this.logger.error({ commandId, sensorId: command.sensorId, error }, 'Command failed permanently');
 
@@ -403,14 +432,18 @@ export class FleetCommander extends EventEmitter {
           'Command timed out'
         );
 
-        await this.prisma.fleetCommand.update({
-          where: { id: command.id },
+        const updated = await this.prisma.fleetCommand.updateMany({
+          where: { id: command.id, status: { in: ['pending', 'sent'] } },
           data: {
             status: 'timeout',
             error: 'Command timed out',
             completedAt: new Date(),
           },
         });
+
+        if (updated.count === 0) {
+          continue;
+        }
 
         this.emit('command-timeout', {
           commandId: command.id,

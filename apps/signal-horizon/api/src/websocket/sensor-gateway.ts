@@ -19,6 +19,7 @@ import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import type { Aggregator } from '../services/aggregator/index.js';
 import type { FleetAggregator } from '../services/fleet/fleet-aggregator.js';
+import type { AuthCoverageAggregator } from '../services/auth-coverage-aggregator.js';
 import type { CommandSender } from '../protocols/command-sender.js';
 import type {
   ThreatSignal,
@@ -31,6 +32,7 @@ import {
   type ValidatedSensorHeartbeatPayload,
   type ValidatedSensorCommandAckPayload,
 } from '../schemas/signal.js';
+import type { AuthCoverageSummary } from '../schemas/auth-coverage.js';
 
 interface SensorConnection {
   id: string;
@@ -96,9 +98,6 @@ class RateLimiter {
   }
 }
 
-// Local type aliases for Zod-validated payloads
-// Full validation schemas are in ../schemas/signal.ts
-
 export class SensorGateway {
   private wss: WebSocketServer | null = null;
   private connections: Map<string, SensorConnection> = new Map();
@@ -109,6 +108,7 @@ export class SensorGateway {
   private logger: Logger;
   private aggregator: Aggregator;
   private fleetAggregator: FleetAggregator;
+  private authCoverageAggregator: AuthCoverageAggregator;
   private config: SensorGatewayConfig;
   private sequenceId = 0;
   private rateLimiter: RateLimiter;
@@ -119,12 +119,14 @@ export class SensorGateway {
     logger: Logger,
     aggregator: Aggregator,
     fleetAggregator: FleetAggregator,
-    config: SensorGatewayConfig
+    config: SensorGatewayConfig,
+    authCoverageAggregator: AuthCoverageAggregator
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ gateway: 'sensor' });
     this.aggregator = aggregator;
     this.fleetAggregator = fleetAggregator;
+    this.authCoverageAggregator = authCoverageAggregator;
     this.config = config;
 
     // Initialize rate limiter with defaults or config values
@@ -359,6 +361,14 @@ export class SensorGateway {
           return;
         }
         await this.handleCommandAck(conn, message.payload);
+        break;
+
+      case 'auth-coverage-summary':
+        if (!conn.sensorId) {
+          this.send(conn, { type: 'error', error: 'Not authenticated' });
+          return;
+        }
+        await this.handleAuthCoverageSummary(conn, message.payload);
         break;
     }
   }
@@ -770,19 +780,23 @@ export class SensorGateway {
           success,
           resultMessage
         );
+        return;
       }
 
-      // Update command status in database
-      await this.prisma.fleetCommand.update({
-        where: { id: commandId },
+      // Fallback: Update command status in database when CommandSender is not available
+      const updated = await this.prisma.fleetCommand.updateMany({
+        where: { id: commandId, status: { in: ['pending', 'sent'] } },
         data: {
           status: success ? 'success' : 'failed',
           completedAt: new Date(),
           error: success ? undefined : resultMessage,
           result: success ? (result as Prisma.InputJsonValue) : undefined,
-          attempts: { increment: 1 },
         },
       });
+
+      if (updated.count === 0) {
+        this.logger.debug({ commandId }, 'Skipping command ack update (already completed)');
+      }
 
       this.logger.info(
         { commandId, sensorId: conn.sensorId, success },
@@ -792,6 +806,33 @@ export class SensorGateway {
       this.logger.error(
         { error, commandId: payload.commandId },
         'Failed to handle command acknowledgment'
+      );
+    }
+  }
+
+  private async handleAuthCoverageSummary(
+    conn: SensorConnection,
+    payload: AuthCoverageSummary
+  ): Promise<void> {
+    try {
+      // Ingest into aggregator
+      this.authCoverageAggregator.ingestSummary(payload);
+
+      this.logger.debug(
+        { sensorId: conn.sensorId, endpointCount: payload.endpoints.length },
+        'Auth coverage summary ingested'
+      );
+
+      // Acknowledge receipt (optional but good for protocol symmetry)
+      this.send(conn, {
+        type: 'auth-coverage-ack',
+        timestamp: Date.now(),
+        sequenceId: this.nextSequenceId(),
+      });
+    } catch (error) {
+      this.logger.error(
+        { error, sensorId: conn.sensorId },
+        'Failed to handle auth coverage summary'
       );
     }
   }
