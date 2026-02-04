@@ -7,6 +7,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tracing::{debug, warn};
 
 use super::client::TunnelClientHandle;
@@ -14,6 +15,68 @@ use super::types::LegacyTunnelMessage;
 
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
+
+/// Dangerous terminal escape sequence prefixes that can be used for terminal injection attacks.
+/// These allow arbitrary command injection, clipboard access, or window manipulation.
+const DANGEROUS_ESCAPE_PREFIXES: &[&[u8]] = &[
+    b"\x1b]", // OSC - Operating System Command (clipboard, window title injection)
+    b"\x1bP", // DCS - Device Control String (Sixel, ReGIS, DECRQSS attacks)
+    b"\x1b_", // APC - Application Program Command
+    b"\x1b^", // PM - Privacy Message
+    b"\x1bX", // SOS - Start of String
+];
+
+/// Filter dangerous terminal escape sequences from input data.
+/// Allows normal CSI sequences (ESC [) for cursor control and colors,
+/// but blocks OSC, DCS, APC, PM, and SOS sequences that can be exploited.
+fn filter_dangerous_escapes(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len());
+    let mut i = 0;
+
+    while i < input.len() {
+        // Check for ESC character
+        if input[i] == 0x1b && i + 1 < input.len() {
+            let next_byte = input[i + 1];
+
+            // Check if this is a dangerous escape sequence
+            let is_dangerous = DANGEROUS_ESCAPE_PREFIXES
+                .iter()
+                .any(|prefix| input[i..].starts_with(prefix));
+
+            if is_dangerous {
+                // Skip the dangerous escape sequence
+                // Find the sequence terminator (ST = ESC \ or BEL, or end of input)
+                let mut j = i + 2;
+                while j < input.len() {
+                    // String Terminator: ESC \
+                    if j + 1 < input.len() && input[j] == 0x1b && input[j + 1] == b'\\' {
+                        j += 2;
+                        break;
+                    }
+                    // BEL (often used to terminate OSC)
+                    if input[j] == 0x07 {
+                        j += 1;
+                        break;
+                    }
+                    j += 1;
+                }
+                i = j;
+                continue;
+            } else if next_byte == b'[' {
+                // CSI sequence - allowed (cursor control, colors, etc.)
+                output.push(input[i]);
+                i += 1;
+                continue;
+            }
+        }
+
+        // Normal byte or safe escape - pass through
+        output.push(input[i]);
+        i += 1;
+    }
+
+    output
+}
 
 struct ShellSession {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -27,34 +90,62 @@ pub struct TunnelShellService {
     handle: TunnelClientHandle,
     sessions: Arc<DashMap<String, ShellSession>>,
     default_shell: String,
+    enabled: bool,
 }
 
 impl TunnelShellService {
     /// Create a new shell service with the given tunnel handle.
-    pub fn new(handle: TunnelClientHandle) -> Self {
+    pub fn new(handle: TunnelClientHandle, enabled: bool) -> Self {
         let default_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
         Self {
             handle,
             sessions: Arc::new(DashMap::new()),
             default_shell,
+            enabled,
         }
     }
 
     /// Start the shell service (listens for legacy tunnel messages).
-    pub async fn run(self) {
+    pub async fn run(self, mut shutdown_rx: broadcast::Receiver<()>) {
+        if !self.enabled {
+            warn!("Remote shell service is disabled by configuration");
+            return;
+        }
+
         let mut rx = self.handle.subscribe_legacy();
         loop {
-            match rx.recv().await {
-                Ok(message) => self.handle_message(message).await,
-                Err(err) => {
-                    warn!("Shell service channel closed: {}", err);
+            tokio::select! {
+                message = rx.recv() => {
+                    match message {
+                        Ok(message) => self.handle_message(message).await,
+                        Err(err) => {
+                            warn!("Shell service channel closed: {}", err);
+                            break;
+                        }
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    debug!("Shell service shutdown signal received");
                     break;
                 }
             }
         }
+
+        // Cleanup all active sessions
+        let session_ids: Vec<String> = self.sessions.iter().map(|e| e.key().clone()).collect();
+        for id in session_ids {
+            self.end_session(&id, "service shutdown");
+        }
     }
 
     async fn handle_message(&self, message: LegacyTunnelMessage) {
+        if !self.enabled {
+            if let Some(session_id) = message.session_id {
+                self.send_shell_error(&session_id, "remote shell is disabled on this sensor");
+            }
+            return;
+        }
+
         match message.message_type.as_str() {
             "shell-data" => {
                 self.handle_shell_data(message).await;
@@ -189,10 +280,16 @@ impl TunnelShellService {
 
     fn spawn_reader(&self, session_id: String, mut reader: Box<dyn Read + Send>) {
         let handle = self.handle.clone();
+        let sessions = Arc::clone(&self.sessions);
 
-        std::thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             let mut buffer = [0u8; 8192];
             loop {
+                // Check if session still exists
+                if !sessions.contains_key(&session_id) {
+                    break;
+                }
+
                 match reader.read(&mut buffer) {
                     Ok(0) => {
                         debug!("shell output closed for {}", session_id);
@@ -209,13 +306,16 @@ impl TunnelShellService {
                         let _ = handle.send_json_blocking(message);
                     }
                     Err(err) => {
-                        let message = serde_json::json!({
-                            "type": "shell-error",
-                            "sessionId": session_id,
-                            "payload": { "error": format!("shell output error: {}", err) },
-                            "timestamp": chrono::Utc::now().to_rfc3339(),
-                        });
-                        let _ = handle.send_json_blocking(message);
+                        // Avoid logging error if it's just the session closing
+                        if sessions.contains_key(&session_id) {
+                            let message = serde_json::json!({
+                                "type": "shell-error",
+                                "sessionId": session_id,
+                                "payload": { "error": format!("shell output error: {}", err) },
+                                "timestamp": chrono::Utc::now().to_rfc3339(),
+                            });
+                            let _ = handle.send_json_blocking(message);
+                        }
                         break;
                     }
                 }
@@ -227,41 +327,50 @@ impl TunnelShellService {
         let sessions = Arc::clone(&self.sessions);
         let handle = self.handle.clone();
 
-        std::thread::spawn(move || {
+        tokio::task::spawn(async move {
             loop {
-                if let Some(entry) = sessions.get(&session_id) {
-                    let mut child = entry.child.lock().unwrap();
-                    match child.try_wait() {
-                        Ok(Some(status)) => {
-                            let exit_code = status.exit_code();
-                            let message = serde_json::json!({
-                                "type": "shell-exit",
-                                "sessionId": session_id,
-                                "payload": { "code": exit_code },
-                                "timestamp": chrono::Utc::now().to_rfc3339(),
-                            });
-                            let _ = handle.send_json_blocking(message);
-                            sessions.remove(&session_id);
-                            break;
+                let status = {
+                    if let Some(entry) = sessions.get(&session_id) {
+                        let mut child = entry.child.lock().unwrap();
+                        match child.try_wait() {
+                            Ok(Some(status)) => Some(Ok(status)),
+                            Ok(None) => None,
+                            Err(err) => Some(Err(err)),
                         }
-                        Ok(None) => {}
-                        Err(err) => {
-                            let message = serde_json::json!({
-                                "type": "shell-error",
-                                "sessionId": session_id,
-                                "payload": { "error": format!("shell wait error: {}", err) },
-                                "timestamp": chrono::Utc::now().to_rfc3339(),
-                            });
-                            let _ = handle.send_json_blocking(message);
-                            sessions.remove(&session_id);
-                            break;
-                        }
+                    } else {
+                        break;
                     }
-                } else {
-                    break;
-                }
+                };
 
-                std::thread::sleep(Duration::from_millis(250));
+                match status {
+                    Some(Ok(status)) => {
+                        let exit_code = status.exit_code();
+                        let message = serde_json::json!({
+                            "type": "shell-exit",
+                            "sessionId": session_id,
+                            "payload": { "code": exit_code },
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        });
+                        let _ = handle.send_json(message).await;
+                        sessions.remove(&session_id);
+                        break;
+                    }
+                    Some(Err(err)) => {
+                        let message = serde_json::json!({
+                            "type": "shell-error",
+                            "sessionId": session_id,
+                            "payload": { "error": format!("shell wait error: {}", err) },
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        });
+                        let _ = handle.send_json(message).await;
+                        sessions.remove(&session_id);
+                        break;
+                    }
+                    None => {
+                        // Still running, wait a bit
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                    }
+                }
             }
         });
     }
@@ -271,10 +380,13 @@ impl TunnelShellService {
             .decode(data.as_bytes())
             .map_err(|err| format!("invalid base64 input: {}", err))?;
 
+        // Filter dangerous terminal escape sequences before writing to PTY
+        let sanitized = filter_dangerous_escapes(&decoded);
+
         if let Some(session) = self.sessions.get(session_id) {
             let mut writer = session.writer.lock().unwrap();
             writer
-                .write_all(&decoded)
+                .write_all(&sanitized)
                 .map_err(|err| format!("failed to write to pty: {}", err))?;
             writer
                 .flush()

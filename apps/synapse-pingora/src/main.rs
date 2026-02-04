@@ -339,6 +339,28 @@ fn is_wildcard_cidr(cidr: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Parses an environment variable as a boolean (case-insensitive).
+/// Accepts: 1, true, yes, y, on (labs-58mn)
+fn parse_bool_env(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| {
+            let v = v.to_lowercase();
+            v == "1" || v == "true" || v == "yes" || v == "y" || v == "on"
+        })
+        .unwrap_or(false)
+}
+
+/// Parses an environment variable as a boolean for negative values (case-insensitive).
+/// Accepts: 0, false, no, n, off (labs-58mn)
+fn parse_bool_env_neg(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| {
+            let v = v.to_lowercase();
+            v == "0" || v == "false" || v == "no" || v == "n" || v == "off"
+        })
+        .unwrap_or(false)
+}
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -3775,7 +3797,7 @@ struct HorizonMetricsProvider {
 impl MetricsProvider for HorizonMetricsProvider {
     fn cpu_usage(&self) -> f64 {
         let mut sys = self.system.lock();
-        sys.refresh_cpu();
+        sys.refresh_cpu_all();
         (sys.global_cpu_usage() as f64).clamp(0.0, 100.0)
     }
     fn memory_usage(&self) -> f64 {
@@ -4246,18 +4268,14 @@ fn main() {
     }
 
     // Check for dev/demo modes via CLI flags or environment variables
-    let dev_mode = cli.dev
-        || std::env::var("SYNAPSE_DEV").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+    let dev_mode = cli.dev || parse_bool_env("SYNAPSE_DEV");
 
-    let demo_mode = cli.demo
-        || std::env::var("SYNAPSE_DEMO").map(|v| v == "1" || v.to_lowercase() == "true").unwrap_or(false);
+    let demo_mode = cli.demo || parse_bool_env("SYNAPSE_DEMO");
 
     if dev_mode {
         // SECURITY: Require explicit non-production environment for dev mode (secure-by-default)
         // Dev mode bypasses authentication, so we need explicit confirmation this is not production
-        let is_explicitly_non_production = std::env::var("SYNAPSE_PRODUCTION")
-            .map(|v| matches!(v.to_lowercase().as_str(), "0" | "false" | "no"))
-            .unwrap_or(false)
+        let is_explicitly_non_production = parse_bool_env_neg("SYNAPSE_PRODUCTION")
             || std::env::var("NODE_ENV")
                 .map(|v| matches!(v.to_lowercase().as_str(), "development" | "dev" | "local" | "test"))
                 .unwrap_or(false);
@@ -4447,8 +4465,6 @@ fn main() {
     }
     let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
     if telemetry_client.is_enabled() {
-        telemetry_client.start_background_flush();
-
         let telemetry_for_logs = Arc::clone(&telemetry_client);
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Builder::new_current_thread()
@@ -4463,6 +4479,7 @@ fn main() {
             };
 
             rt.block_on(async move {
+                telemetry_for_logs.start_background_flush();
                 tokio::spawn(LogTelemetryService::new(telemetry_for_logs).run());
                 std::future::pending::<()>().await;
             });
@@ -4582,23 +4599,29 @@ fn main() {
             };
 
             rt.block_on(async move {
+                let shell_enabled = tunnel_config.shell_enabled;
                 let mut tunnel_client = TunnelClient::new(tunnel_config);
                 if let Err(e) = tunnel_client.start().await {
                     error!("Failed to start tunnel client: {}", e);
                     return;
                 }
                 if let Some(handle) = tunnel_client.handle() {
-                    tokio::spawn(TunnelShellService::new(handle.clone()).run());
-                    tokio::spawn(TunnelLogService::new(handle.clone()).run());
+                    tokio::spawn(
+                        TunnelShellService::new(handle.clone(), shell_enabled)
+                            .run(handle.subscribe_shutdown()),
+                    );
+                    tokio::spawn(
+                        TunnelLogService::new(handle.clone()).run(handle.subscribe_shutdown()),
+                    );
                     tokio::spawn(
                         TunnelDiagService::new(
-                            handle,
+                            handle.clone(),
                             health,
                             metrics,
                             actor_manager,
                             config_manager,
                         )
-                        .run(),
+                        .run(handle.subscribe_shutdown()),
                     );
                 } else {
                     warn!("Tunnel client handle unavailable; shell/log/diag services disabled");

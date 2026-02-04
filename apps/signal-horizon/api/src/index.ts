@@ -31,6 +31,7 @@ import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
+import { FleetIntelService } from './services/fleet/fleet-intel.js';
 import { FleetSessionQueryService } from './services/fleet/session-query.js';
 import { ImpossibleTravelService } from './services/impossible-travel.js';
 import { SecurityAuditService } from './services/audit/security-audit.js';
@@ -224,6 +225,7 @@ let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
 let synapseProxy: SynapseProxyService;
 let sessionQueryService: FleetSessionQueryService;
+let fleetIntelService: FleetIntelService;
 let warRoomService: WarRoomService;
 let securityAuditService: SecurityAuditService;
 let playbookService: PlaybookService;
@@ -553,6 +555,8 @@ async function start() {
   tunnelBroker = new TunnelBroker(logger);
   synapseProxy = new SynapseProxyService(tunnelBroker, logger);
   sessionQueryService = new FleetSessionQueryService({ prisma, logger, tunnelBroker });
+  fleetIntelService = new FleetIntelService(prisma, logger, synapseProxy);
+  fleetIntelService.start();
   
   // Default War Room config
   const warRoomConfig: WarRoomConfig = {
@@ -592,6 +596,7 @@ async function start() {
     synapseProxy,
     tunnelBroker,
     sessionQueryService,
+    fleetIntelService,
     warRoomService,
     apiIntelligenceService,
     playbookService,
@@ -758,6 +763,7 @@ async function shutdown(signal: string) {
   aggregator?.stop();
   broadcaster?.stop();
   fleetAggregator?.stop?.();
+  fleetIntelService?.shutdown();
   await synapseProxy?.shutdown?.();
   await tunnelBroker?.shutdown?.();
   tunnelWss?.close();

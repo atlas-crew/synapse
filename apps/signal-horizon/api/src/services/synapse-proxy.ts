@@ -211,6 +211,101 @@ export interface CampaignActorsRawResponse {
   actors: CampaignActorRaw[];
 }
 
+export interface SynapseApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+export interface PayloadSummaryResponse {
+  total_endpoints: number;
+  total_entities: number;
+  total_requests: number;
+  total_request_bytes: number;
+  total_response_bytes: number;
+  avg_request_size: number;
+  avg_response_size: number;
+  active_anomalies: number;
+}
+
+export interface EndpointPayloadSummary {
+  template: string;
+  request_count: number;
+  avg_request_size: number;
+  avg_response_size: number;
+}
+
+export interface PayloadAnomalyResponse {
+  anomaly_type: string;
+  severity: string;
+  risk_applied?: number | null;
+  template: string;
+  entity_id: string;
+  detected_at_ms: number;
+  description: string;
+}
+
+export interface PayloadBandwidthPoint {
+  timestamp: number;
+  bytesIn: number;
+  bytesOut: number;
+  requestCount: number;
+}
+
+export interface PayloadBandwidthStats {
+  totalBytes: number;
+  totalBytesIn: number;
+  totalBytesOut: number;
+  avgBytesPerRequest: number;
+  maxRequestSize: number;
+  maxResponseSize: number;
+  requestCount: number;
+  timeline: PayloadBandwidthPoint[];
+}
+
+export type PayloadStatsResponse = SynapseApiResponse<PayloadSummaryResponse>;
+export type PayloadEndpointsResponse = SynapseApiResponse<EndpointPayloadSummary[]>;
+export type PayloadAnomaliesResponse = SynapseApiResponse<PayloadAnomalyResponse[]>;
+
+export interface ProfilePayloadSizeStats {
+  mean: number;
+  variance: number;
+  stdDev: number;
+  count: number;
+}
+
+export interface ProfileSummary {
+  template: string;
+  sampleCount: number;
+  firstSeenMs: number;
+  lastUpdatedMs: number;
+  payloadSize: ProfilePayloadSizeStats;
+  expectedParams: unknown;
+  contentTypes: unknown;
+  statusCodes: unknown;
+  endpointRisk: number;
+  currentRps: number;
+}
+
+export interface ProfileDetail {
+  template: string;
+  sampleCount: number;
+  firstSeenMs: number;
+  lastUpdatedMs: number;
+  payloadSize: ProfilePayloadSizeStats;
+  expectedParams: unknown;
+  contentTypes: unknown;
+  statusCodes: unknown;
+  endpointRisk: number;
+  requestRate: {
+    currentRps: number;
+    windowMs: number;
+  };
+}
+
+export type ProfilesListResponse = SynapseApiResponse<{ profiles: ProfileSummary[]; count: number }>;
+export type ProfileDetailResponse = SynapseApiResponse<ProfileDetail>;
+
 export interface HijackAlert {
   sessionId: string;
   alertType: string;
@@ -334,6 +429,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/system',
   '/_sensor/signals',
   '/_sensor/trends',
+  '/api/profiles',
 ] as const;
 
 /** Sensor ID format validation */
@@ -1107,6 +1203,137 @@ export class SynapseProxyService extends EventEmitter {
   }
 
   /**
+   * Get payload profiling summary stats
+   */
+  async getPayloadStats(sensorId: string, tenantId: string): Promise<PayloadStatsResponse> {
+    const cacheKey = `payload:stats:${sensorId}`;
+    const cached = this.getFromCache<PayloadStatsResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<PayloadStatsResponse>(
+      sensorId,
+      tenantId,
+      '/_sensor/payload/stats',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * List payload endpoint summaries
+   */
+  async listPayloadEndpoints(
+    sensorId: string,
+    tenantId: string,
+    options?: { limit?: number }
+  ): Promise<PayloadEndpointsResponse> {
+    const cacheKey = `payload:endpoints:${sensorId}:${JSON.stringify(options ?? {})}`;
+    const cached = this.getFromCache<PayloadEndpointsResponse>(cacheKey);
+    if (cached) return cached;
+
+    const query = new URLSearchParams();
+    if (options?.limit) query.set('limit', String(options.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+
+    const result = await this.proxyRequest<PayloadEndpointsResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/payload/endpoints${suffix}`,
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * List recent payload anomalies
+   */
+  async listPayloadAnomalies(
+    sensorId: string,
+    tenantId: string,
+    options?: { limit?: number }
+  ): Promise<PayloadAnomaliesResponse> {
+    const cacheKey = `payload:anomalies:${sensorId}:${JSON.stringify(options ?? {})}`;
+    const cached = this.getFromCache<PayloadAnomaliesResponse>(cacheKey);
+    if (cached) return cached;
+
+    const query = new URLSearchParams();
+    if (options?.limit) query.set('limit', String(options.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+
+    const result = await this.proxyRequest<PayloadAnomaliesResponse>(
+      sensorId,
+      tenantId,
+      `/_sensor/payload/anomalies${suffix}`,
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get payload bandwidth statistics
+   */
+  async getPayloadBandwidth(
+    sensorId: string,
+    tenantId: string
+  ): Promise<PayloadBandwidthStats> {
+    const cacheKey = `payload:bandwidth:${sensorId}`;
+    const cached = this.getFromCache<PayloadBandwidthStats>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<PayloadBandwidthStats>(
+      sensorId,
+      tenantId,
+      '/_sensor/payload/bandwidth',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * List all endpoint profiles
+   */
+  async listProfiles(sensorId: string, tenantId: string): Promise<ProfilesListResponse> {
+    const cacheKey = `profiles:${sensorId}`;
+    const cached = this.getFromCache<ProfilesListResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<ProfilesListResponse>(
+      sensorId,
+      tenantId,
+      '/api/profiles',
+      'GET'
+    );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
+  }
+
+  /**
+   * Get profile detail by template
+   */
+  async getProfile(
+    sensorId: string,
+    tenantId: string,
+    template: string
+  ): Promise<ProfileDetailResponse> {
+    const encodedTemplate = encodeURIComponent(template);
+    return this.proxyRequest<ProfileDetailResponse>(
+      sensorId,
+      tenantId,
+      `/api/profiles/${encodedTemplate}`,
+      'GET'
+    );
+  }
+
+  /**
    * Evaluate a request against the sensor's rules
    */
   async evaluateRequest(
@@ -1228,7 +1455,18 @@ export class SynapseProxyService extends EventEmitter {
    */
   clearSensorCache(sensorId: string): void {
     const sanitizedSensorId = sensorId.replace(/[^a-zA-Z0-9_-]/g, '');
-    const prefixes = ['status', 'entities', 'blocks', 'rules', 'actors', 'sessions', 'campaigns', 'config'];
+    const prefixes = [
+      'status',
+      'entities',
+      'blocks',
+      'rules',
+      'actors',
+      'sessions',
+      'campaigns',
+      'config',
+      'payload',
+      'profiles',
+    ];
     for (const prefix of prefixes) {
       this.invalidateCache(`${prefix}:${sanitizedSensorId}`);
     }

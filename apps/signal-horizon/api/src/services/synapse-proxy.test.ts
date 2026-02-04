@@ -468,6 +468,104 @@ describe('SynapseProxyService', () => {
       await service.listBlocks(sensorId, tenantId, { type: 'IP', limit: 5, offset: 10 });
     });
 
+    it('getPayloadStats uses cache', async () => {
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe('/_sensor/payload/stats');
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: {
+            status: 200,
+            data: {
+              success: true,
+              data: {
+                total_endpoints: 1,
+                total_entities: 1,
+                total_requests: 10,
+                total_request_bytes: 100,
+                total_response_bytes: 200,
+                avg_request_size: 10,
+                avg_response_size: 20,
+                active_anomalies: 0,
+              },
+            },
+          },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      await service.getPayloadStats(sensorId, tenantId);
+      await service.getPayloadStats(sensorId, tenantId);
+
+      expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
+    });
+
+    it('listProfiles caches responses', async () => {
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe('/api/profiles');
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: {
+            status: 200,
+            data: {
+              success: true,
+              data: {
+                profiles: [],
+                count: 0,
+              },
+            },
+          },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      await service.listProfiles(sensorId, tenantId);
+      await service.listProfiles(sensorId, tenantId);
+
+      expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
+    });
+
+    it('getProfile encodes templates with slashes', async () => {
+      const template = '/api/v1/users/:id';
+      const encoded = encodeURIComponent(template);
+
+      broker.sendToSensor.mockImplementation((_id, message) => {
+        expect(message.payload.endpoint).toBe(`/api/profiles/${encoded}`);
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: {
+            status: 200,
+            data: {
+              success: true,
+              data: {
+                template,
+                sampleCount: 1,
+                firstSeenMs: 1000,
+                lastUpdatedMs: 2000,
+                payloadSize: { mean: 1, variance: 0, stdDev: 0, count: 1 },
+                expectedParams: [],
+                contentTypes: [],
+                statusCodes: [],
+                endpointRisk: 0,
+                requestRate: { currentRps: 0, windowMs: 60000 },
+              },
+            },
+          },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      await service.getProfile(sensorId, tenantId, template);
+    });
+
     it('evaluateRequest performs POST', async () => {
       const evalData = { method: 'GET', path: '/', headers: {}, clientIp: '1.1.1.1' };
       broker.sendToSensor.mockImplementation((_id, message) => {

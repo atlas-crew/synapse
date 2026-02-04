@@ -68,6 +68,14 @@ const CampaignFilterSchema = PaginationSchema.extend({
   status: z.string().optional(),
 });
 
+const PayloadLimitSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+
+const ProfileTemplateSchema = z.object({
+  template: z.string().min(1).max(2048),
+});
+
 const AddBlockSchema = z.object({
   type: z.enum(['IP', 'FINGERPRINT', 'CIDR', 'USER_AGENT']),
   value: z.string().min(1),
@@ -988,6 +996,157 @@ export function createSynapseRoutes(
         res.json(session);
       } catch (error) {
         handleError(req, res, error, 'getSession');
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Payload & Profiles Endpoints
+  // ==========================================================================
+
+  /**
+   * GET /synapse/:sensorId/payload/stats
+   * Get payload profiling summary
+   */
+  router.get(
+    '/:sensorId/payload/stats',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const result = await synapseProxy.getPayloadStats(sensorId, tenantId);
+        res.json(result);
+      } catch (error) {
+        handleError(req, res, error, 'getPayloadStats');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/payload/endpoints
+   * Get payload endpoint summaries
+   */
+  router.get(
+    '/:sensorId/payload/endpoints',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = PayloadLimitSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const result = await synapseProxy.listPayloadEndpoints(sensorId, tenantId, parsed.data);
+        res.json(result);
+      } catch (error) {
+        handleError(req, res, error, 'listPayloadEndpoints');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/payload/anomalies
+   * Get recent payload anomalies
+   */
+  router.get(
+    '/:sensorId/payload/anomalies',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = PayloadLimitSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const result = await synapseProxy.listPayloadAnomalies(sensorId, tenantId, parsed.data);
+        res.json(result);
+      } catch (error) {
+        handleError(req, res, error, 'listPayloadAnomalies');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/payload/bandwidth
+   * Get payload bandwidth statistics
+   */
+  router.get(
+    '/:sensorId/payload/bandwidth',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const result = await synapseProxy.getPayloadBandwidth(sensorId, tenantId);
+        res.json(result);
+      } catch (error) {
+        handleError(req, res, error, 'getPayloadBandwidth');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/profiles
+   * List endpoint profiles
+   */
+  router.get(
+    '/:sensorId/profiles',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      try {
+        const result = await synapseProxy.listProfiles(sensorId, tenantId);
+        res.json(result);
+      } catch (error) {
+        handleError(req, res, error, 'listProfiles');
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/:sensorId/profiles/:template
+   * Get profile detail by template (template may include slashes)
+   */
+  router.get(
+    '/:sensorId/profiles/:template(*)',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const { sensorId, template } = req.params;
+      const tenantId = req.auth!.tenantId;
+
+      const parsed = ProfileTemplateSchema.safeParse({ template });
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid profile template',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const result = await synapseProxy.getProfile(sensorId, tenantId, parsed.data.template);
+        res.json(result);
+      } catch (error) {
+        handleError(req, res, error, 'getProfile');
       }
     }
   );

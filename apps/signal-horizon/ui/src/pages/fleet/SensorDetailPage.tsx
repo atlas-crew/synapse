@@ -85,6 +85,24 @@ async function updateKernelConfig(id: string, params: Record<string, string>, pe
   return response.json();
 }
 
+async function fetchSystemConfig(id: string) {
+  const response = await fetch(`${API_BASE}/api/v1/synapse/${id}/config`, {
+    headers: authHeaders,
+  });
+  if (!response.ok) throw new Error('Failed to fetch system config');
+  return response.json();
+}
+
+async function fetchCommandHistory(id: string) {
+  const response = await fetch(`${API_BASE}/api/v1/fleet/commands?limit=100&offset=0`, {
+    headers: authHeaders,
+  });
+  if (!response.ok) throw new Error('Failed to fetch command history');
+  const data = await response.json();
+  const commands = (data?.commands || []).filter((command: any) => command.sensorId === id);
+  return { ...data, commands };
+}
+
 async function fetchPingoraConfig(id: string) {
   const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch Pingora config');
@@ -179,6 +197,12 @@ export function SensorDetailPage() {
     return <SensorDetailSkeleton />;
   }
 
+  const status = sensor.connectionState === 'CONNECTED'
+    ? 'online'
+    : sensor.connectionState === 'RECONNECTING'
+      ? 'warning'
+      : 'offline';
+
   const tabs: { key: TabType; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'performance', label: 'Performance' },
@@ -203,7 +227,7 @@ export function SensorDetailPage() {
           </button>
           <h1 className="text-2xl font-bold text-ink-primary">{sensor.name}</h1>
           <div className="mt-2 flex items-center gap-4">
-            <SensorStatusBadge status={sensor.connectionState} />
+            <SensorStatusBadge status={status} />
             <span className="text-sm text-ink-secondary">ID: {sensor.id.slice(0, 8)}...</span>
             <span className="text-sm text-ink-secondary">v{sensor.version}</span>
             <span className="text-sm text-ink-secondary">{sensor.region}</span>
@@ -640,30 +664,17 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   const queryClient = useQueryClient();
   const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
 
-  // Placeholder data for general/kernel tabs (future: fetch from API)
-  const mockConfig = {
-    general: {
-      autoUpdates: true,
-      verboseLogging: false,
-      healthCheckReporting: true,
-      collectionInterval: 5000,
-      bufferSize: 10000,
-      compression: true,
-    },
-    network: {
-      upstreamTimeout: 60,
-      maxConnections: 1024,
-      keepalive: 300,
-      bufferSize: '16k',
-    },
-    kernel: {
-      'net.core.somaxconn': '65535',
-      'net.ipv4.tcp_max_syn_backlog': '65535',
-      'net.ipv4.tcp_fin_timeout': '30',
-      'net.ipv4.tcp_keepalive_time': '300',
-      'vm.swappiness': '10',
-    },
-  };
+  const {
+    data: systemConfig,
+    isLoading: isSystemConfigLoading,
+    error: systemConfigError,
+    refetch: refetchSystemConfig,
+    isFetching: isSystemConfigFetching,
+  } = useQuery({
+    queryKey: ['fleet', 'sensor', id, 'config', 'system'],
+    queryFn: () => fetchSystemConfig(id),
+    enabled: !!id && configTab === 'general',
+  });
 
   const { data: remoteKernelConfig, isLoading: isKernelLoading, error: kernelError, refetch: refetchKernel, isFetching: isKernelFetching } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'kernel'],
@@ -675,7 +686,19 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   const { data: remotePingoraConfig, isLoading, error: pingoraError, refetch: refetchPingora, isFetching: isPingoraFetching } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'pingora'],
     queryFn: () => fetchPingoraConfig(id),
-    enabled: !!id && configTab === 'pingora',
+    enabled: !!id && (configTab === 'pingora' || configTab === 'drift'),
+  });
+
+  const {
+    data: commandHistory,
+    isLoading: isHistoryLoading,
+    error: historyError,
+    refetch: refetchHistory,
+    isFetching: isHistoryFetching,
+  } = useQuery({
+    queryKey: ['fleet', 'sensor', id, 'commands'],
+    queryFn: () => fetchCommandHistory(id),
+    enabled: !!id && configTab === 'history',
   });
 
   // Local state for editing
@@ -698,7 +721,7 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   const [kernelDraft, setKernelDraft] = useState<Record<string, string>>({});
   const [persistKernel, setPersistKernel] = useState(false);
 
-  const kernelParams = (remoteKernelConfig?.data?.parameters || mockConfig.kernel) as Record<string, string>;
+  const kernelParams = (remoteKernelConfig?.data?.parameters || {}) as Record<string, string>;
 
   // Sync local state when remote data loads
   useEffect(() => {
@@ -714,6 +737,38 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
       setKernelDraft(kernelParams);
     }
   }, [kernelParams]);
+
+  const systemConfigData = systemConfig?.data || {};
+  const generalSettings = {
+    ...(systemConfigData.general || {}),
+    ...(systemConfigData.features || {}),
+  } as Record<string, unknown>;
+
+  const formatSectionEntries = (label: string, section?: Record<string, unknown>) =>
+    Object.entries(section || {}).map(([key, value]) => [`${label} ${key}`, value] as const);
+
+  const runtimeEntries = [
+    ...formatSectionEntries('Risk', systemConfigData.runtimeConfig?.risk),
+    ...formatSectionEntries('State', systemConfigData.runtimeConfig?.state),
+    ...formatSectionEntries('Session', systemConfigData.runtimeConfig?.session),
+  ];
+
+  const describeCommand = (command: any) => {
+    const payload = command?.payload || {};
+    if (payload.templateId) return `Pushed config template ${payload.templateId}`;
+    if (payload.policyTemplateId) return `Applied policy template ${payload.policyTemplateId}`;
+    if (payload.config) return 'Updated sensor configuration';
+    return `Sent ${command.commandType}`;
+  };
+
+  const configHistoryEntries = (commandHistory?.commands || [])
+    .filter((command: any) => command.commandType === 'push_config')
+    .map((command: any) => ({
+      id: command.id,
+      date: new Date(command.createdAt).toLocaleString(),
+      change: describeCommand(command),
+      status: command.status,
+    }));
 
   // Mutations
   const updateMutation = useMutation({
@@ -844,36 +899,69 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
       )}
 
       {configTab === 'general' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-ink-primary mb-4">General Settings</h3>
-            <div className="space-y-4">
-              {Object.entries(mockConfig.general).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                  {typeof value === 'boolean' ? (
-                    <div className={`w-10 h-6 rounded-full ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}>
-                      <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
+        <div className="space-y-4">
+          {isSystemConfigLoading ? (
+            <ConfigPanelSkeleton />
+          ) : systemConfigError ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="flex items-center gap-2 text-status-error">
+                <AlertCircle className="w-5 h-5" />
+                <span>Error: {(systemConfigError as Error).message}</span>
+              </div>
+              <button
+                onClick={() => refetchSystemConfig()}
+                disabled={isSystemConfigFetching}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSystemConfigFetching ? 'animate-spin' : ''}`} />
+                {isSystemConfigFetching ? 'Retrying...' : 'Retry'}
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-ink-primary mb-4">General Settings</h3>
+                <div className="space-y-4">
+                  {Object.entries(generalSettings).map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-sm text-ink-secondary capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                      {typeof value === 'boolean' ? (
+                        <div className={`w-10 h-6 rounded-full ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}>
+                          <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
+                        </div>
+                      ) : (
+                        <span className="text-sm font-mono text-ink-primary">{String(value)}</span>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-sm font-mono text-ink-primary">{value}</span>
+                  ))}
+                  {Object.keys(generalSettings).length === 0 && (
+                    <div className="text-sm text-ink-muted">No general settings available.</div>
                   )}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-ink-primary mb-4">Network Settings</h3>
-            <div className="space-y-4">
-              {Object.entries(mockConfig.network).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
-                  <span className="text-sm font-mono text-ink-primary">{value}</span>
+              <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-ink-primary mb-4">Runtime Settings</h3>
+                <div className="space-y-4">
+                  {runtimeEntries.map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-sm text-ink-secondary capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                      {typeof value === 'boolean' ? (
+                        <div className={`w-10 h-6 rounded-full ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}>
+                          <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
+                        </div>
+                      ) : (
+                        <span className="text-sm font-mono text-ink-primary">{String(value)}</span>
+                      )}
+                    </div>
+                  ))}
+                  {runtimeEntries.length === 0 && (
+                    <div className="text-sm text-ink-muted">No runtime settings available.</div>
+                  )}
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -946,24 +1034,37 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
       {configTab === 'history' && (
         <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Recent Configuration Changes</h3>
-          <div className="space-y-4">
-            {[
-              { date: '2024-01-15 14:30', user: 'admin', change: 'Updated synapse-pingora upstream keepalive from 60 to 65', revertable: true },
-              { date: '2024-01-14 09:15', user: 'admin', change: 'Enabled verbose logging', revertable: true },
-              { date: '2024-01-12 16:45', user: 'system', change: 'Auto-update: agent version 4.2.0 → 4.2.1', revertable: false },
-              { date: '2024-01-10 11:20', user: 'admin', change: 'Modified kernel parameter net.core.somaxconn', revertable: true },
-            ].map((entry, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-surface-subtle rounded-lg">
-                <div>
-                  <div className="text-sm font-medium text-ink-primary">{entry.change}</div>
-                  <div className="text-xs text-ink-muted">{entry.date} by {entry.user}</div>
-                </div>
-                {entry.revertable && (
-                  <button className="text-xs text-accent-primary hover:underline">Revert</button>
-                )}
+          {isHistoryLoading ? (
+            <ConfigPanelSkeleton />
+          ) : historyError ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
+              <div className="flex items-center gap-2 text-status-error">
+                <AlertCircle className="w-5 h-5" />
+                <span>Error: {(historyError as Error).message}</span>
               </div>
-            ))}
-          </div>
+              <button
+                onClick={() => refetchHistory()}
+                disabled={isHistoryFetching}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isHistoryFetching ? 'animate-spin' : ''}`} />
+                {isHistoryFetching ? 'Retrying...' : 'Retry'}
+              </button>
+            </div>
+          ) : configHistoryEntries.length === 0 ? (
+            <div className="text-sm text-ink-muted">No configuration changes recorded yet.</div>
+          ) : (
+            <div className="space-y-4">
+              {configHistoryEntries.map((entry: any) => (
+                <div key={entry.id} className="flex items-center justify-between p-3 bg-surface-subtle rounded-lg">
+                  <div>
+                    <div className="text-sm font-medium text-ink-primary">{entry.change}</div>
+                    <div className="text-xs text-ink-muted">{entry.date} • {entry.status}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

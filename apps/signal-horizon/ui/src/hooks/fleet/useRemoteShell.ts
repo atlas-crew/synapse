@@ -46,6 +46,8 @@ export interface UseRemoteShellOptions {
   reconnectOptions?: Partial<ShellReconnectOptions>;
   /** Auto-connect on mount */
   autoConnect?: boolean;
+  /** Optional WebSocket factory (useful for deterministic tests) */
+  webSocketFactory?: (url: string) => WebSocket;
 }
 
 export interface UseRemoteShellReturn {
@@ -82,6 +84,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     onReady,
     reconnectOptions = {},
     autoConnect = false,
+    webSocketFactory,
   } = options;
 
   const reconnectConfig: ShellReconnectOptions = {
@@ -274,6 +277,16 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     };
   }, [sensorId]);
 
+  const createWebSocket = useCallback(
+    (url: string) => {
+      if (webSocketFactory) {
+        return webSocketFactory(url);
+      }
+      return new WebSocket(url);
+    },
+    [webSocketFactory]
+  );
+
   /**
    * Internal connect function
    */
@@ -324,7 +337,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         : `${wsProtocol}://${wsHost}${wsPath.startsWith('/') ? wsPath : `/${wsPath}`}`;
 
       try {
-        const ws = new WebSocket(wsUrl);
+        const ws = createWebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -373,7 +386,16 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         onError?.(errorMsg);
       }
     },
-    [cleanup, createSession, handleMessage, onError, scheduleReconnect, sensorId, session?.id]
+    [
+      cleanup,
+      createSession,
+      createWebSocket,
+      handleMessage,
+      onError,
+      scheduleReconnect,
+      sensorId,
+      session?.id,
+    ]
   );
 
   /**
@@ -408,7 +430,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     sessionUrlRef.current = null;
     pendingInitOptionsRef.current = null;
     isCleaningUpRef.current = false;
-  }, [cleanup, clearTimers, session?.id]);
+  }, [cleanup, clearTimers]);
 
   /**
    * Send input to the shell (base64 encoded)

@@ -18,6 +18,7 @@ import { createWarRoomRoutes } from './warroom.js';
 import { createIntelRoutes } from './intel.js';
 import { createHuntRoutes } from './hunt.js';
 import { createFleetRoutes } from './fleet.js';
+import { createFleetIntelRoutes } from './fleet-intel.js';
 import { createBeamRouter } from './beam/index.js';
 import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
@@ -60,6 +61,7 @@ export interface ApiRouterOptions {
   intelService?: import('../../services/intel/index.js').IntelService;
   policyService?: import('../../services/fleet/policy-template.js').PolicyTemplateService;
   bandwidthService?: import('../../services/fleet/bandwidth-aggregator.js').BandwidthAggregatorService;
+  fleetIntelService?: import('../../services/fleet/fleet-intel.js').FleetIntelService;
   playbookService?: import('../../services/warroom/playbook-service.js').PlaybookService;
   securityAuditService?: import('../../services/audit/security-audit.js').SecurityAuditService;
 }
@@ -132,6 +134,13 @@ export function createApiRouter(
   if (options.fleetAggregator || options.configManager || options.fleetCommander || options.ruleDistributor) {
     router.use('/fleet', createFleetRoutes(prisma, logger, options));
     logger.info('Fleet routes mounted at /api/v1/fleet');
+  }
+
+  if (options.fleetIntelService) {
+    router.use('/fleet/intel', createFleetIntelRoutes(prisma, logger, {
+      fleetIntelService: options.fleetIntelService,
+    }));
+    logger.info('Fleet intel routes mounted at /api/v1/fleet/intel');
   }
 
   // Mount Beam (Customer Protection Console) routes
