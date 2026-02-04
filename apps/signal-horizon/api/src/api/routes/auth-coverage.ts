@@ -92,7 +92,7 @@ export function createAuthCoverageRoutes(aggregator: AuthCoverageAggregator): Ro
       return res.status(404).json({ error: 'Endpoint not found' });
     }
     
-    res.json(stats);
+    return res.json(stats);
   });
   
   /**
@@ -116,7 +116,7 @@ export function createAuthCoverageRoutes(aggregator: AuthCoverageAggregator): Ro
       return res.send(csv);
     }
     
-    res.json({
+    return res.json({
       exportedAt: new Date().toISOString(),
       gaps,
     });
