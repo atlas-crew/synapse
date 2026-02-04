@@ -2144,7 +2144,18 @@ async fn sensor_report_handler(
     }
 
     // Embed full report as metadata
-    signal = signal.with_metadata(serde_json::to_value(&report).unwrap_or_default());
+    let metadata = match serde_json::to_value(&report) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!(
+                sensor_id = %report.sensor_id,
+                error = %err,
+                "Failed to serialize external report metadata"
+            );
+            serde_json::json!({})
+        }
+    };
+    signal = signal.with_metadata(metadata.clone());
 
     // Dispatch to Signal Horizon (Fleet Intelligence)
     if let Err(err) = state.handler.dispatch_horizon_signal(signal.clone()) {
@@ -2156,11 +2167,11 @@ async fn sensor_report_handler(
         use crate::intelligence::SignalCategory;
         
         manager.record_event(
-            SignalCategory::Intelligence, 
+            SignalCategory::Intelligence,
             report.signal.signal_type.clone(),
             Some(report.actor.ip.clone()),
             Some(format!("External threat reported by {}", report.sensor_id)),
-            serde_json::to_value(&report).unwrap_or_default()
+            metadata
         );
         
         info!("Received external threat report from {}: {} ({})", 
