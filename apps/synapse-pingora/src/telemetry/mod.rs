@@ -314,7 +314,7 @@ impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            endpoint: "http://localhost:3100/_sensor/report".to_string(),
+            endpoint: "http://localhost:3100/telemetry".to_string(),
             api_key: None,
             batch_size: 100,
             flush_interval: Duration::from_secs(10),

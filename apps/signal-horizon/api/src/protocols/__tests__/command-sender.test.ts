@@ -129,9 +129,8 @@ describe('CommandSender', () => {
       limitedSender.stop();
     });
 
-    it('allows sending to connected sensor even when pending limit would block', () => {
-      // Per-sensor limit only applies to pending commands (offline sensors)
-      // When sensor is connected, commands are sent immediately and don't count against limit
+    it('allows sending to connected sensor without dropping when limit is 1', () => {
+      // Connected sensors still queue behind inflight, but should not drop commands at capacity
       const limitedSender = new CommandSender({ maxQueueSize: 100, maxPerSensorQueueSize: 1 });
 
       // Register connection so commands go to 'sent' state
@@ -140,10 +139,10 @@ describe('CommandSender', () => {
       const id1 = limitedSender.sendCommand('sensor-1', 'push_config', {});
       const id2 = limitedSender.sendCommand('sensor-1', 'push_rules', {});
 
-      // Both should succeed because they're being sent, not queued
+      // Both should succeed; second command should be pending behind inflight
       expect(id1).not.toBeNull();
       expect(id2).not.toBeNull();
-      expect(limitedSender.getSensorStats('sensor-1').pending).toBe(0);
+      expect(limitedSender.getSensorStats('sensor-1').pending).toBe(1);
 
       limitedSender.stop();
     });
@@ -199,22 +198,22 @@ describe('CommandSender', () => {
       limitedSender.stop();
     });
 
-    it('tracks dropped and evicted separately', () => {
+    it('tracks dropped and evicted separately when connected', () => {
       const limitedSender = new CommandSender({ maxQueueSize: 2, maxPerSensorQueueSize: 100 });
 
       // Register connection so commands go to 'sent' (not evictable)
       limitedSender.registerConnection('sensor-1', createMockWs());
 
-      // Fill with sent commands (not evictable)
+      // Fill with inflight + pending commands
       limitedSender.sendCommand('sensor-1', 'push_config', {});
       limitedSender.sendCommand('sensor-1', 'push_rules', {});
 
-      // This should be dropped (can't evict sent commands)
+      // This should evict the oldest pending command
       limitedSender.sendCommand('sensor-1', 'restart', {});
 
       const stats = limitedSender.getStats();
-      expect(stats.dropped).toBe(1);
-      expect(stats.evicted).toBe(0);
+      expect(stats.dropped).toBe(0);
+      expect(stats.evicted).toBe(1);
 
       limitedSender.stop();
     });
@@ -283,14 +282,47 @@ describe('CommandSender', () => {
     });
 
     it('flushes pending commands on reconnect', () => {
-      sender.sendCommand('sensor-1', 'push_config', {});
-      sender.sendCommand('sensor-1', 'push_rules', {});
+      const firstId = sender.sendCommand('sensor-1', 'push_config', {});
+      const secondId = sender.sendCommand('sensor-1', 'push_rules', {});
 
       const ws = createMockWs();
       sender.registerConnection('sensor-1', ws);
 
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      const firstPayload = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      expect(firstPayload.commandId).toBe(firstId);
+
+      sender.handleResponse(firstId!, true);
+
       expect(ws.send).toHaveBeenCalledTimes(2);
+      const secondPayload = JSON.parse((ws.send as ReturnType<typeof vi.fn>).mock.calls[1][0]);
+      expect(secondPayload.commandId).toBe(secondId);
       expect(sender.getPendingCommands('sensor-1').length).toBe(0);
+    });
+
+    it('resends inflight command on reconnect before pending commands', () => {
+      const ws1 = createMockWs();
+      sender.registerConnection('sensor-1', ws1);
+
+      const firstId = sender.sendCommand('sensor-1', 'push_config', { seq: 1 });
+      const secondId = sender.sendCommand('sensor-1', 'push_rules', { seq: 2 });
+
+      expect(ws1.send).toHaveBeenCalledTimes(1);
+
+      sender.unregisterConnection('sensor-1');
+
+      const ws2 = createMockWs();
+      sender.registerConnection('sensor-1', ws2);
+
+      expect(ws2.send).toHaveBeenCalledTimes(1);
+      const resentPayload = JSON.parse((ws2.send as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+      expect(resentPayload.commandId).toBe(firstId);
+
+      sender.handleResponse(firstId!, true);
+
+      expect(ws2.send).toHaveBeenCalledTimes(2);
+      const nextPayload = JSON.parse((ws2.send as ReturnType<typeof vi.fn>).mock.calls[1][0]);
+      expect(nextPayload.commandId).toBe(secondId);
     });
 
     it('handles command response correctly', () => {

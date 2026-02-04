@@ -240,22 +240,18 @@ export class FleetCommander extends EventEmitter {
    */
   async cancelCommand(commandId: string): Promise<boolean> {
     try {
-      const command = await this.prisma.fleetCommand.findUnique({
-        where: { id: commandId },
-      });
-
-      if (!command || !['pending', 'sent'].includes(command.status)) {
-        return false;
-      }
-
-      await this.prisma.fleetCommand.update({
-        where: { id: commandId },
+      const updated = await this.prisma.fleetCommand.updateMany({
+        where: { id: commandId, status: { in: ['pending', 'sent'] } },
         data: {
           status: 'failed',
           error: 'Cancelled by user',
           completedAt: new Date(),
         },
       });
+
+      if (updated.count === 0) {
+        return false;
+      }
 
       this.logger.info({ commandId }, 'Command cancelled');
       return true;

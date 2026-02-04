@@ -264,7 +264,7 @@ Event reporting to external collectors.
 ```yaml
 telemetry:
   enabled: false
-  endpoint: "http://localhost:3100/_sensor/report"
+  endpoint: "http://localhost:3100/telemetry"
   api_key: ""
   batch_size: 100
   flush_interval_secs: 10
@@ -280,7 +280,7 @@ telemetry:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `enabled` | boolean | `false` | Enable telemetry |
-| `endpoint` | string | `"http://localhost:3100/_sensor/report"` | Telemetry endpoint URL |
+| `endpoint` | string | `"http://localhost:3100/telemetry"` | Telemetry endpoint URL |
 | `api_key` | string | `""` | JWT bearer token for telemetry authentication |
 | `batch_size` | integer | `100` | Events per batch |
 | `flush_interval_secs` | integer | `10` | Flush interval in seconds |
@@ -294,7 +294,7 @@ telemetry:
 
 **Event types:** `request_processed`, `waf_block`, `rate_limit_hit`, `config_reload`, `service_health`, `sensor_report`, `campaign_report`, `auth_coverage`, `log_entry`
 
-**Telemetry JWT requirements:** HS256 token with `tenantId`, `sensorId`, and `jti` claims.
+**Telemetry JWT requirements:** HS256 token with `tenantId`, `sensorId`, and `jti` claims. Signal Horizon still accepts legacy `/_sensor/report` for backward compatibility.
 
 ---
 

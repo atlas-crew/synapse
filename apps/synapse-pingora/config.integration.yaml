@@ -20,7 +20,7 @@ detection:
 
 telemetry:
   enabled: true
-  endpoint: "http://localhost:3100/_sensor/report"
+  endpoint: "http://localhost:3100/telemetry"
 
 logging:
   level: "info"

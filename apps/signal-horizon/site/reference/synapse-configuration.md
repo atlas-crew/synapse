@@ -264,7 +264,7 @@ Event reporting to external collectors.
 ```yaml
 telemetry:
   enabled: false
-  endpoint: "http://localhost:8080/telemetry"
+  endpoint: "http://localhost:3100/telemetry"
   api_key: ""
   batch_size: 100
   flush_interval_secs: 10
@@ -280,7 +280,7 @@ telemetry:
 | Field | Type | Default | Constraints | Description |
 |-------|------|---------|-------------|-------------|
 | `enabled` | boolean | `false` | — | Enable telemetry |
-| `endpoint` | string | `"http://localhost:8080/telemetry"` | valid URL | Telemetry endpoint URL |
+| `endpoint` | string | `"http://localhost:3100/telemetry"` | valid URL | Telemetry endpoint URL |
 | `api_key` | string | `""` | — | API key for authentication |
 | `batch_size` | integer | `100` | 1-10000 | Events per batch |
 | `flush_interval_secs` | integer | `10` | 1-300 | Flush interval in seconds |
@@ -293,6 +293,8 @@ telemetry:
 | `enabled_events` | string[] | `[]` | valid event types | Event types to send (empty = all) |
 
 **Event types:** `request_processed`, `waf_block`, `rate_limit_hit`, `config_reload`, `service_health`, `sensor_report`, `campaign_report`
+
+Signal Horizon also accepts legacy `/_sensor/report` endpoints for backward compatibility.
 
 ---
 

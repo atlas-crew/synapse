@@ -44,6 +44,7 @@ export interface Command {
 }
 
 export class CommandSender extends EventEmitter {
+  private logger = console;
   private commands = new Map<string, Command>();
   private sensorConnections = new Map<string, WebSocket>();
   private sensorQueues = new Map<string, string[]>();
@@ -221,7 +222,7 @@ export class CommandSender extends EventEmitter {
       return;
     }
 
-    if (cmd.status !== 'pending' && cmd.status !== 'sent') {
+    if (cmd.status !== 'pending') {
       queue.shift();
       this.trySendNext(sensorId);
       return;
@@ -249,16 +250,25 @@ export class CommandSender extends EventEmitter {
     if (inflight && inflight !== cmd.id) return;
     if (['success', 'failed', 'timeout'].includes(cmd.status)) return;
 
+    // Keep per-sensor queues pending-only by removing inflight entries on send.
+    this.removeFromQueue(cmd.sensorId, cmd.id);
+
     this.inflightCommands.set(cmd.sensorId, cmd.id);
     cmd.attempts++;
     cmd.sentAt = Date.now();
     cmd.status = 'sent';
 
-    ws.send(JSON.stringify({
-      type: cmd.type,
-      commandId: cmd.id,
-      payload: cmd.payload,
-    }));
+    try {
+      ws.send(JSON.stringify({
+        type: cmd.type,
+        commandId: cmd.id,
+        payload: cmd.payload,
+      }));
+    } catch (error) {
+      this.logger.error({ error, commandId: cmd.id }, 'WebSocket send failed');
+      this.finalizeCommand(cmd, 'failed', 'WebSocket send failed');
+      return;
+    }
 
     this.setCommandTimeout(cmd);
     this.emit('command-sent', cmd);
@@ -272,11 +282,13 @@ export class CommandSender extends EventEmitter {
       const ws = this.sensorConnections.get(cmd.sensorId);
       const wsReady = !!ws && ws.readyState === 1;
       if (!wsReady) {
+        this.clearCommandTimeout(cmd.id);
         this.setCommandTimeout(cmd);
         return;
       }
 
       if (cmd.attempts < cmd.maxAttempts) {
+        this.clearCommandTimeout(cmd.id);
         this.trySendCommand(cmd);
         return;
       }
@@ -326,14 +338,27 @@ export class CommandSender extends EventEmitter {
   }
 
   private flushPendingCommands(sensorId: string): void {
-    const queue = this.sensorQueues.get(sensorId);
-    if (!queue || queue.length === 0) {
-      const pending = Array.from(this.commands.values())
-        .filter((cmd) => cmd.sensorId === sensorId && cmd.status === 'pending')
-        .sort((a, b) => a.createdAt - b.createdAt)
-        .map((cmd) => cmd.id);
-      if (pending.length > 0) {
-        this.sensorQueues.set(sensorId, pending);
+    const inflightId = this.inflightCommands.get(sensorId);
+
+    const pending = Array.from(this.commands.values())
+      .filter((cmd) => cmd.sensorId === sensorId && cmd.status === 'pending')
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    if (pending.length > 0) {
+      this.sensorQueues.set(sensorId, pending.map((cmd) => cmd.id));
+    } else {
+      this.sensorQueues.delete(sensorId);
+    }
+
+    if (inflightId) {
+      const inflightCmd = this.commands.get(inflightId);
+      if (
+        inflightCmd
+        && inflightCmd.sensorId === sensorId
+        && (inflightCmd.status === 'sent' || inflightCmd.status === 'pending')
+        && inflightCmd.attempts < inflightCmd.maxAttempts
+      ) {
+        this.trySendCommand(inflightCmd);
       }
     }
 

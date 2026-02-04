@@ -112,7 +112,7 @@ Telemetry durations are serialized as `{ secs: <int>, nanos: <int> }`.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable telemetry |
-| `endpoint` | string | `"http://localhost:3100/_sensor/report"` | Telemetry endpoint |
+| `endpoint` | string | `"http://localhost:3100/telemetry"` | Telemetry endpoint |
 | `api_key` | string | `null` | API key for telemetry |
 | `batch_size` | integer | `100` | Events per batch |
 | `flush_interval` | duration | `10s` | Flush interval |

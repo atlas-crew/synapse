@@ -38,7 +38,7 @@ tls:
 
 telemetry:
   enabled: true
-  endpoint: "http://localhost:3100/_sensor/report"
+  endpoint: "http://localhost:3100/telemetry"
   api_key: null
   batch_size: 100
   flush_interval:

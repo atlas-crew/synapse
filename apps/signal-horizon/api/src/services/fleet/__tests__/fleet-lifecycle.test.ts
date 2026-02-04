@@ -70,6 +70,27 @@ function createMockPrisma() {
         }
         return Promise.resolve(null);
       }),
+      updateMany: vi.fn().mockImplementation(({ where, data }) => {
+        const existing = commands.get(where.id);
+        if (!existing) {
+          return Promise.resolve({ count: 0 });
+        }
+        if (where.status?.in && !where.status.in.includes(existing.status)) {
+          return Promise.resolve({ count: 0 });
+        }
+        if (where.attempts?.lt !== undefined) {
+          const attempts = (existing.attempts as number | undefined) ?? 0;
+          if (attempts >= where.attempts.lt) {
+            return Promise.resolve({ count: 0 });
+          }
+        }
+        const updated = { ...existing, ...data };
+        if (data.attempts?.increment) {
+          updated.attempts = ((existing.attempts as number | undefined) ?? 0) + data.attempts.increment;
+        }
+        commands.set(where.id, updated);
+        return Promise.resolve({ count: 1 });
+      }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     _commands: commands, // Expose for test assertions
@@ -218,8 +239,8 @@ describe('Fleet Management Lifecycle', () => {
       );
 
       // Verify database was updated
-      expect(prisma.fleetCommand.update).toHaveBeenCalledWith({
-        where: { id: commandId },
+      expect(prisma.fleetCommand.updateMany).toHaveBeenCalledWith({
+        where: { id: commandId, status: { in: ['pending', 'sent'] } },
         data: expect.objectContaining({
           status: 'success',
         }),
@@ -386,8 +407,8 @@ describe('Fleet Management Lifecycle', () => {
       const cancelled = await fleetCommander.cancelCommand(commandId);
 
       expect(cancelled).toBe(true);
-      expect(prisma.fleetCommand.update).toHaveBeenCalledWith({
-        where: { id: commandId },
+      expect(prisma.fleetCommand.updateMany).toHaveBeenCalledWith({
+        where: { id: commandId, status: { in: ['pending', 'sent'] } },
         data: expect.objectContaining({
           status: 'failed',
           error: 'Cancelled by user',
@@ -436,15 +457,23 @@ describe('Fleet Management Lifecycle', () => {
       isolated.start();
 
       // Queue some commands while offline
-      isolated.sendCommand(TEST_SENSOR_ID, 'push_config', { v: 1 });
-      isolated.sendCommand(TEST_SENSOR_ID, 'push_config', { v: 2 });
+      const firstId = isolated.sendCommand(TEST_SENSOR_ID, 'push_config', { v: 1 });
+      const secondId = isolated.sendCommand(TEST_SENSOR_ID, 'push_config', { v: 2 });
 
       // Reconnect
       const ws = new MockWebSocket();
       isolated.registerConnection(TEST_SENSOR_ID, ws as unknown as WebSocket);
 
       // Commands should be flushed
+      expect(ws.sentMessages.length).toBe(1);
+      const firstPayload = JSON.parse(ws.sentMessages[0]);
+      expect(firstPayload.commandId).toBe(firstId);
+
+      isolated.handleResponse(firstId as string, true);
+
       expect(ws.sentMessages.length).toBe(2);
+      const secondPayload = JSON.parse(ws.sentMessages[1]);
+      expect(secondPayload.commandId).toBe(secondId);
 
       isolated.stop();
       isolated.clear();

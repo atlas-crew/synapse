@@ -1251,9 +1251,12 @@ pub async fn start_admin_server(
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
 
-    // Routes requiring admin:read scope (console access)
+    // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
+        .route("/_sensor/system/logs", get(sensor_system_logs_handler))
+        .route("/_sensor/logs", get(logs_handler))
+        .route("/_sensor/logs/:source", get(logs_by_source_handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
@@ -1299,7 +1302,6 @@ pub async fn start_admin_server(
         .route("/_sensor/system/performance", get(sensor_system_performance_handler))
         .route("/_sensor/system/network", get(sensor_system_network_handler))
         .route("/_sensor/system/processes", get(sensor_system_processes_handler))
-        .route("/_sensor/system/logs", get(sensor_system_logs_handler))
         // Note: DLP endpoints moved to sensor_read_routes (require auth)
         // API Profiling endpoints for API Catalog
         .route("/_sensor/profiling/templates", get(profiling_templates_handler))
@@ -5859,8 +5861,10 @@ async fn config_kernel_put_handler(
 mod tests {
     use super::*;
     use axum::body::Body;
+    use hyper::body::to_bytes;
     use http::Request;
     use tower::util::ServiceExt;
+    use std::num::NonZeroU32;
     use crate::horizon::{SignalType, Severity};
     use crate::intelligence::signal_manager::{SignalManager, SignalManagerConfig};
     use crate::intelligence::SignalQueryOptions;
@@ -5902,9 +5906,11 @@ mod tests {
             .with_state(state)
     }
 
-    fn create_test_app_with_sensor_report() -> (Router, Arc<SignalManager>) {
+    fn create_test_app_with_sensor_report_with_scopes(
+        scopes: Vec<String>,
+        report_quota: NonZeroU32,
+    ) -> (Router, Arc<SignalManager>) {
         use governor::{Quota, RateLimiter};
-        use std::num::NonZeroU32;
 
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
         let signal_manager_ref = Arc::clone(&signal_manager);
@@ -5912,12 +5918,12 @@ mod tests {
         let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
         let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
         let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
-        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(Quota::per_minute(report_quota)));
         let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
         let state = AdminState {
             handler,
             admin_api_key: "test-key".to_string(),
-            admin_scopes: scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
+            admin_scopes: scopes,
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
             public_rate_limiter,
@@ -5927,10 +5933,19 @@ mod tests {
 
         let router = Router::new()
             .route("/_sensor/report", post(sensor_report_handler))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_write))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin))
             .with_state(state);
 
         (router, signal_manager_ref)
+    }
+
+    fn create_test_app_with_sensor_report() -> (Router, Arc<SignalManager>) {
+        create_test_app_with_sensor_report_with_scopes(
+            scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
+            NonZeroU32::new(1000).unwrap(),
+        )
     }
 
     #[tokio::test]
@@ -6177,6 +6192,114 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_requires_sensor_write_scope() {
+        let (app, _manager) = create_test_app_with_sensor_report_with_scopes(
+            vec![scopes::ADMIN_READ.to_string()],
+            NonZeroU32::new(1000).unwrap(),
+        );
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": { "ip": "10.0.0.1" },
+            "signal": { "type": "honeypot_hit", "severity": "high", "details": {} }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_rate_limits_per_sensor() {
+        let (app, _manager) = create_test_app_with_sensor_report_with_scopes(
+            scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
+            NonZeroU32::new(1).unwrap(),
+        );
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": { "ip": "10.0.0.1" },
+            "signal": { "type": "honeypot_hit", "severity": "high", "details": {} }
+        });
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(first.status(), StatusCode::OK);
+
+        let second = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn test_sensor_report_validation_error() {
+        let (app, _manager) = create_test_app_with_sensor_report();
+
+        let payload = serde_json::json!({
+            "sensorId": "sensor-1",
+            "timestamp": "2026-02-03T00:00:00Z",
+            "actor": { "ip": "not-an-ip" },
+            "signal": { "type": "honeypot_hit", "severity": "high", "details": {} }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/_sensor/report")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let status = response.status();
+        let body = to_bytes(response.into_body()).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["code"], error_codes::VALIDATION_ERROR);
     }
 
     #[test]
