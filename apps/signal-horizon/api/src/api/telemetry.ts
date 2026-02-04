@@ -5,13 +5,13 @@
 
 import { Router, type Request, type Response } from 'express';
 import type { Logger } from 'pino';
-import { config } from '../config.js';
-import { safeCompare } from '../lib/safe-compare.js';
+import { requireTelemetryJwt } from './middleware/telemetry-jwt.js';
 import type {
   ClickHouseRetryBuffer,
   ClickHouseService,
   HttpTransactionRow,
   LogEntryRow,
+  SignalEventRow,
 } from '../storage/clickhouse/index.js';
 
 export interface TelemetryRouterOptions {
@@ -25,40 +25,29 @@ type TelemetryEventEntry = {
   timestamp_ms?: number;
   instance_id?: string | null;
   event?: TelemetryEventPayload;
+  // External report fields (Apparatus format)
+  sensorId?: string;
+  timestamp?: string | number;
+  actor?: {
+    ip: string;
+    fingerprint?: string;
+  };
+  signal?: {
+    type: string;
+    severity: string;
+    details?: Record<string, unknown>;
+  };
 } & TelemetryEventPayload;
 
 interface ParsedTelemetry {
   rows: HttpTransactionRow[];
   logRows: LogEntryRow[];
+  signalRows: SignalEventRow[];
   received: number;
   ignored: number;
 }
 
-const DEFAULT_TENANT_ID = 'default';
 const DEFAULT_SITE = '_default';
-
-function getHeader(req: { header: (name: string) => string | undefined }, name: string): string | undefined {
-  const value = req.header(name);
-  return value && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function getApiKey(
-  req: { header: (name: string) => string | undefined },
-  apiKeyHeader: string
-): string | undefined {
-  const headers = [apiKeyHeader, 'X-Admin-Key'];
-  for (const header of headers) {
-    const headerKey = getHeader(req, header);
-    if (headerKey) return headerKey;
-  }
-
-  const auth = getHeader(req, 'authorization');
-  if (auth && auth.toLowerCase().startsWith('bearer ')) {
-    return auth.slice(7).trim();
-  }
-
-  return undefined;
-}
 
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -123,11 +112,13 @@ function extractTelemetryEntries(payload: unknown): TelemetryEventEntry[] {
 function parseTelemetryPayload(
   payload: unknown,
   tenantId: string,
-  defaultSensorId: string
+  defaultSensorId: string,
+  log: Logger
 ): ParsedTelemetry {
   const entries = extractTelemetryEntries(payload);
   const rows: HttpTransactionRow[] = [];
   const logRows: LogEntryRow[] = [];
+  const signalRows: SignalEventRow[] = [];
 
   for (const entry of entries) {
     const eventPayload = normalizeEventPayload(entry);
@@ -147,10 +138,14 @@ function parseTelemetryPayload(
         Date.now()
       );
 
-      const instanceId = normalizeString(
-        entry.instance_id ?? data.instance_id,
-        defaultSensorId
-      );
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
 
       rows.push({
         timestamp: new Date(timestampMs).toISOString(),
@@ -172,10 +167,14 @@ function parseTelemetryPayload(
         Date.now()
       );
 
-      const instanceId = normalizeString(
-        entry.instance_id ?? data.instance_id,
-        defaultSensorId
-      );
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
 
       const fieldsValue = data.fields;
       let fields: string | null = null;
@@ -213,13 +212,66 @@ function parseTelemetryPayload(
         client_ip: normalizeOptionalString(data.client_ip ?? data.clientIp),
         rule_id: normalizeOptionalString(data.rule_id ?? data.ruleId),
       });
+      continue;
+    }
+
+    // Handle external threat signals (Apparatus/Cutlass format) (labs-gxge)
+    if (!eventType && entry.signal && typeof entry.signal === 'object') {
+      const signal = entry.signal;
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? (typeof entry.timestamp === 'number' ? entry.timestamp : (typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : Date.now())),
+        Date.now()
+      );
+
+      const providedSensorId = normalizeOptionalString(entry.sensorId ?? entry.sensor_id);
+      if (providedSensorId && providedSensorId !== defaultSensorId) {
+        log.warn(
+          { providedSensorId, sensorId: defaultSensorId },
+          'Telemetry sensorId does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
+
+      const signalType = normalizeString(signal.type, 'UNKNOWN');
+      const severity = normalizeString(signal.severity, 'LOW');
+
+      // 1. AUDIT LOGGING (Required for compliance)
+      log.info({
+        audit: true,
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        signal_type: signalType,
+        severity,
+        result: 'received'
+      }, 'External signal submission received');
+
+      // 2. ClickHouse persistence
+      signalRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        signal_type: signalType,
+        source_ip: normalizeString(entry.actor?.ip, '0.0.0.0'),
+        fingerprint: normalizeString(entry.actor?.fingerprint, ''),
+        anon_fingerprint: '',
+        severity: severity.toUpperCase(),
+        confidence: 1.0,
+        event_count: 1,
+        metadata: JSON.stringify({
+          details: signal.details || {},
+          request: entry.request || undefined,
+          version: entry.version || '1.0.0'
+        })
+      });
     }
   }
 
-  const processed = rows.length + logRows.length;
+  const processed = rows.length + logRows.length + signalRows.length;
   return {
     rows,
     logRows,
+    signalRows,
     received: entries.length,
     ignored: Math.max(0, entries.length - processed),
   };
@@ -241,22 +293,16 @@ export function createTelemetryRouter(
       return res.status(503).json({ error: 'clickhouse_disabled' });
     }
 
-    if (!config.telemetry.apiKey) {
-      log.error('Telemetry API key not configured; rejecting /_sensor/report');
-      return res.status(503).json({ error: 'telemetry_key_missing' });
+    const authContext = requireTelemetryJwt(req, res);
+    if (!authContext) {
+      return;
     }
 
-    const providedKey = getApiKey(req, config.security.apiKeyHeader);
-    if (!providedKey || !safeCompare(providedKey, config.telemetry.apiKey)) {
-      return res.status(401).json({ error: 'unauthorized' });
-    }
+    const { tenantId, sensorId } = authContext;
 
-    const tenantId = getHeader(req, 'x-tenant-id') ?? getHeader(req, 'x-tenant') ?? DEFAULT_TENANT_ID;
-    const sensorId = getHeader(req, 'x-sensor-id') ?? 'unknown';
+    const { rows, logRows, signalRows, received, ignored } = parseTelemetryPayload(req.body, tenantId, sensorId, log);
 
-    const { rows, logRows, received, ignored } = parseTelemetryPayload(req.body, tenantId, sensorId);
-
-    if (rows.length === 0 && logRows.length === 0) {
+    if (rows.length === 0 && logRows.length === 0 && signalRows.length === 0) {
       return res.status(202).json({ received, inserted: 0, ignored });
     }
 
@@ -271,6 +317,10 @@ export function createTelemetryRouter(
           const success = await options.retryBuffer.insertLogEntries(logRows);
           buffered += success ? 0 : logRows.length;
         }
+        if (signalRows.length > 0) {
+          const success = await options.retryBuffer.insertSignalEvents(signalRows);
+          buffered += success ? 0 : signalRows.length;
+        }
       } else {
         if (rows.length > 0) {
           await options.clickhouse.insertHttpTransactions(rows);
@@ -278,16 +328,19 @@ export function createTelemetryRouter(
         if (logRows.length > 0) {
           await options.clickhouse.insertLogEntries(logRows);
         }
+        if (signalRows.length > 0) {
+          await options.clickhouse.insertSignalEvents(signalRows);
+        }
       }
 
       res.status(202).json({
         received,
-        inserted: rows.length + logRows.length - buffered,
+        inserted: rows.length + logRows.length + signalRows.length - buffered,
         buffered,
         ignored,
       });
     } catch (error) {
-      log.warn({ error, count: rows.length }, 'Telemetry ingest failed');
+      log.warn({ error, count: rows.length + signalRows.length }, 'Telemetry ingest failed');
       res.status(503).json({ error: 'ingest_failed' });
     }
   };

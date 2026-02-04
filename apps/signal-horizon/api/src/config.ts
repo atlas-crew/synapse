@@ -50,7 +50,8 @@ const envSchema = z.object({
 
   // Security
   API_KEY_HEADER: z.string().min(1).default('X-API-Key'),
-  TELEMETRY_API_KEY: z.string().min(1).optional(),
+  TELEMETRY_JWT_SECRET: z.string().min(16).optional(),
+  JWT_SECRET: z.string().min(16).optional(),
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://localhost:4200,http://localhost:5180,http://127.0.0.1:5180'),
@@ -151,7 +152,7 @@ function loadConfig() {
     },
 
     telemetry: {
-      apiKey: env.TELEMETRY_API_KEY,
+      jwtSecret: env.TELEMETRY_JWT_SECRET ?? env.JWT_SECRET,
     },
 
     logging: {
