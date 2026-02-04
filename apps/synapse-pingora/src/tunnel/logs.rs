@@ -377,6 +377,7 @@ impl TunnelLogService {
         let mut rx = subscribe_logs();
         let handle = self.handle.clone();
         let session_id = session_id.to_string();
+        let task_session_id = session_id.clone();
         let filter_ref = Arc::clone(&filter);
 
         let task = tokio::spawn(async move {
@@ -394,7 +395,7 @@ impl TunnelLogService {
                         let mut message = serde_json::json!({
                             "type": "entry",
                             "channel": "logs",
-                            "sessionId": session_id.as_str(),
+                            "sessionId": task_session_id.as_str(),
                             "timestamp": chrono::Utc::now().to_rfc3339(),
                         });
                         if let Value::Object(ref mut map) = message {
