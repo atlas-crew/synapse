@@ -147,7 +147,7 @@ describe('Beam Analytics Route', () => {
         const response = await request(app).get('/analytics');
 
         expect(response.body).toHaveProperty('dataSource');
-        expect(['live', 'demo']).toContain(response.body.dataSource);
+        expect(['live', 'synapse-direct']).toContain(response.body.dataSource);
       });
     });
 
@@ -208,13 +208,13 @@ describe('Beam Analytics Route', () => {
         expect(response.body.dataSource).toBe('live');
       });
 
-      it('should return demo dataSource when no blocks exist', async () => {
+      it('should return live dataSource when no blocks exist', async () => {
         (mockPrisma.blockDecision.findMany as any).mockResolvedValue([]);
         (mockPrisma.endpoint.count as any).mockResolvedValue(0);
 
         const response = await request(app).get('/analytics');
 
-        expect(response.body.dataSource).toBe('demo');
+        expect(response.body.dataSource).toBe('live');
       });
     });
 

@@ -5,7 +5,7 @@
  * Data sources (in priority order):
  * 1. Synapse Direct (SYNAPSE_DIRECT_URL) - Direct connection to synapse-pingora admin API
  * 2. Risk Server (RISK_SERVER_URL) - Upstream Synapse proxy with full analytics
- * 3. Demo Data - Fallback when no live data source available
+ * 3. Derived Data - Fallback when metrics are unavailable
  */
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
@@ -50,50 +50,21 @@ async function fetchFromRiskServer<T>(path: string, logger: Logger): Promise<T |
   }
 }
 
-/**
- * Generate demo response time distribution data
- * (Not available from risk-server yet)
- */
-function generateDemoResponseTimeData(): ResponseTimeBucket[] {
-  return [
-    { range: '<25ms', count: 45230, percentage: 38.2 },
-    { range: '25-50ms', count: 32100, percentage: 27.1 },
-    { range: '50-100ms', count: 21500, percentage: 18.2 },
-    { range: '100-250ms', count: 12300, percentage: 10.4 },
-    { range: '250-500ms', count: 5200, percentage: 4.4 },
-    { range: '>500ms', count: 2100, percentage: 1.8 },
-  ];
-}
+const EMPTY_RESPONSE_TIME_DISTRIBUTION: ResponseTimeBucket[] = [
+  { range: '<25ms', count: 0, percentage: 0 },
+  { range: '25-50ms', count: 0, percentage: 0 },
+  { range: '50-100ms', count: 0, percentage: 0 },
+  { range: '100-250ms', count: 0, percentage: 0 },
+  { range: '250-500ms', count: 0, percentage: 0 },
+  { range: '>500ms', count: 0, percentage: 0 },
+];
 
-/**
- * Generate demo region traffic data
- * (Not available from risk-server yet - no geo-IP resolution)
- */
-function generateDemoRegionData(): RegionTraffic[] {
-  return [
-    { countryCode: 'US', countryName: 'United States', requests: 892000, percentage: 37.2, blocked: 18400 },
-    { countryCode: 'GB', countryName: 'United Kingdom', requests: 412000, percentage: 17.2, blocked: 8200 },
-    { countryCode: 'DE', countryName: 'Germany', requests: 298000, percentage: 12.4, blocked: 5900 },
-    { countryCode: 'FR', countryName: 'France', requests: 245000, percentage: 10.2, blocked: 4900 },
-    { countryCode: 'JP', countryName: 'Japan', requests: 187000, percentage: 7.8, blocked: 3700 },
-    { countryCode: 'CA', countryName: 'Canada', requests: 156000, percentage: 6.5, blocked: 3100 },
-    { countryCode: 'AU', countryName: 'Australia', requests: 98000, percentage: 4.1, blocked: 1900 },
-    { countryCode: 'NL', countryName: 'Netherlands', requests: 112000, percentage: 4.7, blocked: 2200 },
-  ];
-}
-
-/**
- * Generate demo status code distribution
- * (Not available from risk-server yet)
- */
-function generateDemoStatusCodes(): StatusCodeDistribution {
-  return {
-    code2xx: 2145000,
-    code3xx: 156000,
-    code4xx: 89000,
-    code5xx: 12000,
-  };
-}
+const EMPTY_STATUS_CODES: StatusCodeDistribution = {
+  code2xx: 0,
+  code3xx: 0,
+  code4xx: 0,
+  code5xx: 0,
+};
 
 /**
  * Transform risk-server bandwidth data to our format
@@ -167,6 +138,15 @@ function transformSensorMetrics(data: unknown): SensorMetrics {
 
   const rsData = data as Record<string, unknown>;
   const metrics = (rsData.metrics || rsData) as Record<string, unknown>;
+  const rawStatusCounts = (metrics.status_counts || metrics.statusCounts) as Record<string, unknown> | undefined;
+  const statusCounts = rawStatusCounts && typeof rawStatusCounts === 'object'
+    ? {
+        '2xx': Number(rawStatusCounts['2xx'] ?? rawStatusCounts.code2xx ?? 0),
+        '3xx': Number(rawStatusCounts['3xx'] ?? rawStatusCounts.code3xx ?? 0),
+        '4xx': Number(rawStatusCounts['4xx'] ?? rawStatusCounts.code4xx ?? 0),
+        '5xx': Number(rawStatusCounts['5xx'] ?? rawStatusCounts.code5xx ?? 0),
+      }
+    : undefined;
 
   return {
     requestsTotal: Number(metrics.requests_total || metrics.requestsTotal || 0),
@@ -175,9 +155,10 @@ function transformSensorMetrics(data: unknown): SensorMetrics {
     activeCampaigns: Number(metrics.active_campaigns || metrics.activeCampaigns || 0),
     uptime: Number(metrics.uptime || 0),
     rps: Number(metrics.rps || metrics.requests_per_second || 0),
-    latencyP50: Number(metrics.latency_p50 || metrics.latencyP50 || 45),
-    latencyP95: Number(metrics.latency_p95 || metrics.latencyP95 || 120),
-    latencyP99: Number(metrics.latency_p99 || metrics.latencyP99 || 250),
+    latencyP50: Number(metrics.latency_p50 || metrics.latencyP50 || 0),
+    latencyP95: Number(metrics.latency_p95 || metrics.latencyP95 || 0),
+    latencyP99: Number(metrics.latency_p99 || metrics.latencyP99 || 0),
+    statusCounts,
   };
 }
 
@@ -234,18 +215,20 @@ function transformThreats(data: unknown): ThreatSummary {
  * Build traffic overview from sensor metrics and bandwidth data
  */
 function buildTrafficOverview(sensor: SensorMetrics, bandwidth: BandwidthAnalytics): TrafficOverview {
+  const blockRate = sensor.requestsTotal > 0
+    ? sensor.blocksTotal / sensor.requestsTotal
+    : 0;
+
   return {
     totalRequests: sensor.requestsTotal,
     totalBlocked: sensor.blocksTotal,
     totalBandwidthIn: bandwidth.totalBytesIn,
     totalBandwidthOut: bandwidth.totalBytesOut,
-    blockRate: sensor.requestsTotal > 0
-      ? (sensor.blocksTotal / sensor.requestsTotal) * 100
-      : 0,
+    blockRate: blockRate * 100,
     timeline: bandwidth.timeline.map(b => ({
       timestamp: b.timestamp,
       requests: b.requestCount,
-      blocked: Math.round(b.requestCount * 0.02), // Estimate ~2% block rate
+      blocked: Math.round(b.requestCount * blockRate),
       bytesIn: b.bytesIn,
       bytesOut: b.bytesOut,
     })),
@@ -255,16 +238,55 @@ function buildTrafficOverview(sensor: SensorMetrics, bandwidth: BandwidthAnalyti
 /**
  * Transform bandwidth endpoints to top endpoints format
  */
-function transformTopEndpoints(bandwidth: BandwidthAnalytics): TopEndpoint[] {
+function transformTopEndpoints(
+  bandwidth: BandwidthAnalytics,
+  sensor: SensorMetrics,
+  statusCodes: StatusCodeDistribution
+): TopEndpoint[] {
+  const totalStatus = statusCodes.code2xx + statusCodes.code3xx + statusCodes.code4xx + statusCodes.code5xx;
+  const errorRate = totalStatus > 0
+    ? ((statusCodes.code4xx + statusCodes.code5xx) / totalStatus) * 100
+    : 0;
+  const avgLatency = sensor.latencyP50 || sensor.latencyP95 || 0;
+
   return bandwidth.topEndpoints.slice(0, 10).map(ep => ({
     method: ep.method.toUpperCase() as TopEndpoint['method'],
     path: ep.template,
     requests: ep.requests,
-    avgLatency: 45 + Math.random() * 100, // Demo: not available from risk-server
-    errorRate: Math.random() * 2,          // Demo: not available from risk-server
+    avgLatency,
+    errorRate,
     bandwidthIn: ep.avgRequestSize * ep.requests,
     bandwidthOut: ep.avgResponseSize * ep.requests,
   }));
+}
+
+function buildStatusCodes(sensor: SensorMetrics): StatusCodeDistribution {
+  if (!sensor.statusCounts) {
+    return { ...EMPTY_STATUS_CODES };
+  }
+
+  return {
+    code2xx: sensor.statusCounts['2xx'] ?? 0,
+    code3xx: sensor.statusCounts['3xx'] ?? 0,
+    code4xx: sensor.statusCounts['4xx'] ?? 0,
+    code5xx: sensor.statusCounts['5xx'] ?? 0,
+  };
+}
+
+function buildRegionTraffic(sensor: SensorMetrics): RegionTraffic[] {
+  if (sensor.requestsTotal <= 0) {
+    return [];
+  }
+
+  return [
+    {
+      countryCode: 'ZZ',
+      countryName: 'Unknown',
+      requests: sensor.requestsTotal,
+      percentage: 100,
+      blocked: sensor.blocksTotal,
+    },
+  ];
 }
 
 export function createBeamRoutes(logger: Logger): Router {
@@ -273,7 +295,7 @@ export function createBeamRoutes(logger: Logger): Router {
 
   /**
    * GET /api/v1/beam/analytics
-   * Returns combined analytics data from synapse-pingora or risk-server with demo fallbacks
+   * Returns combined analytics data from synapse-pingora or risk-server with derived fallbacks
    *
    * Security: Requires analytics:read scope (or dashboard:read via alias)
    */
@@ -286,22 +308,27 @@ export function createBeamRoutes(logger: Logger): Router {
     let sensor: SensorMetrics;
     let bandwidth: BandwidthAnalytics;
     let threats: ThreatSummary;
-    let dataSource: 'synapse-direct' | 'risk-server' | 'mixed' | 'demo';
+    let dataSource: 'synapse-direct' | 'risk-server' | 'mixed';
+    let responseTimeDistribution = EMPTY_RESPONSE_TIME_DISTRIBUTION;
+    let statusCodes = EMPTY_STATUS_CODES;
 
     if (synapseAdapter) {
       // Use direct synapse-pingora connection
       log.debug('Using synapse-direct adapter');
 
-      const [sensorData, bandwidthData, threatData] = await Promise.all([
+      const [sensorData, bandwidthData, threatData, prometheusAnalytics] = await Promise.all([
         synapseAdapter.getSensorStatus(),
         synapseAdapter.getBandwidthAnalytics(),
         synapseAdapter.getThreatSummary(),
+        synapseAdapter.getPrometheusAnalytics(),
       ]);
 
       sensor = sensorData || transformSensorMetrics(null);
       bandwidth = bandwidthData || transformBandwidthData(null);
       threats = threatData || transformThreats(null);
-      dataSource = sensorData ? 'synapse-direct' : 'demo';
+      responseTimeDistribution = prometheusAnalytics?.responseTimeDistribution ?? EMPTY_RESPONSE_TIME_DISTRIBUTION;
+      statusCodes = prometheusAnalytics?.statusCodes ?? buildStatusCodes(sensor);
+      dataSource = 'synapse-direct';
     } else {
       // Fetch data from risk-server in parallel
       const [sensorData, bandwidthData, anomalyData] = await Promise.all([
@@ -314,14 +341,16 @@ export function createBeamRoutes(logger: Logger): Router {
       sensor = transformSensorMetrics(sensorData);
       bandwidth = transformBandwidthData(bandwidthData);
       threats = transformThreats(anomalyData);
+      statusCodes = buildStatusCodes(sensor);
+      responseTimeDistribution = EMPTY_RESPONSE_TIME_DISTRIBUTION;
 
       // Determine data source
-      const hasLiveData = sensorData !== null || bandwidthData !== null || anomalyData !== null;
-      dataSource = hasLiveData ? 'risk-server' : 'demo';
+      dataSource = 'risk-server';
     }
 
     const traffic = buildTrafficOverview(sensor, bandwidth);
-    const topEndpoints = transformTopEndpoints(bandwidth);
+    const topEndpoints = transformTopEndpoints(bandwidth, sensor, statusCodes);
+    const regionTraffic = buildRegionTraffic(sensor);
 
     const response: BeamAnalyticsResponse = {
       // Real data from risk-server (or transformed)
@@ -331,10 +360,10 @@ export function createBeamRoutes(logger: Logger): Router {
       sensor,
       topEndpoints,
 
-      // Demo data (not available from risk-server yet)
-      responseTimeDistribution: generateDemoResponseTimeData(),
-      regionTraffic: generateDemoRegionData(),
-      statusCodes: generateDemoStatusCodes(),
+      // Derived metrics (may be empty if unavailable)
+      responseTimeDistribution,
+      regionTraffic,
+      statusCodes,
 
       // Metadata
       fetchedAt: new Date().toISOString(),
@@ -414,7 +443,9 @@ export function createBeamRoutes(logger: Logger): Router {
   router.get('/endpoints', requireScope('analytics:read'), async (_req: Request, res: Response, _next: NextFunction) => {
     const bandwidthData = await fetchFromRiskServer('/_sensor/payload/bandwidth', log);
     const bandwidth = transformBandwidthData(bandwidthData);
-    const topEndpoints = transformTopEndpoints(bandwidth);
+    const sensor = transformSensorMetrics(null);
+    const statusCodes = buildStatusCodes(sensor);
+    const topEndpoints = transformTopEndpoints(bandwidth, sensor, statusCodes);
 
     res.json({
       endpoints: topEndpoints,

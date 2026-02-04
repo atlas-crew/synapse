@@ -4,6 +4,49 @@ import type { Logger } from 'pino';
 import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler } from '../../../lib/errors.js';
 import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
+import type { ResponseTimeBucket, SensorMetrics, StatusCodeDistribution } from '../../../types/beam.js';
+
+const EMPTY_RESPONSE_TIME_DISTRIBUTION: ResponseTimeBucket[] = [
+  { range: '<25ms', count: 0, percentage: 0 },
+  { range: '25-50ms', count: 0, percentage: 0 },
+  { range: '50-100ms', count: 0, percentage: 0 },
+  { range: '100-250ms', count: 0, percentage: 0 },
+  { range: '250-500ms', count: 0, percentage: 0 },
+  { range: '>500ms', count: 0, percentage: 0 },
+];
+
+const EMPTY_STATUS_CODES: StatusCodeDistribution = {
+  code2xx: 0,
+  code3xx: 0,
+  code4xx: 0,
+  code5xx: 0,
+};
+
+function buildStatusCodesFromSensor(sensorMetrics: SensorMetrics | null): StatusCodeDistribution | null {
+  if (!sensorMetrics?.statusCounts) {
+    return null;
+  }
+
+  return {
+    code2xx: sensorMetrics.statusCounts['2xx'] ?? 0,
+    code3xx: sensorMetrics.statusCounts['3xx'] ?? 0,
+    code4xx: sensorMetrics.statusCounts['4xx'] ?? 0,
+    code5xx: sensorMetrics.statusCounts['5xx'] ?? 0,
+  };
+}
+
+function buildFallbackStatusCodes(totalRequests: number, totalBlocked: number): StatusCodeDistribution {
+  if (totalRequests <= 0) {
+    return { ...EMPTY_STATUS_CODES };
+  }
+
+  return {
+    code2xx: Math.max(totalRequests - totalBlocked, 0),
+    code3xx: 0,
+    code4xx: totalBlocked,
+    code5xx: 0,
+  };
+}
 
 export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Router {
   const router = Router();
@@ -47,8 +90,35 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
       decidedAt: Date;
     }
 
-    // Generate timeline buckets (24 hours, 1 hour each)
-    const timeline = Array.from({ length: 24 }, (_, i) => {
+    // Check for synapse-direct adapter for live sensor metrics
+    const synapseAdapter = getSynapseDirectAdapter();
+    let sensorMetrics: SensorMetrics | null = null;
+    let responseTimeDistribution = EMPTY_RESPONSE_TIME_DISTRIBUTION;
+    let statusCodes: StatusCodeDistribution = { ...EMPTY_STATUS_CODES };
+    let dataSource: 'synapse-direct' | 'live' = 'live';
+
+    if (synapseAdapter) {
+      try {
+        const [sensorData, prometheusAnalytics] = await Promise.all([
+          synapseAdapter.getSensorStatus(),
+          synapseAdapter.getPrometheusAnalytics(),
+        ]);
+        sensorMetrics = sensorData;
+        if (prometheusAnalytics) {
+          responseTimeDistribution = prometheusAnalytics.responseTimeDistribution;
+          statusCodes = prometheusAnalytics.statusCodes;
+        }
+        if (sensorMetrics) {
+          dataSource = 'synapse-direct';
+          logger.info({ tenantId, source: 'synapse-direct' }, 'Using synapse-pingora sensor metrics');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to fetch synapse-direct metrics, using fallback');
+      }
+    }
+
+    // Generate timeline buckets (24 hours, 1 hour each) using observed blocks and sensor totals
+    const timelineBuckets = Array.from({ length: 24 }, (_, i) => {
       const bucketStart = new Date(now.getTime() - (23 - i) * 3600000);
       const bucketEnd = new Date(bucketStart.getTime() + 3600000);
 
@@ -57,11 +127,27 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
         return decidedAt >= bucketStart && decidedAt < bucketEnd;
       });
 
-      const requests = Math.floor(80000 + Math.random() * 40000); // Simulated total requests
       return {
         timestamp: bucketStart.toISOString(),
+        blocked: bucketBlocks.length,
+      };
+    });
+
+    const blockedFromTimeline = timelineBuckets.reduce((sum, bucket) => sum + bucket.blocked, 0);
+    const baselineRequests = sensorMetrics?.requestsTotal && sensorMetrics.requestsTotal > 0
+      ? sensorMetrics.requestsTotal
+      : blockedFromTimeline;
+    const requestScale = blockedFromTimeline > 0 ? baselineRequests / blockedFromTimeline : 0;
+    const defaultRequests = baselineRequests > 0 ? Math.round(baselineRequests / 24) : 0;
+
+    const timeline = timelineBuckets.map(bucket => {
+      const requests = blockedFromTimeline > 0
+        ? Math.round(bucket.blocked * requestScale)
+        : defaultRequests;
+      return {
+        timestamp: bucket.timestamp,
         requests,
-        blocked: bucketBlocks.length || Math.floor(requests * 0.025),
+        blocked: bucket.blocked,
         bytesIn: requests * 1500,
         bytesOut: requests * 4500,
       };
@@ -86,33 +172,25 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
 
     const totalRequests = timeline.reduce((sum, t) => sum + t.requests, 0);
     const totalBlocked = (blockDecisions as BlockDecision[]).length;
+    const effectiveRequestsTotal = sensorMetrics?.requestsTotal ?? totalRequests;
+    const effectiveBlocksTotal = sensorMetrics?.blocksTotal ?? totalBlocked;
 
-    // Check for synapse-direct adapter for live sensor metrics
-    const synapseAdapter = getSynapseDirectAdapter();
-    let sensorMetrics = null;
-    let dataSource: 'synapse-direct' | 'live' | 'demo' = (blockDecisions as BlockDecision[]).length > 0 ? 'live' : 'demo';
-
-    if (synapseAdapter) {
-      try {
-        sensorMetrics = await synapseAdapter.getSensorStatus();
-        if (sensorMetrics) {
-          dataSource = 'synapse-direct';
-          logger.info({ tenantId, source: 'synapse-direct' }, 'Using synapse-pingora sensor metrics');
-        }
-      } catch (err) {
-        logger.warn({ err }, 'Failed to fetch synapse-direct metrics, using fallback');
-      }
+    const statusCodesFromSensor = buildStatusCodesFromSensor(sensorMetrics);
+    if (statusCodesFromSensor) {
+      statusCodes = statusCodesFromSensor;
+    } else if (statusCodes.code2xx === 0 && statusCodes.code3xx === 0 && statusCodes.code4xx === 0 && statusCodes.code5xx === 0) {
+      statusCodes = buildFallbackStatusCodes(effectiveRequestsTotal, effectiveBlocksTotal);
     }
 
     logger.info({ tenantId, blockCount: totalBlocked, dataSource }, 'Analytics data fetched');
 
     return res.json({
       traffic: {
-        totalRequests: sensorMetrics?.requestsTotal || totalRequests,
-        totalBlocked: sensorMetrics?.blocksTotal || totalBlocked,
+        totalRequests: effectiveRequestsTotal,
+        totalBlocked: effectiveBlocksTotal,
         totalBandwidthIn: timeline.reduce((sum, t) => sum + t.bytesIn, 0),
         totalBandwidthOut: timeline.reduce((sum, t) => sum + t.bytesOut, 0),
-        blockRate: totalRequests > 0 ? ((sensorMetrics?.blocksTotal || totalBlocked) / (sensorMetrics?.requestsTotal || totalRequests)) * 100 : 0,
+        blockRate: effectiveRequestsTotal > 0 ? (effectiveBlocksTotal / effectiveRequestsTotal) * 100 : 0,
         timeline,
       },
       bandwidth: {
@@ -128,7 +206,7 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
         avgBytesPerRequest: 6000,
       },
       threats: {
-        total: sensorMetrics?.blocksTotal || totalBlocked,
+        total: sensorMetrics?.blocksTotal ?? totalBlocked,
         bySeverity: severityCounts,
         byType: threatTypeCounts,
         recentEvents: (blockDecisions as BlockDecision[]).slice(0, 10).map((block: BlockDecision) => ({
@@ -143,33 +221,26 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
           blocked: block.action === 'BLOCK',
         })),
       },
-      sensor: sensorMetrics || {
-        requestsTotal: totalRequests,
-        blocksTotal: totalBlocked,
-        entitiesTracked: totalEndpoints,
-        activeCampaigns: 0,
-        uptime: 99.95,
-        rps: Math.round(totalRequests / (24 * 3600)),
-        latencyP50: 23,
-        latencyP95: 67,
-        latencyP99: 245,
-      },
+      sensor: sensorMetrics
+        ? {
+            ...sensorMetrics,
+            entitiesTracked: sensorMetrics.entitiesTracked || totalEndpoints,
+          }
+        : {
+            requestsTotal: effectiveRequestsTotal,
+            blocksTotal: effectiveBlocksTotal,
+            entitiesTracked: totalEndpoints,
+            activeCampaigns: 0,
+            uptime: 0,
+            rps: effectiveRequestsTotal > 0 ? Math.round((effectiveRequestsTotal / (24 * 3600)) * 10) / 10 : 0,
+            latencyP50: 0,
+            latencyP95: 0,
+            latencyP99: 0,
+          },
       topEndpoints: [],
-      responseTimeDistribution: [
-        { range: '<25ms', count: 45230, percentage: 38.2 },
-        { range: '25-50ms', count: 32100, percentage: 27.1 },
-        { range: '50-100ms', count: 21500, percentage: 18.2 },
-        { range: '100-250ms', count: 12300, percentage: 10.4 },
-        { range: '250-500ms', count: 5200, percentage: 4.4 },
-        { range: '>500ms', count: 2100, percentage: 1.8 },
-      ],
+      responseTimeDistribution,
       regionTraffic: [],
-      statusCodes: {
-        code2xx: Math.round(totalRequests * 0.89),
-        code3xx: Math.round(totalRequests * 0.065),
-        code4xx: Math.round(totalRequests * 0.037),
-        code5xx: Math.round(totalRequests * 0.005),
-      },
+      statusCodes,
       fetchedAt: now.toISOString(),
       dataSource,
     });

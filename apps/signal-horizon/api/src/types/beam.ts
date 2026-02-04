@@ -117,7 +117,7 @@ export interface TopEndpoint {
 }
 
 // ============================================================================
-// Response Time Distribution (Demo data - not available from risk-server)
+// Response Time Distribution (derived from Prometheus when available)
 // ============================================================================
 
 export interface ResponseTimeBucket {
@@ -127,7 +127,7 @@ export interface ResponseTimeBucket {
 }
 
 // ============================================================================
-// Traffic by Region (Demo data - not available from risk-server)
+// Traffic by Region (derived from geo-IP when available)
 // ============================================================================
 
 export interface RegionTraffic {
@@ -139,7 +139,7 @@ export interface RegionTraffic {
 }
 
 // ============================================================================
-// Status Codes (Demo data - not available from risk-server)
+// Status Codes (derived from Prometheus when available)
 // ============================================================================
 
 export interface StatusCodeDistribution {
@@ -154,14 +154,14 @@ export interface StatusCodeDistribution {
 // ============================================================================
 
 export interface BeamAnalyticsResponse {
-  // Real data from risk-server
+  // Live data from sensors and aggregation
   traffic: TrafficOverview;
   bandwidth: BandwidthAnalytics;
   threats: ThreatSummary;
   sensor: SensorMetrics;
   topEndpoints: TopEndpoint[];
 
-  // Demo data (not available from risk-server yet)
+  // Derived metrics (may be empty if unavailable)
   responseTimeDistribution: ResponseTimeBucket[];
   regionTraffic: RegionTraffic[];
   statusCodes: StatusCodeDistribution;

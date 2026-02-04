@@ -18,6 +18,8 @@ import type {
   BandwidthAnalytics,
   ThreatSummary,
   TopEndpoint,
+  ResponseTimeBucket,
+  StatusCodeDistribution,
 } from '../types/beam.js';
 
 // ============================================================================
@@ -80,6 +82,11 @@ interface PrometheusMetrics {
     '3xx': number;
     '4xx': number;
     '5xx': number;
+  };
+  requestDuration?: {
+    buckets: Record<string, number>;
+    sum: number;
+    count: number;
   };
 }
 
@@ -150,6 +157,24 @@ export class SynapseDirectAdapter {
         return match ? parseInt(match[1], 10) : 0;
       };
 
+      const parseHistogram = (metric: string): { buckets: Record<string, number>; sum: number; count: number } | null => {
+        const bucketRegex = new RegExp(`^${metric}_bucket\\{le="([^"]+)"\\}\\s+(\\d+(?:\\.\\d+)?)`, 'gm');
+        const buckets: Record<string, number> = {};
+        let match: RegExpExecArray | null;
+        while ((match = bucketRegex.exec(text)) !== null) {
+          buckets[match[1]] = parseFloat(match[2]);
+        }
+
+        const sum = getMetricValue(`${metric}_sum`);
+        const count = getMetricValue(`${metric}_count`);
+
+        if (Object.keys(buckets).length === 0 && sum === 0 && count === 0) {
+          return null;
+        }
+
+        return { buckets, sum, count };
+      };
+
       return {
         requestsTotal: getMetricValue('synapse_requests_total'),
         requestsBlocked: getMetricValue('synapse_requests_blocked'),
@@ -160,6 +185,7 @@ export class SynapseDirectAdapter {
           '4xx': getStatusCount('4xx'),
           '5xx': getStatusCount('5xx'),
         },
+        requestDuration: parseHistogram('synapse_request_duration_us') ?? undefined,
       };
     } catch (error) {
       this.logger.warn({ url, error: (error as Error).message }, 'Prometheus metrics fetch error');
@@ -202,9 +228,9 @@ export class SynapseDirectAdapter {
       activeCampaigns: 0, // Not available from synapse-pingora
       uptime: uptimeSecs,
       rps,
-      latencyP50: avgLatencyMs > 0 ? avgLatencyMs * 0.8 : 45,
-      latencyP95: avgLatencyMs > 0 ? avgLatencyMs * 1.5 : 120,
-      latencyP99: avgLatencyMs > 0 ? avgLatencyMs * 2.5 : 250,
+      latencyP50: avgLatencyMs > 0 ? avgLatencyMs * 0.8 : 0,
+      latencyP95: avgLatencyMs > 0 ? avgLatencyMs * 1.5 : 0,
+      latencyP99: avgLatencyMs > 0 ? avgLatencyMs * 2.5 : 0,
       // Include status code breakdown if available
       statusCounts: prometheus?.statusCounts,
     };
@@ -279,6 +305,30 @@ export class SynapseDirectAdapter {
   }
 
   /**
+   * Get response time and status code analytics from Prometheus metrics.
+   */
+  async getPrometheusAnalytics(): Promise<{
+    responseTimeDistribution: ResponseTimeBucket[];
+    statusCodes: StatusCodeDistribution;
+  } | null> {
+    const prometheus = await this.fetchPrometheusMetrics();
+    if (!prometheus) {
+      return null;
+    }
+
+    const statusCodes: StatusCodeDistribution = {
+      code2xx: prometheus.statusCounts['2xx'] || 0,
+      code3xx: prometheus.statusCounts['3xx'] || 0,
+      code4xx: prometheus.statusCounts['4xx'] || 0,
+      code5xx: prometheus.statusCounts['5xx'] || 0,
+    };
+
+    const responseTimeDistribution = buildResponseTimeDistribution(prometheus.requestDuration);
+
+    return { responseTimeDistribution, statusCodes };
+  }
+
+  /**
    * Health check - verify connection to synapse-pingora
    */
   async healthCheck(): Promise<{ connected: boolean; status?: string; uptime?: number }> {
@@ -302,6 +352,57 @@ export class SynapseDirectAdapter {
     const response = await this.fetch<PingoraWafStatsResponse>('/waf/stats');
     return response?.success ? response.data : null;
   }
+}
+
+// ============================================================================
+// Prometheus Analytics Helpers
+// ============================================================================
+
+const RESPONSE_TIME_BUCKETS = [
+  { label: '<25ms', upperBoundUs: 25_000 },
+  { label: '25-50ms', upperBoundUs: 50_000 },
+  { label: '50-100ms', upperBoundUs: 100_000 },
+  { label: '100-250ms', upperBoundUs: 250_000 },
+  { label: '250-500ms', upperBoundUs: 500_000 },
+] as const;
+
+function buildResponseTimeDistribution(
+  histogram?: { buckets: Record<string, number>; count: number }
+): ResponseTimeBucket[] {
+  if (!histogram) {
+    return RESPONSE_TIME_BUCKETS.map(bucket => ({
+      range: bucket.label,
+      count: 0,
+      percentage: 0,
+    })).concat({ range: '>500ms', count: 0, percentage: 0 });
+  }
+
+  const total = histogram.count || histogram.buckets['+Inf'] || 0;
+  const getCumulative = (upperBoundUs: number): number =>
+    histogram.buckets[String(upperBoundUs)] ?? 0;
+
+  const buckets: ResponseTimeBucket[] = [];
+  let previousCumulative = 0;
+
+  for (const bucket of RESPONSE_TIME_BUCKETS) {
+    const cumulative = getCumulative(bucket.upperBoundUs);
+    const count = Math.max(cumulative - previousCumulative, 0);
+    previousCumulative = cumulative;
+    buckets.push({
+      range: bucket.label,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 1000) / 10 : 0,
+    });
+  }
+
+  const overCount = Math.max(total - previousCumulative, 0);
+  buckets.push({
+    range: '>500ms',
+    count: overCount,
+    percentage: total > 0 ? Math.round((overCount / total) * 1000) / 10 : 0,
+  });
+
+  return buckets;
 }
 
 // ============================================================================
