@@ -14,12 +14,10 @@ import type {
 } from '../../types/logs';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3100';
-const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
-
-// Convert HTTP URL to WebSocket URL
-function getWsUrl(apiUrl: string): string {
-  return apiUrl.replace(/^http/, 'ws');
-}
+const API_KEY =
+  import.meta.env.VITE_API_KEY ||
+  import.meta.env.VITE_HORIZON_API_KEY ||
+  'dev-dashboard-key';
 
 export interface UseLogStreamOptions {
   /** Sensor ID to stream logs from */
@@ -50,23 +48,47 @@ export interface UseLogStreamReturn {
 /**
  * Parse a raw log entry message into a LogEntry object
  */
-function parseLogEntry(raw: LogStreamMessage['type'] extends 'log' ? LogStreamMessage : never): LogEntry | null {
+function parseLogEntry(raw: LogStreamMessage): LogEntry | null {
   try {
-    const entry = (raw as { entry: LogEntry['id'] extends string ? LogEntry : never }).entry;
-    return {
-      id: entry.id,
-      timestamp: new Date(entry.timestamp as unknown as string),
-      source: entry.source,
-      level: entry.level,
-      message: entry.message,
-      fields: entry.fields,
-      method: entry.method,
-      path: entry.path,
-      statusCode: entry.statusCode,
-      latencyMs: entry.latencyMs,
-      clientIp: entry.clientIp,
-      ruleId: entry.ruleId,
-    };
+    if (raw.type === 'log') {
+      const entry = raw.entry;
+      return {
+        id: entry.id,
+        timestamp: new Date(entry.timestamp),
+        source: entry.source,
+        level: entry.level,
+        message: entry.message,
+        fields: entry.fields,
+        method: entry.method,
+        path: entry.path,
+        statusCode: entry.statusCode,
+        latencyMs: entry.latencyMs,
+        clientIp: entry.clientIp,
+        ruleId: entry.ruleId,
+      };
+    }
+
+    if (raw.type === 'entry' && raw.channel === 'logs') {
+      const timestamp = raw.logTimestamp
+        ? new Date(raw.logTimestamp)
+        : new Date();
+      return {
+        id: `${raw.sessionId ?? 'log'}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        timestamp,
+        source: raw.source,
+        level: raw.level,
+        message: raw.message,
+        fields: raw.fields,
+        method: raw.method,
+        path: raw.path,
+        statusCode: raw.statusCode,
+        latencyMs: raw.latencyMs,
+        clientIp: raw.clientIp,
+        ruleId: raw.ruleId,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -121,6 +143,9 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
   const filterDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCleaningUpRef = useRef(false);
   const pausedBufferRef = useRef<LogEntry[]>([]);
+  const sessionIdRef = useRef<string | null>(null);
+  const sessionUrlRef = useRef<string | null>(null);
+  const filterRef = useRef<LogFilter>(initialFilter);
 
   const [state, setState] = useState<LogStreamState>({
     connected: false,
@@ -129,6 +154,27 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
     paused: false,
     dropped: 0,
   });
+
+  const createSession = useCallback(async () => {
+    const response = await fetch(`${API_URL}/api/v1/tunnel/logs/${sensorId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || 'Failed to create log session');
+    }
+
+    const data = await response.json();
+    return {
+      sessionId: data.sessionId as string,
+      wsUrl: data.wsUrl as string,
+    };
+  }, [sensorId]);
 
   /**
    * Clean up WebSocket connection and timers
@@ -199,8 +245,8 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
       try {
         const data = JSON.parse(event.data as string) as LogStreamMessage;
 
-        if (data.type === 'log') {
-          const entry = parseLogEntry(data as never);
+        if (data.type === 'log' || data.type === 'entry') {
+          const entry = parseLogEntry(data);
           if (entry) {
             addEntries([entry]);
           }
@@ -231,6 +277,8 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
           if (entries.length > 0) {
             addEntries(entries);
           }
+        } else if (data.type === 'backfill-complete') {
+          // Optional: could surface a toast or mark backfill finished
         }
       } catch (err) {
         console.error('[useLogStream] Failed to parse message:', err);
@@ -242,14 +290,35 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
   /**
    * Connect to the log stream WebSocket
    */
-  const connect = useCallback(() => {
+  const connectInternal = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
 
     cleanup();
 
-    const wsUrl = `${getWsUrl(API_URL)}/api/v1/tunnel?channel=logs&sensorId=${encodeURIComponent(sensorId)}`;
+    let sessionId = sessionIdRef.current;
+    let wsPath = sessionUrlRef.current;
+
+    if (!sessionId || !wsPath) {
+      try {
+        const sessionInfo = await createSession();
+        sessionId = sessionInfo.sessionId;
+        wsPath = sessionInfo.wsUrl;
+        sessionIdRef.current = sessionId;
+        sessionUrlRef.current = wsPath;
+      } catch (error) {
+        console.error('[useLogStream] Failed to create session:', error);
+        setState((prev) => ({ ...prev, connected: false }));
+        return;
+      }
+    }
+
+    const wsProtocol = API_URL.startsWith('https') ? 'wss' : 'ws';
+    const wsHost = API_URL.replace(/^https?:\/\//, '');
+    const wsUrl = wsPath.startsWith('ws')
+      ? wsPath
+      : `${wsProtocol}://${wsHost}${wsPath.startsWith('/') ? wsPath : `/${wsPath}`}`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -259,20 +328,16 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
         console.log('[useLogStream] Connected to log stream');
         setState((prev) => ({ ...prev, connected: true }));
 
-        // Send authentication and subscribe message
-        ws.send(
-          JSON.stringify({
-            type: 'auth',
-            payload: { apiKey: API_KEY },
-          })
-        );
-
+        const activeFilter = filterRef.current;
         ws.send(
           JSON.stringify({
             type: 'subscribe',
             channel: 'logs',
-            sensorId,
-            filter: state.filter,
+            sessionId,
+            sources: activeFilter.sources ?? [],
+            filter: activeFilter,
+            backfill: true,
+            backfillLines: 200,
           })
         );
       };
@@ -286,7 +351,7 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
         // Attempt reconnection unless intentionally cleaning up
         if (!isCleaningUpRef.current && event.code !== 1000) {
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            void connectInternal();
           }, 3000);
         }
       };
@@ -299,7 +364,11 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
       console.error('[useLogStream] Failed to connect:', error);
       setState((prev) => ({ ...prev, connected: false }));
     }
-  }, [sensorId, cleanup, handleMessage, state.filter]);
+  }, [cleanup, createSession, handleMessage]);
+
+  const connect = useCallback(() => {
+    void connectInternal();
+  }, [connectInternal]);
 
   /**
    * Disconnect from the log stream
@@ -310,19 +379,22 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
         JSON.stringify({
           type: 'unsubscribe',
           channel: 'logs',
-          sensorId,
+          sessionId: sessionIdRef.current,
         })
       );
     }
     cleanup();
     setState((prev) => ({ ...prev, connected: false }));
-  }, [sensorId, cleanup]);
+    sessionIdRef.current = null;
+    sessionUrlRef.current = null;
+  }, [cleanup]);
 
   /**
    * Update the active filter with debouncing
    */
   const setFilter = useCallback(
     (filter: LogFilter) => {
+      filterRef.current = filter;
       // Clear existing debounce timer
       if (filterDebounceRef.current) {
         clearTimeout(filterDebounceRef.current);
@@ -346,6 +418,9 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
           wsRef.current.send(
             JSON.stringify({
               type: 'filter',
+              channel: 'logs',
+              sessionId: sessionIdRef.current,
+              sources: filter.sources ?? [],
               filter,
             })
           );

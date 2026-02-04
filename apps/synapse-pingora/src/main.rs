@@ -84,8 +84,12 @@ use synapse_pingora::ratelimit::RateLimitManager;
 use synapse_pingora::access::{AccessListManager, CidrRange};
 use synapse_pingora::headers;
 use synapse_pingora::telemetry::{
-    TelemetryClient, TelemetryConfig, TelemetryEvent
+    TelemetryClient, TelemetryConfig, TelemetryEvent, SignalEmitter,
 };
+use synapse_pingora::telemetry::auth_coverage_aggregator::AuthCoverageAggregator;
+use synapse_pingora::signals::auth_coverage::ResponseClass;
+use synapse_pingora::utils::path_normalizer::endpoint_key;
+use synapse_pingora::utils::auth_detection::has_auth_header;
 use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use synapse_pingora::block_log::{BlockLog, BlockEvent};
 use synapse_pingora::correlation::CampaignManager;
@@ -106,7 +110,14 @@ use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
 
 // Phase 9: Signal Horizon Hub integration (fleet-wide threat intelligence)
 use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, SignalType, Severity};
-use synapse_pingora::tunnel::{TunnelClient, TunnelConfig, TunnelShellService};
+use synapse_pingora::tunnel::{
+    publish_access_log,
+    publish_waf_log,
+    TunnelClient,
+    TunnelConfig,
+    TunnelLogService,
+    TunnelShellService,
+};
 
 // Phase 9: Payload Profiling (bandwidth tracking and anomaly detection)
 use synapse_pingora::payload::{PayloadManager, PayloadConfig};
@@ -1020,6 +1031,10 @@ pub struct RequestContext {
     response_content_type: Option<String>,
     /// Request path for schema template mapping (stored for response phase)
     request_path: Option<String>,
+    /// Request method for auth coverage mapping
+    request_method: Option<String>,
+    /// Whether request contained authentication headers/cookies
+    has_auth_header: bool,
     /// Phase 5: Actor ID correlated for this request
     actor_id: Option<String>,
     /// Phase 5: Actor risk score snapshot for this request
@@ -1159,6 +1174,8 @@ pub struct SynapseProxy {
     signal_manager: Arc<SignalManager>,
     /// Phase 10: Progression manager for challenge escalation
     progression_manager: Arc<ProgressionManager>,
+    /// Phase 11: Auth coverage aggregator for endpoint telemetry
+    auth_coverage: Arc<AuthCoverageAggregator>,
 }
 
 impl SynapseProxy {
@@ -1228,6 +1245,8 @@ impl SynapseProxy {
             create_progression_config(),
         ));
 
+        let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
+
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
@@ -1257,6 +1276,7 @@ impl SynapseProxy {
             trends_manager,
             signal_manager,
             progression_manager,
+            auth_coverage,
         }
     }
 
@@ -1264,6 +1284,10 @@ impl SynapseProxy {
         let crawler_detector = build_crawler_detector(CrawlerConfig::default()).await;
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
+        let telemetry_client = Arc::new(TelemetryClient::new(TelemetryConfig {
+            enabled: false,
+            ..TelemetryConfig::default()
+        }));
 
         // Create tarpit manager first (needed by progression manager)
         let tarpit_manager = Arc::new(TarpitManager::new(tarpit_config));
@@ -1281,6 +1305,8 @@ impl SynapseProxy {
             create_progression_config(),
         ));
 
+        let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
+
         Self {
             backends,
             backend_counter: AtomicUsize::new(0),
@@ -1291,7 +1317,7 @@ impl SynapseProxy {
             dlp_scanner: Arc::new(DlpScanner::new(dlp_config)),
             health_checker: Arc::new(HealthChecker::default()),
             metrics_registry: Arc::new(MetricsRegistry::new()),
-            telemetry_client: Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
+            telemetry_client,
             tls_manager,
             trusted_proxies: Vec::new(),
             vhost_matcher: None,
@@ -1310,7 +1336,23 @@ impl SynapseProxy {
             trends_manager,
             signal_manager,
             progression_manager,
+            auth_coverage,
         }
+    }
+
+    fn build_auth_coverage(telemetry_client: Arc<TelemetryClient>) -> Arc<AuthCoverageAggregator> {
+        let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
+            .unwrap_or_else(|_| "synapse-default".to_string());
+        let tenant_id = std::env::var("SYNAPSE_TENANT_ID").ok();
+        let emitter: Arc<dyn SignalEmitter> = telemetry_client;
+        let auth_coverage = Arc::new(AuthCoverageAggregator::new(
+            sensor_id,
+            tenant_id,
+            emitter,
+            60,
+        ));
+        auth_coverage.clone().start_flush_task();
+        auth_coverage
     }
 
     /// Create a SynapseProxy with multi-site configuration support
@@ -1356,6 +1398,8 @@ impl SynapseProxy {
             create_progression_config(),
         ));
 
+        let auth_coverage = Self::build_auth_coverage(Arc::clone(&telemetry_client));
+
         Self {
             backends: default_backends,
             backend_counter: AtomicUsize::new(0),
@@ -1385,6 +1429,7 @@ impl SynapseProxy {
             trends_manager,
             signal_manager,
             progression_manager,
+            auth_coverage,
         }
     }
 
@@ -3640,6 +3685,30 @@ impl ProxyHttp for SynapseProxy {
             dlp_info
         );
 
+        publish_access_log(
+            session.req_header().method.as_str(),
+            path,
+            status,
+            total_time.as_secs_f64() * 1000.0,
+            ctx.client_ip.as_deref(),
+        );
+
+        if let Some(ref detection) = ctx.detection {
+            if detection.blocked || detection.risk_score > 50 {
+                let message = detection
+                    .block_reason
+                    .clone()
+                    .unwrap_or_else(|| "WAF detection event".to_string());
+                publish_waf_log(
+                    &detection.matched_rules,
+                    detection.risk_score,
+                    ctx.client_ip.as_deref(),
+                    Some(path),
+                    message,
+                );
+            }
+        }
+
         // ===== Phase 9: Payload Profiling =====
         // Record request/response payload sizes for bandwidth tracking and anomaly detection
         let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
@@ -4329,9 +4398,10 @@ fn main() {
                     return;
                 }
                 if let Some(handle) = tunnel_client.handle() {
-                    tokio::spawn(TunnelShellService::new(handle).run());
+                    tokio::spawn(TunnelShellService::new(handle.clone()).run());
+                    tokio::spawn(TunnelLogService::new(handle).run());
                 } else {
-                    warn!("Tunnel client handle unavailable; shell service disabled");
+                    warn!("Tunnel client handle unavailable; shell/log services disabled");
                 }
                 std::future::pending::<()>().await;
             });

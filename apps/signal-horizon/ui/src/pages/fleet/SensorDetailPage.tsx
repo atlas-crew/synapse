@@ -6,6 +6,7 @@ import { SensorStatusBadge, MetricCard } from '../../components/fleet';
 import { SensorDetailSkeleton, ConfigPanelSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
 import { FileBrowser } from '../../components/fleet/FileBrowser';
+import { LogViewer } from '../../components/fleet/LogViewer';
 import { ConfigDriftViewer } from '../../components/fleet/ConfigDriftViewer';
 import { WafConfig, type WafConfigData } from '../../components/fleet/pingora/WafConfig';
 import { RateLimitConfig, type RateLimitData } from '../../components/fleet/pingora/RateLimitConfig';
@@ -51,14 +52,6 @@ async function fetchNetwork(id: string) {
 async function fetchProcesses(id: string) {
   const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/processes`, { headers: authHeaders });
   if (!response.ok) throw new Error('Failed to fetch processes');
-  return response.json();
-}
-
-async function fetchLogs(id: string, type: string) {
-  const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/logs?type=${type}&limit=50`, {
-    headers: authHeaders,
-  });
-  if (!response.ok) throw new Error('Failed to fetch logs');
   return response.json();
 }
 
@@ -125,7 +118,6 @@ export function SensorDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [logType, setLogType] = useState<'access' | 'error' | 'system'>('access');
 
   // Core sensor data
   const { data: sensor, isLoading } = useQuery({
@@ -165,14 +157,6 @@ export function SensorDetailPage() {
     queryFn: () => fetchProcesses(id!),
     enabled: !!id && activeTab === 'processes',
     refetchInterval: 5000,
-  });
-
-  // Logs data
-  const { data: logs } = useQuery({
-    queryKey: ['fleet', 'sensor', id, 'logs', logType],
-    queryFn: () => fetchLogs(id!, logType),
-    enabled: !!id && activeTab === 'logs',
-    refetchInterval: 10000,
   });
 
   // Mutations
@@ -267,7 +251,13 @@ export function SensorDetailPage() {
       {activeTab === 'performance' && <PerformanceTab data={performance} />}
       {activeTab === 'network' && <NetworkTab data={network} />}
       {activeTab === 'processes' && <ProcessesTab data={processes} />}
-      {activeTab === 'logs' && <LogsTab data={logs} logType={logType} setLogType={setLogType} />}
+      {activeTab === 'logs' && (
+        <LogViewer
+          sensorId={sensor.id}
+          sensorName={sensor.name}
+          height="600px"
+        />
+      )}
       {activeTab === 'configuration' && <ConfigurationTab sensor={sensor} />}
       {activeTab === 'remote-shell' && (
         <div className="h-[600px]">
@@ -638,94 +628,6 @@ function ProcessesTab({ data }: { data: any }) {
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LogsTab({ data, logType, setLogType }: { data: any; logType: string; setLogType: (t: any) => void }) {
-  const logTypes = ['access', 'error', 'system'] as const;
-
-  return (
-    <div className="space-y-6">
-      {/* Log Type Selector */}
-      <div className="flex gap-2">
-        {logTypes.map((type) => (
-          <button
-            key={type}
-            onClick={() => setLogType(type)}
-            className={`px-4 py-2 text-sm rounded-lg capitalize ${
-              logType === type
-                ? 'bg-accent-primary text-white'
-                : 'bg-surface-subtle text-ink-secondary hover:bg-surface-card'
-            }`}
-          >
-            {type} Logs
-          </button>
-        ))}
-      </div>
-
-      {/* Log Viewer */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl">
-        <div className="p-4 border-b border-border-subtle flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-ink-primary capitalize">{logType} Logs</h3>
-          <span className="text-sm text-ink-muted">{data?.total || 0} entries</span>
-        </div>
-        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-          {!data ? (
-            <div className="p-4 text-center text-ink-muted">Loading logs...</div>
-          ) : logType === 'access' ? (
-            <table className="w-full text-sm font-mono">
-              <thead className="sticky top-0 bg-surface-card">
-                <tr className="text-left text-ink-muted text-xs">
-                  <th className="p-2">Time</th>
-                  <th className="p-2">Method</th>
-                  <th className="p-2">Path</th>
-                  <th className="p-2">Status</th>
-                  <th className="p-2">Size</th>
-                  <th className="p-2">Duration</th>
-                  <th className="p-2">IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.logs.map((log: any, idx: number) => (
-                  <tr key={idx} className="border-t border-border-subtle hover:bg-surface-subtle">
-                    <td className="p-2 text-ink-muted whitespace-nowrap">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                    <td className="p-2">
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${log.method === 'GET' ? 'bg-blue-500/10 text-blue-400' : log.method === 'POST' ? 'bg-green-500/10 text-green-400' : 'bg-orange-500/10 text-orange-400'}`}>
-                        {log.method}
-                      </span>
-                    </td>
-                    <td className="p-2 text-ink-secondary">{log.path}</td>
-                    <td className="p-2">
-                      <span className={`${log.status >= 500 ? 'text-status-error' : log.status >= 400 ? 'text-status-warning' : 'text-status-success'}`}>
-                        {log.status}
-                      </span>
-                    </td>
-                    <td className="p-2 text-ink-muted">{formatBytes(log.size)}</td>
-                    <td className="p-2 text-ink-muted">{log.duration.toFixed(1)}ms</td>
-                    <td className="p-2 text-ink-muted">{log.ip}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="divide-y divide-border-subtle">
-              {data.logs.map((log: any, idx: number) => (
-                <div key={idx} className="p-3 hover:bg-surface-subtle">
-                  <div className="flex items-center gap-3">
-                    <span className={`px-2 py-0.5 rounded text-xs ${log.level === 'ERROR' || log.level === 'CRIT' ? 'bg-status-error/10 text-status-error' : log.level === 'WARN' ? 'bg-status-warning/10 text-status-warning' : 'bg-surface-subtle text-ink-muted'}`}>
-                      {log.level}
-                    </span>
-                    <span className="text-xs text-ink-muted">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                    <span className="text-xs text-ink-muted">[{log.source}]</span>
-                  </div>
-                  <div className="mt-1 text-sm text-ink-primary font-mono">{log.message}</div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

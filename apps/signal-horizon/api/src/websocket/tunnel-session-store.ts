@@ -5,7 +5,7 @@
  * sessions for production to survive restarts and enable horizontal scaling.
  */
 
-export type TunnelUserSessionType = 'shell' | 'dashboard';
+export type TunnelUserSessionType = 'shell' | 'dashboard' | 'logs';
 
 export type TunnelUserSessionStatus =
   | 'pending'

@@ -196,12 +196,12 @@ export interface TunnelBrokerEvents {
 /**
  * @deprecated Use TunnelChannel from '../types/tunnel.js' instead
  */
-export type TunnelCapability = 'shell' | 'dashboard';
+export type TunnelCapability = 'shell' | 'dashboard' | 'logs';
 
 /**
  * @deprecated Use TunnelChannel from '../types/tunnel.js' instead
  */
-export type UserSessionType = 'shell' | 'dashboard';
+export type UserSessionType = 'shell' | 'dashboard' | 'logs';
 
 /**
  * @deprecated Use ChannelSession instead
@@ -244,6 +244,12 @@ export type TunnelMessageType =
   | 'shell-ready'
   | 'shell-exit'
   | 'shell-error'
+  | 'subscribe'
+  | 'unsubscribe'
+  | 'filter'
+  | 'entry'
+  | 'log-batch'
+  | 'backfill-complete'
   | 'dashboard-request'
   | 'dashboard-response'
   | 'error';
@@ -1209,6 +1215,9 @@ export class TunnelBroker extends EventEmitter {
         case 'shell-ready':
         case 'shell-exit':
         case 'shell-error':
+        case 'entry':
+        case 'log-batch':
+        case 'backfill-complete':
         case 'dashboard-response':
           this.routeToUser(sensorId, message);
           break;
@@ -1368,17 +1377,94 @@ export class TunnelBroker extends EventEmitter {
     return sessionId;
   }
 
+  /**
+   * @deprecated Use createSession() with a logs channel instead
+   */
+  startLogsSession(
+    ws: WebSocket,
+    userId: string,
+    tenantId: string,
+    sensorId: string
+  ): string | null {
+    const sessionId = randomUUID();
+    return this.startLogsSessionWithId(ws, userId, tenantId, sensorId, sessionId);
+  }
+
+  /**
+   * @deprecated Use createSession() with a logs channel instead
+   */
+  startLogsSessionWithId(
+    ws: WebSocket,
+    userId: string,
+    tenantId: string,
+    sensorId: string,
+    sessionId: string
+  ): string | null {
+    const tunnel = this.legacyTunnels.get(sensorId);
+    if (!tunnel || !tunnel.capabilities.includes('logs')) {
+      return null;
+    }
+
+    if (tunnel.tenantId !== tenantId) {
+      return null;
+    }
+
+    if (this.legacySessions.has(sessionId)) {
+      this.logger.warn({ sessionId, sensorId }, 'Log session already exists');
+      return null;
+    }
+
+    const session: UserSession = {
+      sessionId,
+      userId,
+      tenantId,
+      sensorId,
+      type: 'logs',
+      socket: ws,
+      createdAt: new Date(),
+      lastActivity: new Date(),
+    };
+
+    this.legacySessions.set(sessionId, session);
+
+    ws.on('message', (data) => this.handleUserMessage(sessionId, data));
+    ws.on('close', () => this.endUserSession(sessionId, 'User disconnected'));
+    ws.on('error', () => this.endUserSession(sessionId, 'Socket error'));
+
+    this.logger.info({ sessionId, userId, sensorId }, 'Log session started');
+    this.emit('session:started', session);
+
+    return sessionId;
+  }
+
   private endUserSession(sessionId: string, reason: string): void {
     const session = this.legacySessions.get(sessionId);
     if (!session) return;
 
     // Notify sensor
-    this.sendToSensor(sessionId, {
-      type: session.type === 'shell' ? 'shell-data' : 'dashboard-request',
-      sessionId,
-      payload: { action: 'end' },
-      timestamp: new Date().toISOString(),
-    });
+    if (session.type === 'shell') {
+      this.sendToSensor(sessionId, {
+        type: 'shell-data',
+        sessionId,
+        payload: { action: 'end' },
+        timestamp: new Date().toISOString(),
+      });
+    } else if (session.type === 'dashboard') {
+      this.sendToSensor(sessionId, {
+        type: 'dashboard-request',
+        sessionId,
+        payload: { action: 'end' },
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      this.sendToSensor(sessionId, {
+        type: 'unsubscribe',
+        channel: 'logs',
+        sessionId,
+        payload: { sources: [] },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     if (session.socket.readyState === WebSocket.OPEN) {
       session.socket.close(1000, reason);
@@ -1468,7 +1554,7 @@ export class TunnelBroker extends EventEmitter {
       totalTunnels: this.legacyTunnels.size,
       activeSessions: this.sessions.size + this.legacySessions.size,
       byTenant: {},
-      byType: { shell: 0, dashboard: 0 },
+      byType: { shell: 0, dashboard: 0, logs: 0 },
       byChannel: {
         shell: 0,
         logs: 0,

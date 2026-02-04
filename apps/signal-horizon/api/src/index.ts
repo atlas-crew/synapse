@@ -428,6 +428,14 @@ function handleTunnelUserConnection(
       sensorId,
       sessionId
     );
+  } else if (type === 'logs') {
+    started = tunnelBroker.startLogsSessionWithId(
+      ws,
+      userId,
+      tenantId,
+      sensorId,
+      sessionId
+    );
   } else {
     started = tunnelBroker.startDashboardProxyWithId(
       ws,

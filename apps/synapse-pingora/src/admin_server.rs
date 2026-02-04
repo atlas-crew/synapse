@@ -340,6 +340,14 @@ static LOG_BUFFER: Lazy<RwLock<VecDeque<LogEntry>>> = Lazy::new(|| {
 
 /// Record a log entry with source
 pub fn record_log_with_source(level: &str, source: LogSource, message: String) {
+    let stream_source = match source {
+        LogSource::Http => "access",
+        LogSource::Waf => "waf",
+        LogSource::System => "system",
+        LogSource::Access => "access",
+    };
+    crate::tunnel::publish_internal_log(level, stream_source, message.clone());
+
     let entry = LogEntry {
         id: format!("{}", fastrand::u64(..)),
         timestamp: chrono::Utc::now().to_rfc3339(),

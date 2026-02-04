@@ -122,6 +122,13 @@ impl TunnelClientHandle {
             .map_err(|e| TunnelError::SendFailed(e.to_string()))
     }
 
+    /// Try to send a JSON message without waiting (drops on backpressure).
+    pub fn try_send_json(&self, value: serde_json::Value) -> Result<(), TunnelError> {
+        self.sender
+            .try_send(value)
+            .map_err(|e| TunnelError::SendFailed(e.to_string()))
+    }
+
     /// Send a message to the hub with automatic serialization.
     pub async fn send<T: Serialize>(&self, message: T) -> Result<(), TunnelError> {
         let value = serde_json::to_value(message)?;

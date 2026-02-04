@@ -150,6 +150,7 @@ export interface LogEntryMessage {
     source: LogSource;
     level: LogLevel;
     message: string;
+    logTimestamp?: number;
     fields?: Record<string, unknown>;
     method?: string;
     path?: string;
@@ -165,4 +166,33 @@ export interface LogBatchMessage {
   entries: LogEntryMessage['entry'][];
 }
 
-export type LogStreamMessage = LogEntryMessage | LogBatchMessage;
+export interface TunnelLogEntryMessage {
+  type: 'entry';
+  channel: 'logs';
+  sessionId?: string;
+  source: LogSource;
+  level: LogLevel;
+  message: string;
+  fields?: Record<string, unknown>;
+  method?: string;
+  path?: string;
+  statusCode?: number;
+  latencyMs?: number;
+  clientIp?: string;
+  ruleId?: string;
+  logTimestamp?: number;
+}
+
+export interface LogBackfillCompleteMessage {
+  type: 'backfill-complete';
+  channel: 'logs';
+  sessionId?: string;
+  count?: number;
+  sources?: LogSource[];
+}
+
+export type LogStreamMessage =
+  | LogEntryMessage
+  | LogBatchMessage
+  | TunnelLogEntryMessage
+  | LogBackfillCompleteMessage;

@@ -30,7 +30,7 @@ const TunnelSessionSchema = z.object({
   sensorId: z.string(),
   userId: z.string(),
   tenantId: z.string(),
-  type: z.enum(['shell', 'dashboard']),
+  type: z.enum(['shell', 'dashboard', 'logs']),
   status: z.enum(['pending', 'connected', 'disconnected', 'error']),
   createdAt: z.string().datetime(),
   lastActivity: z.string().datetime().nullish(),
@@ -73,7 +73,7 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
         sensorId,
         available: isOnline,
         connectionState: sensor.connectionState,
-        capabilities: isOnline ? ['shell', 'dashboard'] : [],
+        capabilities: isOnline ? ['shell', 'dashboard', 'logs'] : [],
         lastHeartbeat: sensor.lastHeartbeat,
       });
     } catch (error) {
@@ -205,6 +205,68 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
       });
     } catch (error) {
       logger.error({ error, sensorId }, 'Failed to create dashboard session');
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * POST /tunnel/logs/:sensorId
+   * Request a new log streaming session to a sensor
+   *
+   * Security: Requires tunnel:read scope (logs are read-only)
+   */
+  router.post('/logs/:sensorId', requireScope('tunnel:read'), async (req: Request, res): Promise<Response | void> => {
+    const { sensorId } = req.params;
+    const tenantId = req.auth!.tenantId;
+    const userId = req.auth!.userId ?? req.auth!.apiKeyId;
+
+    try {
+      // Verify sensor exists and belongs to tenant
+      const sensor = await prisma.sensor.findFirst({
+        where: { id: sensorId, tenantId },
+        select: { id: true, connectionState: true, lastHeartbeat: true },
+      });
+
+      if (!sensor) {
+        return res.status(404).json({ error: 'Sensor not found' });
+      }
+
+      // Check if sensor is online
+      const isOnline = sensor.lastHeartbeat &&
+        new Date().getTime() - new Date(sensor.lastHeartbeat).getTime() < 120000;
+
+      if (!isOnline) {
+        return res.status(503).json({
+          error: 'Sensor offline',
+          lastHeartbeat: sensor.lastHeartbeat,
+        });
+      }
+
+      const sessionId = randomUUID();
+      const session: z.infer<typeof TunnelSessionSchema> = {
+        sessionId,
+        sensorId,
+        userId,
+        tenantId,
+        type: 'logs',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        lastActivity: null,
+        expiresAt: Date.now() + 300000,
+      };
+
+      createTunnelSession(session);
+      logger.info({ sessionId, sensorId, userId }, 'Log session created');
+
+      return res.status(201).json({
+        sessionId,
+        sensorId,
+        type: 'logs',
+        wsUrl: `/ws/tunnel/user/${sessionId}`,
+        expiresIn: 300,
+      });
+    } catch (error) {
+      logger.error({ error, sensorId }, 'Failed to create log session');
       return res.status(500).json({ error: 'Internal server error' });
     }
   });
