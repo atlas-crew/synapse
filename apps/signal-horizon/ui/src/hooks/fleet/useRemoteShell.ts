@@ -359,6 +359,9 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
 
             // Attempt reconnection unless it was a clean close
             if (event.code !== 1000 && event.code !== 1001) {
+              // Clear session so reconnect creates a fresh tunnel session
+              setSession(null);
+              sessionUrlRef.current = null;
               scheduleReconnect();
             }
           }

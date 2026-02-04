@@ -350,6 +350,9 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
 
         // Attempt reconnection unless intentionally cleaning up
         if (!isCleaningUpRef.current && event.code !== 1000) {
+          // Clear session so reconnect creates a fresh tunnel session
+          sessionIdRef.current = null;
+          sessionUrlRef.current = null;
           reconnectTimeoutRef.current = setTimeout(() => {
             void connectInternal();
           }, 3000);
