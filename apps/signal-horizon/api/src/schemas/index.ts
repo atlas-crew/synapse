@@ -101,6 +101,27 @@ export {
 } from './synapse.js';
 
 // -----------------------------------------------------------------------------
+// Auth Coverage Schemas
+// -----------------------------------------------------------------------------
+
+export {
+  EndpointCountsSchema,
+  EndpointSummarySchema,
+  AuthCoverageSummarySchema,
+  AuthPatternSchema,
+  RiskLevelSchema,
+  type EndpointCounts,
+  type EndpointSummary,
+  type AuthCoverageSummary,
+  type AuthPattern,
+  type RiskLevel,
+  type EndpointAuthStats,
+  type CoverageMapSummary,
+  type AuthCoverageResponse,
+  type AuthGapsResponse,
+} from './auth-coverage.js';
+
+// -----------------------------------------------------------------------------
 // Tunnel Schemas
 // -----------------------------------------------------------------------------
 
