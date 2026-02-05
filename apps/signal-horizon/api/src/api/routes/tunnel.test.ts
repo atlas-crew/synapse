@@ -11,7 +11,6 @@ import request from '../../__tests__/test-request.js';
 import { createTunnelRoutes } from './tunnel.js';
 import type { PrismaClient, Sensor } from '@prisma/client';
 import type { Logger } from 'pino';
-import { clearTunnelSessions } from '../../websocket/tunnel-session-store.js';
 
 // Mock logger
 const mockLogger: Logger = {
@@ -64,12 +63,64 @@ describe('Tunnel Routes', () => {
   let mockPrisma: Partial<PrismaClient>;
 
   beforeEach(() => {
-    clearTunnelSessions();
+    const createdSessions: Record<string, unknown>[] = [];
+    const sensorStore = {
+      findFirst: vi.fn(),
+    } as unknown as PrismaClient['sensor'];
+    const apiKeyStore = {
+      findUnique: vi.fn(),
+    } as unknown as PrismaClient['apiKey'];
+    const tunnelSessionStore = {
+      create: vi.fn(async ({ data }) => {
+        const session = {
+          ...data,
+          createdAt: new Date(),
+          lastActivity: new Date(),
+        };
+        createdSessions.push(session);
+        return session;
+      }),
+      findUnique: vi.fn(async ({ where }) => {
+        const id = String(where.id);
+        return createdSessions.find((session) => session.id === id) ?? null;
+      }),
+      findMany: vi.fn(async ({ where }) => {
+        return createdSessions.filter(
+          (session) => session.tenantId === where.tenantId
+        );
+      }),
+      delete: vi.fn(async ({ where }) => {
+        const id = String(where.id);
+        const index = createdSessions.findIndex((session) => session.id === id);
+        if (index >= 0) {
+          createdSessions.splice(index, 1);
+        }
+        return {};
+      }),
+      update: vi.fn(async ({ where, data }) => {
+        const id = String(where.id);
+        const index = createdSessions.findIndex((session) => session.id === id);
+        const existing = index >= 0 ? createdSessions[index] : null;
+        if (!existing) {
+          return null;
+        }
+        const updated = { ...existing, ...data };
+        createdSessions[index] = updated;
+        return updated;
+      }),
+    } as unknown as PrismaClient['tunnelSession'];
     mockPrisma = {
-      sensor: {
-        findFirst: vi.fn(),
-      } as unknown as PrismaClient['sensor'],
+      sensor: sensorStore,
+      apiKey: apiKeyStore,
+      tunnelSession: tunnelSessionStore,
+      $transaction: vi.fn(async (callback) => callback({
+        sensor: sensorStore,
+        apiKey: apiKeyStore,
+        tunnelSession: tunnelSessionStore,
+      })),
     };
+    vi.mocked(apiKeyStore.findUnique).mockResolvedValue({ tenantId: 'tenant-1' } as never);
+    vi.mocked(tunnelSessionStore.create).mockResolvedValue({} as never);
 
     app = express();
     app.use(express.json());
@@ -77,7 +128,7 @@ describe('Tunnel Routes', () => {
     app.use((req, _res, next) => {
       req.headers['x-org-id'] = 'tenant-1';
       req.headers['x-user-id'] = 'user-1';
-      (req as any).auth = {
+      req.auth = {
         tenantId: 'tenant-1',
         apiKeyId: 'test-key',
         scopes: [
@@ -193,6 +244,50 @@ describe('Tunnel Routes', () => {
         .post('/tunnel/shell/non-existent')
         .expect(404);
     });
+
+    it('should rate limit tunnel creation per API key', async () => {
+      const previousLimit = process.env.TUNNEL_CREATE_RATE_LIMIT_PER_HOUR;
+      process.env.TUNNEL_CREATE_RATE_LIMIT_PER_HOUR = '2';
+
+      const sensor = createMockSensor({
+        lastHeartbeat: new Date(),
+      });
+      vi.mocked(mockPrisma.sensor!.findFirst).mockResolvedValue(sensor);
+
+      const rateLimitedApp = express();
+      rateLimitedApp.use(express.json());
+      rateLimitedApp.use((req, _res, next) => {
+        req.headers['x-org-id'] = 'tenant-1';
+        req.headers['x-user-id'] = 'user-1';
+        req.auth = {
+          tenantId: 'tenant-1',
+          apiKeyId: 'test-key',
+          scopes: [
+            'tunnel:read',
+            'tunnel:shell',
+            'tunnel:dashboard',
+            'tunnel:manage',
+            'command:execute',
+          ],
+          isFleetAdmin: false,
+          userId: 'user-1',
+        };
+        next();
+      });
+      rateLimitedApp.use('/tunnel', createTunnelRoutes(mockPrisma as PrismaClient, mockLogger));
+
+      await request(rateLimitedApp).post('/tunnel/shell/sensor-1').expect(201);
+      await request(rateLimitedApp).post('/tunnel/shell/sensor-1').expect(201);
+      const res = await request(rateLimitedApp).post('/tunnel/shell/sensor-1').expect(429);
+
+      expect(res.headers['retry-after']).toBeDefined();
+
+      if (previousLimit === undefined) {
+        delete process.env.TUNNEL_CREATE_RATE_LIMIT_PER_HOUR;
+      } else {
+        process.env.TUNNEL_CREATE_RATE_LIMIT_PER_HOUR = previousLimit;
+      }
+    });
   });
 
   describe('POST /tunnel/dashboard/:sensorId', () => {
@@ -239,13 +334,24 @@ describe('Tunnel Routes', () => {
         .expect(201);
 
       const sessionId = createRes.body.sessionId;
+      const session = {
+        id: sessionId,
+        sensorId: 'sensor-1',
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        type: 'shell',
+        status: 'pending',
+        createdAt: new Date(),
+        lastActivity: new Date(),
+      };
+      vi.mocked(mockPrisma.tunnelSession!.findUnique).mockResolvedValueOnce(session as never);
 
       // Then retrieve it
       const res = await request(app)
         .get(`/tunnel/session/${sessionId}`)
         .expect(200);
 
-      expect(res.body.sessionId).toBe(sessionId);
+      expect(res.body.id).toBe(sessionId);
       expect(res.body.sensorId).toBe('sensor-1');
       expect(res.body.status).toBe('pending');
     });
@@ -270,13 +376,13 @@ describe('Tunnel Routes', () => {
       // Try to access with different tenant
       const otherTenantApp = express();
       otherTenantApp.use(express.json());
-      otherTenantApp.use((req, _res, next) => {
-        req.headers['x-org-id'] = 'tenant-2'; // Different tenant
-        (req as any).auth = {
-          tenantId: 'tenant-2',
-          apiKeyId: 'test-key',
-          scopes: [
-            'tunnel:read',
+    otherTenantApp.use((req, _res, next) => {
+      req.headers['x-org-id'] = 'tenant-2'; // Different tenant
+      req.auth = {
+        tenantId: 'tenant-2',
+        apiKeyId: 'test-key',
+        scopes: [
+          'tunnel:read',
             'tunnel:shell',
             'tunnel:dashboard',
             'tunnel:manage',
@@ -308,6 +414,19 @@ describe('Tunnel Routes', () => {
         .expect(201);
 
       const sessionId = createRes.body.sessionId;
+      const session = {
+        id: sessionId,
+        sensorId: 'sensor-1',
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        type: 'shell',
+        status: 'pending',
+        createdAt: new Date(),
+        lastActivity: new Date(),
+      };
+      vi.mocked(mockPrisma.tunnelSession!.findUnique)
+        .mockResolvedValueOnce(session as never)
+        .mockResolvedValueOnce(null as never);
 
       // Then delete it
       await request(app)
@@ -335,6 +454,28 @@ describe('Tunnel Routes', () => {
 
       await request(app).post('/tunnel/shell/sensor-1').expect(201);
       await request(app).post('/tunnel/dashboard/sensor-1').expect(201);
+      vi.mocked(mockPrisma.tunnelSession!.findMany).mockResolvedValueOnce([
+        {
+          id: 'session-1',
+          sensorId: 'sensor-1',
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          type: 'shell',
+          status: 'pending',
+          createdAt: new Date(),
+          lastActivity: new Date(),
+        },
+        {
+          id: 'session-2',
+          sensorId: 'sensor-1',
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          type: 'dashboard',
+          status: 'pending',
+          createdAt: new Date(),
+          lastActivity: new Date(),
+        },
+      ] as never);
 
       const res = await request(app)
         .get('/tunnel/sessions')

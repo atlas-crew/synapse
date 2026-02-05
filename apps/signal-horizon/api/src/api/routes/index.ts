@@ -9,6 +9,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { createAuthMiddleware } from '../middleware/auth.js';
+import { createAuthRateLimiters } from '../middleware/rate-limit.js';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { contentTypeValidation } from '../../middleware/content-type.js';
 import { csrfProtection, csrfTokenHandler, ensureCsrfToken } from '../../middleware/csrf.js';
@@ -25,6 +26,7 @@ import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
 import { createTenantRoutes } from './tenant.js';
+import { createAuthManagementRoutes } from './auth-management.js';
 import { createSynapseRoutes } from './synapse.js';
 import { createAPIIntelligenceRoutes } from './api-intelligence.js';
 import { createFleetControlRoutes } from './fleet-control.js';
@@ -46,6 +48,7 @@ import type { TunnelBroker } from '../../websocket/tunnel-broker.js';
 import type { WarRoomService } from '../../services/warroom/index.js';
 import type { APIIntelligenceService } from '../../services/api-intelligence/index.js';
 import type { ClickHouseService } from '../../storage/clickhouse/index.js';
+import type { PreferenceService } from '../../services/fleet/preference-service.js';
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
@@ -59,6 +62,7 @@ export interface ApiRouterOptions {
   sessionQueryService?: FleetSessionQueryService;
   warRoomService?: WarRoomService;
   apiIntelligenceService?: APIIntelligenceService;
+  preferenceService?: PreferenceService;
   // Additional services for dependency injection
   intelService?: import('../../services/intel/index.js').IntelService;
   policyService?: import('../../services/fleet/policy-template.js').PolicyTemplateService;
@@ -75,6 +79,7 @@ export function createApiRouter(
 ): Router {
   const router = Router();
   const authMiddleware = createAuthMiddleware(prisma);
+  const authRateLimiters = createAuthRateLimiters(logger);
 
   // PEN-004: Content-type validation for all mutation endpoints
   // Applied before auth to reject malformed requests early
@@ -99,6 +104,11 @@ export function createApiRouter(
 
   // Apply global rate limiting to all authenticated routes (labs-mmft.7)
   router.use(rateLimiters.global);
+
+  // Apply auth-specific rate limits before auth middleware (labs-tj9l)
+  router.use(authRateLimiters.ipBurst);
+  router.use(authRateLimiters.ipFailures);
+  router.use(authRateLimiters.keyFailures);
 
   // All API routes require authentication
   router.use(authMiddleware);
@@ -161,8 +171,12 @@ export function createApiRouter(
   logger.info('Management routes mounted at /api/v1/management');
 
   // Mount Tenant routes for settings
-  router.use('/tenant', createTenantRoutes(prisma, logger));
+  router.use('/tenant', createTenantRoutes(prisma, logger, options.securityAuditService, options.preferenceService));
   logger.info('Tenant routes mounted at /api/v1/tenant');
+
+  // Mount Auth Management routes
+  router.use('/auth', createAuthManagementRoutes(prisma, logger));
+  logger.info('Auth Management routes mounted at /api/v1/auth');
 
   // Mount Onboarding routes for sensor registration
   router.use('/onboarding', createOnboardingRoutes(prisma, logger));
