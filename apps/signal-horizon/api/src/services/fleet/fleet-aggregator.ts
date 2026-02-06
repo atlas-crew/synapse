@@ -13,6 +13,7 @@ import type {
   SensorAlert,
   SensorHeartbeat,
 } from './types.js';
+import { type SensorMetricsStore, InMemorySensorMetricsStore } from './sensor-metrics-store.js';
 
 export interface FleetAggregatorConfig {
   /**
@@ -57,10 +58,11 @@ export interface FleetAggregatorConfig {
 export class FleetAggregator extends EventEmitter {
   private logger: Logger;
   private config: Required<FleetAggregatorConfig>;
-  private sensorMetrics: Map<string, SensorMetricsSnapshot> = new Map();
+  /** Persistent sensor metrics cache (distributed support) */
+  private sensorMetrics: SensorMetricsStore;
   private cleanupInterval: NodeJS.Timeout | null = null;
 
-  constructor(logger: Logger, config: FleetAggregatorConfig = {}) {
+  constructor(logger: Logger, config: FleetAggregatorConfig = {}, metricsStore?: SensorMetricsStore) {
     super();
     this.logger = logger.child({ service: 'fleet-aggregator' });
     this.config = {
@@ -70,6 +72,7 @@ export class FleetAggregator extends EventEmitter {
       memoryAlertThreshold: config.memoryAlertThreshold ?? 85,
       diskAlertThreshold: config.diskAlertThreshold ?? 90,
     };
+    this.sensorMetrics = metricsStore ?? new InMemorySensorMetricsStore();
 
     // Start cleanup timer to remove stale metrics
     this.startCleanup();
@@ -78,8 +81,9 @@ export class FleetAggregator extends EventEmitter {
   /**
    * Update sensor metrics from incoming heartbeat
    */
-  updateSensorMetrics(sensorId: string, heartbeat: SensorHeartbeat): void {
-    const wasOnline = this.sensorMetrics.has(sensorId) && this.isOnline(this.sensorMetrics.get(sensorId)!);
+  async updateSensorMetrics(sensorId: string, heartbeat: SensorHeartbeat): Promise<void> {
+    const existing = await this.sensorMetrics.get(sensorId);
+    const wasOnline = existing && this.isOnline(existing);
 
     const snapshot: SensorMetricsSnapshot = {
       sensorId: heartbeat.sensorId,
@@ -98,7 +102,7 @@ export class FleetAggregator extends EventEmitter {
       rulesHash: heartbeat.rulesHash,
     };
 
-    this.sensorMetrics.set(sensorId, snapshot);
+    await this.sensorMetrics.set(sensorId, snapshot);
 
     // Increment metrics (P1-OBSERVABILITY-002)
     metrics.sensorHeartbeatsTotal.inc({ sensor_id: sensorId, tenant_id: heartbeat.tenantId });
@@ -116,18 +120,20 @@ export class FleetAggregator extends EventEmitter {
     this.checkSensorAlerts(snapshot);
 
     // Emit metrics updated event
-    this.emit('metrics-updated', this.getFleetMetrics());
+    const fleetMetrics = await this.getFleetMetrics();
+    this.emit('metrics-updated', fleetMetrics);
   }
 
   /**
    * Compute fleet-wide metrics
    */
-  getFleetMetrics(): FleetMetrics {
+  async getFleetMetrics(): Promise<FleetMetrics> {
     const now = new Date();
     const onlineSensors: SensorMetricsSnapshot[] = [];
     const offlineSensors: SensorMetricsSnapshot[] = [];
 
-    for (const sensor of this.sensorMetrics.values()) {
+    const allMetrics = await this.sensorMetrics.getAll();
+    for (const sensor of allMetrics) {
       if (this.isOnline(sensor)) {
         onlineSensors.push(sensor);
       } else {
@@ -135,7 +141,7 @@ export class FleetAggregator extends EventEmitter {
       }
     }
 
-    const totalSensors = this.sensorMetrics.size;
+    const totalSensors = allMetrics.length;
     const onlineCount = onlineSensors.length;
 
     // Calculate totals and averages
@@ -183,8 +189,9 @@ export class FleetAggregator extends EventEmitter {
   /**
    * Get metrics for a specific region
    */
-  getRegionMetrics(region: string): RegionMetrics {
-    const regionSensors = Array.from(this.sensorMetrics.values()).filter(
+  async getRegionMetrics(region: string): Promise<RegionMetrics> {
+    const allMetrics = await this.sensorMetrics.getAll();
+    const regionSensors = allMetrics.filter(
       (s) => s.region === region
     );
 
@@ -216,10 +223,11 @@ export class FleetAggregator extends EventEmitter {
   /**
    * Get sensors requiring attention (degraded, high resource usage)
    */
-  getSensorsRequiringAttention(): SensorAlert[] {
+  async getSensorsRequiringAttention(): Promise<SensorAlert[]> {
     const alerts: SensorAlert[] = [];
+    const allMetrics = await this.sensorMetrics.getAll();
 
-    for (const sensor of this.sensorMetrics.values()) {
+    for (const sensor of allMetrics) {
       // Offline sensors
       if (!this.isOnline(sensor)) {
         alerts.push({
@@ -297,24 +305,25 @@ export class FleetAggregator extends EventEmitter {
   /**
    * Get current sensor metrics snapshot
    */
-  getSensorMetrics(sensorId: string): SensorMetricsSnapshot | null {
-    return this.sensorMetrics.get(sensorId) ?? null;
+  async getSensorMetrics(sensorId: string): Promise<SensorMetricsSnapshot | null> {
+    const metrics = await this.sensorMetrics.get(sensorId);
+    return metrics ?? null;
   }
 
   /**
    * Get all sensor metrics
    */
-  getAllSensorMetrics(): SensorMetricsSnapshot[] {
-    return Array.from(this.sensorMetrics.values());
+  async getAllSensorMetrics(): Promise<SensorMetricsSnapshot[]> {
+    return this.sensorMetrics.getAll();
   }
 
   /**
    * Remove sensor from tracking
    */
-  removeSensor(sensorId: string): void {
-    const sensor = this.sensorMetrics.get(sensorId);
+  async removeSensor(sensorId: string): Promise<void> {
+    const sensor = await this.sensorMetrics.get(sensorId);
     if (sensor) {
-      this.sensorMetrics.delete(sensorId);
+      await this.sensorMetrics.delete(sensorId);
       this.logger.info({ sensorId }, 'Sensor removed from fleet aggregator');
       this.emit('sensor-offline', { sensorId, tenantId: sensor.tenantId });
     }
@@ -410,20 +419,21 @@ export class FleetAggregator extends EventEmitter {
   /**
    * Remove metrics for sensors that have been offline too long
    */
-  private cleanupStaleMetrics(): void {
+  private async cleanupStaleMetrics(): Promise<void> {
     const now = Date.now();
     const retentionThreshold = now - this.config.metricsRetentionMs;
     let removedCount = 0;
 
-    for (const [sensorId, sensor] of this.sensorMetrics.entries()) {
+    const allMetrics = await this.sensorMetrics.getAll();
+    for (const sensor of allMetrics) {
       if (sensor.lastHeartbeat.getTime() < retentionThreshold) {
         const tenantId = sensor.tenantId;
         const region = sensor.region;
         
-        this.sensorMetrics.delete(sensorId);
+        await this.sensorMetrics.delete(sensor.sensorId);
         removedCount++;
-        this.logger.info({ sensorId, tenantId }, 'Removed stale sensor metrics');
-        this.emit('sensor-offline', { sensorId, tenantId });
+        this.logger.info({ sensorId: sensor.sensorId, tenantId }, 'Removed stale sensor metrics');
+        this.emit('sensor-offline', { sensorId: sensor.sensorId, tenantId });
         
         // Update online count gauge
         metrics.sensorsOnlineGauge.dec({ tenant_id: tenantId, region });
@@ -443,7 +453,6 @@ export class FleetAggregator extends EventEmitter {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
-    this.sensorMetrics.clear();
     this.removeAllListeners();
     this.logger.info('Fleet aggregator stopped');
   }

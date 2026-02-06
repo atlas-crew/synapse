@@ -80,6 +80,21 @@ interface ParsedTelemetry {
 
 const DEFAULT_SITE = '_default';
 
+function normalizeEventType(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const raw = value.trim();
+  if (raw.length === 0) return undefined;
+
+  // Support both snake_case (`request_processed`) and legacy-ish CamelCase (`RequestProcessed`).
+  const snake = raw.includes('_')
+    ? raw
+    : raw
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2');
+
+  return snake.toLowerCase();
+}
+
 /**
  * Normalizes a value to a finite number.
  * Handles both numeric and string inputs from various sensor versions. (labs-mmft.26)
@@ -116,6 +131,18 @@ function normalizeOptionalString(value: unknown, maxLength: number = 2048): stri
     return value.trim().slice(0, maxLength);
   }
   return null;
+}
+
+const REQUEST_ID_MAX_LEN = 128;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+function normalizeOptionalRequestId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > REQUEST_ID_MAX_LEN) return null;
+  if (trimmed.includes('\r') || trimmed.includes('\n')) return null;
+  if (!REQUEST_ID_PATTERN.test(trimmed)) return null;
+  return trimmed;
 }
 
 /**
@@ -178,13 +205,16 @@ function parseTelemetryPayload(
     const eventPayload = normalizeEventPayload(entry);
     if (!eventPayload) continue;
 
-    const eventType = typeof eventPayload.event_type === 'string'
-      ? eventPayload.event_type.toLowerCase()
-      : undefined;
+    const eventType = normalizeEventType(eventPayload.event_type);
 
     const data = (eventPayload.data && typeof eventPayload.data === 'object')
       ? (eventPayload.data as Record<string, unknown>)
       : eventPayload;
+
+    const eventRequestId = normalizeOptionalRequestId(
+      (data.request_id ?? data.requestId) as unknown
+    );
+    const effectiveRequestId = eventRequestId ?? requestId ?? null;
 
     if (eventType === 'request_processed') {
       const timestampMs = normalizeNumber(
@@ -205,7 +235,7 @@ function parseTelemetryPayload(
         timestamp: new Date(timestampMs).toISOString(),
         tenant_id: tenantId,
         sensor_id: instanceId,
-        request_id: requestId, // Pass correlation ID
+        request_id: effectiveRequestId, // Pass correlation ID (prefer per-event request_id)
         site: normalizeString(data.site, DEFAULT_SITE),
         method: normalizeString(data.method, 'UNKNOWN'),
         path: normalizeString(data.path, '/'),
@@ -255,7 +285,7 @@ function parseTelemetryPayload(
         timestamp: new Date(timestampMs).toISOString(),
         tenant_id: tenantId,
         sensor_id: instanceId,
-        request_id: requestId, // Pass correlation ID
+        request_id: effectiveRequestId, // Pass correlation ID (prefer per-event request_id)
         log_id: logId,
         source: normalizeString(data.source, 'system'),
         level: normalizeString(data.level, 'info'),
@@ -307,7 +337,7 @@ function parseTelemetryPayload(
         timestamp: new Date(timestampMs).toISOString(),
         tenant_id: tenantId,
         sensor_id: instanceId,
-        request_id: requestId, // Pass correlation ID
+        request_id: effectiveRequestId, // Pass correlation ID (prefer per-event request_id)
         signal_type: signalType,
         source_ip: normalizeString(entry.actor?.ip, '0.0.0.0'),
         fingerprint: normalizeString(entry.actor?.fingerprint, ''),
@@ -366,8 +396,8 @@ export function createTelemetryRouter(
             });
             return;
           }
-        const { tenantId, sensorId } = authContext;
-    const requestId = req.id || null; // Use requestId from middleware (P1-OBSERVABILITY-001)
+      const { tenantId, sensorId } = authContext;
+    const requestId = typeof req.id === 'string' ? req.id : null; // Use requestId from middleware (P1-OBSERVABILITY-001)
 
     // Check for idempotency if batch_id is present (labs-mmft.14)
     const body = result.data as Record<string, unknown>;
@@ -408,7 +438,7 @@ export function createTelemetryRouter(
             tenantId, 
             sensorId, 
             log,
-            String(requestId)
+            requestId
           );
     
           if (rows.length === 0 && logRows.length === 0 && signalRows.length === 0) {

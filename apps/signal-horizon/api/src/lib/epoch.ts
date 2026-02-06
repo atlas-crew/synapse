@@ -5,8 +5,9 @@
  * When a tenant's epoch is incremented, all JWTs issued with a lower epoch
  * are considered expired, enabling "revoke all tokens" functionality.
  *
- * Uses the RedisKv abstraction for storage. Falls back gracefully when
- * Redis is unavailable (consistent with the fail-open pattern in jwt.ts).
+ * Uses the RedisKv abstraction for storage. Throws on Redis errors so that
+ * callers (auth middleware) can fail-closed with 503 rather than silently
+ * bypassing revocation.
  */
 
 import { type RedisKv } from '../storage/redis/kv.js';
@@ -28,8 +29,24 @@ function epochKey(tenantId: string): string {
 }
 
 /**
+ * Error thrown when Redis is unavailable during epoch lookup.
+ * Callers should treat this as a denial (503) rather than allowing access.
+ */
+export class EpochLookupError extends Error {
+  public readonly cause: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'EpochLookupError';
+    this.cause = cause;
+  }
+}
+
+/**
  * Get the current epoch for a tenant.
- * Returns 0 if not set or if Redis is unavailable (fail-open).
+ * Returns 0 if no epoch has been set (tenant has never revoked tokens).
+ * Throws EpochLookupError on Redis errors so the auth middleware can
+ * respond with 503 instead of silently bypassing revocation.
  */
 export async function getEpochForTenant(
   tenantId: string,
@@ -40,23 +57,24 @@ export async function getEpochForTenant(
     if (raw === null) return 0;
     const parsed = parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : 0;
-  } catch {
-    // Fail-open: treat Redis errors as epoch 0 (no tokens rejected).
-    // This is consistent with the isTokenRevoked fail-open pattern (jwt.ts line 66-76).
-    return 0;
+  } catch (error) {
+    throw new EpochLookupError(
+      `Failed to read auth epoch for tenant ${tenantId}`,
+      error
+    );
   }
 }
 
 /**
- * Increment the epoch for a tenant and return the new value.
+ * Atomically increment the epoch for a tenant and return the new value.
  * This effectively invalidates all tokens issued before this epoch.
+ *
+ * Uses Redis INCR for atomicity -- the previous read-modify-write pattern
+ * was susceptible to lost updates under concurrent revocation requests.
  */
 export async function incrementEpochForTenant(
   tenantId: string,
   kv: RedisKv
 ): Promise<number> {
-  const current = await getEpochForTenant(tenantId, kv);
-  const next = current + 1;
-  await kv.set(epochKey(tenantId), String(next));
-  return next;
+  return kv.incr(epochKey(tenantId));
 }

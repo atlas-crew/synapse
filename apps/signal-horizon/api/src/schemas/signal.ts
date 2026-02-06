@@ -193,6 +193,8 @@ export const SensorAuthPayloadSchema = z.object({
   sensorId: z.string().min(1, 'Sensor ID is required'),
   sensorName: z.string().max(255).optional(),
   version: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format'),
+  /** Protocol version for wire-format negotiation (e.g., "1.0") */
+  protocolVersion: z.string().max(32).optional(),
 }).refine(data => data.apiKey || data.token, {
   message: "Either apiKey or token must be provided",
   path: ["apiKey"]
@@ -304,6 +306,37 @@ export const DashboardClientMessageSchema = z.discriminatedUnion('type', [
 ]);
 
 export type ValidatedDashboardMessage = z.infer<typeof DashboardClientMessageSchema>;
+
+// =============================================================================
+// Pub/Sub Broadcast Envelope (labs-2rf9.10)
+// =============================================================================
+
+/**
+ * Schema for Redis pub/sub broadcast messages exchanged between gateway instances.
+ * Validates the envelope structure before acting on payloads from the message bus.
+ */
+export const BroadcastEnvelopeSchema = z.object({
+  type: z.string(),
+  payload: z.unknown(),
+  senderId: z.string(),
+});
+
+export type BroadcastEnvelope = z.infer<typeof BroadcastEnvelopeSchema>;
+
+/**
+ * Schema for dashboard-specific broadcast envelopes (includes topic and options).
+ */
+export const DashboardBroadcastEnvelopeSchema = z.object({
+  topic: z.string(),
+  message: z.unknown(),
+  options: z.object({
+    tenantId: z.string().optional(),
+    isFleetEvent: z.boolean().optional(),
+  }).default({}),
+  senderId: z.string(),
+});
+
+export type DashboardBroadcastEnvelope = z.infer<typeof DashboardBroadcastEnvelopeSchema>;
 
 // =============================================================================
 // Validation Helpers

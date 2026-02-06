@@ -192,6 +192,10 @@ function loadConfig() {
       heartbeatIntervalMs: env.WS_HEARTBEAT_INTERVAL_MS, // Already parsed
       maxSensorConnections: env.WS_MAX_SENSOR_CONNECTIONS, // Already parsed
       maxDashboardConnections: env.WS_MAX_DASHBOARD_CONNECTIONS, // Already parsed
+      protocol: {
+        supportedVersions: ['1.0'],
+        legacyVersion: '0.9',
+      },
     },
 
     sensorCompatibility: {

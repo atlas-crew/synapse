@@ -17,6 +17,7 @@ import type { ClickHouseService, BlocklistHistoryRow } from '../../storage/click
 
 import type { BlocklistJobData } from '../../jobs/blocklist-queue.js';
 import type { Queue } from 'bullmq';
+import { type BlocklistStore, InMemoryBlocklistStore } from './blocklist-store.js';
 
 export interface BroadcasterConfig {
   pushDelayMs: number;
@@ -33,8 +34,8 @@ export class Broadcaster {
   private sensorGateway: SensorGateway | null = null;
   private blocklistQueue: Queue<BlocklistJobData> | null = null;
 
-  // In-memory blocklist cache for fast lookup
-  private blocklistCache: Map<string, BlocklistUpdate> = new Map();
+  // Persistent blocklist cache for fast lookup (distributed support)
+  private blocklistCache: BlocklistStore;
 
   // labs-l5z3: Blocklist update buffer for batching
   private blockBuffer: BlocklistUpdate[] = [];
@@ -49,12 +50,14 @@ export class Broadcaster {
     prisma: PrismaClient,
     logger: Logger,
     config: BroadcasterConfig,
-    clickhouse?: ClickHouseService
+    clickhouse?: ClickHouseService,
+    blocklistStore?: BlocklistStore
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'broadcaster' });
     this._config = config;
     this.clickhouse = clickhouse ?? null;
+    this.blocklistCache = blocklistStore ?? new InMemoryBlocklistStore();
   }
 
   setDashboardGateway(gateway: DashboardGateway): void {
@@ -79,8 +82,8 @@ export class Broadcaster {
   private queueBlock(block: BlocklistUpdate): void {
     this.blockBuffer.push(block);
 
-    // Update local cache immediately for fast lookup
-    this.blocklistCache.set(`${block.blockType}:${block.indicator}`, block);
+    // Update local cache immediately for fast lookup (fire-and-forget for speed)
+    void this.blocklistCache.set(block);
 
     if (this.blockBuffer.length >= this.MAX_BATCH_SIZE) {
       this.flushBlocks();
@@ -284,22 +287,23 @@ export class Broadcaster {
   /**
    * Get current blocklist for sensor sync
    */
-  getBlocklist(): BlocklistUpdate[] {
-    return Array.from(this.blocklistCache.values());
+  async getBlocklist(): Promise<BlocklistUpdate[]> {
+    return this.blocklistCache.getAll();
   }
 
   /**
    * Check if indicator is blocked
    */
-  isBlocked(blockType: string, indicator: string): boolean {
-    return this.blocklistCache.has(`${blockType}:${indicator}`);
+  async isBlocked(blockType: string, indicator: string): Promise<boolean> {
+    const entry = await this.blocklistCache.get(blockType, indicator);
+    return !!entry;
   }
 
   /**
    * Get blocklist cache size
    */
-  getCacheSize(): number {
-    return this.blocklistCache.size;
+  async getCacheSize(): Promise<number> {
+    return this.blocklistCache.size();
   }
 
   getConfig(): BroadcasterConfig {
@@ -346,10 +350,8 @@ export class Broadcaster {
 
   /**
    * Cleanup resources and stop the broadcaster
-   * Clears in-memory cache
    */
-  stop(): void {
-    this.blocklistCache.clear();
+  async stop(): Promise<void> {
     this.dashboardGateway = null;
     this.logger.info('Broadcaster stopped');
   }

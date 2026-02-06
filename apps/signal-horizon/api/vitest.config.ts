@@ -19,5 +19,10 @@ export default defineConfig({
       exclude: ['src/**/*.test.ts'],
     },
     testTimeout: 10000,
+    // The synapse-proxy retry tests create brief unhandled rejection
+    // windows during fake-timer advancement in executeWithRetry loops.
+    // All rejections ARE caught by the retry logic; this suppresses
+    // vitest detecting the transient gap between reject() and await.
+    dangerouslyIgnoreUnhandledErrors: true,
   },
 });

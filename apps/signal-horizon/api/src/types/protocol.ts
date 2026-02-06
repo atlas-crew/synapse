@@ -57,6 +57,8 @@ export interface SensorAuthMessage {
     sensorName?: string;
     /** Sensor software version for compatibility checks */
     version: string;
+    /** Protocol version for wire-format negotiation (e.g., "1.0") */
+    protocolVersion?: string;
   };
 }
 
@@ -229,6 +231,8 @@ export interface HubAuthSuccessMessage {
   tenantId: string;
   /** List of enabled capabilities (e.g., 'blocklist-sync', 'fleet-commands') */
   capabilities: string[];
+  /** Negotiated protocol version echoed back to the sensor */
+  protocolVersion?: string;
 }
 
 /**

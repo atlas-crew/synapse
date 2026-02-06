@@ -11,6 +11,7 @@ import type { PrismaClient, Signal, Prisma, SignalType } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { ClickHouseService } from '../../storage/clickhouse/index.js';
 import type { Severity } from '../../types/protocol.js';
+import { type SavedQueryStore, InMemorySavedQueryStore } from './saved-query-store.js';
 
 // =============================================================================
 // Query Types
@@ -95,6 +96,7 @@ export class HuntService {
   private prisma: PrismaClient;
   private clickhouse: ClickHouseService | null;
   private logger: Logger;
+  private savedQueries: SavedQueryStore;
 
   // Time threshold for routing (24 hours in ms)
   private readonly ROUTING_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -102,11 +104,13 @@ export class HuntService {
   constructor(
     prisma: PrismaClient,
     logger: Logger,
-    clickhouse?: ClickHouseService
+    clickhouse?: ClickHouseService,
+    savedQueryStore?: SavedQueryStore
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'hunt' });
     this.clickhouse = clickhouse ?? null;
+    this.savedQueries = savedQueryStore ?? new InMemorySavedQueryStore();
   }
 
   /**
@@ -428,10 +432,8 @@ export class HuntService {
   }
 
   // =============================================================================
-  // Saved Queries (In-Memory for Demo, Prisma for Production)
+  // Saved Queries (Persistent across instances)
   // =============================================================================
-
-  private savedQueries: Map<string, SavedQuery> = new Map();
 
   async saveQuery(
     name: string,
@@ -448,21 +450,18 @@ export class HuntService {
       createdAt: new Date(),
     };
 
-    this.savedQueries.set(saved.id, saved);
+    await this.savedQueries.set(saved);
     this.logger.info({ queryId: saved.id, name }, 'Saved hunt query');
 
     return saved;
   }
 
   async getSavedQueries(createdBy?: string): Promise<SavedQuery[]> {
-    const queries = Array.from(this.savedQueries.values());
-    return createdBy
-      ? queries.filter((q) => q.createdBy === createdBy)
-      : queries;
+    return this.savedQueries.list(createdBy);
   }
 
   async getSavedQuery(id: string): Promise<SavedQuery | null> {
-    return this.savedQueries.get(id) ?? null;
+    return this.savedQueries.get(id);
   }
 
   async deleteSavedQuery(id: string): Promise<boolean> {
@@ -470,10 +469,11 @@ export class HuntService {
   }
 
   async runSavedQuery(id: string): Promise<HuntResult | null> {
-    const saved = this.savedQueries.get(id);
+    const saved = await this.savedQueries.get(id);
     if (!saved) return null;
 
     saved.lastRunAt = new Date();
+    await this.savedQueries.set(saved);
     return this.queryTimeline(saved.query);
   }
 

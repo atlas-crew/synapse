@@ -742,6 +742,8 @@ describe('SynapseProxyService', () => {
       broker.sendToSensor.mockReturnValue(true);
 
       const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+      // Attach catch to prevent unhandled rejection during timer advancement
+      request.catch(() => {});
 
       // Let acquire() settle
       await vi.advanceTimersByTimeAsync(0);
@@ -765,6 +767,8 @@ describe('SynapseProxyService', () => {
       });
 
       const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+      // Attach catch to prevent unhandled rejection during retry timer advancement
+      request.catch(() => {});
 
       // Let acquire() and first executeRequest settle
       await vi.advanceTimersByTimeAsync(0);

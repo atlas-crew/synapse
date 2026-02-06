@@ -31,12 +31,15 @@ import type {
 } from '../types/protocol.js';
 import {
   validateSensorMessage,
+  BroadcastEnvelopeSchema,
+  type BroadcastEnvelope,
   type ValidatedSensorMessage,
   type ValidatedSensorAuthPayload,
   type ValidatedSensorHeartbeatPayload,
   type ValidatedSensorCommandAckPayload,
 } from '../schemas/signal.js';
 import type { AuthCoverageSummary } from '../schemas/auth-coverage.js';
+import type { RedisPubSub } from '../storage/redis/pubsub.js';
 
 interface SensorConnection {
   id: string;
@@ -51,6 +54,8 @@ interface SensorConnection {
   messageTimestamps: number[];
   /** API key ID for periodic revalidation (WS2-002) */
   apiKeyId: string | null;
+  /** Which table the apiKeyId references: 'sensor' for SensorApiKey, 'legacy' for ApiKey */
+  apiKeySource: 'sensor' | 'legacy' | null;
 }
 
 interface SensorGatewayConfig {
@@ -70,6 +75,12 @@ interface SensorGatewayConfig {
 
 /** Interval for token revalidation (WS2-002) - 5 minutes */
 const TOKEN_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Supported protocol versions for sensor-hub communication (from config) */
+const SUPPORTED_PROTOCOL_VERSIONS = globalConfig.websocket.protocol.supportedVersions;
+
+/** Default protocol version assigned to sensors that do not advertise one (from config) */
+const LEGACY_PROTOCOL_VERSION = globalConfig.websocket.protocol.legacyVersion;
 
 /** labs-9cy0: Maximum WebSocket send buffer before applying backpressure (1MB) */
 const MAX_SEND_BUFFER_BYTES = 1024 * 1024;
@@ -148,6 +159,9 @@ export class SensorGateway {
   private sequenceId = 0;
   private rateLimiter: RateLimiter;
   private commandSender: CommandSender | null = null;
+  private pubsub: RedisPubSub | null = null;
+  private readonly instanceId = randomUUID();
+  private readonly BROADCAST_CHANNEL = 'sensor-broadcast';
 
   constructor(
     prisma: PrismaClient,
@@ -155,7 +169,8 @@ export class SensorGateway {
     aggregator: Aggregator,
     fleetAggregator: FleetAggregator,
     config: SensorGatewayConfig,
-    authCoverageAggregator: AuthCoverageAggregator
+    authCoverageAggregator: AuthCoverageAggregator,
+    pubsub?: RedisPubSub
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ gateway: 'sensor' });
@@ -163,6 +178,30 @@ export class SensorGateway {
     this.fleetAggregator = fleetAggregator;
     this.authCoverageAggregator = authCoverageAggregator;
     this.config = config;
+    this.pubsub = pubsub ?? null;
+
+    if (this.pubsub) {
+      void this.pubsub.subscribe(this.BROADCAST_CHANNEL, (_channel, message) => {
+        try {
+          const parsed = JSON.parse(message);
+          // labs-2rf9.10: Validate broadcast envelope before acting on payload
+          const result = BroadcastEnvelopeSchema.safeParse(parsed);
+          if (!result.success) {
+            this.logger.warn(
+              { errors: result.error.issues.map(i => i.message) },
+              'Rejected invalid sensor broadcast envelope'
+            );
+            return;
+          }
+          const envelope = result.data;
+          if (envelope.senderId !== this.instanceId) {
+            this.handleRemoteBroadcast(envelope);
+          }
+        } catch (error) {
+          this.logger.error({ error }, 'Failed to handle remote sensor broadcast');
+        }
+      });
+    }
 
     // Initialize rate limiter with defaults or config values
     this.rateLimiter = new RateLimiter(
@@ -343,6 +382,7 @@ export class SensorGateway {
       signalsReceived: 0,
       messageTimestamps: [], // For rate limiting
       apiKeyId: null, // Set after auth for revalidation (WS2-002)
+      apiKeySource: null,
     };
 
     // Temporarily store pending connection
@@ -482,6 +522,7 @@ export class SensorGateway {
     authTimeout: NodeJS.Timeout
   ): Promise<void> {
     const { apiKey, token, sensorId, sensorName, version } = payload;
+    const protocolVersion = (payload as Record<string, unknown>).protocolVersion as string | undefined;
     // Extract registration token and fingerprint from payload (optional fields)
     const registrationToken = (payload as Record<string, unknown>).registrationToken as string | undefined;
     const sensorFingerprint = (payload as Record<string, unknown>).fingerprint as string | undefined;
@@ -489,6 +530,7 @@ export class SensorGateway {
     try {
       let tenantId: string;
       let apiKeyId: string | null = null;
+      let apiKeySource: 'sensor' | 'legacy' | null = null;
       let sharingPreference: SharingPreference = 'CONTRIBUTE_AND_RECEIVE';
 
       if (token) {
@@ -592,6 +634,7 @@ export class SensorGateway {
           
           tenantId = sensorKey.sensor.tenantId;
           apiKeyId = sensorKey.id;
+          apiKeySource = 'sensor'; // labs-2rf9.9: Track SensorApiKey auth path
           sharingPreference = sensorKey.sensor.tenant.sharingPreference as SharingPreference;
           
           // Force the sensor ID to be the one from the key
@@ -620,8 +663,9 @@ export class SensorGateway {
 
           tenantId = apiKeyRecord.tenantId;
           apiKeyId = apiKeyRecord.id;
+          apiKeySource = 'legacy'; // labs-2rf9.9: Track legacy ApiKey auth path
           sharingPreference = apiKeyRecord.tenant.sharingPreference as SharingPreference;
-          
+
           this.logger.warn({ apiKeyId }, 'Sensor using legacy ApiKey table - please migrate to SensorApiKey');
         }
       } else {
@@ -639,6 +683,27 @@ export class SensorGateway {
         );
         this.send(conn, { type: 'auth-failed', error: compatibilityCheck.error });
         conn.ws.close(4003, 'Unsupported sensor version');
+        return;
+      }
+
+      // Protocol version negotiation
+      const effectiveProtocolVersion = protocolVersion ?? LEGACY_PROTOCOL_VERSION;
+      if (!protocolVersion) {
+        this.logger.warn(
+          { sensorId, effectiveProtocolVersion },
+          'Sensor connected without protocolVersion; treating as legacy 0.9'
+        );
+      } else if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
+        this.logger.warn(
+          { sensorId, protocolVersion },
+          'Sensor protocol version unsupported'
+        );
+        this.send(conn, {
+          type: 'error',
+          error: `Unsupported protocol version "${protocolVersion}". Supported: ${SUPPORTED_PROTOCOL_VERSIONS.join(', ')}`,
+          code: 'PROTOCOL_VERSION_UNSUPPORTED',
+        });
+        conn.ws.close(4003, 'Unsupported protocol version');
         return;
       }
 
@@ -759,6 +824,7 @@ export class SensorGateway {
       conn.tenantId = tenantId;
       conn.sharingPreference = sharingPreference;
       conn.apiKeyId = apiKeyId; // Store for revalidation (WS2-002)
+      conn.apiKeySource = apiKeySource; // labs-2rf9.9: Track which table the key came from
 
       // Register connection with command sender for outbound commands
       if (this.commandSender) {
@@ -783,6 +849,7 @@ export class SensorGateway {
         sensorId: sensor.id,
         tenantId,
         capabilities,
+        protocolVersion: effectiveProtocolVersion,
         approvalStatus: sensor.approvalStatus,
         ...(sensor.approvalStatus === 'PENDING' && {
           message: 'Sensor is pending approval. Contact your administrator to approve this sensor.',
@@ -1014,7 +1081,7 @@ export class SensorGateway {
       conn.lastHeartbeat = Date.now();
 
       // Route heartbeat to FleetAggregator
-      this.fleetAggregator.updateSensorMetrics(conn.sensorId, {
+      await this.fleetAggregator.updateSensorMetrics(conn.sensorId, {
         sensorId: conn.sensorId,
         tenantId: conn.tenantId,
         timestamp: new Date(payload.timestamp),
@@ -1215,23 +1282,46 @@ export class SensorGateway {
 
       if (authenticatedConns.length === 0) return;
 
-      // Batch fetch API key status for all authenticated connections
-      const apiKeyIds = authenticatedConns.map(([, conn]) => conn.apiKeyId!);
+      // labs-2rf9.9: Separate connections by auth source to query the correct table
+      const sensorKeyConns = authenticatedConns.filter(([, conn]) => conn.apiKeySource === 'sensor');
+      const legacyKeyConns = authenticatedConns.filter(([, conn]) => conn.apiKeySource === 'legacy');
 
       try {
-        const validKeys = await this.prisma.apiKey.findMany({
-          where: {
-            id: { in: apiKeyIds },
-            isRevoked: false,
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } },
-            ],
-          },
-          select: { id: true },
-        });
+        const validKeyIds = new Set<string>();
 
-        const validKeyIds = new Set(validKeys.map((k) => k.id));
+        // Batch-validate SensorApiKey entries
+        if (sensorKeyConns.length > 0) {
+          const sensorKeyIds = sensorKeyConns.map(([, conn]) => conn.apiKeyId!);
+          const validSensorKeys = await this.prisma.sensorApiKey.findMany({
+            where: {
+              id: { in: sensorKeyIds },
+              status: 'ACTIVE',
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } },
+              ],
+            },
+            select: { id: true },
+          });
+          for (const k of validSensorKeys) validKeyIds.add(k.id);
+        }
+
+        // Batch-validate legacy ApiKey entries
+        if (legacyKeyConns.length > 0) {
+          const legacyKeyIds = legacyKeyConns.map(([, conn]) => conn.apiKeyId!);
+          const validLegacyKeys = await this.prisma.apiKey.findMany({
+            where: {
+              id: { in: legacyKeyIds },
+              isRevoked: false,
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } },
+              ],
+            },
+            select: { id: true },
+          });
+          for (const k of validLegacyKeys) validKeyIds.add(k.id);
+        }
 
         // Disconnect connections with invalid tokens
         for (const [id, conn] of authenticatedConns) {
@@ -1326,10 +1416,36 @@ export class SensorGateway {
   }
 
   /**
+   * Handle broadcast message received from another instance.
+   */
+  private handleRemoteBroadcast(envelope: BroadcastEnvelope): void {
+    if (envelope.type === 'blocklist-push') {
+      this.localBlocklistPush(envelope.payload as BlocklistUpdate[]);
+    }
+  }
+
+  /**
    * Broadcast blocklist updates to all connected sensors.
    * Honors SharingPreference for each connection (receivers only).
    */
   broadcastBlocklistPush(updates: BlocklistUpdate[]): void {
+    // 1. Local push
+    this.localBlocklistPush(updates);
+
+    // 2. Distributed push (via Redis)
+    if (this.pubsub) {
+      this.pubsub.publish(this.BROADCAST_CHANNEL, {
+        type: 'blocklist-push',
+        payload: updates,
+        senderId: this.instanceId,
+      }).catch((err) => this.logger.error({ error: err }, 'Failed to publish sensor broadcast'));
+    }
+  }
+
+  /**
+   * Perform local blocklist push to connected sensors.
+   */
+  private localBlocklistPush(updates: BlocklistUpdate[]): void {
     const sequenceId = this.nextSequenceId();
 
     for (const conn of this.connections.values()) {

@@ -1,11 +1,17 @@
-import { Queue } from 'bullmq';
 import type { Logger } from 'pino';
+import RedisModule from 'ioredis';
+import type { Redis } from 'ioredis';
 
 import { getRedisConfig } from '../../jobs/queue.js';
 import { createIoredisKv, type IoredisLikeClient, type RedisKv } from './kv.js';
 
+// Handle ESM/CJS interop for ioredis (same pattern as pubsub.ts)
+const RedisClient = (RedisModule as any).default || RedisModule;
+
 export interface SharedRedisKv {
   kv: RedisKv;
+  /** The underlying ioredis client, exposed for health checks (e.g. ping). */
+  client: Redis;
   close: () => Promise<void>;
 }
 
@@ -13,50 +19,44 @@ let shared: SharedRedisKv | null = null;
 let initializing: Promise<SharedRedisKv> | null = null;
 
 /**
- * Create a shared Redis key/value adapter using BullMQ's managed ioredis client.
+ * Create a shared Redis key/value adapter using a direct ioredis client.
  *
- * This avoids a direct `ioredis` dependency in the app package (pnpm hoisting),
- * while still giving us a real Redis client for distributed state.
- *
- * Note: this instantiates a BullMQ Queue to obtain the underlying client.
+ * Previous versions piggy-backed on a BullMQ Queue to obtain the underlying
+ * ioredis connection. This version creates a dedicated ioredis client directly,
+ * removing the unnecessary BullMQ dependency for state storage.
  */
 export async function getSharedRedisKv(logger: Logger): Promise<SharedRedisKv> {
   if (shared) return shared;
   if (initializing) return initializing;
 
   initializing = (async () => {
-    const connection = getRedisConfig();
-    const queue = new Queue('__sh_state_kv__', {
-      connection,
-      // Keep BullMQ keys separate from "bull" defaults.
-      prefix: 'sh',
-    });
+    const config = getRedisConfig();
+    const client: Redis = new RedisClient(config);
 
     try {
       const timeoutMs = 2000;
       await Promise.race([
-        queue.waitUntilReady(),
+        client.ping(),
         new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error(`Redis connection timeout after ${timeoutMs}ms`)), timeoutMs)
         ),
       ]);
     } catch (error) {
       // Ensure we don't leak sockets on boot failure.
-      await queue.close().catch(() => {});
+      await client.quit().catch(() => {});
       throw error;
     }
 
-    // BullMQ uses ioredis under the hood.
-    const client = (await queue.client) as unknown as IoredisLikeClient;
-    const kv = createIoredisKv(client);
+    const kv = createIoredisKv(client as unknown as IoredisLikeClient);
 
     shared = {
       kv,
+      client,
       close: async () => {
         try {
-          await queue.close();
+          await client.quit();
         } catch (error) {
-          logger.warn({ error }, 'Failed to close shared Redis/BullMQ queue');
+          logger.warn({ error }, 'Failed to close shared Redis client');
         } finally {
           shared = null;
         }

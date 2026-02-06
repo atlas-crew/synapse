@@ -148,7 +148,7 @@ export class FleetCommander extends EventEmitter {
     let timeout = command.timeout ?? this.config.defaultTimeoutMs;
     
     if (this.config.enableAdaptiveTimeout && this.fleetAggregator) {
-      const sensorMetrics = this.fleetAggregator.getSensorMetrics(sensorId);
+      const sensorMetrics = await this.fleetAggregator.getSensorMetrics(sensorId);
       if (sensorMetrics && sensorMetrics.latency > 0) {
         // timeout = latency + 10s buffer (as per implementation findings)
         const adaptiveTimeout = sensorMetrics.latency + 10000;

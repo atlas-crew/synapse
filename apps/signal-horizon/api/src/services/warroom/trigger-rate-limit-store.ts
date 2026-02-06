@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, applyTtlJitter, type RedisKv } from '../../storage/redis/index.js';
+import { buildRedisKey, jsonDecode, jsonEncode, applyTtlJitter, type RedisKv } from '../../storage/redis/index.js';
 import type { Logger } from 'pino';
 
 /**
@@ -80,7 +79,6 @@ export class RedisTriggerRateLimitStore implements TriggerRateLimitStore {
   private version: number;
   private dataType: string;
   private indexKeyName: string;
-  private lockTtlSeconds: number;
 
   constructor(
     kv: RedisKv,
@@ -94,7 +92,6 @@ export class RedisTriggerRateLimitStore implements TriggerRateLimitStore {
     this.namespace = options.namespace ?? 'horizon';
     this.version = options.version ?? 1;
     this.dataType = options.dataType ?? 'warroom-trigger-rate';
-    this.lockTtlSeconds = TTL_SECONDS.lockMin;
     this.indexKeyName = buildRedisKey({
       namespace: this.namespace,
       version: this.version,
@@ -114,39 +111,16 @@ export class RedisTriggerRateLimitStore implements TriggerRateLimitStore {
     });
   }
 
-  private indexLockKey(): string {
-    return buildRedisKey({
-      namespace: this.namespace,
-      version: this.version,
-      tenantId: 'global',
-      dataType: 'lock',
-      id: ['warroom-trigger-rate-index', 'all'],
-    });
-  }
-
-  private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
-    const lockKey = this.indexLockKey();
-    const lockValue = randomUUID();
-    let lockAcquired = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      lockAcquired = await this.kv.set(lockKey, lockValue, { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
-      if (lockAcquired) break;
-      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
-    }
-
-    try {
-      return await fn();
-    } finally {
-      if (lockAcquired) {
-        const current = await this.kv.get(lockKey);
-        if (current === lockValue) await this.kv.del(lockKey);
-      }
-    }
-  }
-
   async get(tenantId: string): Promise<TriggerCountRecord | undefined> {
     const raw = await this.kv.get(this.tenantKey(tenantId));
-    if (!raw) return undefined;
+    if (!raw) {
+      // Also check atomic counter
+      const atomicCount = await this.kv.get(this.atomicCounterKey(tenantId));
+      if (atomicCount) {
+        return { count: Number(atomicCount), windowStart: Date.now() }; // windowStart is approximate here
+      }
+      return undefined;
+    }
     return jsonDecode<TriggerCountRecord>(raw, { maxBytes: 1024 * 1024 });
   }
 
@@ -156,70 +130,56 @@ export class RedisTriggerRateLimitStore implements TriggerRateLimitStore {
     const ttlSeconds = applyTtlJitter(300);
 
     await this.kv.set(key, jsonEncode(record), { ttlSeconds });
-
-    // Update index for entries() support
-    await this.withIndexLock(async () => {
-      const indexRaw = await this.kv.get(this.indexKeyName);
-      const index = indexRaw ? jsonDecode<string[]>(indexRaw, { maxBytes: 1024 * 1024 }) : [];
-      if (!index.includes(tenantId)) {
-        index.push(tenantId);
-      }
-      // Always refresh the index TTL, even if the key already exists
-      await this.kv.set(this.indexKeyName, jsonEncode(index), { ttlSeconds });
-    });
+    // Use Redis Set for O(1) atomic index updates.
+    await this.kv.sadd(this.indexKeyName, tenantId);
   }
 
   async delete(tenantId: string): Promise<void> {
     await this.kv.del(this.tenantKey(tenantId));
-
-    await this.withIndexLock(async () => {
-      const indexRaw = await this.kv.get(this.indexKeyName);
-      if (indexRaw) {
-        const index = jsonDecode<string[]>(indexRaw, { maxBytes: 1024 * 1024 });
-        const nextIndex = index.filter((id) => id !== tenantId);
-        if (nextIndex.length !== index.length) {
-          await this.kv.set(this.indexKeyName, jsonEncode(nextIndex), { ttlSeconds: applyTtlJitter(300) });
-        }
-      }
-    });
+    await this.kv.del(this.atomicCounterKey(tenantId));
+    await this.kv.srem(this.indexKeyName, tenantId);
   }
 
   async entries(): Promise<[string, TriggerCountRecord][]> {
-    const indexRaw = await this.kv.get(this.indexKeyName);
-    if (!indexRaw) return [];
-
-    const index = jsonDecode<string[]>(indexRaw, { maxBytes: 1024 * 1024 });
+    const index = await this.kv.smembers(this.indexKeyName);
     if (index.length === 0) return [];
 
     const keys = index.map((tenantId) => this.tenantKey(tenantId));
+    const atomicKeys = index.map((tenantId) => this.atomicCounterKey(tenantId));
+    
     const rawValues = await this.kv.mget(keys);
+    const rawAtomics = await this.kv.mget(atomicKeys);
 
     const results: Array<[string, TriggerCountRecord]> = [];
-    const stillPresent: string[] = [];
+    const missing: string[] = [];
 
     for (let i = 0; i < index.length; i++) {
       const raw = rawValues[i];
-      if (!raw) continue;
-      results.push([index[i], jsonDecode<TriggerCountRecord>(raw, { maxBytes: 1024 * 1024 })]);
-      stillPresent.push(index[i]);
+      const rawAtomic = rawAtomics[i];
+      
+      if (raw) {
+        results.push([index[i], jsonDecode<TriggerCountRecord>(raw, { maxBytes: 1024 * 1024 })]);
+      } else if (rawAtomic) {
+        results.push([index[i], { count: Number(rawAtomic), windowStart: Date.now() }]);
+      } else {
+        missing.push(index[i]);
+      }
     }
 
-    if (stillPresent.length !== index.length) {
-      await this.kv.set(this.indexKeyName, jsonEncode(stillPresent), { ttlSeconds: applyTtlJitter(300) });
+    if (missing.length > 0) {
+      await this.kv.srem(this.indexKeyName, ...missing);
     }
 
     return results;
   }
 
   async clear(): Promise<void> {
-    const indexRaw = await this.kv.get(this.indexKeyName);
-    if (indexRaw) {
-      const index = jsonDecode<string[]>(indexRaw, { maxBytes: 1024 * 1024 });
-      for (const tenantId of index) {
-        await this.kv.del(this.tenantKey(tenantId));
-      }
-      await this.kv.del(this.indexKeyName);
+    const index = await this.kv.smembers(this.indexKeyName);
+    for (const tenantId of index) {
+      await this.kv.del(this.tenantKey(tenantId));
+      await this.kv.del(this.atomicCounterKey(tenantId));
     }
+    await this.kv.del(this.indexKeyName);
   }
 
   private atomicCounterKey(tenantId: string): string {
@@ -236,7 +196,12 @@ export class RedisTriggerRateLimitStore implements TriggerRateLimitStore {
     const ttlSeconds = Math.max(1, Math.ceil(windowMs / 1000));
     // Redis INCR is atomic and single-threaded. The TTL is set only when the
     // key is first created (result === 1), so the window naturally expires.
-    return this.kv.incr(this.atomicCounterKey(tenantId), { ttlSeconds });
+    const count = await this.kv.incr(this.atomicCounterKey(tenantId), { ttlSeconds });
+    
+    // Ensure it's in the index
+    await this.kv.sadd(this.indexKeyName, tenantId);
+    
+    return count;
   }
 }
 

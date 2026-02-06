@@ -24,10 +24,21 @@ export interface RedisKv {
    */
   incr(key: string, options?: { ttlSeconds?: number }): Promise<number>;
   /**
+   * Atomically increment a key by a specific amount, returning the new value.
+   * Optionally sets a TTL (only applied when the key is first created).
+   */
+  incrby(key: string, amount: number, options?: { ttlSeconds?: number }): Promise<number>;
+  /**
    * Fetch multiple keys in a single round-trip (Redis MGET).
    * Returns an array whose order matches `keys`; missing keys are `null`.
    */
   mget(keys: string[]): Promise<(string | null)[]>;
+  /** Add members to a set. Returns the number of new members added. */
+  sadd(key: string, ...members: string[]): Promise<number>;
+  /** Remove members from a set. Returns the number of members removed. */
+  srem(key: string, ...members: string[]): Promise<number>;
+  /** Get all members of a set. */
+  smembers(key: string): Promise<string[]>;
 }
 
 export interface IoredisLikeClient {
@@ -41,8 +52,12 @@ export interface IoredisLikeClient {
   ): Promise<'OK' | null>;
   del(key: string): Promise<number>;
   incr(key: string): Promise<number>;
+  incrby(key: string, amount: number): Promise<number>;
   expire(key: string, seconds: number): Promise<number>;
   mget(...keys: string[]): Promise<(string | null)[]>;
+  sadd(key: string, ...members: string[]): Promise<number>;
+  srem(key: string, ...members: string[]): Promise<number>;
+  smembers(key: string): Promise<string[]>;
 }
 
 export function createIoredisKv(client: IoredisLikeClient): RedisKv {
@@ -50,6 +65,9 @@ export function createIoredisKv(client: IoredisLikeClient): RedisKv {
     get: (key) => client.get(key),
     del: (key) => client.del(key),
     mget: (keys) => client.mget(...keys),
+    sadd: (key, ...members) => client.sadd(key, ...members),
+    srem: (key, ...members) => client.srem(key, ...members),
+    smembers: (key) => client.smembers(key),
     async set(key, value, options) {
       const ttlSeconds = options?.ttlSeconds;
       const ifNotExists = options?.ifNotExists ?? false;
@@ -67,6 +85,13 @@ export function createIoredisKv(client: IoredisLikeClient): RedisKv {
       }
       return result;
     },
+    async incrby(key, amount, options) {
+      const result = await client.incrby(key, amount);
+      if (options?.ttlSeconds && result === amount) {
+        await client.expire(key, options.ttlSeconds);
+      }
+      return result;
+    },
   };
 }
 
@@ -79,8 +104,12 @@ export interface NodeRedisLikeClient {
   ): Promise<'OK' | null>;
   del(key: string): Promise<number>;
   incr(key: string): Promise<number>;
+  incrby(key: string, amount: number): Promise<number>;
   expire(key: string, seconds: number): Promise<boolean>;
   mget(keys: string[]): Promise<(string | null)[]>;
+  sadd(key: string, members: string[]): Promise<number>;
+  srem(key: string, members: string[]): Promise<number>;
+  smembers(key: string): Promise<string[]>;
 }
 
 export function createNodeRedisKv(client: NodeRedisLikeClient): RedisKv {
@@ -88,6 +117,9 @@ export function createNodeRedisKv(client: NodeRedisLikeClient): RedisKv {
     get: (key) => client.get(key),
     del: (key) => client.del(key),
     mget: (keys) => client.mget(keys),
+    sadd: (key, ...members) => client.sadd(key, members),
+    srem: (key, ...members) => client.srem(key, members),
+    smembers: (key) => client.smembers(key),
     async set(key, value, options) {
       const redisOptions: { EX?: number; NX?: boolean } = {};
       if (options?.ttlSeconds) redisOptions.EX = options.ttlSeconds;
@@ -100,6 +132,13 @@ export function createNodeRedisKv(client: NodeRedisLikeClient): RedisKv {
     async incr(key, options) {
       const result = await client.incr(key);
       if (options?.ttlSeconds && result === 1) {
+        await client.expire(key, options.ttlSeconds);
+      }
+      return result;
+    },
+    async incrby(key, amount, options) {
+      const result = await client.incrby(key, amount);
+      if (options?.ttlSeconds && result === amount) {
         await client.expire(key, options.ttlSeconds);
       }
       return result;

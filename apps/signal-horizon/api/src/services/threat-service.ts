@@ -4,10 +4,9 @@
  * Replaces basic severity ranking with multi-factor threat scoring.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { Severity } from '../types/protocol.js';
-import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, type RedisKv } from '../storage/redis/index.js';
+import { buildRedisKey, jsonDecode, jsonEncode, type RedisKv } from '../storage/redis/index.js';
 
 /**
  * Signal context for threat scoring
@@ -110,6 +109,11 @@ const SEVERITY_SCORES: Record<Severity, number> = {
 export interface RecentSignalsStore {
   get(key: string): Promise<{ count: number; lastSeen: number } | undefined>;
   set(key: string, value: { count: number; lastSeen: number }): Promise<void>;
+  /**
+   * Atomically increment the count for a key and update lastSeen.
+   * Returns the new total count.
+   */
+  incrementBy(key: string, amount: number): Promise<number>;
   delete(key: string): Promise<void>;
   entries(): Promise<[string, { count: number; lastSeen: number }][]>;
   /** When true, the store handles its own expiry (e.g., Redis TTLs) and periodic cleanup can be skipped. */
@@ -129,6 +133,13 @@ export class InMemoryRecentSignalsStore implements RecentSignalsStore {
 
   async set(key: string, value: { count: number; lastSeen: number }): Promise<void> {
     this.map.set(key, value);
+  }
+
+  async incrementBy(key: string, amount: number): Promise<number> {
+    const existing = this.map.get(key);
+    const count = (existing?.count ?? 0) + amount;
+    this.map.set(key, { count, lastSeen: Date.now() });
+    return count;
   }
 
   async delete(key: string): Promise<void> {
@@ -190,6 +201,17 @@ export class ResilientRecentSignalsStore implements RecentSignalsStore {
     }
   }
 
+  async incrementBy(key: string, amount: number): Promise<number> {
+    // Keep fallback warm.
+    const fallbackCount = await this.fallback.incrementBy(key, amount);
+    try {
+      return await this.primary.incrementBy(key, amount);
+    } catch (error) {
+      this.warn('incrementBy', error);
+      return fallbackCount;
+    }
+  }
+
   async delete(key: string): Promise<void> {
     await this.fallback.delete(key);
     try {
@@ -210,11 +232,6 @@ export class ResilientRecentSignalsStore implements RecentSignalsStore {
 }
 
 type StoredRecentSignalEntry = { count: number; lastSeen: number };
-type RecentSignalsIndexEntry = { tenantId: string; id: string };
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export class RedisRecentSignalsStore implements RecentSignalsStore {
   readonly skipCleanup = true;
@@ -228,7 +245,6 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
   private indexDataType: string;
   private indexId: string;
   private windowMs: number;
-  private lockTtlSeconds: number;
 
   constructor(
     kv: RedisKv,
@@ -241,7 +257,6 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
       indexDataType?: string;
       indexId?: string;
       windowMs?: number;
-      lockTtlSeconds?: number;
     } = {}
   ) {
     this.kv = kv;
@@ -253,7 +268,6 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
     this.indexDataType = options.indexDataType ?? 'recent-signal-volume-index';
     this.indexId = options.indexId ?? 'all';
     this.windowMs = options.windowMs ?? 5 * 60 * 1000;
-    this.lockTtlSeconds = options.lockTtlSeconds ?? TTL_SECONDS.lockMin;
   }
 
   private parseVolumeKey(key: string): { tenantId: string; id: string } {
@@ -287,51 +301,6 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
     });
   }
 
-  private indexLockKey(): string {
-    return buildRedisKey({
-      namespace: this.namespace,
-      version: this.version,
-      tenantId: this.indexTenantId,
-      dataType: 'lock',
-      id: [this.indexDataType, this.indexId],
-    });
-  }
-
-  private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
-    const lockKey = this.indexLockKey();
-    const lockValue = randomUUID();
-    let lockAcquired = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      lockAcquired = await this.kv.set(lockKey, lockValue, { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
-      if (lockAcquired) break;
-      await sleep(25 * (attempt + 1));
-    }
-
-    if (!lockAcquired) {
-      this.logger.warn({ lockKey }, 'Failed to acquire index lock after 3 attempts, proceeding unprotected');
-    }
-
-    try {
-      return await fn();
-    } finally {
-      if (lockAcquired) {
-        const current = await this.kv.get(lockKey);
-        if (current === lockValue) await this.kv.del(lockKey);
-      }
-    }
-  }
-
-  private async readIndex(): Promise<RecentSignalsIndexEntry[]> {
-    const raw = await this.kv.get(this.indexKey());
-    if (!raw) return [];
-    return jsonDecode<RecentSignalsIndexEntry[]>(raw, { maxBytes: 1024 * 1024 });
-  }
-
-  private async writeIndex(entries: RecentSignalsIndexEntry[]): Promise<void> {
-    const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
-    await this.kv.set(this.indexKey(), jsonEncode(entries), { ttlSeconds });
-  }
-
   async get(key: string): Promise<StoredRecentSignalEntry | undefined> {
     const { tenantId, id } = this.parseVolumeKey(key);
     const raw = await this.kv.get(this.entryKey(tenantId, id));
@@ -343,48 +312,88 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
     const { tenantId, id } = this.parseVolumeKey(key);
     const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
 
-    await this.kv.set(this.entryKey(tenantId, id), jsonEncode(value), { ttlSeconds });
+    const entryKey = this.entryKey(tenantId, id);
+    await this.kv.set(entryKey, jsonEncode(value), { ttlSeconds });
+    // Use Redis Set for O(1) atomic index updates without global locks.
+    await this.kv.sadd(this.indexKey(), `${tenantId}:${id}`);
+  }
 
-    await this.withIndexLock(async () => {
-      const entries = await this.readIndex();
-      const exists = entries.some((e) => e.tenantId === tenantId && e.id === id);
-      if (!exists) entries.push({ tenantId, id });
-      await this.writeIndex(entries);
-    });
+  async incrementBy(key: string, amount: number): Promise<number> {
+    const { tenantId, id } = this.parseVolumeKey(key);
+    const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
+    const entryKey = this.entryKey(tenantId, id);
+
+    // Increment count atomically.
+    // Note: To keep the same JSON structure { count, lastSeen }, we'd need a Lua script.
+    // Simplifying: we store count and lastSeen as separate keys or a hash.
+    // But for now, let's keep it simple and just update the JSON (with a slight race on lastSeen, but count remains atomic).
+    // Actually, if we want TRULY atomic read-modify-write for the JSON, we need Lua.
+    // Alternatively, just use INCRBY for count and a separate SET for lastSeen.
+    
+    // For this remediation, let's use a simple approach: 
+    // We'll store count as a separate key for atomic increments, and lastSeen as another.
+    const countKey = `${entryKey}:count`;
+    const lastSeenKey = `${entryKey}:lastSeen`;
+    
+    const count = await this.kv.incrby(countKey, amount, { ttlSeconds });
+    await this.kv.set(lastSeenKey, String(Date.now()), { ttlSeconds });
+    
+    // Add to index.
+    await this.kv.sadd(this.indexKey(), `${tenantId}:${id}`);
+    
+    return count;
   }
 
   async delete(key: string): Promise<void> {
     const { tenantId, id } = this.parseVolumeKey(key);
-    await this.kv.del(this.entryKey(tenantId, id));
-
-    await this.withIndexLock(async () => {
-      const entries = await this.readIndex();
-      const next = entries.filter((e) => !(e.tenantId === tenantId && e.id === id));
-      await this.writeIndex(next);
-    });
+    const entryKey = this.entryKey(tenantId, id);
+    await this.kv.del(entryKey);
+    await this.kv.del(`${entryKey}:count`);
+    await this.kv.del(`${entryKey}:lastSeen`);
+    await this.kv.srem(this.indexKey(), `${tenantId}:${id}`);
   }
 
   async entries(): Promise<[string, StoredRecentSignalEntry][]> {
-    const entries = await this.readIndex();
-    if (entries.length === 0) return [];
-
-    const keys = entries.map((e) => this.entryKey(e.tenantId, e.id));
-    const rawValues = this.kv.mget ? await this.kv.mget(keys) : await Promise.all(keys.map((k) => this.kv.get(k)));
+    const members = await this.kv.smembers(this.indexKey());
+    if (members.length === 0) return [];
 
     const loaded: Array<[string, StoredRecentSignalEntry]> = [];
-    const stillPresent: RecentSignalsIndexEntry[] = [];
+    const missing: string[] = [];
 
-    for (let i = 0; i < entries.length; i++) {
-      const raw = rawValues[i];
-      if (!raw) continue;
-      loaded.push([`t:${entries[i].tenantId}:${entries[i].id}`, jsonDecode<StoredRecentSignalEntry>(raw)]);
-      stillPresent.push(entries[i]);
+    // Fetch in batches to avoid blocking Redis.
+    const batchSize = 100;
+    for (let i = 0; i < members.length; i += batchSize) {
+      const batch = members.slice(i, i + batchSize);
+      const keys = batch.map(m => {
+        const [tenantId, ...idParts] = m.split(':');
+        return this.entryKey(tenantId, idParts.join(':'));
+      });
+
+      const rawValues = await this.kv.mget(keys);
+      // Also check the split keys (count/lastSeen) if they exist.
+      const countKeys = keys.map(k => `${k}:count`);
+      const lastSeenKeys = keys.map(k => `${k}:lastSeen`);
+      const rawCounts = await this.kv.mget(countKeys);
+      const rawLastSeens = await this.kv.mget(lastSeenKeys);
+
+      for (let j = 0; j < batch.length; j++) {
+        const raw = rawValues[j];
+        const rawCount = rawCounts[j];
+        const rawLastSeen = rawLastSeens[j];
+        
+        if (raw) {
+          loaded.push([`t:${batch[j]}`, jsonDecode<StoredRecentSignalEntry>(raw)]);
+        } else if (rawCount && rawLastSeen) {
+          loaded.push([`t:${batch[j]}`, { count: Number(rawCount), lastSeen: Number(rawLastSeen) }]);
+        } else {
+          missing.push(batch[j]);
+        }
+      }
     }
 
-    // Best-effort index compaction.
-    if (stillPresent.length !== entries.length) {
-      const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
-      await this.kv.set(this.indexKey(), jsonEncode(stillPresent), { ttlSeconds });
+    // Clean up stale index entries.
+    if (missing.length > 0) {
+      await this.kv.srem(this.indexKey(), ...missing);
     }
 
     return loaded;
@@ -490,19 +499,10 @@ export class ThreatService {
 
   private async updateVolumeTracking(key: string, eventCount: number): Promise<number> {
     try {
-      const now = Date.now();
-      const existing = await this.recentSignals.get(key);
-
-      if (existing) {
-        existing.count += eventCount;
-        existing.lastSeen = now;
-        await this.recentSignals.set(key, existing);
-      } else {
-        await this.recentSignals.set(key, { count: eventCount, lastSeen: now });
-      }
+      // Use atomic increment to prevent lost updates in distributed deployments.
+      const totalCount = await this.recentSignals.incrementBy(key, eventCount);
 
       // Calculate volume score: logarithmic scaling for repeat offenders
-      const totalCount = existing?.count ?? eventCount;
       // 1 signal = 0, 10 signals = 50, 100 signals = 100
       return Math.min(100, Math.round(Math.log10(totalCount + 1) * 50));
     } catch (error) {

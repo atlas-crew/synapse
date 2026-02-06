@@ -20,9 +20,12 @@ import type {
 } from '../types/protocol.js';
 import {
   validateDashboardMessage,
+  DashboardBroadcastEnvelopeSchema,
+  type DashboardBroadcastEnvelope,
   type ValidatedDashboardMessage,
 } from '../schemas/signal.js';
 import { WebSocketRateLimiter } from '../lib/ws-rate-limiter.js';
+import type { RedisPubSub } from '../storage/redis/pubsub.js';
 
 interface DashboardConnection {
   id: string;
@@ -134,6 +137,9 @@ const AUTH_TIMEOUT_MS = 10000;
 /** Interval for token revalidation (WS2-002) */
 const TOKEN_REVALIDATE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** labs-2rf9.15: Maximum WebSocket send buffer before applying backpressure (1MB) */
+const MAX_SEND_BUFFER_BYTES = 1024 * 1024;
+
 export class DashboardGateway {
   private wss: WebSocketServer | null = null;
   private connections: Map<string, DashboardConnection> = new Map();
@@ -148,16 +154,44 @@ export class DashboardGateway {
   private rateLimiter: WebSocketRateLimiter;
   /** Subscription manager for efficient broadcasting (labs-s2gc) */
   private subscriptionManager: SubscriptionManager;
+  private pubsub: RedisPubSub | null = null;
+  private readonly instanceId = randomUUID();
+  private readonly BROADCAST_CHANNEL = 'dashboard-broadcast';
 
   constructor(
     prisma: PrismaClient,
     logger: Logger,
-    config: DashboardGatewayConfig
+    config: DashboardGatewayConfig,
+    pubsub?: RedisPubSub
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ gateway: 'dashboard' });
     this.config = config;
     this.subscriptionManager = new SubscriptionManager();
+    this.pubsub = pubsub ?? null;
+
+    if (this.pubsub) {
+      void this.pubsub.subscribe(this.BROADCAST_CHANNEL, (_channel, message) => {
+        try {
+          const parsed = JSON.parse(message);
+          // labs-2rf9.10: Validate broadcast envelope before acting on payload
+          const result = DashboardBroadcastEnvelopeSchema.safeParse(parsed);
+          if (!result.success) {
+            this.logger.warn(
+              { errors: result.error.issues.map(i => i.message) },
+              'Rejected invalid dashboard broadcast envelope'
+            );
+            return;
+          }
+          const envelope = result.data;
+          if (envelope.senderId !== this.instanceId) {
+            this.handleRemoteBroadcast(envelope);
+          }
+        } catch (error) {
+          this.logger.error({ error }, 'Failed to handle remote broadcast');
+        }
+      });
+    }
 
     // Initialize rate limiter: 50 msg/s with burst of 75 (dashboard sends less than sensors)
     this.rateLimiter = new WebSocketRateLimiter({
@@ -809,6 +843,20 @@ export class DashboardGateway {
         this.connections.delete(conn.id);
         return false;
       }
+
+      // labs-2rf9.15: Check backpressure before sending
+      if (conn.ws.bufferedAmount > MAX_SEND_BUFFER_BYTES) {
+        this.logger.warn(
+          { connectionId: conn.id, bufferedAmount: conn.ws.bufferedAmount },
+          'WebSocket backpressure exceeded, disconnecting slow consumer'
+        );
+        conn.ws.close(1008, 'Backpressure limit exceeded');
+        this.connections.delete(conn.id);
+        this.subscriptionManager.removeConnection(conn.id);
+        this.rateLimiter.removeConnection(conn.id);
+        return false;
+      }
+
       conn.ws.send(payload);
       return true;
     } catch (error) {
@@ -826,6 +874,57 @@ export class DashboardGateway {
    * and sharing preference enforcement.
    */
   private broadcast(
+    topic: string,
+    message: Record<string, unknown>,
+    options: { tenantId?: string; isFleetEvent?: boolean } = {}
+  ): void {
+    // 1. Local broadcast
+    this.localBroadcast(topic, message, options);
+
+    // 2. Distributed broadcast (via Redis)
+    if (this.pubsub) {
+      this.pubsub.publish(this.BROADCAST_CHANNEL, {
+        topic,
+        message,
+        options,
+        senderId: this.instanceId,
+      }).catch((err) => this.logger.error({ error: err }, 'Failed to publish dashboard broadcast'));
+    }
+  }
+
+  /**
+   * Handle broadcast message received from another instance.
+   */
+  private handleRemoteBroadcast(envelope: DashboardBroadcastEnvelope): void {
+    if (envelope.topic === '*') {
+      // Local broadcast all
+      const payload = JSON.stringify(envelope.message);
+      for (const conn of this.connections.values()) {
+        if (conn.isAuthenticated) {
+          this.safeSend(conn, payload);
+        }
+      }
+    } else if (envelope.topic === 'tenant-direct' && envelope.options.tenantId) {
+      // Local broadcast to tenant
+      const payload = JSON.stringify(envelope.message);
+      const tenantId = envelope.options.tenantId;
+      for (const conn of this.connections.values()) {
+        if (
+          conn.isAuthenticated &&
+          (conn.tenantId === tenantId || conn.isFleetAdmin)
+        ) {
+          this.safeSend(conn, payload);
+        }
+      }
+    } else {
+      this.localBroadcast(envelope.topic, envelope.message as Record<string, unknown>, envelope.options);
+    }
+  }
+
+  /**
+   * Perform local broadcast to connected clients.
+   */
+  private localBroadcast(
     topic: string,
     message: Record<string, unknown>,
     options: { tenantId?: string; isFleetEvent?: boolean } = {}
@@ -872,10 +971,21 @@ export class DashboardGateway {
   broadcastAll(message: Record<string, unknown>): void {
     const payload = JSON.stringify(message);
 
+    // Local
     for (const conn of this.connections.values()) {
       if (conn.isAuthenticated) {
         this.safeSend(conn, payload);
       }
+    }
+
+    // Distributed
+    if (this.pubsub) {
+      this.pubsub.publish(this.BROADCAST_CHANNEL, {
+        topic: '*', // special topic for all
+        message,
+        options: {},
+        senderId: this.instanceId,
+      }).catch((err) => this.logger.error({ error: err }, 'Failed to publish dashboard broadcast'));
     }
   }
 
@@ -886,6 +996,7 @@ export class DashboardGateway {
   broadcastToTenant(tenantId: string, message: Record<string, unknown>): void {
     const payload = JSON.stringify(message);
 
+    // Local
     for (const conn of this.connections.values()) {
       if (
         conn.isAuthenticated &&
@@ -893,6 +1004,16 @@ export class DashboardGateway {
       ) {
         this.safeSend(conn, payload);
       }
+    }
+
+    // Distributed
+    if (this.pubsub) {
+      this.pubsub.publish(this.BROADCAST_CHANNEL, {
+        topic: 'tenant-direct',
+        message,
+        options: { tenantId },
+        senderId: this.instanceId,
+      }).catch((err) => this.logger.error({ error: err }, 'Failed to publish dashboard broadcast'));
     }
   }
 

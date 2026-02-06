@@ -158,7 +158,9 @@ export class ResilientTriggerCooldownStore implements TriggerCooldownStore {
   stop(): void {
     try {
       this.fallback.stop();
-    } catch {}
+    } catch (error) {
+      // Ignore fallback errors
+    }
     try {
       this.primary.stop();
     } catch (error) {
@@ -364,10 +366,9 @@ export class AutomatedPlaybookTrigger {
     matchedSignals: EnrichedSignal[],
     matchReason: string
   ): Promise<void> {
-    // Atomically check and increment rate limit in a single operation.
-    // This prevents races where concurrent triggers both read a count below the
-    // limit, then both proceed past the check.
-    if (!(await this.checkAndIncrementRateLimit(tenantId))) {
+    // 1. Check rate limit first WITHOUT incrementing (optimistic check)
+    const currentRate = await this.triggerCounts.get(tenantId);
+    if (currentRate && currentRate.count >= this.config.maxAutoTriggersPerMinute) {
       this.logger.warn(
         { tenantId, playbookId: playbook.id },
         'Rate limit exceeded for automated playbook triggers'
@@ -375,7 +376,7 @@ export class AutomatedPlaybookTrigger {
       return;
     }
 
-    // Acquire cooldown (distributed)
+    // 2. Acquire cooldown (distributed)
     const cooldownAcquired = await this.cooldownStore.tryAcquire(
       tenantId,
       playbook.id,
@@ -386,6 +387,16 @@ export class AutomatedPlaybookTrigger {
         { playbookId: playbook.id, tenantId },
         'Playbook trigger skipped (cooldown active)'
       );
+      return;
+    }
+
+    // 3. Now that we have the cooldown, increment the rate limit counter atomically
+    if (!(await this.checkAndIncrementRateLimit(tenantId))) {
+      this.logger.warn(
+        { tenantId, playbookId: playbook.id },
+        'Rate limit exceeded for automated playbook triggers'
+      );
+      await this.cooldownStore.release(tenantId, playbook.id);
       return;
     }
 

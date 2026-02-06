@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getEpochForTenant, incrementEpochForTenant } from '../epoch.js';
+import { getEpochForTenant, incrementEpochForTenant, EpochLookupError } from '../epoch.js';
 import type { RedisKv } from '../../storage/redis/kv.js';
 
 function createMockKv(store: Map<string, string> = new Map()): RedisKv {
@@ -14,6 +14,13 @@ function createMockKv(store: Map<string, string> = new Map()): RedisKv {
       store.delete(key);
       return had;
     }),
+    incr: vi.fn(async (key: string) => {
+      const current = parseInt(store.get(key) ?? '0', 10);
+      const next = current + 1;
+      store.set(key, String(next));
+      return next;
+    }),
+    mget: vi.fn(async (keys: string[]) => keys.map((k) => store.get(k) ?? null)),
   };
 }
 
@@ -38,10 +45,13 @@ describe('epoch', () => {
       expect(await getEpochForTenant('tenant-1', kv)).toBe(5);
     });
 
-    it('returns 0 on Redis error (fail-open)', async () => {
+    it('throws EpochLookupError on Redis error (fail-closed)', async () => {
       const failKv = createMockKv();
       vi.mocked(failKv.get).mockRejectedValue(new Error('connection refused'));
-      expect(await getEpochForTenant('tenant-1', failKv)).toBe(0);
+      await expect(getEpochForTenant('tenant-1', failKv)).rejects.toThrow(EpochLookupError);
+      await expect(getEpochForTenant('tenant-1', failKv)).rejects.toThrow(
+        /Failed to read auth epoch for tenant tenant-1/
+      );
     });
 
     it('returns 0 for non-numeric stored value', async () => {
@@ -57,12 +67,12 @@ describe('epoch', () => {
     it('increments from 0 to 1 on first call', async () => {
       const result = await incrementEpochForTenant('tenant-1', kv);
       expect(result).toBe(1);
-      expect(kv.set).toHaveBeenCalled();
+      expect(kv.incr).toHaveBeenCalled();
     });
 
     it('increments existing epoch', async () => {
-      // Pre-set epoch to 3
-      vi.mocked(kv.get).mockResolvedValue('3');
+      // Pre-set epoch to 3 in the backing store
+      store.set('horizon:v1:tenant-1:auth-epoch:current', '3');
       const result = await incrementEpochForTenant('tenant-1', kv);
       expect(result).toBe(4);
     });
@@ -71,8 +81,6 @@ describe('epoch', () => {
       await incrementEpochForTenant('tenant-a', kv);
       await incrementEpochForTenant('tenant-a', kv);
 
-      // Reset mock to return null for tenant-b
-      vi.mocked(kv.get).mockResolvedValue(null);
       const result = await incrementEpochForTenant('tenant-b', kv);
       expect(result).toBe(1);
     });

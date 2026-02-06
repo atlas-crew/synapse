@@ -98,6 +98,20 @@ export class SynapseDirectAdapter {
   private readonly baseUrl: string;
   private readonly timeout = 5000; // 5s timeout
 
+  private normalizeTraceHeaders(traceHeaders?: Record<string, string>): Record<string, string> {
+    if (!traceHeaders) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(traceHeaders)) {
+      const k = key.toLowerCase();
+      if (k !== 'x-request-id' && k !== 'traceparent' && k !== 'tracestate') continue;
+      if (typeof value !== 'string') continue;
+      const v = value.trim();
+      if (v.length === 0) continue;
+      out[k] = v;
+    }
+    return out;
+  }
+
   constructor(
     baseUrl: string,
     private logger: Logger
@@ -110,11 +124,12 @@ export class SynapseDirectAdapter {
   /**
    * Fetch JSON from synapse-pingora with error handling
    */
-  private async fetch<T>(path: string): Promise<T | null> {
+  private async fetch<T>(path: string, traceHeaders?: Record<string, string>): Promise<T | null> {
     const url = `${this.baseUrl}${path}`;
     try {
+      const headers = this.normalizeTraceHeaders(traceHeaders);
       const response = await fetch(url, {
-        headers: { Accept: 'application/json' },
+        headers: { ...headers, Accept: 'application/json' },
         signal: AbortSignal.timeout(this.timeout),
       });
 
@@ -133,10 +148,12 @@ export class SynapseDirectAdapter {
   /**
    * Fetch and parse Prometheus metrics from /metrics endpoint
    */
-  private async fetchPrometheusMetrics(): Promise<PrometheusMetrics | null> {
+  private async fetchPrometheusMetrics(traceHeaders?: Record<string, string>): Promise<PrometheusMetrics | null> {
     const url = `${this.baseUrl}/metrics`;
     try {
+      const headers = this.normalizeTraceHeaders(traceHeaders);
       const response = await fetch(url, {
+        headers,
         signal: AbortSignal.timeout(this.timeout),
       });
 
@@ -196,11 +213,11 @@ export class SynapseDirectAdapter {
   /**
    * Get sensor status - transforms /health and /metrics to SensorMetrics format
    */
-  async getSensorStatus(): Promise<SensorMetrics | null> {
+  async getSensorStatus(traceHeaders?: Record<string, string>): Promise<SensorMetrics | null> {
     const [health, stats, prometheus] = await Promise.all([
-      this.fetch<PingoraHealthResponse>('/health'),
-      this.fetch<PingoraStatsResponse>('/stats'),
-      this.fetchPrometheusMetrics(),
+      this.fetch<PingoraHealthResponse>('/health', traceHeaders),
+      this.fetch<PingoraStatsResponse>('/stats', traceHeaders),
+      this.fetchPrometheusMetrics(traceHeaders),
     ]);
 
     if (!health?.success) {
@@ -241,8 +258,8 @@ export class SynapseDirectAdapter {
    * Note: synapse-pingora doesn't expose detailed bandwidth metrics,
    * so we provide estimates based on request counts
    */
-  async getBandwidthAnalytics(): Promise<BandwidthAnalytics | null> {
-    const health = await this.fetch<PingoraHealthResponse>('/health');
+  async getBandwidthAnalytics(traceHeaders?: Record<string, string>): Promise<BandwidthAnalytics | null> {
+    const health = await this.fetch<PingoraHealthResponse>('/health', traceHeaders);
 
     if (!health?.success) {
       return null;
@@ -268,10 +285,10 @@ export class SynapseDirectAdapter {
    * Note: synapse-pingora doesn't expose detailed threat breakdown,
    * so we provide summary based on block counts
    */
-  async getThreatSummary(): Promise<ThreatSummary | null> {
+  async getThreatSummary(traceHeaders?: Record<string, string>): Promise<ThreatSummary | null> {
     const [health, wafStats] = await Promise.all([
-      this.fetch<PingoraHealthResponse>('/health'),
-      this.fetch<PingoraWafStatsResponse>('/waf/stats'),
+      this.fetch<PingoraHealthResponse>('/health', traceHeaders),
+      this.fetch<PingoraWafStatsResponse>('/waf/stats', traceHeaders),
     ]);
 
     if (!health?.success) {
@@ -307,11 +324,11 @@ export class SynapseDirectAdapter {
   /**
    * Get response time and status code analytics from Prometheus metrics.
    */
-  async getPrometheusAnalytics(): Promise<{
+  async getPrometheusAnalytics(traceHeaders?: Record<string, string>): Promise<{
     responseTimeDistribution: ResponseTimeBucket[];
     statusCodes: StatusCodeDistribution;
   } | null> {
-    const prometheus = await this.fetchPrometheusMetrics();
+    const prometheus = await this.fetchPrometheusMetrics(traceHeaders);
     if (!prometheus) {
       return null;
     }
@@ -331,8 +348,8 @@ export class SynapseDirectAdapter {
   /**
    * Health check - verify connection to synapse-pingora
    */
-  async healthCheck(): Promise<{ connected: boolean; status?: string; uptime?: number }> {
-    const health = await this.fetch<PingoraHealthResponse>('/health');
+  async healthCheck(traceHeaders?: Record<string, string>): Promise<{ connected: boolean; status?: string; uptime?: number }> {
+    const health = await this.fetch<PingoraHealthResponse>('/health', traceHeaders);
 
     if (!health?.success) {
       return { connected: false };
@@ -348,8 +365,8 @@ export class SynapseDirectAdapter {
   /**
    * Get raw WAF stats for debugging/monitoring
    */
-  async getWafStats(): Promise<PingoraWafStatsResponse['data'] | null> {
-    const response = await this.fetch<PingoraWafStatsResponse>('/waf/stats');
+  async getWafStats(traceHeaders?: Record<string, string>): Promise<PingoraWafStatsResponse['data'] | null> {
+    const response = await this.fetch<PingoraWafStatsResponse>('/waf/stats', traceHeaders);
     return response?.success ? response.data : null;
   }
 }

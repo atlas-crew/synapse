@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler } from '../../../lib/errors.js';
+import { buildTraceHeaders } from '../../../lib/trace-headers.js';
 import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
 import type { ResponseTimeBucket, SensorMetrics, StatusCodeDistribution } from '../../../types/beam.js';
 
@@ -112,9 +113,10 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
 
     if (synapseAdapter) {
       try {
+        const traceHeaders = buildTraceHeaders(req);
         const [sensorData, prometheusAnalytics] = await Promise.all([
-          synapseAdapter.getSensorStatus(),
-          synapseAdapter.getPrometheusAnalytics(),
+          synapseAdapter.getSensorStatus(traceHeaders),
+          synapseAdapter.getPrometheusAnalytics(traceHeaders),
         ]);
         sensorMetrics = sensorData;
         if (prometheusAnalytics) {

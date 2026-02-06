@@ -408,7 +408,7 @@ export function createFleetRoutes(
         return;
       }
 
-      const metrics = fleetAggregator.getFleetMetrics();
+      const metrics = await fleetAggregator.getFleetMetrics();
       res.json(metrics);
     } catch (error) {
       logger.error({ error }, 'Failed to get fleet metrics');
@@ -479,7 +479,7 @@ export function createFleetRoutes(
       // Get fleet metrics from aggregator if available
       let fleetMetrics = null;
       if (fleetAggregator) {
-        fleetMetrics = fleetAggregator.getFleetMetrics();
+        fleetMetrics = await fleetAggregator.getFleetMetrics();
       }
 
       // Get recent alerts

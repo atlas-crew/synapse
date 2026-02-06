@@ -43,19 +43,37 @@ export interface RolloutJobData {
 }
 
 /**
- * Get Redis connection configuration from environment
+ * Redis connection configuration including optional TLS.
  */
-export function getRedisConfig(): { host: string; port: number; password?: string; db?: number } {
+export interface RedisConnectionConfig {
+  host: string;
+  port: number;
+  password?: string;
+  db?: number;
+  tls?: Record<string, never>;
+}
+
+/**
+ * Get Redis connection configuration from environment.
+ *
+ * TLS is enabled when:
+ * - The REDIS_URL uses the `rediss://` scheme, or
+ * - The REDIS_TLS_ENABLED env var is set to "true"
+ */
+export function getRedisConfig(): RedisConnectionConfig {
   const redisUrl = process.env.REDIS_URL;
+  const tlsExplicit = process.env.REDIS_TLS_ENABLED === 'true';
 
   if (redisUrl) {
     try {
       const url = new URL(redisUrl);
+      const useTls = url.protocol === 'rediss:' || tlsExplicit;
       return {
         host: url.hostname,
         port: parseInt(url.port, 10) || 6379,
         password: url.password || undefined,
         db: url.pathname ? parseInt(url.pathname.slice(1), 10) : undefined,
+        ...(useTls ? { tls: {} } : {}),
       };
     } catch {
       // Fall through to defaults if URL parsing fails
@@ -67,6 +85,7 @@ export function getRedisConfig(): { host: string; port: number; password?: strin
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
+    ...(tlsExplicit ? { tls: {} } : {}),
   };
 }
 

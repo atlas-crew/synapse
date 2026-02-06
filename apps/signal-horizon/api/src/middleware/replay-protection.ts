@@ -784,10 +784,14 @@ export function createReplayProtection(
       checkResult
         .then(handleResult)
         .catch((error) => {
-          // Log error but allow request to proceed (fail-open for availability)
-          // In high-security contexts, you may want to fail-closed instead
+          // Fail-closed: deny the request when the nonce store is unavailable.
+          // Allowing requests through would disable replay protection entirely.
           console.error('Replay protection store error:', error);
-          next();
+          res.status(503).json({
+            error: 'Service Unavailable',
+            code: 'REPLAY_STORE_UNAVAILABLE',
+            message: 'Replay protection service is temporarily unavailable',
+          });
         });
     } else {
       handleResult(checkResult);

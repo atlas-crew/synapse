@@ -9,6 +9,7 @@ import { createThreatsRouter } from './threats.js';
 import { createAnalyticsRouter } from './analytics.js';
 import { getSynapseDirectAdapter } from '../../../services/synapse-direct.js';
 import { config } from '../../../config.js';
+import { buildTraceHeaders } from '../../../lib/trace-headers.js';
 
 export function createBeamRouter(
   prisma: PrismaClient,
@@ -18,11 +19,11 @@ export function createBeamRouter(
   const beamLogger = logger.child({ module: 'beam' });
 
   // Health check for synapse connectivity
-  router.get('/health', requireScope('dashboard:read'), async (_req, res) => {
+  router.get('/health', requireScope('dashboard:read'), async (req, res) => {
     const synapseAdapter = getSynapseDirectAdapter();
 
     if (synapseAdapter) {
-      const health = await synapseAdapter.healthCheck();
+      const health = await synapseAdapter.healthCheck(buildTraceHeaders(req));
       return res.json({
         synapseDirect: {
           url: config.synapseDirect.url,

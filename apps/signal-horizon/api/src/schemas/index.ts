@@ -29,12 +29,17 @@ export {
   DashboardClientMessageSchema,
   validateSensorMessage,
   validateDashboardMessage,
+  // Pub/sub broadcast envelope schemas (labs-2rf9.10)
+  BroadcastEnvelopeSchema,
+  DashboardBroadcastEnvelopeSchema,
   type ValidatedThreatSignal,
   type ValidatedSensorAuthPayload,
   type ValidatedSensorHeartbeatPayload,
   type ValidatedSensorCommandAckPayload,
   type ValidatedSensorMessage,
   type ValidatedDashboardMessage,
+  type BroadcastEnvelope,
+  type DashboardBroadcastEnvelope,
 } from './signal.js';
 
 // -----------------------------------------------------------------------------
