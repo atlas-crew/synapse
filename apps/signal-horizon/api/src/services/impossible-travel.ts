@@ -6,6 +6,8 @@
 import type { Logger } from 'pino';
 import type { PrismaClient, Severity } from '@prisma/client';
 
+import { applyTtlJitter, buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, type RedisKv } from '../storage/redis/index.js';
+
 export interface GeoLocation {
   latitude: f64;
   longitude: f64;
@@ -40,9 +42,15 @@ type f64 = number;
  * Allows swapping between in-memory and Redis-backed implementations.
  */
 export interface UserHistoryStore {
-  get(key: string): Promise<LoginEvent[]>;
-  set(key: string, events: LoginEvent[]): Promise<void>;
-  delete(key: string): Promise<void>;
+  /**
+   * Atomically (best-effort) append an event and return the prior history window
+   * for evaluation.
+   */
+  appendAndGetPrevious(
+    event: LoginEvent,
+    options: { historyWindowMs: number; maxHistoryPerUser: number }
+  ): Promise<LoginEvent[]>;
+  delete(tenantId: string, userId: string): Promise<void>;
 }
 
 /**
@@ -52,16 +60,127 @@ export interface UserHistoryStore {
 export class InMemoryUserHistoryStore implements UserHistoryStore {
   private map = new Map<string, LoginEvent[]>();
 
-  async get(key: string): Promise<LoginEvent[]> {
-    return this.map.get(key) || [];
+  async appendAndGetPrevious(
+    event: LoginEvent,
+    options: { historyWindowMs: number; maxHistoryPerUser: number }
+  ): Promise<LoginEvent[]> {
+    const key = `${event.tenantId}:${event.userId}`;
+    const existing = this.map.get(key) || [];
+
+    const cutoff = Date.now() - options.historyWindowMs;
+    const previous = existing.filter((e) => e.timestamp.getTime() > cutoff);
+
+    const updated = [...previous, event];
+    if (updated.length > options.maxHistoryPerUser) updated.splice(0, updated.length - options.maxHistoryPerUser);
+
+    this.map.set(key, updated);
+    return previous;
   }
 
-  async set(key: string, events: LoginEvent[]): Promise<void> {
-    this.map.set(key, events);
+  async delete(tenantId: string, userId: string): Promise<void> {
+    this.map.delete(`${tenantId}:${userId}`);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type StoredLoginEvent = Omit<LoginEvent, 'timestamp'> & { timestamp: string };
+
+function serializeLoginEvent(event: LoginEvent): StoredLoginEvent {
+  return { ...event, timestamp: event.timestamp.toISOString() };
+}
+
+function deserializeLoginEvent(event: StoredLoginEvent): LoginEvent {
+  return { ...event, timestamp: new Date(event.timestamp) };
+}
+
+export class RedisUserHistoryStore implements UserHistoryStore {
+  private kv: RedisKv;
+  private namespace: string;
+  private version: number;
+  private dataType: string;
+  private lockTtlSeconds: number;
+
+  constructor(
+    kv: RedisKv,
+    options: {
+      namespace?: string;
+      version?: number;
+      dataType?: string;
+      lockTtlSeconds?: number;
+    } = {}
+  ) {
+    this.kv = kv;
+    this.namespace = options.namespace ?? 'horizon';
+    this.version = options.version ?? 1;
+    this.dataType = options.dataType ?? 'impossible-travel-user-history';
+    this.lockTtlSeconds = options.lockTtlSeconds ?? TTL_SECONDS.lockMin;
   }
 
-  async delete(key: string): Promise<void> {
-    this.map.delete(key);
+  private historyKey(tenantId: string, userId: string): string {
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId,
+      dataType: this.dataType,
+      id: userId,
+    });
+  }
+
+  private lockKey(tenantId: string, userId: string): string {
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId,
+      dataType: 'lock',
+      id: [this.dataType, userId],
+    });
+  }
+
+  private async readHistory(key: string): Promise<LoginEvent[]> {
+    const raw = await this.kv.get(key);
+    if (!raw) return [];
+    const parsed = jsonDecode<StoredLoginEvent[]>(raw);
+    return parsed.map(deserializeLoginEvent);
+  }
+
+  async appendAndGetPrevious(
+    event: LoginEvent,
+    options: { historyWindowMs: number; maxHistoryPerUser: number }
+  ): Promise<LoginEvent[]> {
+    const key = this.historyKey(event.tenantId, event.userId);
+    const lockKey = this.lockKey(event.tenantId, event.userId);
+
+    const ttlSeconds = applyTtlJitter(Math.ceil(options.historyWindowMs / 1000));
+    const cutoff = Date.now() - options.historyWindowMs;
+
+    let lockAcquired = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      lockAcquired = await this.kv.set(lockKey, '1', { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
+      if (lockAcquired) break;
+      // Keep latency bounded; prefer making progress over waiting indefinitely.
+      await sleep(25 * (attempt + 1));
+    }
+
+    try {
+      const existing = await this.readHistory(key);
+      const previous = existing.filter((e) => e.timestamp.getTime() > cutoff);
+
+      const updated = [...previous, event];
+      if (updated.length > options.maxHistoryPerUser) updated.splice(0, updated.length - options.maxHistoryPerUser);
+
+      await this.kv.set(key, jsonEncode(updated.map(serializeLoginEvent)), { ttlSeconds });
+
+      return previous;
+    } finally {
+      if (lockAcquired) await this.kv.del(lockKey);
+    }
+  }
+
+  async delete(tenantId: string, userId: string): Promise<void> {
+    await this.kv.del(this.historyKey(tenantId, userId));
   }
 }
 
@@ -83,12 +202,10 @@ export class ImpossibleTravelService {
    * Process a new login event and check for impossible travel
    */
   async processLogin(event: LoginEvent): Promise<ImpossibleTravelAlert | null> {
-    const key = `${event.tenantId}:${event.userId}`;
-    let history = await this.userHistory.get(key);
-
-    // Clean old history
-    const cutoff = Date.now() - this.historyWindowMs;
-    history = history.filter((e) => e.timestamp.getTime() > cutoff);
+    const history = await this.userHistory.appendAndGetPrevious(event, {
+      historyWindowMs: this.historyWindowMs,
+      maxHistoryPerUser: this.maxHistoryPerUser,
+    });
 
     let alert: ImpossibleTravelAlert | null = null;
 
@@ -102,13 +219,6 @@ export class ImpossibleTravelService {
         }
       }
     }
-
-    // Update history
-    history.push(event);
-    if (history.length > this.maxHistoryPerUser) {
-      history.shift();
-    }
-    await this.userHistory.set(key, history);
 
     if (alert) {
       this.logger.warn(
