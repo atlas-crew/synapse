@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
 import { HuntQueryBuilder, HuntResultsTable, SavedQueries } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
@@ -146,6 +147,11 @@ export default function HuntingPage() {
           <p className="text-ink-secondary mt-1">
             Search and analyze threats across the fleet
           </p>
+          <div className="mt-2 text-xs text-ink-muted">
+            <Link className="text-link hover:text-link-hover font-mono" to="/hunting/request">
+              Pivot by request_id →
+            </Link>
+          </div>
         </div>
 
         {/* Status Badge */}

@@ -82,6 +82,52 @@ export interface IpActivity {
   signalTypes: string[];
 }
 
+export type RequestTimelineEvent =
+  | {
+      kind: 'http_transaction';
+      timestamp: string;
+      tenantId: string;
+      sensorId: string;
+      requestId: string;
+      site: string;
+      method: string;
+      path: string;
+      statusCode: number;
+      latencyMs: number;
+      wafAction: string | null;
+    }
+  | {
+      kind: 'signal_event';
+      timestamp: string;
+      tenantId: string;
+      sensorId: string;
+      requestId: string;
+      signalType: string;
+      sourceIp: string;
+      severity: string;
+      confidence: number;
+      eventCount: number;
+      metadata: Record<string, unknown> | null;
+    }
+  | {
+      kind: 'sensor_log';
+      timestamp: string;
+      tenantId: string;
+      sensorId: string;
+      requestId: string;
+      logId: string;
+      source: string;
+      level: string;
+      message: string;
+      fields: Record<string, unknown> | string | null;
+      method: string | null;
+      path: string | null;
+      statusCode: number | null;
+      latencyMs: number | null;
+      clientIp: string | null;
+      ruleId: string | null;
+    };
+
 // =============================================================================
 // Zod Schemas for Validation
 // =============================================================================
@@ -177,6 +223,63 @@ const IpActivityResponseSchema = z.object({
   meta: z.object({
     sourceIp: z.string(),
     lookbackDays: z.number(),
+  }),
+});
+
+const RequestTimelineEventSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('http_transaction'),
+    timestamp: z.string(),
+    tenantId: z.string(),
+    sensorId: z.string(),
+    requestId: z.string(),
+    site: z.string(),
+    method: z.string(),
+    path: z.string(),
+    statusCode: z.number(),
+    latencyMs: z.number(),
+    wafAction: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal('signal_event'),
+    timestamp: z.string(),
+    tenantId: z.string(),
+    sensorId: z.string(),
+    requestId: z.string(),
+    signalType: z.string(),
+    sourceIp: z.string(),
+    severity: z.string(),
+    confidence: z.number(),
+    eventCount: z.number(),
+    metadata: z.record(z.string(), z.unknown()).nullable(),
+  }),
+  z.object({
+    kind: z.literal('sensor_log'),
+    timestamp: z.string(),
+    tenantId: z.string(),
+    sensorId: z.string(),
+    requestId: z.string(),
+    logId: z.string(),
+    source: z.string(),
+    level: z.string(),
+    message: z.string(),
+    fields: z.union([z.record(z.string(), z.unknown()), z.string(), z.null()]),
+    method: z.string().nullable(),
+    path: z.string().nullable(),
+    statusCode: z.number().nullable(),
+    latencyMs: z.number().nullable(),
+    clientIp: z.string().nullable(),
+    ruleId: z.string().nullable(),
+  }),
+]);
+
+const RequestTimelineResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(RequestTimelineEventSchema),
+  meta: z.object({
+    requestId: z.string(),
+    tenantId: z.string(),
+    count: z.number(),
   }),
 });
 
@@ -410,6 +513,40 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const getRequestTimeline = useCallback(async (
+    requestId: string,
+    params: { startTime?: string; endTime?: string; limit?: number } = {}
+  ): Promise<{ events: RequestTimelineEvent[]; meta: { requestId: string; tenantId: string; count: number } }> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.startTime) queryParams.set('startTime', params.startTime);
+      if (params.endTime) queryParams.set('endTime', params.endTime);
+      if (params.limit !== undefined) queryParams.set('limit', String(params.limit));
+
+      const url = `/hunt/request/${encodeURIComponent(requestId)}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const data = await fetchApi<unknown>(url);
+
+      const result = RequestTimelineResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid request timeline response');
+      }
+
+      return {
+        events: result.data.data as RequestTimelineEvent[],
+        meta: result.data.meta,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get request timeline';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchApi]);
+
   return {
     // State
     isLoading,
@@ -425,6 +562,7 @@ export function useHunt() {
     saveQuery,
     runSavedQuery,
     deleteSavedQuery,
+    getRequestTimeline,
 
     // Helpers
     clearError: () => setError(null),
