@@ -5,6 +5,7 @@
 
 import type { Logger } from 'pino';
 import { EventEmitter } from 'node:events';
+import { metrics } from '../metrics.js';
 import type {
   SensorMetricsSnapshot,
   FleetMetrics,
@@ -99,10 +100,16 @@ export class FleetAggregator extends EventEmitter {
 
     this.sensorMetrics.set(sensorId, snapshot);
 
+    // Increment metrics (P1-OBSERVABILITY-002)
+    metrics.sensorHeartbeatsTotal.inc({ sensor_id: sensorId, tenant_id: heartbeat.tenantId });
+
     // Emit sensor online event if coming back online
     if (!wasOnline) {
       this.logger.info({ sensorId, tenantId: heartbeat.tenantId }, 'Sensor came online');
       this.emit('sensor-online', { sensorId, tenantId: heartbeat.tenantId });
+      
+      // Update online count gauge
+      metrics.sensorsOnlineGauge.inc({ tenant_id: heartbeat.tenantId, region: heartbeat.region });
     }
 
     // Check for alerts
@@ -410,10 +417,16 @@ export class FleetAggregator extends EventEmitter {
 
     for (const [sensorId, sensor] of this.sensorMetrics.entries()) {
       if (sensor.lastHeartbeat.getTime() < retentionThreshold) {
+        const tenantId = sensor.tenantId;
+        const region = sensor.region;
+        
         this.sensorMetrics.delete(sensorId);
         removedCount++;
-        this.logger.info({ sensorId, tenantId: sensor.tenantId }, 'Removed stale sensor metrics');
-        this.emit('sensor-offline', { sensorId, tenantId: sensor.tenantId });
+        this.logger.info({ sensorId, tenantId }, 'Removed stale sensor metrics');
+        this.emit('sensor-offline', { sensorId, tenantId });
+        
+        // Update online count gauge
+        metrics.sensorsOnlineGauge.dec({ tenant_id: tenantId, region });
       }
     }
 

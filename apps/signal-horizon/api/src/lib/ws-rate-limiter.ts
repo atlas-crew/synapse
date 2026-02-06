@@ -201,7 +201,7 @@ export class WebSocketRateLimiter {
    */
   peekLimit(connectionId: string): RateLimitResult {
     const now = Date.now();
-    let bucket = this.buckets.get(connectionId);
+    const bucket = this.buckets.get(connectionId);
 
     if (!bucket) {
       // New connection would have full bucket

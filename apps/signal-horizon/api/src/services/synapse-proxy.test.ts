@@ -5,7 +5,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { Logger } from 'pino';
-import { SynapseProxyService, SynapseProxyError, SensorError, type SynapseStatus } from './synapse-proxy.js';
+import {
+  SynapseProxyService,
+  SynapseProxyError,
+  SensorError,
+  validateSensorUrl,
+  backoffDelay,
+  type SynapseStatus,
+  type EvalRequest,
+} from './synapse-proxy.js';
 import type { TunnelBroker, LegacyTunnelMessage } from '../websocket/tunnel-broker.js';
 
 class MockTunnelBroker extends EventEmitter implements Partial<TunnelBroker> {
@@ -63,6 +71,24 @@ describe('SynapseProxyService', () => {
   it('blocks path traversal in endpoints', async () => {
     await expect(
       service.proxyRequest('sensor-1', 'tenant-1', '/../_sensor/status')
+    ).rejects.toMatchObject({ code: 'INVALID_ENDPOINT' });
+  });
+
+  it('blocks encoded path traversal in endpoints', async () => {
+    await expect(
+      service.proxyRequest('sensor-1', 'tenant-1', '/%2e%2e/_sensor/status')
+    ).rejects.toMatchObject({ code: 'INVALID_ENDPOINT' });
+  });
+
+  it('blocks null bytes in endpoints', async () => {
+    await expect(
+      service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status\0/etc/passwd')
+    ).rejects.toMatchObject({ code: 'INVALID_ENDPOINT' });
+  });
+
+  it('blocks absolute URLs in endpoints', async () => {
+    await expect(
+      service.proxyRequest('sensor-1', 'tenant-1', 'http://evil.com/_sensor/status')
     ).rejects.toMatchObject({ code: 'INVALID_ENDPOINT' });
   });
 
@@ -150,12 +176,18 @@ describe('SynapseProxyService', () => {
     expect(broker.sendToSensor).toHaveBeenCalledTimes(2);
   });
 
-  it('fails when tunnel cannot send request', async () => {
+  it('fails when tunnel cannot send request (after retries)', async () => {
     broker.sendToSensor.mockReturnValue(false);
 
-    await expect(
-      service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
-    ).rejects.toMatchObject({ code: 'SEND_FAILED' });
+    const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+
+    // Advance through all retry backoff delays (3 retries)
+    // Retry 0: ~1s, Retry 1: ~2s, Retry 2: ~4s
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(6000);
+
+    await expect(request).rejects.toMatchObject({ code: 'SEND_FAILED' });
   });
 
   it('handles sendToSensor exceptions without leaking pending requests', async () => {
@@ -163,9 +195,14 @@ describe('SynapseProxyService', () => {
       throw new Error('network down');
     });
 
-    await expect(
-      service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
-    ).rejects.toMatchObject({ code: 'SEND_FAILED' });
+    const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+
+    // Advance through all retry backoff delays
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(6000);
+
+    await expect(request).rejects.toMatchObject({ code: 'SEND_FAILED' });
 
     const stats = service.getStats();
     expect(stats.pendingRequests).toBe(0);
@@ -567,7 +604,12 @@ describe('SynapseProxyService', () => {
     });
 
     it('evaluateRequest performs POST', async () => {
-      const evalData = { method: 'GET', path: '/', headers: {}, clientIp: '1.1.1.1' };
+      const evalData: EvalRequest = {
+        method: 'GET',
+        path: '/',
+        headers: {},
+        clientIp: '1.1.1.1',
+      };
       broker.sendToSensor.mockImplementation((_id, message) => {
         expect(message.payload.method).toBe('POST');
         expect(message.payload.body).toEqual(evalData);
@@ -581,7 +623,7 @@ describe('SynapseProxyService', () => {
         return true;
       });
 
-      const result = await service.evaluateRequest(sensorId, tenantId, evalData as any);
+      const result = await service.evaluateRequest(sensorId, tenantId, evalData);
       expect(result.decision).toBe('allow');
     });
 
@@ -603,12 +645,126 @@ describe('SynapseProxyService', () => {
     });
   });
 
+  describe('Retry with Exponential Backoff', () => {
+    it('retries retryable errors up to MAX_RETRIES times', async () => {
+      let callCount = 0;
+      broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
+        callCount++;
+        if (callCount <= 3) {
+          // First 3 attempts: simulate timeout via no response
+          // The timeout fires when we advance timers
+          return true;
+        }
+        // 4th attempt: respond successfully
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { ok: true } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+
+      // Let the first executeRequest settle
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Advance past the request timeout (30s) to trigger TIMEOUT on attempt 0
+      await vi.advanceTimersByTimeAsync(30001);
+
+      // Advance past backoff delay for retry 1 (~1s base + jitter)
+      await vi.advanceTimersByTimeAsync(2000);
+
+      // Advance past the request timeout for attempt 1
+      await vi.advanceTimersByTimeAsync(30001);
+
+      // Advance past backoff delay for retry 2 (~2s base + jitter)
+      await vi.advanceTimersByTimeAsync(3000);
+
+      // Advance past the request timeout for attempt 2
+      await vi.advanceTimersByTimeAsync(30001);
+
+      // Advance past backoff delay for retry 3 (~4s base + jitter)
+      await vi.advanceTimersByTimeAsync(6000);
+
+      // Attempt 3 should succeed (4th sendToSensor call)
+      await vi.advanceTimersByTimeAsync(0);
+
+      const result = await request;
+      expect(result).toEqual({ ok: true });
+      expect(callCount).toBe(4); // 1 initial + 3 retries
+    });
+
+    it('does not retry non-retryable errors', async () => {
+      // SENSOR_ERROR is not retryable
+      broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
+        if (message.type === 'dashboard-request' && message.sessionId) {
+          const response: LegacyTunnelMessage = {
+            type: 'dashboard-response',
+            sessionId: message.sessionId,
+            payload: {
+              status: 500,
+              error: 'Sensor failure',
+            },
+            timestamp: new Date().toISOString(),
+          };
+          broker.emit('tunnel:message', sensorId, response);
+        }
+        return true;
+      });
+
+      await expect(
+        service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status')
+      ).rejects.toMatchObject({ code: 'SENSOR_ERROR' });
+
+      // Should have only been called once (no retries)
+      expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries on SEND_FAILED then succeeds', async () => {
+      let callCount = 0;
+      broker.sendToSensor.mockImplementation((sensorId: string, message: LegacyTunnelMessage) => {
+        callCount++;
+        if (callCount === 1) {
+          // First call fails
+          return false;
+        }
+        // Second call succeeds
+        const response: LegacyTunnelMessage = {
+          type: 'dashboard-response',
+          sessionId: message.sessionId!,
+          payload: { status: 200, data: { retried: true } },
+          timestamp: new Date().toISOString(),
+        };
+        process.nextTick(() => broker.emit('tunnel:message', sensorId, response));
+        return true;
+      });
+
+      const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
+
+      // Let first attempt settle and fail
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Advance past backoff for first retry (~1s base + jitter)
+      await vi.advanceTimersByTimeAsync(2000);
+
+      // Let second attempt settle
+      await vi.advanceTimersByTimeAsync(0);
+
+      const result = await request;
+      expect(result).toEqual({ retried: true });
+      expect(callCount).toBe(2);
+    });
+  });
+
   describe('Lifecycle', () => {
     it('rejects pending requests on shutdown', async () => {
       broker.sendToSensor.mockReturnValue(true);
 
       const request = service.proxyRequest('sensor-1', 'tenant-1', '/_sensor/status');
-      
+
       // Let acquire() settle
       await vi.advanceTimersByTimeAsync(0);
 
@@ -629,5 +785,94 @@ describe('SynapseProxyService', () => {
 
       await expect(request).rejects.toMatchObject({ code: 'SENSOR_DISCONNECTED' });
     });
+  });
+});
+
+// ===========================================================================
+// Standalone Unit Tests for SSRF URL Validation
+// ===========================================================================
+
+describe('validateSensorUrl', () => {
+  it('accepts valid public http URLs', () => {
+    expect(() => validateSensorUrl('http://sensor.example.com:6191')).not.toThrow();
+    expect(() => validateSensorUrl('https://8.8.8.8:6191')).not.toThrow();
+  });
+
+  it('rejects non-http schemes', () => {
+    expect(() => validateSensorUrl('ftp://sensor.example.com')).toThrow('only http and https');
+    expect(() => validateSensorUrl('file:///etc/passwd')).toThrow('only http and https');
+  });
+
+  it('rejects localhost', () => {
+    expect(() => validateSensorUrl('http://localhost:6191')).toThrow('blocked host');
+  });
+
+  it('rejects 0.0.0.0', () => {
+    expect(() => validateSensorUrl('http://0.0.0.0:6191')).toThrow('blocked host');
+  });
+
+  it('rejects loopback IPs (127.x.x.x)', () => {
+    expect(() => validateSensorUrl('http://127.0.0.1:6191')).toThrow('private or reserved');
+    expect(() => validateSensorUrl('http://127.255.255.255:6191')).toThrow('private or reserved');
+  });
+
+  it('rejects private 10.x.x.x range', () => {
+    expect(() => validateSensorUrl('http://10.0.0.1:6191')).toThrow('private or reserved');
+    expect(() => validateSensorUrl('http://10.255.255.255:6191')).toThrow('private or reserved');
+  });
+
+  it('rejects private 172.16-31.x.x range', () => {
+    expect(() => validateSensorUrl('http://172.16.0.1:6191')).toThrow('private or reserved');
+    expect(() => validateSensorUrl('http://172.31.255.255:6191')).toThrow('private or reserved');
+  });
+
+  it('rejects private 192.168.x.x range', () => {
+    expect(() => validateSensorUrl('http://192.168.1.1:6191')).toThrow('private or reserved');
+  });
+
+  it('rejects AWS metadata endpoint', () => {
+    expect(() => validateSensorUrl('http://169.254.169.254/latest/meta-data')).toThrow();
+  });
+
+  it('rejects URLs with credentials', () => {
+    expect(() => validateSensorUrl('http://user:pass@sensor.example.com:6191')).toThrow('credentials');
+  });
+
+  it('rejects ports outside valid range', () => {
+    expect(() => validateSensorUrl('http://sensor.example.com:80')).toThrow('Invalid sensor port');
+    expect(() => validateSensorUrl('http://sensor.example.com:0')).toThrow('Invalid sensor port');
+  });
+
+  it('rejects invalid URLs', () => {
+    expect(() => validateSensorUrl('not a url')).toThrow('Invalid sensor URL');
+  });
+});
+
+// ===========================================================================
+// Standalone Unit Tests for Backoff Delay
+// ===========================================================================
+
+describe('backoffDelay', () => {
+  it('returns increasing delays for increasing attempts', () => {
+    const d0 = backoffDelay(0);
+    const d1 = backoffDelay(1);
+    const d2 = backoffDelay(2);
+
+    // Base delays are 1000, 2000, 4000 plus up to 25% jitter
+    expect(d0).toBeGreaterThanOrEqual(1000);
+    expect(d0).toBeLessThanOrEqual(1250);
+
+    expect(d1).toBeGreaterThanOrEqual(2000);
+    expect(d1).toBeLessThanOrEqual(2500);
+
+    expect(d2).toBeGreaterThanOrEqual(4000);
+    expect(d2).toBeLessThanOrEqual(5000);
+  });
+
+  it('caps at 30 seconds', () => {
+    const d10 = backoffDelay(10);
+    // Max base is 30000 + up to 25% jitter = 37500
+    expect(d10).toBeLessThanOrEqual(37500);
+    expect(d10).toBeGreaterThanOrEqual(30000);
   });
 });

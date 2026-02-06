@@ -10,6 +10,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import request from '../../__tests__/test-request.js';
 import { createThreatRoutes } from './threats.js';
 import type { PrismaClient, Threat } from '@prisma/client';
+import type { AuthContext } from '../middleware/auth.js';
 
 // Mock the auth middleware module
 vi.mock('../middleware/auth.js', () => ({
@@ -29,35 +30,39 @@ vi.mock('../middleware/validation.js', () => ({
   IdParamSchema: {},
 }));
 
-// Auth middleware to inject auth object
-const injectAuth = (authOverrides: any = {}) => {
-  return (req: Request, _res: Response, next: NextFunction) => {
-    req.auth = {
-      tenantId: 'tenant-1',
-      userId: 'user-1',
-      scopes: ['dashboard:read', 'dashboard:write'],
-      isFleetAdmin: false,
-      ...authOverrides,
-    } as any;
-    next();
+  // Auth middleware to inject auth object
+  const injectAuth = (authOverrides: Partial<AuthContext> = {}) => {
+    return (req: Request, _res: Response, next: NextFunction) => {
+      req.auth = {
+        authId: 'auth-1',
+        tenantId: 'tenant-1',
+        apiKeyId: 'api-key-1',
+        userId: 'user-1',
+        scopes: ['dashboard:read', 'dashboard:write'],
+        isFleetAdmin: false,
+        ...authOverrides,
+      } as any;
+      next();
+    };
   };
-};
-
-const createMockThreat = (overrides: Partial<Threat> = {}): Threat => ({
-  id: 'threat-1',
-  indicator: '1.2.3.4',
-  threatType: 'IP_THREAT',
-  riskScore: 50,
-  fleetRiskScore: 50,
-  tenantId: 'tenant-1',
-  isFleetThreat: false,
-  metadata: {},
-  firstSeenAt: new Date(),
-  lastSeenAt: new Date(),
-  hitCount: 1,
-  ...overrides,
-});
-
+  const createMockThreat = (overrides: Partial<Threat> = {}): Threat => ({
+    id: 'threat-1',
+    indicator: '1.2.3.4',
+    threatType: 'IP_THREAT' as any,
+    riskScore: 50,
+    fleetRiskScore: 50,
+    tenantId: 'tenant-1',
+    isFleetThreat: false,
+    metadata: {},
+    firstSeenAt: new Date(),
+    lastSeenAt: new Date(),
+    hitCount: 1,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ttl: null,
+    tenantsAffected: 1,
+    ...overrides,
+  } as any);
 describe('Threat Routes', () => {
   let app: Express;
   let mockPrisma: Partial<PrismaClient>;
@@ -69,7 +74,7 @@ describe('Threat Routes', () => {
         findMany: vi.fn(),
         count: vi.fn(),
         update: vi.fn(),
-      } as any,
+      } as unknown as PrismaClient['threat'],
     };
 
     app = express();
@@ -87,7 +92,7 @@ describe('Threat Routes', () => {
 
       const threat = createMockThreat({ riskScore: 50 });
       vi.mocked(mockPrisma.threat!.findUnique).mockResolvedValue(threat);
-      vi.mocked(mockPrisma.threat!.update).mockImplementation(({ data }: any) => 
+      vi.mocked(mockPrisma.threat!.update).mockImplementation(({ data }: Parameters<PrismaClient['threat']['update']>[0]) =>
         Promise.resolve({ ...threat, ...data })
       );
 
@@ -117,7 +122,7 @@ describe('Threat Routes', () => {
 
       const threat = createMockThreat({ riskScore: 10 });
       vi.mocked(mockPrisma.threat!.findUnique).mockResolvedValue(threat);
-      vi.mocked(mockPrisma.threat!.update).mockImplementation(({ data }: any) => 
+      vi.mocked(mockPrisma.threat!.update).mockImplementation(({ data }: Parameters<PrismaClient['threat']['update']>[0]) =>
         Promise.resolve({ ...threat, ...data })
       );
 
@@ -163,7 +168,7 @@ describe('Threat Routes', () => {
 
       const otherThreat = createMockThreat({ id: 'threat-2', tenantId: 'tenant-2' });
       vi.mocked(mockPrisma.threat!.findUnique).mockResolvedValue(otherThreat);
-      vi.mocked(mockPrisma.threat!.update).mockImplementation(({ data }: any) => 
+      vi.mocked(mockPrisma.threat!.update).mockImplementation(({ data }: Parameters<PrismaClient['threat']['update']>[0]) =>
         Promise.resolve({ ...otherThreat, ...data })
       );
 

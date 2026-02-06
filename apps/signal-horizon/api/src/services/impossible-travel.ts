@@ -4,7 +4,7 @@
  */
 
 import type { Logger } from 'pino';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Severity } from '@prisma/client';
 
 export interface GeoLocation {
   latitude: f64;
@@ -165,7 +165,7 @@ export class ImpossibleTravelService {
           tenantId: alert.tenantId,
           sensorId: alert.to.userId, // Using userId as sensor context for now
           signalType: 'IMPOSSIBLE_TRAVEL',
-          severity: alert.severity.toUpperCase() as any,
+          severity: alert.severity.toUpperCase() as Severity,
           confidence: 0.9,
           metadata: {
             alertType: 'impossible_travel',

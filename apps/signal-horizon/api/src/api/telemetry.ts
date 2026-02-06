@@ -5,6 +5,8 @@
 
 import { Router, type Request, type Response } from 'express';
 import type { Logger } from 'pino';
+import type { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { requireTelemetryJwt } from './middleware/telemetry-jwt.js';
 import type { INonceStore } from '../middleware/replay-protection.js';
 import type {
@@ -15,31 +17,58 @@ import type {
   SignalEventRow,
 } from '../storage/clickhouse/index.js';
 
+// ======================== Validation Schemas (P0-SEC-002) ========================
+
+const TelemetryEventSchema = z.object({
+  event_type: z.string().max(100).optional(),
+  timestamp_ms: z.number().optional(),
+  instance_id: z.string().max(255).optional(),
+  data: z.record(z.unknown()).optional(),
+  event: z.record(z.unknown()).optional(),
+  // Apparatus fields
+  sensorId: z.string().max(255).optional(),
+  timestamp: z.union([z.string().max(100), z.number()]).optional(),
+  actor: z.object({
+    ip: z.string().max(50),
+    fingerprint: z.string().max(255).optional(),
+  }).optional(),
+  signal: z.object({
+    type: z.string().max(100),
+    severity: z.string().max(20),
+    details: z.record(z.unknown()).optional(),
+  }).optional(),
+  request: z.record(z.unknown()).optional(),
+  version: z.string().max(50).optional(),
+}).passthrough();
+
+const TelemetryBatchSchema = z.object({
+  batch_id: z.string().max(255).optional(),
+  batchId: z.string().max(255).optional(),
+  timestamp_ms: z.number().optional(),
+  created_at_ms: z.number().optional(),
+  events: z.array(TelemetryEventSchema).max(5000), // Max 5000 events per batch
+});
+
+const TelemetrySingleSchema = TelemetryEventSchema.superRefine((value, ctx) => {
+  if (Object.prototype.hasOwnProperty.call(value, 'events')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'events not allowed in single event payload',
+      path: ['events'],
+    });
+  }
+});
+
+const TelemetryPayloadSchema = z.union([TelemetryBatchSchema, TelemetrySingleSchema]);
+
 export interface TelemetryRouterOptions {
   clickhouse?: ClickHouseService | null;
   retryBuffer?: ClickHouseRetryBuffer | null;
   idempotencyStore?: INonceStore | null;
+  prisma?: PrismaClient;
 }
 
-type TelemetryEventPayload = Record<string, unknown>;
-
-type TelemetryEventEntry = {
-  timestamp_ms?: number;
-  instance_id?: string | null;
-  event?: TelemetryEventPayload;
-  // External report fields (Apparatus format)
-  sensorId?: string;
-  timestamp?: string | number;
-  actor?: {
-    ip: string;
-    fingerprint?: string;
-  };
-  signal?: {
-    type: string;
-    severity: string;
-    details?: Record<string, unknown>;
-  };
-} & TelemetryEventPayload;
+type TelemetryEventEntry = z.infer<typeof TelemetryEventSchema>;
 
 interface ParsedTelemetry {
   rows: HttpTransactionRow[];
@@ -70,17 +99,23 @@ function normalizeNumber(value: unknown, fallback: number): number {
 }
 
 /**
- * Normalizes a value to a string, ensuring it is non-empty.
+ * Normalizes a value to a string, ensuring it is non-empty and within length limits.
  */
-function normalizeString(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+function normalizeString(value: unknown, fallback: string, maxLength: number = 2048): string {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim().slice(0, maxLength);
+  }
+  return fallback;
 }
 
 /**
- * Normalizes an optional string value.
+ * Normalizes an optional string value with length limits.
  */
-function normalizeOptionalString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+function normalizeOptionalString(value: unknown, maxLength: number = 2048): string | null {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim().slice(0, maxLength);
+  }
+  return null;
 }
 
 /**
@@ -98,16 +133,15 @@ function normalizeOptionalNumber(value: unknown): number | null {
   return null;
 }
 
-function normalizeEventPayload(entry: TelemetryEventEntry): TelemetryEventPayload | null {
-  if (entry && typeof entry === 'object') {
-    if (entry.event && typeof entry.event === 'object') {
-      return entry.event as TelemetryEventPayload;
+  function normalizeEventPayload(entry: TelemetryEventEntry): Record<string, unknown> | null {
+    if (entry && typeof entry === 'object') {
+      if (entry.event && typeof entry.event === 'object') {
+        return entry.event as Record<string, unknown>;
+      }
+      return entry as Record<string, unknown>;
     }
-    return entry as TelemetryEventPayload;
+    return null;
   }
-  return null;
-}
-
 function extractTelemetryEntries(payload: unknown): TelemetryEventEntry[] {
   if (!payload || typeof payload !== 'object') return [];
 
@@ -132,7 +166,8 @@ function parseTelemetryPayload(
   payload: unknown,
   tenantId: string,
   defaultSensorId: string,
-  log: Logger
+  log: Logger,
+  requestId: string | null = null
 ): ParsedTelemetry {
   const entries = extractTelemetryEntries(payload);
   const rows: HttpTransactionRow[] = [];
@@ -170,6 +205,7 @@ function parseTelemetryPayload(
         timestamp: new Date(timestampMs).toISOString(),
         tenant_id: tenantId,
         sensor_id: instanceId,
+        request_id: requestId, // Pass correlation ID
         site: normalizeString(data.site, DEFAULT_SITE),
         method: normalizeString(data.method, 'UNKNOWN'),
         path: normalizeString(data.path, '/'),
@@ -219,6 +255,7 @@ function parseTelemetryPayload(
         timestamp: new Date(timestampMs).toISOString(),
         tenant_id: tenantId,
         sensor_id: instanceId,
+        request_id: requestId, // Pass correlation ID
         log_id: logId,
         source: normalizeString(data.source, 'system'),
         level: normalizeString(data.level, 'info'),
@@ -270,6 +307,7 @@ function parseTelemetryPayload(
         timestamp: new Date(timestampMs).toISOString(),
         tenant_id: tenantId,
         sensor_id: instanceId,
+        request_id: requestId, // Pass correlation ID
         signal_type: signalType,
         source_ip: normalizeString(entry.actor?.ip, '0.0.0.0'),
         fingerprint: normalizeString(entry.actor?.fingerprint, ''),
@@ -303,50 +341,81 @@ export function createTelemetryRouter(
   const router = Router();
   const log = logger.child({ route: 'telemetry' });
 
-  const handleTelemetry = async (req: Request, res: Response) => {
-    if (!req.is('application/json')) {
-      return res.status(415).json({ error: 'content_type_required' });
-    }
-
-    if (!options.clickhouse || !options.clickhouse.isEnabled()) {
-      return res.status(503).json({ error: 'clickhouse_disabled' });
-    }
-
-    const authContext = requireTelemetryJwt(req, res);
-    if (!authContext) {
-      return;
-    }
-
-    const { tenantId, sensorId } = authContext;
+      const handleTelemetry = async (req: Request, res: Response): Promise<void> => {
+        if (!req.is('application/json')) {
+          res.status(415).json({ error: 'content_type_required' });
+          return;
+        }
+  
+        if (!options.clickhouse || !options.clickhouse.isEnabled()) {
+          res.status(503).json({ error: 'clickhouse_disabled' });
+          return;
+        }
+  
+        const authContext = await requireTelemetryJwt(req, res, options.prisma);
+        if (!authContext) {
+          return;
+        }
+      // Validate payload schema (P0-SEC-002)
+    const result = TelemetryPayloadSchema.safeParse(req.body);
+          if (!result.success) {
+            log.warn({ errors: result.error.issues, tenantId: authContext.tenantId }, 'Telemetry payload validation failed');
+            res.status(400).json({ 
+              error: 'validation_failed', 
+              details: result.error.issues.map(i => ({ path: i.path, message: i.message }))
+            });
+            return;
+          }
+        const { tenantId, sensorId } = authContext;
+    const requestId = req.id || null; // Use requestId from middleware (P1-OBSERVABILITY-001)
 
     // Check for idempotency if batch_id is present (labs-mmft.14)
-    const body = req.body as Record<string, unknown>;
+    const body = result.data as Record<string, unknown>;
     const batchId = normalizeOptionalString(body.batch_id || body.batchId);
     if (batchId && options.idempotencyStore) {
       const timestamp = normalizeNumber(body.timestamp_ms || body.created_at_ms, Date.now());
       const isNew = await options.idempotencyStore.checkAndAdd(batchId, timestamp, {
         clientIp: req.ip,
         path: req.path,
+        tenantId, // Ensure tenant-scoped deduplication
       });
 
-      if (!isNew) {
-        log.info({ batchId, tenantId, sensorId }, 'Ignoring duplicate telemetry batch');
-        return res.status(202).json({
-          received: 0,
-          inserted: 0,
-          ignored: 0,
-          duplicate: true,
-        });
-      }
+              if (!isNew) {
+
+                log.info({ batchId, tenantId, sensorId }, 'Ignoring duplicate telemetry batch');
+
+                res.status(202).json({
+
+                  received: 0,
+
+                  inserted: 0,
+
+                  ignored: 0,
+
+                  duplicate: true,
+
+                });
+
+                return;
+
+              }
+
+      
     }
 
-    const { rows, logRows, signalRows, received, ignored } = parseTelemetryPayload(req.body, tenantId, sensorId, log);
-
-    if (rows.length === 0 && logRows.length === 0 && signalRows.length === 0) {
-      return res.status(202).json({ received, inserted: 0, ignored });
-    }
-
-    try {
+          const { rows, logRows, signalRows, received, ignored } = parseTelemetryPayload(
+            req.body, 
+            tenantId, 
+            sensorId, 
+            log,
+            String(requestId)
+          );
+    
+          if (rows.length === 0 && logRows.length === 0 && signalRows.length === 0) {
+            res.status(202).json({ received, inserted: 0, ignored });
+            return;
+          }
+        try {
       let buffered = 0;
       if (options.retryBuffer) {
         if (rows.length > 0) {
@@ -380,7 +449,7 @@ export function createTelemetryRouter(
         ignored,
       });
     } catch (error) {
-      log.warn({ error, count: rows.length + signalRows.length }, 'Telemetry ingest failed');
+      log.warn({ error, count: rows.length + logRows.length + signalRows.length }, 'Telemetry ingest failed');
       res.status(503).json({ error: 'ingest_failed' });
     }
   };

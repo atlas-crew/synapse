@@ -20,6 +20,9 @@ const mockPrisma = {
   },
 } as unknown as PrismaClient;
 
+type SignalFindManyArgs = Parameters<PrismaClient['signal']['findMany']>[0];
+type SignalFindManyReturn = Awaited<ReturnType<PrismaClient['signal']['findMany']>>;
+
 const mockLogger = {
   child: vi.fn().mockReturnThis(),
   info: vi.fn(),
@@ -665,16 +668,16 @@ describe('HuntService', () => {
       });
 
       // Mock returns signals only for tenant-1 when filtered
-      vi.mocked(mockPrisma.signal.findMany).mockImplementation(async (args: unknown) => {
-        const whereArgs = args as { where?: { tenantId?: string } };
-        const tenantId = whereArgs.where?.tenantId;
+      vi.mocked(mockPrisma.signal.findMany).mockImplementation(async (args?: SignalFindManyArgs) => {
+        const tenantId = (args?.where as { tenantId?: string } | undefined)?.tenantId;
         if (tenantId === 'tenant-1') {
-          return [tenant1Signal] as any;
-        } else if (tenantId === 'tenant-2') {
-          return [tenant2Signal] as any;
+          return [tenant1Signal] as SignalFindManyReturn;
+        }
+        if (tenantId === 'tenant-2') {
+          return [tenant2Signal] as SignalFindManyReturn;
         }
         // No tenantId filter - return all (this is what we want to prevent)
-        return [tenant1Signal, tenant2Signal] as any;
+        return [tenant1Signal, tenant2Signal] as SignalFindManyReturn;
       });
       vi.mocked(mockPrisma.signal.count).mockResolvedValue(1);
 

@@ -9,6 +9,7 @@
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { randomBytes } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 
 // =============================================================================
 // Types
@@ -91,15 +92,15 @@ export const DEFAULT_REPLAY_CONFIG: ReplayProtectionConfig = {
 
 /**
  * Interface for nonce storage backends.
- * Allows swapping between in-memory and Redis implementations.
+ * Allows swapping between in-memory, Redis, and database implementations.
  */
 export interface INonceStore {
   checkAndAdd(
     nonce: string,
     timestamp: number,
-    metadata?: { clientIp?: string; path?: string }
+    metadata?: { clientIp?: string; path?: string; tenantId?: string }
   ): boolean | Promise<boolean>;
-  exists(nonce: string, timestamp: number): boolean | Promise<boolean>;
+  exists(nonce: string, timestamp: number, tenantId?: string): boolean | Promise<boolean>;
   cleanup(): number | Promise<number>;
   readonly size: number;
   destroy(): void | Promise<void>;
@@ -109,30 +110,55 @@ export interface INonceStore {
 // In-Memory Nonce Store
 // =============================================================================
 
+/** Default maximum number of nonces to hold in memory */
+const DEFAULT_MAX_NONCES = 100_000;
+/** Warn when nonce store reaches this fraction of capacity */
+const NONCE_PRESSURE_THRESHOLD = 0.8;
+
 /**
  * In-memory store for tracking used nonces.
  *
- * PEN-006: For production with multiple instances, use RedisNonceStore instead.
+ * PEN-006: For production with multiple instances, use RedisNonceStore or PrismaNonceStore instead.
  * This implementation is suitable for single-instance deployments or development.
+ *
+ * Memory safety: The store enforces a hard capacity limit (maxNonces). When capacity
+ * is reached, expired nonces are evicted first. If still at capacity, the oldest
+ * entries are evicted to make room. This prevents unbounded memory growth during
+ * sustained traffic spikes or DoS conditions.
  */
 export class NonceStore implements INonceStore {
   private nonces: Map<string, NonceMetadata> = new Map();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private windowMs: number;
+  private maxNonces: number;
+  /** Callback for capacity-related events (evictions, pressure warnings) */
+  private onCapacityEvent?: (event: 'pressure' | 'eviction' | 'at_capacity', detail: { size: number; maxNonces: number; evicted?: number }) => void;
 
   /**
    * Create a new nonce store.
    *
-   * @param windowMs - Time window for nonce validity
-   * @param cleanupIntervalMs - Interval for cleanup of expired nonces
+   * @param windowMs - Time window for nonce validity (default: 5 minutes)
+   * @param cleanupIntervalMs - Interval for cleanup of expired nonces (default: 60s)
+   * @param maxNonces - Maximum nonces to hold in memory (default: 100,000)
+   * @param onCapacityEvent - Optional callback for capacity events (monitoring integration)
    */
-  constructor(windowMs: number = 300000, cleanupIntervalMs: number = 60000) {
+  constructor(
+    windowMs: number = 300000,
+    cleanupIntervalMs: number = 60000,
+    maxNonces: number = DEFAULT_MAX_NONCES,
+    onCapacityEvent?: (event: 'pressure' | 'eviction' | 'at_capacity', detail: { size: number; maxNonces: number; evicted?: number }) => void,
+  ) {
     this.windowMs = windowMs;
+    this.maxNonces = maxNonces;
+    this.onCapacityEvent = onCapacityEvent;
     this.startCleanup(cleanupIntervalMs);
   }
 
   /**
    * Check if a nonce exists and add it if not.
+   *
+   * When the store is at capacity, expired entries are evicted first. If still
+   * at capacity after eviction, the oldest entries are removed to make room.
    *
    * @param nonce - The nonce to check
    * @param timestamp - Request timestamp
@@ -142,13 +168,19 @@ export class NonceStore implements INonceStore {
   checkAndAdd(
     nonce: string,
     timestamp: number,
-    metadata?: { clientIp?: string; path?: string }
+    metadata?: { clientIp?: string; path?: string; tenantId?: string }
   ): boolean {
-    // Create composite key with timestamp to handle clock skew
-    const key = `${nonce}:${Math.floor(timestamp / 1000)}`;
+    // Create composite key with timestamp and optional tenantId to handle clock skew and multi-tenancy
+    const tenantPart = metadata?.tenantId ? `${metadata.tenantId}:` : '';
+    const key = `${tenantPart}${nonce}:${Math.floor(timestamp / 1000)}`;
 
     if (this.nonces.has(key)) {
       return false; // Nonce already used
+    }
+
+    // Enforce capacity limit before inserting
+    if (this.nonces.size >= this.maxNonces) {
+      this.enforceCapacity();
     }
 
     this.nonces.set(key, {
@@ -158,6 +190,11 @@ export class NonceStore implements INonceStore {
       path: metadata?.path,
     });
 
+    // Emit pressure warning when approaching capacity
+    if (this.nonces.size >= this.maxNonces * NONCE_PRESSURE_THRESHOLD) {
+      this.onCapacityEvent?.('pressure', { size: this.nonces.size, maxNonces: this.maxNonces });
+    }
+
     return true;
   }
 
@@ -166,10 +203,12 @@ export class NonceStore implements INonceStore {
    *
    * @param nonce - The nonce to check
    * @param timestamp - Request timestamp
+   * @param tenantId - Optional tenant identifier
    * @returns true if nonce exists (was already used)
    */
-  exists(nonce: string, timestamp: number): boolean {
-    const key = `${nonce}:${Math.floor(timestamp / 1000)}`;
+  exists(nonce: string, timestamp: number, tenantId?: string): boolean {
+    const tenantPart = tenantId ? `${tenantId}:` : '';
+    const key = `${tenantPart}${nonce}:${Math.floor(timestamp / 1000)}`;
     return this.nonces.has(key);
   }
 
@@ -200,6 +239,13 @@ export class NonceStore implements INonceStore {
   }
 
   /**
+   * Get the configured capacity limit.
+   */
+  get capacity(): number {
+    return this.maxNonces;
+  }
+
+  /**
    * Clear all nonces and stop cleanup.
    */
   destroy(): void {
@@ -208,6 +254,43 @@ export class NonceStore implements INonceStore {
       this.cleanupInterval = null;
     }
     this.nonces.clear();
+  }
+
+  /**
+   * Enforce capacity limits when the store is full.
+   *
+   * Strategy:
+   * 1. Evict all expired entries (TTL-based cleanup)
+   * 2. If still at capacity, evict oldest 10% of entries
+   *
+   * This ensures the store never exceeds maxNonces while preserving
+   * the most recent nonces for replay detection.
+   */
+  private enforceCapacity(): void {
+    // Step 1: Try TTL-based eviction first
+    const expired = this.cleanup();
+
+    if (this.nonces.size < this.maxNonces) {
+      if (expired > 0) {
+        this.onCapacityEvent?.('eviction', { size: this.nonces.size, maxNonces: this.maxNonces, evicted: expired });
+      }
+      return;
+    }
+
+    // Step 2: Still at capacity - evict oldest 10% of entries
+    const evictCount = Math.max(1, Math.ceil(this.maxNonces * 0.1));
+    let evicted = 0;
+    for (const key of this.nonces.keys()) {
+      if (evicted >= evictCount) break;
+      this.nonces.delete(key);
+      evicted++;
+    }
+
+    this.onCapacityEvent?.('at_capacity', {
+      size: this.nonces.size,
+      maxNonces: this.maxNonces,
+      evicted: expired + evicted,
+    });
   }
 
   /**
@@ -345,6 +428,119 @@ export class RedisNonceStore implements INonceStore {
 }
 
 // =============================================================================
+// Prisma Nonce Store (Distributed DB-backed)
+// =============================================================================
+
+/**
+ * Prisma-backed nonce store for distributed deployments without Redis.
+ *
+ * Uses the existing `IdempotencyRequest` table to track used nonces/keys.
+ * This ensures cross-instance deduplication using the primary database.
+ */
+export class PrismaNonceStore implements INonceStore {
+  private prisma: PrismaClient;
+  private windowMs: number;
+  private _size: number = 0;
+
+  constructor(
+    prisma: PrismaClient,
+    options: {
+      windowMs?: number;
+    } = {}
+  ) {
+    this.prisma = prisma;
+    this.windowMs = options.windowMs ?? 300000;
+  }
+
+  /**
+   * Check if a nonce exists and add it if not.
+   * Uses the IdempotencyRequest table with tenantId scoped uniqueness.
+   */
+  async checkAndAdd(
+    nonce: string,
+    timestamp: number,
+    metadata?: { clientIp?: string; path?: string; tenantId?: string }
+  ): Promise<boolean> {
+    // IdempotencyRequest model requires a tenantId. 
+    // If not provided, we can't use this table (as it's part of the PK).
+    if (!metadata?.tenantId) {
+      throw new Error('PrismaNonceStore requires a tenantId in metadata');
+    }
+
+    const tenantId = metadata.tenantId;
+    const expiresAt = new Date(Date.now() + this.windowMs);
+
+    try {
+      // Attempt to create the idempotency record. 
+      // If it already exists, Prisma will throw a unique constraint error (P2002).
+      await this.prisma.idempotencyRequest.create({
+        data: {
+          key: nonce,
+          tenantId,
+          response: { 
+            status: 'accepted',
+            timestamp,
+            clientIp: metadata.clientIp,
+            path: metadata.path
+          } as any, // Cast to any for Prisma JSON compatibility
+          expiresAt,
+        },
+      });
+
+      this._size++;
+      return true;
+    } catch (error: any) {
+      // P2002 is Unique constraint failed
+      if (error.code === 'P2002') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a nonce exists without adding it.
+   */
+  async exists(nonce: string, _timestamp: number, tenantId?: string): Promise<boolean> {
+    if (!tenantId) return false;
+
+    const entry = await this.prisma.idempotencyRequest.findUnique({
+      where: {
+        key_tenantId: { key: nonce, tenantId },
+      },
+    });
+
+    return !!entry;
+  }
+
+  /**
+   * Remove expired nonces from the database.
+   */
+  async cleanup(): Promise<number> {
+    const result = await this.prisma.idempotencyRequest.deleteMany({
+      where: {
+        expiresAt: { lt: new Date() },
+      },
+    });
+    return result.count;
+  }
+
+  /**
+   * Get approximate size (last known created count).
+   */
+  get size(): number {
+    return this._size;
+  }
+
+  /**
+   * No-op for Prisma store.
+   */
+  async destroy(): Promise<void> {
+    // No connection to close
+  }
+}
+
+// =============================================================================
 // Validation Functions
 // =============================================================================
 
@@ -423,6 +619,11 @@ export interface ReplayProtectionFactoryConfig extends Partial<ReplayProtectionC
    * If not provided, uses in-memory NonceStore.
    */
   store?: INonceStore;
+  /**
+   * Maximum nonces to hold in the in-memory store (default: 100,000).
+   * Only applies when no external store is provided.
+   */
+  maxNonces?: number;
 }
 
 /**
@@ -464,7 +665,11 @@ export function createReplayProtection(
   destroy: () => void | Promise<void>;
 } {
   const fullConfig = { ...DEFAULT_REPLAY_CONFIG, ...config };
-  const store = config.store ?? new NonceStore(fullConfig.windowMs);
+  const store = config.store ?? new NonceStore(
+    fullConfig.windowMs,
+    undefined,
+    config.maxNonces,
+  );
 
   const middleware: RequestHandler = (
     req: Request,

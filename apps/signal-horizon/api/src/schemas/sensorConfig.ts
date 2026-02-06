@@ -67,48 +67,48 @@ import {
 } from './sensorConfigDefaults';
 
 export const ServerConfigSchema = z.object({
-  http_addr: z.string().default(DEFAULT_SERVER_HTTP_ADDR),
-  https_addr: z.string().default(DEFAULT_SERVER_HTTPS_ADDR),
-  workers: z.number().default(DEFAULT_SERVER_WORKERS),
-  shutdown_timeout_secs: z.number().default(DEFAULT_SERVER_SHUTDOWN_TIMEOUT_SECS),
+  http_addr: z.string().max(255).regex(/^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])?:\d+$/).default(DEFAULT_SERVER_HTTP_ADDR),
+  https_addr: z.string().max(255).regex(/^([a-zA-Z0-9.-]+|\[[a-fA-F0-9:]+\])?:\d+$/).default(DEFAULT_SERVER_HTTPS_ADDR),
+  workers: z.number().int().min(0).max(1024).default(DEFAULT_SERVER_WORKERS),
+  shutdown_timeout_secs: z.number().int().min(1).max(3600).default(DEFAULT_SERVER_SHUTDOWN_TIMEOUT_SECS),
   waf_threshold: z.number().min(0).max(100).default(DEFAULT_SERVER_WAF_THRESHOLD),
   waf_enabled: z.boolean().default(DEFAULT_SERVER_WAF_ENABLED),
-  log_level: z.string().default(DEFAULT_SERVER_LOG_LEVEL),
+  log_level: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default(DEFAULT_SERVER_LOG_LEVEL),
 });
 
 export const UpstreamConfigSchema = z.object({
-  host: z.string(),
-  port: z.number(),
-  weight: z.number().default(DEFAULT_UPSTREAM_WEIGHT),
+  host: z.string().max(255),
+  port: z.number().int().min(1).max(65535),
+  weight: z.number().int().min(1).max(1000).default(DEFAULT_UPSTREAM_WEIGHT),
 });
 
 export const TlsConfigSchema = z.object({
-  cert_path: z.string(),
-  key_path: z.string(),
-  min_version: z.string().default(DEFAULT_TLS_MIN_VERSION),
+  cert_path: z.string().max(1024).refine(p => !p.includes('..'), "Path traversal detected"),
+  key_path: z.string().max(1024).refine(p => !p.includes('..'), "Path traversal detected"),
+  min_version: z.enum(["1.2", "1.3"]).default(DEFAULT_TLS_MIN_VERSION),
 });
 
 export const AccessControlConfigSchema = z.object({
-  allow: z.array(z.string()).default([]),
-  deny: z.array(z.string()).default([]),
+  allow: z.array(z.string().max(255)).max(1000).default([]),
+  deny: z.array(z.string().max(255)).max(1000).default([]),
   default_action: z.enum(["allow", "deny"]).default(DEFAULT_ACCESS_CONTROL_ACTION),
 });
 
 export const SiteWafConfigSchema = z.object({
   enabled: z.boolean().default(DEFAULT_SITE_WAF_ENABLED),
   threshold: z.number().min(0).max(100).optional(),
-  rule_overrides: z.record(z.string()).default({}),
+  rule_overrides: z.record(z.string().max(100), z.string().max(50)).default({}),
 });
 
 export const RateLimitConfigSchema = z.object({
-  rps: z.number().default(DEFAULT_RATE_LIMIT_RPS),
+  rps: z.number().int().min(1).max(1000000).default(DEFAULT_RATE_LIMIT_RPS),
   enabled: z.boolean().default(DEFAULT_RATE_LIMIT_ENABLED),
-  burst: z.number().optional(),
+  burst: z.number().int().min(1).max(2000000).optional(),
 });
 
 export const SiteConfigSchema = z.object({
-  hostname: z.string(),
-  upstreams: z.array(UpstreamConfigSchema),
+  hostname: z.string().max(255),
+  upstreams: z.array(UpstreamConfigSchema).min(1).max(100),
   tls: TlsConfigSchema.optional(),
   waf: SiteWafConfigSchema.optional(),
   rate_limit: RateLimitConfigSchema.optional(),
@@ -117,17 +117,17 @@ export const SiteConfigSchema = z.object({
 
 export const ProfilerConfigSchema = z.object({
   enabled: z.boolean().default(DEFAULT_PROFILER_ENABLED),
-  max_profiles: z.number().default(DEFAULT_PROFILER_MAX_PROFILES),
-  max_schemas: z.number().default(DEFAULT_PROFILER_MAX_SCHEMAS),
-  min_samples_for_validation: z.number().default(DEFAULT_PROFILER_MIN_SAMPLES),
-  payload_z_threshold: z.number().default(DEFAULT_PROFILER_PAYLOAD_Z),
-  param_z_threshold: z.number().default(DEFAULT_PROFILER_PARAM_Z),
-  response_z_threshold: z.number().default(DEFAULT_PROFILER_RESPONSE_Z),
-  min_stddev: z.number().default(DEFAULT_PROFILER_MIN_STDDEV),
-  type_ratio_threshold: z.number().default(DEFAULT_PROFILER_TYPE_RATIO),
-  max_type_counts: z.number().default(DEFAULT_PROFILER_MAX_TYPE_COUNTS),
+  max_profiles: z.number().int().min(1).max(100000).default(DEFAULT_PROFILER_MAX_PROFILES),
+  max_schemas: z.number().int().min(1).max(10000).default(DEFAULT_PROFILER_MAX_SCHEMAS),
+  min_samples_for_validation: z.number().int().min(1).max(10000).default(DEFAULT_PROFILER_MIN_SAMPLES),
+  payload_z_threshold: z.number().min(0.1).max(20.0).default(DEFAULT_PROFILER_PAYLOAD_Z),
+  param_z_threshold: z.number().min(0.1).max(20.0).default(DEFAULT_PROFILER_PARAM_Z),
+  response_z_threshold: z.number().min(0.1).max(20.0).default(DEFAULT_PROFILER_RESPONSE_Z),
+  min_stddev: z.number().min(0.0001).max(1.0).default(DEFAULT_PROFILER_MIN_STDDEV),
+  type_ratio_threshold: z.number().min(0.1).max(1.0).default(DEFAULT_PROFILER_TYPE_RATIO),
+  max_type_counts: z.number().int().min(1).max(1000).default(DEFAULT_PROFILER_MAX_TYPE_COUNTS),
   redact_pii: z.boolean().default(DEFAULT_PROFILER_REDACT_PII),
-  freeze_after_samples: z.number().default(DEFAULT_PROFILER_FREEZE_AFTER_SAMPLES),
+  freeze_after_samples: z.number().int().min(0).max(1000000).default(DEFAULT_PROFILER_FREEZE_AFTER_SAMPLES),
 });
 
 // =============================================================================
@@ -137,22 +137,22 @@ export const DlpConfigSchema = z.object({
   enabled: z.boolean().default(DEFAULT_DLP_ENABLED),
   fast_mode: z.boolean().default(DEFAULT_DLP_FAST_MODE),
   scan_text_only: z.boolean().default(DEFAULT_DLP_SCAN_TEXT_ONLY),
-  max_scan_size: z.number().default(DEFAULT_DLP_MAX_SCAN_SIZE_BYTES),
-  max_body_inspection_bytes: z.number().default(DEFAULT_DLP_MAX_BODY_INSPECTION_BYTES),
-  max_matches: z.number().default(DEFAULT_DLP_MAX_MATCHES),
-  custom_keywords: z.array(z.string()).default([]),
-  redaction: z.record(z.enum(["mask", "hash", "full"])).default({}),
+  max_scan_size: z.number().int().min(1).max(100 * 1024 * 1024).default(DEFAULT_DLP_MAX_SCAN_SIZE_BYTES),
+  max_body_inspection_bytes: z.number().int().min(1).max(10 * 1024 * 1024).default(DEFAULT_DLP_MAX_BODY_INSPECTION_BYTES),
+  max_matches: z.number().int().min(1).max(10000).default(DEFAULT_DLP_MAX_MATCHES),
+  custom_keywords: z.array(z.string().max(255)).max(1000).default([]),
+  redaction: z.record(z.string().max(100), z.enum(["mask", "hash", "full"])).default({}),
 });
 
 // =============================================================================
 // Block Page Configuration
 // =============================================================================
 export const BlockPageConfigSchema = z.object({
-  company_name: z.string().optional(),
-  support_email: z.string().email().optional(),
-  logo_url: z.string().url().optional(),
-  custom_template: z.string().optional(),
-  custom_css: z.string().optional(),
+  company_name: z.string().max(255).optional(),
+  support_email: z.string().max(255).email().optional(),
+  logo_url: z.string().max(2048).url().optional(),
+  custom_template: z.string().max(100000).optional(),
+  custom_css: z.string().max(100000).optional(),
   show_request_id: z.boolean().default(DEFAULT_BLOCK_PAGE_SHOW_REQUEST_ID),
   show_timestamp: z.boolean().default(DEFAULT_BLOCK_PAGE_SHOW_TIMESTAMP),
   show_client_ip: z.boolean().default(DEFAULT_BLOCK_PAGE_SHOW_CLIENT_IP),
@@ -167,12 +167,12 @@ export const CrawlerConfigSchema = z.object({
   verify_legitimate_crawlers: z.boolean().default(DEFAULT_CRAWLER_VERIFY_LEGIT),
   block_bad_bots: z.boolean().default(DEFAULT_CRAWLER_BLOCK_BAD_BOTS),
   dns_failure_policy: z.enum(["allow", "apply_risk_penalty", "block"]).default(DEFAULT_CRAWLER_DNS_FAILURE_POLICY),
-  dns_cache_ttl_secs: z.number().default(DEFAULT_CRAWLER_DNS_CACHE_TTL_SECS),
-  verification_cache_ttl_secs: z.number().default(DEFAULT_CRAWLER_VERIFICATION_CACHE_TTL_SECS),
-  max_cache_entries: z.number().default(DEFAULT_CRAWLER_MAX_CACHE_ENTRIES),
-  dns_timeout_ms: z.number().default(DEFAULT_CRAWLER_DNS_TIMEOUT_MS),
-  max_concurrent_dns_lookups: z.number().default(DEFAULT_CRAWLER_MAX_CONCURRENT_DNS_LOOKUPS),
-  dns_failure_risk_penalty: z.number().default(DEFAULT_CRAWLER_DNS_FAILURE_RISK_PENALTY),
+  dns_cache_ttl_secs: z.number().int().min(1).max(86400).default(DEFAULT_CRAWLER_DNS_CACHE_TTL_SECS),
+  verification_cache_ttl_secs: z.number().int().min(1).max(604800).default(DEFAULT_CRAWLER_VERIFICATION_CACHE_TTL_SECS),
+  max_cache_entries: z.number().int().min(1).max(1000000).default(DEFAULT_CRAWLER_MAX_CACHE_ENTRIES),
+  dns_timeout_ms: z.number().int().min(1).max(30000).default(DEFAULT_CRAWLER_DNS_TIMEOUT_MS),
+  max_concurrent_dns_lookups: z.number().int().min(1).max(10000).default(DEFAULT_CRAWLER_MAX_CONCURRENT_DNS_LOOKUPS),
+  dns_failure_risk_penalty: z.number().int().min(0).max(100).default(DEFAULT_CRAWLER_DNS_FAILURE_RISK_PENALTY),
 });
 
 // =============================================================================
@@ -180,23 +180,23 @@ export const CrawlerConfigSchema = z.object({
 // =============================================================================
 export const TarpitConfigSchema = z.object({
   enabled: z.boolean().default(DEFAULT_TARPIT_ENABLED),
-  base_delay_ms: z.number().default(DEFAULT_TARPIT_BASE_DELAY_MS),
-  max_delay_ms: z.number().default(DEFAULT_TARPIT_MAX_DELAY_MS),
-  progressive_multiplier: z.number().default(DEFAULT_TARPIT_PROGRESSIVE_MULTIPLIER),
-  max_states: z.number().default(DEFAULT_TARPIT_MAX_STATES),
-  decay_threshold_ms: z.number().default(DEFAULT_TARPIT_DECAY_THRESHOLD_MS),
-  cleanup_threshold_ms: z.number().default(DEFAULT_TARPIT_CLEANUP_THRESHOLD_MS),
-  max_concurrent_tarpits: z.number().default(DEFAULT_TARPIT_MAX_CONCURRENT),
+  base_delay_ms: z.number().int().min(0).max(60000).default(DEFAULT_TARPIT_BASE_DELAY_MS),
+  max_delay_ms: z.number().int().min(0).max(300000).default(DEFAULT_TARPIT_MAX_DELAY_MS),
+  progressive_multiplier: z.number().min(1.0).max(10.0).default(DEFAULT_TARPIT_PROGRESSIVE_MULTIPLIER),
+  max_states: z.number().int().min(1).max(1000000).default(DEFAULT_TARPIT_MAX_STATES),
+  decay_threshold_ms: z.number().int().min(1000).max(3600000).default(DEFAULT_TARPIT_DECAY_THRESHOLD_MS),
+  cleanup_threshold_ms: z.number().int().min(1000).max(86400000).default(DEFAULT_TARPIT_CLEANUP_THRESHOLD_MS),
+  max_concurrent_tarpits: z.number().int().min(1).max(100000).default(DEFAULT_TARPIT_MAX_CONCURRENT),
 });
 
 // =============================================================================
 // Impossible Travel Configuration
 // =============================================================================
 export const TravelConfigSchema = z.object({
-  max_speed_kmh: z.number().default(DEFAULT_TRAVEL_MAX_SPEED_KMH),
-  min_distance_km: z.number().default(DEFAULT_TRAVEL_MIN_DISTANCE_KM),
-  history_window_ms: z.number().default(DEFAULT_TRAVEL_HISTORY_WINDOW_MS),
-  max_history_per_user: z.number().default(DEFAULT_TRAVEL_MAX_HISTORY_PER_USER),
+  max_speed_kmh: z.number().min(1).max(40000).default(DEFAULT_TRAVEL_MAX_SPEED_KMH),
+  min_distance_km: z.number().min(0).max(20000).default(DEFAULT_TRAVEL_MIN_DISTANCE_KM),
+  history_window_ms: z.number().int().min(1000).max(30 * 24 * 60 * 60 * 1000).default(DEFAULT_TRAVEL_HISTORY_WINDOW_MS),
+  max_history_per_user: z.number().int().min(1).max(10000).default(DEFAULT_TRAVEL_MAX_HISTORY_PER_USER),
 });
 
 // =============================================================================
@@ -204,12 +204,12 @@ export const TravelConfigSchema = z.object({
 // =============================================================================
 export const EntityConfigSchema = z.object({
   enabled: z.boolean().default(DEFAULT_ENTITY_ENABLED),
-  max_entities: z.number().default(DEFAULT_ENTITY_MAX_ENTITIES),
-  risk_decay_per_minute: z.number().default(DEFAULT_ENTITY_RISK_DECAY_PER_MINUTE),
-  block_threshold: z.number().default(DEFAULT_ENTITY_BLOCK_THRESHOLD),
-  max_rules_per_entity: z.number().default(DEFAULT_ENTITY_MAX_RULES_PER_ENTITY),
-  max_risk: z.number().default(DEFAULT_ENTITY_MAX_RISK),
-  max_anomalies_per_entity: z.number().default(DEFAULT_ENTITY_MAX_ANOMALIES),
+  max_entities: z.number().int().min(1).max(10000000).default(DEFAULT_ENTITY_MAX_ENTITIES),
+  risk_decay_per_minute: z.number().min(0).max(100).default(DEFAULT_ENTITY_RISK_DECAY_PER_MINUTE),
+  block_threshold: z.number().min(0).max(100).default(DEFAULT_ENTITY_BLOCK_THRESHOLD),
+  max_rules_per_entity: z.number().int().min(1).max(1000).default(DEFAULT_ENTITY_MAX_RULES_PER_ENTITY),
+  max_risk: z.number().min(0).max(1000).default(DEFAULT_ENTITY_MAX_RISK),
+  max_anomalies_per_entity: z.number().int().min(1).max(1000).default(DEFAULT_ENTITY_MAX_ANOMALIES),
 });
 
 export const SensorConfigSchema = z.object({

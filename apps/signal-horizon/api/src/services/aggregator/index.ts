@@ -1,8 +1,4 @@
-/**
- * Signal Aggregator Service
- * Batches, deduplicates, and anonymizes incoming threat signals
- */
-
+import { createHmac, createHash } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Correlator } from '../correlator/index.js';
@@ -10,9 +6,11 @@ import type { ImpossibleTravelService, LoginEvent } from '../impossible-travel.j
 import type { APIIntelligenceService } from '../api-intelligence/index.js';
 import type { ThreatService } from '../threat-service.js';
 import type { AutomatedPlaybookTrigger } from '../warroom/automated-trigger.js';
-import type { ThreatSignal, EnrichedSignal, Severity } from '../../types/protocol.js';
+import type { INonceStore } from '../../middleware/replay-protection.js';
+import type { ThreatSignal, EnrichedSignal, Severity, SharingPreference } from '../../types/protocol.js';
 import type { ClickHouseService, SignalEventRow } from '../../storage/clickhouse/index.js';
 import { ClickHouseRetryBuffer, type RetryBufferConfig } from '../../storage/clickhouse/index.js';
+import { metrics } from '../metrics.js';
 
 /**
  * Signal with tenant/sensor context from sensor gateway
@@ -23,6 +21,9 @@ import { ClickHouseRetryBuffer, type RetryBufferConfig } from '../../storage/cli
 export type IncomingSignal = ThreatSignal & {
   tenantId: string;
   sensorId: string;
+  requestId?: string; // Correlation ID (P1-OBSERVABILITY-001)
+  /** Optional client-provided idempotency key (labs-yb6m) */
+  idempotencyKey?: string;
 };
 
 export interface AggregatorConfig {
@@ -46,6 +47,8 @@ export interface QueueResult {
 // Default limits to prevent unbounded memory growth
 const DEFAULT_MAX_QUEUE_SIZE = 10000;
 const DEFAULT_MAX_RETRIES = 3;
+/** Warn when buffer reaches this fraction of capacity */
+const BUFFER_PRESSURE_THRESHOLD = 0.8;
 
 export class Aggregator {
   private prisma: PrismaClient;
@@ -57,6 +60,7 @@ export class Aggregator {
   private apiIntelligence: APIIntelligenceService | null;
   private threatService: ThreatService | null;
   private playbookTrigger: AutomatedPlaybookTrigger | null;
+  private idempotencyStore: INonceStore | null;
   private config: Required<Omit<AggregatorConfig, 'clickhouseRetry'>> & { clickhouseRetry?: Partial<RetryBufferConfig> };
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private signalBatch: IncomingSignal[] = [];
@@ -73,7 +77,8 @@ export class Aggregator {
     impossibleTravel?: ImpossibleTravelService,
     apiIntelligenceService?: APIIntelligenceService,
     threatService?: ThreatService,
-    playbookTrigger?: AutomatedPlaybookTrigger
+    playbookTrigger?: AutomatedPlaybookTrigger,
+    idempotencyStore?: INonceStore
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'aggregator' });
@@ -83,6 +88,7 @@ export class Aggregator {
     this.apiIntelligence = apiIntelligenceService ?? null;
     this.threatService = threatService ?? null;
     this.playbookTrigger = playbookTrigger ?? null;
+    this.idempotencyStore = idempotencyStore ?? null;
     this.config = {
       maxQueueSize: DEFAULT_MAX_QUEUE_SIZE,
       maxRetries: DEFAULT_MAX_RETRIES,
@@ -105,6 +111,9 @@ export class Aggregator {
     if (this.playbookTrigger) {
       this.logger.info('Automated playbook triggers enabled');
     }
+    if (this.idempotencyStore) {
+      this.logger.info('Aggregator cross-instance idempotency enabled');
+    }
   }
 
   private startBatchTimer(): void {
@@ -126,11 +135,25 @@ export class Aggregator {
         { queueSize: currentSize, maxSize: this.config.maxQueueSize },
         'Signal queue full, rejecting signal (backpressure)'
       );
+      metrics.signalsDroppedTotal.inc({ reason: 'queue_full' });
       return {
         accepted: false,
         reason: 'queue_full',
         queueSize: currentSize,
       };
+    }
+
+    // Warn when approaching capacity to give operators time to react
+    const utilization = currentSize / this.config.maxQueueSize;
+    if (utilization >= BUFFER_PRESSURE_THRESHOLD) {
+      this.logger.warn(
+        {
+          queueSize: currentSize,
+          maxSize: this.config.maxQueueSize,
+          utilization: Math.round(utilization * 100),
+        },
+        'Signal queue approaching capacity'
+      );
     }
 
     // Don't accept new signals while flushing to prevent interleaving
@@ -172,8 +195,7 @@ export class Aggregator {
 
     this.isFlushing = true;
 
-    // Snapshot current queues - swap retryQueue so new arrivals during processing
-    // go to a fresh array instead of being lost when we clear on success
+    // Snapshot current queues
     const batchSnapshot = this.signalBatch;
     const retrySnapshot = this.retryQueue;
     this.signalBatch = [];
@@ -181,37 +203,58 @@ export class Aggregator {
     
     const batch = [...batchSnapshot, ...retrySnapshot];
     const batchSize = batch.length;
+    const startTime = Date.now();
+
+    // Track successfully stored signals to avoid duplicates on retry (P1-ERROR-001)
+    const storedSignals: EnrichedSignal[] = [];
+    const processedIndices = new Set<number>();
 
     try {
       this.logger.info({ count: batchSize }, 'Processing signal batch');
 
-      // Deduplicate signals
+      // Deduplicate signals (only those not yet processed)
       const dedupedSignals = this.deduplicateSignals(batch);
 
-      // Store signals and collect enriched versions with anonFingerprint
-      const enrichedSignals: EnrichedSignal[] = [];
-      for (const signal of dedupedSignals) {
-        const enriched = await this.storeSignal(signal);
-        enrichedSignals.push(enriched);
+      // Store signals with individual retry protection
+      for (let i = 0; i < dedupedSignals.length; i++) {
+        const signal = dedupedSignals[i];
+        try {
+          const enriched = await this.storeSignal(signal);
+          storedSignals.push(enriched);
+          processedIndices.add(i);
+
+          // Increment metrics (P1-OBSERVABILITY-002)
+          metrics.signalsIngestedTotal.inc({ 
+            type: signal.signalType, 
+            tenant_id: signal.tenantId,
+            severity: signal.severity
+          });
+        } catch (err) {
+          this.logger.error({ err, signalType: signal.signalType, tenantId: signal.tenantId }, 'Failed to store individual signal - will retry batch');
+          throw err; // Rethrow to trigger batch-level retry logic
+        }
       }
 
       // Forward enriched signals to correlator for campaign detection
-      await this.correlator.analyzeSignals(enrichedSignals);
+      if (storedSignals.length > 0) {
+        await this.correlator.analyzeSignals(storedSignals);
 
-      // Evaluate signals for automated playbook triggers (non-blocking)
-      if (this.playbookTrigger) {
-        void this.playbookTrigger.evaluateSignals(enrichedSignals).catch((err) => {
-          this.logger.warn({ error: err }, 'Automated playbook trigger evaluation failed');
-        });
+        // Evaluate signals for automated playbook triggers (non-blocking)
+        if (this.playbookTrigger) {
+          void this.playbookTrigger.evaluateSignals(storedSignals).catch((err) => {
+            this.logger.warn({ error: err }, 'Automated playbook trigger evaluation failed');
+          });
+        }
       }
 
-      // SUCCESS: Batch processed, snapshots can be discarded
-      // signalBatch and retryQueue were already swapped to fresh arrays above,
-      // so any signals that arrived during processing are preserved
       this.retryCount = 0;
+      
+      // Track duration
+      const duration = (Date.now() - startTime) / 1000;
+      metrics.signalIngestionDuration.observe(duration);
 
       this.logger.info(
-        { original: batchSize, deduped: dedupedSignals.length },
+        { original: batchSize, deduped: dedupedSignals.length, stored: storedSignals.length },
         'Batch processed successfully'
       );
     } catch (error) {
@@ -221,27 +264,31 @@ export class Aggregator {
         'Failed to process signal batch'
       );
 
-      // Restore failed batch for retry, prepending to any signals that arrived during flush
+      // Restore failed batch for retry, but only signals that weren't successfully stored
+      // This is a simplified approach - in a full implementation we'd use idempotency keys
       if (this.retryCount >= this.config.maxRetries) {
+        const droppedCount = batchSize - storedSignals.length;
         this.logger.error(
-          { droppedCount: batchSize, maxRetries: this.config.maxRetries },
-          'Max retries exceeded, dropping batch to prevent memory exhaustion'
+          { droppedCount, maxRetries: this.config.maxRetries },
+          'Max retries exceeded, dropping remaining signals in batch'
         );
-        // Don't restore snapshots - let them be garbage collected
-        // retryQueue already has only signals that arrived during this flush
+        metrics.signalsDroppedTotal.inc({ reason: 'max_retries' }, droppedCount);
         this.retryCount = 0;
       } else {
-        // Prepend failed batch to current queues for retry
-        // Signals that arrived during flush are already in this.signalBatch/retryQueue
-        const combined = [...batchSnapshot, ...retrySnapshot, ...this.retryQueue];
+        // Find signals that weren't processed
+        const deduped = this.deduplicateSignals(batch);
+        const remaining = deduped.filter((_, idx) => !processedIndices.has(idx));
         
-        // Enforce memory bounds during restoration
+        const combined = [...remaining, ...this.retryQueue];
+        
+        // Enforce memory bounds - drop oldest when over capacity
         if (combined.length > this.config.maxQueueSize) {
           const dropCount = combined.length - this.config.maxQueueSize;
           this.logger.warn(
-            { dropCount, maxSize: this.config.maxQueueSize },
-            'Max queue size exceeded during batch restoration, dropping oldest signals'
+            { dropCount, combinedSize: combined.length, maxSize: this.config.maxQueueSize },
+            'Retry queue overflow, dropping oldest signals'
           );
+          metrics.signalsDroppedTotal.inc({ reason: 'retry_overflow' }, dropCount);
           this.retryQueue = combined.slice(dropCount);
         } else {
           this.retryQueue = combined;
@@ -347,13 +394,57 @@ export class Aggregator {
    * 2. Async write to ClickHouse (historical analytics, non-blocking)
    */
   private async storeSignal(signal: IncomingSignal): Promise<EnrichedSignal> {
-    // Fetch tenant to get sharing preference for policy enforcement
+    // 0. Cross-instance idempotency check (labs-yb6m)
+    if (this.idempotencyStore) {
+      const idempotencyKey = signal.idempotencyKey || this.generateSignalIdempotencyKey(signal);
+      const isNew = await this.idempotencyStore.checkAndAdd(idempotencyKey, Date.now(), {
+        tenantId: signal.tenantId,
+        path: 'aggregator:storeSignal',
+      });
+
+      if (!isNew) {
+        this.logger.debug({ signalType: signal.signalType, tenantId: signal.tenantId }, 'Skipping duplicate signal (idempotency hit)');
+        // Retrieve existing signal ID if possible, or return a mock ID
+        // For correlation, we need an ID. 
+        // We'll return the existing one if we can find it, otherwise throw to be safe
+        const existing = await this.prisma.signal.findFirst({
+          where: {
+            tenantId: signal.tenantId,
+            signalType: signal.signalType,
+            sourceIp: signal.sourceIp,
+            fingerprint: signal.fingerprint,
+            createdAt: { gte: new Date(Date.now() - 60000) } // Look back 1 minute
+          },
+          select: { id: true }
+        });
+
+        if (existing) {
+          // Wrap in a mock enriched signal so correlator can still see it if needed
+          // Or just return it.
+          return {
+            ...signal,
+            id: existing.id,
+          };
+        }
+        
+        // If we can't find it but idempotency store said it's a duplicate, 
+        // it might have been deleted or we are in a race.
+        // We'll proceed with a fake ID to avoid breaking the correlator chain
+        return {
+          ...signal,
+          id: `dup-${idempotencyKey.slice(0, 8)}`,
+        };
+      }
+    }
+
+    // Fetch tenant to get sharing preference and salt for policy enforcement
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: signal.tenantId },
-      select: { sharingPreference: true },
+      select: { sharingPreference: true, anonymizationSalt: true },
     });
 
-    const sharingPreference = tenant?.sharingPreference ?? 'CONTRIBUTE_AND_RECEIVE';
+    const sharingPreference = (tenant?.sharingPreference ?? 'CONTRIBUTE_AND_RECEIVE') as SharingPreference;
+    const salt = tenant?.anonymizationSalt ?? 'default-salt';
 
     // Generate anonymized fingerprint for cross-tenant intelligence
     // Skip anonymization if tenant is ISOLATED or RECEIVE_ONLY (privacy-first)
@@ -362,7 +453,7 @@ export class Aggregator {
       sharingPreference === 'CONTRIBUTE_ONLY';
 
     const anonFingerprint = signal.fingerprint && canContribute
-      ? await this.anonymizeFingerprint(signal.fingerprint)
+      ? await this.anonymizeFingerprint(signal.fingerprint, salt)
       : undefined;
 
     // 1. Store in PostgreSQL (source of truth)
@@ -435,6 +526,7 @@ export class Aggregator {
       timestamp: timestamp.toISOString(),
       tenant_id: signal.tenantId,
       sensor_id: signal.sensorId,
+      request_id: signal.requestId ?? null,
       signal_type: signal.signalType,
       source_ip: signal.sourceIp ?? '0.0.0.0',
       fingerprint: signal.fingerprint ?? '',
@@ -450,14 +542,10 @@ export class Aggregator {
   }
 
   /**
-   * SHA-256 hash for cross-tenant anonymization
+   * HMAC-SHA256 for cross-tenant anonymization with tenant-specific salt. (labs-6wkk)
    */
-  private async anonymizeFingerprint(fingerprint: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(fingerprint);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  private async anonymizeFingerprint(fingerprint: string, salt: string): Promise<string> {
+    return createHmac('sha256', salt).update(fingerprint).digest('hex');
   }
 
   /**
@@ -493,6 +581,21 @@ export class Aggregator {
       },
       fingerprint: signal.fingerprint,
     };
+  }
+
+  /**
+   * Generate a stable idempotency key for a signal based on its content. (labs-yb6m)
+   */
+  private generateSignalIdempotencyKey(signal: IncomingSignal): string {
+    const data = JSON.stringify({
+      tenantId: signal.tenantId,
+      sensorId: signal.sensorId,
+      type: signal.signalType,
+      ip: signal.sourceIp,
+      fp: signal.fingerprint,
+      meta: signal.metadata,
+    });
+    return createHash('sha256').update(data).digest('hex');
   }
 
   /**

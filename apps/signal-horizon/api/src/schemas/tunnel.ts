@@ -600,6 +600,23 @@ export const FilesMessageSchema = z.discriminatedUnion('type', [
 export type ValidatedFilesMessage = z.infer<typeof FilesMessageSchema>;
 
 // =============================================================================
+// Legacy Protocol Schemas (P1-TYPE-001)
+// =============================================================================
+
+/**
+ * Schema for legacy tunnel messages (backward compatibility).
+ */
+export const LegacyTunnelMessageSchema = z.object({
+  type: z.string().max(64),
+  sessionId: z.string().max(64).optional(),
+  requestId: z.string().max(64).optional(),
+  payload: z.unknown(),
+  timestamp: z.string().max(64),
+});
+
+export type ValidatedLegacyTunnelMessage = z.infer<typeof LegacyTunnelMessageSchema>;
+
+// =============================================================================
 // Session Management Schemas
 // =============================================================================
 

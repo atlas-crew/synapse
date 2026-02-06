@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ClickHouseRetryBuffer, DEFAULT_RETRY_CONFIG } from '../retry-buffer.js';
+import { ClickHouseRetryBuffer } from '../retry-buffer.js';
 import type { ClickHouseService, SignalEventRow, CampaignHistoryRow } from '../client.js';
 import type { Logger } from 'pino';
 
@@ -195,6 +195,79 @@ describe('ClickHouseRetryBuffer', () => {
       expect(buffer.getStats().bufferedCount).toBe(0);
       expect(buffer.getStats().droppedItems).toBe(1);
     });
+
+    it('removes processed items during a batch to avoid evicting new failures', async () => {
+      let signalCallCount = 0;
+      let campaignCallCount = 0;
+      let resolveCampaignRetry: (() => void) | null = null;
+      let signalRetryStarted: (() => void) | null = null;
+
+      const signalRetryStartedPromise = new Promise<void>((resolve) => {
+        signalRetryStarted = resolve;
+      });
+
+      (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        signalCallCount += 1;
+        if (signalCallCount === 1) {
+          throw new Error('fail');
+        }
+        if (signalCallCount === 2) {
+          signalRetryStarted?.();
+          return;
+        }
+        throw new Error('fail');
+      });
+
+      (clickhouse.insertCampaignEvent as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        campaignCallCount += 1;
+        if (campaignCallCount === 1) {
+          throw new Error('fail');
+        }
+        return new Promise<void>((resolve) => {
+          resolveCampaignRetry = resolve;
+        });
+      });
+
+      buffer = new ClickHouseRetryBuffer(clickhouse, logger, {
+        maxBufferSize: 2,
+        retryIntervalMs: 50,
+        initialDelayMs: 0,
+        retryBatchSize: 2,
+      });
+
+      buffer.start();
+
+      await buffer.insertSignalEvents([createTestSignal({ source_ip: '1.1.1.1' })]);
+      await buffer.insertCampaignEvent({
+        timestamp: new Date().toISOString(),
+        campaign_id: 'campaign-1',
+        tenant_id: 'test-tenant',
+        event_type: 'created',
+        name: 'Test Campaign',
+        status: 'active',
+        severity: 'HIGH',
+        is_cross_tenant: 0,
+        tenants_affected: 1,
+        confidence: 0.9,
+        metadata: '{}',
+      });
+
+      expect(buffer.getStats().bufferedCount).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(50);
+      await signalRetryStartedPromise;
+      await Promise.resolve();
+
+      expect(buffer.getStats().bufferedCount).toBe(1);
+
+      await buffer.insertSignalEvents([createTestSignal({ source_ip: '2.2.2.2' })]);
+
+      expect(buffer.getStats().bufferedCount).toBe(2);
+      expect(buffer.getStats().droppedItems).toBe(0);
+
+      resolveCampaignRetry?.();
+      await Promise.resolve();
+    });
   });
 
   describe('buffer capacity', () => {
@@ -316,6 +389,46 @@ describe('ClickHouseRetryBuffer', () => {
 
       expect(result.succeeded).toBe(1);
       expect(result.failed).toBe(1);
+    });
+
+    it('times out flush and reports remaining items as failed (labs-ykn9)', async () => {
+      vi.useRealTimers();
+
+      const slowClickhouse = createMockClickhouse();
+      const slowLogger = createMockLogger();
+      const slowBuffer = new ClickHouseRetryBuffer(slowClickhouse, slowLogger, {
+        retryIntervalMs: 100000, // Long interval so no background retries
+      });
+
+      // First call fails (to buffer), second call hangs forever (to simulate timeout)
+      (slowClickhouse.insertSignalEvents as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockImplementationOnce(() => new Promise(() => {})); // Never resolves
+
+      await slowBuffer.insertSignalEvents([createTestSignal()]);
+      await slowBuffer.insertSignalEvents([createTestSignal()]);
+
+      expect(slowBuffer.getStats().bufferedCount).toBe(2);
+
+      // Flush with a short timeout
+      const result = await slowBuffer.flush(100);
+
+      // One should hang (timed out), the buffer should be cleared
+      expect(result.succeeded + result.failed).toBe(2);
+      expect(result.failed).toBeGreaterThanOrEqual(1);
+      expect(slowBuffer.getStats().bufferedCount).toBe(0);
+
+      vi.useFakeTimers();
+    });
+
+    it('returns immediately when buffer is empty', async () => {
+      expect(buffer.getStats().bufferedCount).toBe(0);
+
+      const result = await buffer.flush();
+
+      expect(result.succeeded).toBe(0);
+      expect(result.failed).toBe(0);
     });
   });
 

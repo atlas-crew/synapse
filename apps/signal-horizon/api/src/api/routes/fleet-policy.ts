@@ -7,7 +7,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { requireScope } from '../middleware/auth.js';
+import { requireScope, requireTenant } from '../middleware/auth.js';
 import {
   validateParams,
   validateBody,
@@ -125,6 +125,7 @@ export function createFleetPolicyRoutes(
   router.get(
     '/:id',
     requireScope('policy:read'),
+    requireTenant(prisma, 'policy', 'id'),
     validateParams(IdParamSchema),
     async (req, res) => {
       try {
@@ -198,6 +199,7 @@ export function createFleetPolicyRoutes(
   router.put(
     '/:id',
     requireScope('policy:write'),
+    requireTenant(prisma, 'policy', 'id'),
     validateParams(IdParamSchema),
     validateBody(UpdatePolicyTemplateSchema),
     async (req, res) => {
@@ -260,6 +262,7 @@ export function createFleetPolicyRoutes(
   router.delete(
     '/:id',
     requireScope('policy:write'),
+    requireTenant(prisma, 'policy', 'id'),
     validateParams(IdParamSchema),
     async (req, res) => {
       try {
@@ -318,6 +321,7 @@ export function createFleetPolicyRoutes(
   router.post(
     '/:id/apply',
     requireScope('policy:write'),
+    requireTenant(prisma, 'policy', 'id'),
     validateParams(IdParamSchema),
     validateBody(ApplyPolicyTemplateSchema),
     async (req, res) => {
@@ -372,6 +376,7 @@ export function createFleetPolicyRoutes(
   router.post(
     '/:id/clone',
     requireScope('policy:write'),
+    requireTenant(prisma, 'policy', 'id'),
     validateParams(IdParamSchema),
     validateBody(CloneTemplateSchema),
     async (req, res) => {

@@ -4,7 +4,7 @@ import type { Logger } from 'pino';
 import { createHmac } from 'node:crypto';
 import request from '../__tests__/test-request.js';
 import { createTelemetryRouter } from './telemetry.js';
-import { revokeTelemetryToken } from './middleware/telemetry-jwt.js';
+import type { PrismaClient } from '@prisma/client';
 import type { ClickHouseService } from '../storage/clickhouse/index.js';
 
 const mockConfig = vi.hoisted(() => ({
@@ -18,9 +18,10 @@ vi.mock('../config.js', () => ({
 const createLogger = (): Logger => {
   const logger = {
     child: vi.fn(() => logger),
+    info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
-  } as unknown as Logger;
+  } as Logger;
   return logger;
 };
 
@@ -67,6 +68,7 @@ describe('Telemetry routes', () => {
   let app: Express;
   let clickhouse: ClickHouseService;
   let insertSpy: ReturnType<typeof vi.fn>;
+  let prisma: PrismaClient;
 
   beforeEach(() => {
     mockConfig.telemetry.jwtSecret = 'test-secret';
@@ -77,9 +79,15 @@ describe('Telemetry routes', () => {
       insertHttpTransactions: insertSpy,
     } as unknown as ClickHouseService;
 
+    prisma = {
+      tokenBlacklist: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+    } as unknown as PrismaClient;
+
     app = express();
     app.use(express.json());
-    app.use(createTelemetryRouter(createLogger(), { clickhouse }));
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
   });
 
   it('rejects requests when telemetry jwt secret is missing', async () => {
@@ -131,9 +139,72 @@ describe('Telemetry routes', () => {
     expect(insertSpy).toHaveBeenCalled();
   });
 
+  it('rejects payloads exceeding the event batch limit', async () => {
+    const token = createJwt({ jti: 'oversized-batch' });
+    const oversized = {
+      events: Array.from({ length: 5001 }, () => ({})),
+    };
+
+    const res = await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(oversized)
+      .expect(400);
+
+    expect(res.body.error).toBe('validation_failed');
+    expect(insertSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects telemetry payloads with invalid event_type values', async () => {
+    const token = createJwt({ jti: 'invalid-event-type' });
+    const invalidPayload = {
+      event_type: 123,
+      data: {
+        method: 'GET',
+        path: '/',
+        status_code: 200,
+        latency_ms: 12,
+      },
+    };
+
+    const res = await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(invalidPayload)
+      .expect(400);
+
+    expect(res.body.error).toBe('validation_failed');
+    expect(insertSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects telemetry payloads with overlong actor ip', async () => {
+    const token = createJwt({ jti: 'invalid-actor-ip' });
+    const invalidPayload = {
+      event_type: 'request_processed',
+      actor: {
+        ip: '1'.repeat(51),
+      },
+      data: {
+        method: 'GET',
+        path: '/',
+        status_code: 200,
+        latency_ms: 12,
+      },
+    };
+
+    const res = await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(invalidPayload)
+      .expect(400);
+
+    expect(res.body.error).toBe('validation_failed');
+    expect(insertSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects revoked jwt tokens', async () => {
     const token = createJwt({ jti: 'revoked-jti' });
-    revokeTelemetryToken('revoked-jti');
+    vi.mocked(prisma.tokenBlacklist.findUnique).mockResolvedValue({ jti: 'revoked-jti' });
 
     const res = await request(app)
       .post('/_sensor/report')
@@ -157,8 +228,8 @@ describe('Telemetry routes', () => {
 
     const logger = createLogger();
     const infoSpy = vi.fn();
-    (logger as any).info = infoSpy;
-    (logger as any).child = vi.fn(() => logger);
+    logger.info = infoSpy as Logger['info'];
+    logger.child = vi.fn(() => logger) as Logger['child'];
 
     const signalSpy = vi.fn().mockResolvedValue(undefined);
     const clickhouseWithSignal = {

@@ -3,7 +3,7 @@ import type { PrismaClient, Playbook, WarRoom, PlaybookRun } from '@prisma/clien
 import type { Logger } from 'pino';
 import type { EnrichedSignal, Severity } from '../../../types/protocol.js';
 import { AutomatedPlaybookTrigger, type AutomatedTriggerConfig } from '../automated-trigger.js';
-import { PlaybookService, PlaybookConcurrencyError, type UserInfo } from '../playbook-service.js';
+import { PlaybookService, PlaybookConcurrencyError } from '../playbook-service.js';
 
 // Mock PrismaClient
 const createMockPrisma = () => ({
@@ -55,7 +55,7 @@ const createMockPlaybook = (overrides: Partial<Playbook> = {}): Playbook => ({
   description: 'Test description',
   triggerType: 'SIGNAL_SEVERITY',
   triggerValue: 'HIGH',
-  steps: [] as any,
+  steps: [],
   isActive: true,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -85,7 +85,7 @@ const createMockPlaybookRun = (overrides: Partial<PlaybookRun> = {}): PlaybookRu
   tenantId: 'tenant-1',
   status: 'RUNNING',
   currentStep: 0,
-  stepResults: [] as any,
+  stepResults: [],
   startedBy: 'system',
   startedAt: new Date(),
   completedAt: null,

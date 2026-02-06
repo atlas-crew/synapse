@@ -572,6 +572,30 @@ export type SharingPreference =
   | 'ISOLATED';
 
 /**
+ * Versioned sharing preference for schema evolution (labs-u2au).
+ */
+export enum SharingPreference_v1 {
+  CONTRIBUTE_AND_RECEIVE = 'CONTRIBUTE_AND_RECEIVE',
+  RECEIVE_ONLY = 'RECEIVE_ONLY',
+  CONTRIBUTE_ONLY = 'CONTRIBUTE_ONLY',
+  ISOLATED = 'ISOLATED',
+}
+
+/**
+ * Future-proof parser for sharing preferences.
+ * Defaults to ISOLATED (safest) for unknown values.
+ */
+export function parsePreference(value: string): SharingPreference {
+  const validValues = Object.values(SharingPreference_v1) as string[];
+  if (validValues.includes(value)) {
+    return value as SharingPreference;
+  }
+  
+  // Unknown value: default to safest
+  return 'ISOLATED';
+}
+
+/**
  * ThreatSignal enriched with tenant/sensor context after ingestion.
  * Used internally by aggregator, correlator, and broadcaster.
  *

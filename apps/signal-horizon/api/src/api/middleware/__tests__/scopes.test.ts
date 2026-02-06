@@ -11,7 +11,6 @@ import {
   SCOPE_ALIASES,
   expandScopes,
   hasScope,
-  type Scope,
 } from '../scopes.js';
 
 describe('scopes.ts', () => {
@@ -27,7 +26,7 @@ describe('scopes.ts', () => {
     });
 
     it('should have descriptions for all scopes', () => {
-      for (const [scope, description] of Object.entries(SCOPES)) {
+      for (const [, description] of Object.entries(SCOPES)) {
         expect(description).toBeTruthy();
         expect(typeof description).toBe('string');
         expect(description.length).toBeGreaterThan(5);
@@ -56,7 +55,7 @@ describe('scopes.ts', () => {
         ...Object.keys(SCOPE_ALIASES),
       ]);
 
-      for (const [aliasKey, aliasedScopes] of Object.entries(SCOPE_ALIASES)) {
+      for (const [, aliasedScopes] of Object.entries(SCOPE_ALIASES)) {
         for (const scope of aliasedScopes) {
           expect(allValidScopes.has(scope)).toBe(true);
         }

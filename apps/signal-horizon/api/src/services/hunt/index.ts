@@ -47,7 +47,7 @@ export interface SignalResult {
   severity: Severity;
   confidence: number;
   eventCount: number;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CampaignTimelineEvent {
@@ -624,7 +624,7 @@ export class HuntService {
       if (row.metadata) {
         parsedMetadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
       }
-    } catch (e) {
+    } catch {
       // Ignore parse errors
     }
 

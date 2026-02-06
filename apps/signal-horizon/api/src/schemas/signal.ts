@@ -188,10 +188,14 @@ export type ValidatedThreatSignal = z.infer<typeof ThreatSignalSchema>;
 // =============================================================================
 
 export const SensorAuthPayloadSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional(),
+  token: z.string().optional(),
   sensorId: z.string().min(1, 'Sensor ID is required'),
   sensorName: z.string().max(255).optional(),
   version: z.string().regex(/^\d+\.\d+\.\d+/, 'Version must be semver format'),
+}).refine(data => data.apiKey || data.token, {
+  message: "Either apiKey or token must be provided",
+  path: ["apiKey"]
 });
 
 export const SensorHeartbeatPayloadSchema = z.object({
@@ -267,7 +271,11 @@ export type ValidatedSensorMessage = z.infer<typeof SensorMessageSchema>;
 // =============================================================================
 
 export const DashboardAuthPayloadSchema = z.object({
-  apiKey: z.string().min(1, 'API key is required'),
+  apiKey: z.string().optional(),
+  token: z.string().optional(),
+}).refine(data => data.apiKey || data.token, {
+  message: "Either apiKey or token must be provided",
+  path: ["apiKey"]
 });
 
 export const DashboardClientMessageSchema = z.discriminatedUnion('type', [

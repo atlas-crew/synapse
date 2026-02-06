@@ -435,6 +435,117 @@ const ALLOWED_PATH_PREFIXES = [
 /** Sensor ID format validation */
 const SENSOR_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
+/**
+ * Private/reserved IP ranges that must be blocked to prevent SSRF.
+ * Covers loopback, link-local, private RFC1918, and metadata endpoints.
+ */
+const BLOCKED_IP_PATTERNS = [
+  /^127\./,                          // 127.0.0.0/8 loopback
+  /^10\./,                           // 10.0.0.0/8 private
+  /^172\.(1[6-9]|2\d|3[01])\./,     // 172.16.0.0/12 private
+  /^192\.168\./,                     // 192.168.0.0/16 private
+  /^169\.254\./,                     // 169.254.0.0/16 link-local (AWS metadata)
+  /^0\./,                            // 0.0.0.0/8
+  /^::1$/,                           // IPv6 loopback
+  /^fc00:/i,                         // IPv6 ULA
+  /^fe80:/i,                         // IPv6 link-local
+] as const;
+
+const BLOCKED_HOSTNAMES = new Set([
+  'localhost',
+  '0.0.0.0',
+  '[::1]',
+  'metadata.google.internal',
+  'metadata.google',
+  '169.254.169.254',
+]);
+
+/** Valid admin port range for sensors */
+const VALID_SENSOR_PORT_MIN = 1024;
+const VALID_SENSOR_PORT_MAX = 65535;
+
+/**
+ * Validate a URL is safe (not targeting internal/private services).
+ * Used to prevent SSRF when sensor admin URLs are registered.
+ */
+export function validateSensorUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new SynapseProxyError(
+      'Invalid sensor URL',
+      'INVALID_ENDPOINT'
+    );
+  }
+
+  // Validate scheme
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new SynapseProxyError(
+      'Invalid URL scheme: only http and https are allowed',
+      'INVALID_ENDPOINT'
+    );
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block known dangerous hostnames
+  if (BLOCKED_HOSTNAMES.has(hostname)) {
+    throw new SynapseProxyError(
+      'URL targets a blocked host',
+      'INVALID_ENDPOINT'
+    );
+  }
+
+  // Block private/reserved IP ranges
+  for (const pattern of BLOCKED_IP_PATTERNS) {
+    if (pattern.test(hostname)) {
+      throw new SynapseProxyError(
+        'URL targets a private or reserved IP range',
+        'INVALID_ENDPOINT'
+      );
+    }
+  }
+
+  // Validate port range if specified
+  if (parsed.port) {
+    const port = parseInt(parsed.port, 10);
+    if (isNaN(port) || port < VALID_SENSOR_PORT_MIN || port > VALID_SENSOR_PORT_MAX) {
+      throw new SynapseProxyError(
+        `Invalid sensor port: must be between ${VALID_SENSOR_PORT_MIN} and ${VALID_SENSOR_PORT_MAX}`,
+        'INVALID_ENDPOINT'
+      );
+    }
+  }
+
+  // Block credentials in URL
+  if (parsed.username || parsed.password) {
+    throw new SynapseProxyError(
+      'URL must not contain credentials',
+      'INVALID_ENDPOINT'
+    );
+  }
+}
+
+// ============================================================================
+// Retry Utilities
+// ============================================================================
+
+/** Maximum number of retry attempts for failed requests */
+const MAX_RETRIES = 3;
+
+/**
+ * Calculate exponential backoff delay with jitter.
+ * Uses decorrelated jitter to prevent thundering herd.
+ */
+export function backoffDelay(attempt: number): number {
+  const base = 1000;  // 1 second
+  const max = 30000;  // 30 seconds
+  const delay = Math.min(base * Math.pow(2, attempt), max);
+  const jitter = Math.random() * delay * 0.25;
+  return delay + jitter;
+}
+
 // ============================================================================
 // LRU Cache Implementation
 // ============================================================================
@@ -629,20 +740,101 @@ export class SynapseProxyService extends EventEmitter {
     await this.concurrencyLimit.acquire();
 
     try {
-      return await this.executeRequest<T>(sensorId, endpoint, method, body, headers);
+      return await this.executeWithRetry<T>(sensorId, endpoint, method, body, headers);
     } finally {
       this.concurrencyLimit.release();
     }
   }
 
   /**
-   * Validate endpoint against allowlist to prevent SSRF
+   * Execute a request with exponential backoff retry for retryable failures.
+   * Only retries on TIMEOUT, SEND_FAILED, and SENSOR_DISCONNECTED errors.
+   */
+  private async executeWithRetry<T>(
+    sensorId: string,
+    endpoint: string,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    body?: unknown,
+    headers?: Record<string, string>
+  ): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await this.executeRequest<T>(sensorId, endpoint, method, body, headers);
+      } catch (error) {
+        lastError = error as Error;
+
+        // Only retry on retryable errors
+        const isRetryable =
+          error instanceof SynapseProxyError && error.retryable;
+
+        if (!isRetryable || attempt >= MAX_RETRIES) {
+          throw error;
+        }
+
+        const delay = backoffDelay(attempt);
+        this.logger.warn(
+          { sensorId, endpoint, attempt: attempt + 1, maxRetries: MAX_RETRIES, delayMs: Math.round(delay) },
+          'Retrying failed proxy request'
+        );
+
+        await this.sleep(delay);
+      }
+    }
+
+    // Should not reach here, but satisfy TypeScript
+    throw lastError ?? new SynapseProxyError('Retry exhausted', 'SEND_FAILED');
+  }
+
+  /**
+   * Promise-based sleep for retry delays.
+   * Uses setTimeout so it works with both real and fake timers.
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Validate endpoint against allowlist to prevent SSRF.
+   *
+   * Checks performed:
+   * 1. Reject null bytes
+   * 2. Reject encoded path traversal (percent-encoded dots/slashes)
+   * 3. Reject path traversal via .. or //
+   * 4. Reject absolute URLs (must be a relative path)
+   * 5. Normalize and check against allowlist
    */
   private validateEndpoint(endpoint: string): void {
+    // Reject null bytes
+    if (endpoint.includes('\0')) {
+      throw new SynapseProxyError(
+        'Invalid endpoint: null byte detected',
+        'INVALID_ENDPOINT'
+      );
+    }
+
+    // Reject encoded path traversal attempts (%2e = '.', %2f = '/')
+    const lower = endpoint.toLowerCase();
+    if (lower.includes('%2e') || lower.includes('%2f') || lower.includes('%5c')) {
+      throw new SynapseProxyError(
+        'Invalid endpoint: encoded traversal detected',
+        'INVALID_ENDPOINT'
+      );
+    }
+
     // Reject path traversal attempts
     if (endpoint.includes('..') || endpoint.includes('//')) {
       throw new SynapseProxyError(
         'Invalid endpoint: path traversal detected',
+        'INVALID_ENDPOINT'
+      );
+    }
+
+    // Reject absolute URLs (endpoint must be a relative path)
+    if (/^https?:\/\//i.test(endpoint)) {
+      throw new SynapseProxyError(
+        'Invalid endpoint: absolute URLs are not allowed',
         'INVALID_ENDPOINT'
       );
     }
@@ -704,7 +896,7 @@ export class SynapseProxyService extends EventEmitter {
       let sent = false;
       try {
         sent = this.tunnelBroker.sendToSensor(sensorId, message);
-      } catch (error) {
+      } catch {
         this.pendingRequests.delete(requestId);
         clearTimeout(timeout);
         reject(new SynapseProxyError('Failed to send request', 'SEND_FAILED'));
@@ -1177,8 +1369,8 @@ export class SynapseProxyService extends EventEmitter {
     sensorId: string,
     tenantId: string,
     campaignId: string
-  ): Promise<any> {
-    return this.proxyRequest<any>(
+  ): Promise<unknown> {
+    return this.proxyRequest<unknown>(
       sensorId,
       tenantId,
       `/_sensor/campaigns/${campaignId}/graph`,

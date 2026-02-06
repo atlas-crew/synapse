@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { SignalTypeSchema, SeveritySchema } from '../schemas/signal.js';
+import { SeveritySchema } from '../schemas/signal.js';
 
 // =============================================================================
 // Common Components

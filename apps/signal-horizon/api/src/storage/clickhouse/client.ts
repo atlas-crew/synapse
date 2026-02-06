@@ -5,6 +5,7 @@
 
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import type { Logger } from 'pino';
+import { metrics } from '../../services/metrics.js';
 
 // =============================================================================
 // Configuration Types
@@ -35,6 +36,7 @@ export interface SignalEventRow {
   timestamp: string; // ISO 8601
   tenant_id: string;
   sensor_id: string;
+  request_id: string | null; // Correlation ID (P1-OBSERVABILITY-001)
   signal_type: string;
   source_ip: string;
   fingerprint: string;
@@ -52,6 +54,7 @@ export interface CampaignHistoryRow {
   timestamp: string;
   campaign_id: string;
   tenant_id: string;
+  request_id: string | null; // Correlation ID (P1-OBSERVABILITY-001)
   event_type: 'created' | 'updated' | 'escalated' | 'resolved';
   name: string;
   status: string;
@@ -68,6 +71,7 @@ export interface CampaignHistoryRow {
 export interface BlocklistHistoryRow {
   timestamp: string;
   tenant_id: string;
+  request_id: string | null; // Correlation ID (P1-OBSERVABILITY-001)
   action: 'added' | 'removed' | 'expired';
   block_type: string;
   indicator: string;
@@ -84,6 +88,7 @@ export interface HttpTransactionRow {
   timestamp: string; // ISO 8601
   tenant_id: string;
   sensor_id: string;
+  request_id: string | null; // Correlation ID (P1-OBSERVABILITY-001)
   site: string;
   method: string;
   path: string;
@@ -99,6 +104,7 @@ export interface LogEntryRow {
   timestamp: string; // ISO 8601
   tenant_id: string;
   sensor_id: string;
+  request_id: string | null; // Correlation ID (P1-OBSERVABILITY-001)
   log_id: string;
   source: string;
   level: string;
@@ -214,8 +220,10 @@ export class ClickHouseService {
         format: 'JSONEachRow',
       });
       this.logger.debug({ count: signals.length }, 'Inserted signal events');
+      metrics.clickhouseInsertSuccess.inc({ table: 'signal_events' });
     } catch (error) {
       this.logger.error({ error, count: signals.length }, 'Failed to insert signal events');
+      metrics.clickhouseInsertFailed.inc({ table: 'signal_events' });
       throw error;
     }
   }
@@ -302,8 +310,10 @@ export class ClickHouseService {
         format: 'JSONEachRow',
       });
       this.logger.debug({ count: events.length }, 'Inserted HTTP transaction events');
+      metrics.clickhouseInsertSuccess.inc({ table: 'http_transactions' });
     } catch (error) {
       this.logger.error({ error, count: events.length }, 'Failed to insert HTTP transaction events');
+      metrics.clickhouseInsertFailed.inc({ table: 'http_transactions' });
       throw error;
     }
   }
@@ -321,8 +331,10 @@ export class ClickHouseService {
         format: 'JSONEachRow',
       });
       this.logger.debug({ count: events.length }, 'Inserted sensor log entries');
+      metrics.clickhouseInsertSuccess.inc({ table: 'sensor_logs' });
     } catch (error) {
       this.logger.error({ error, count: events.length }, 'Failed to insert sensor log entries');
+      metrics.clickhouseInsertFailed.inc({ table: 'sensor_logs' });
       throw error;
     }
   }

@@ -49,48 +49,6 @@ async function main() {
 
   console.log(`Created ${tenants.length} tenants`);
 
-  // Create API keys for each tenant (sensor keys)
-  const apiKeys = [
-    { tenant: 'tenant-acme', key: 'sk-acme-dev-12345', name: 'Acme Development' },
-    { tenant: 'tenant-globex', key: 'sk-globex-dev-67890', name: 'Globex Development' },
-    { tenant: 'tenant-initech', key: 'sk-initech-dev-54321', name: 'Initech Development' },
-  ];
-
-  for (const { tenant, key, name } of apiKeys) {
-    await prisma.apiKey.create({
-      data: {
-        tenantId: tenant,
-        keyHash: await hashApiKey(key),
-        name,
-        scopes: ['signal:write', 'blocklist:read'],
-        rateLimit: 5000,
-      },
-    });
-    console.log(`Created API key for ${tenant}: ${key}`);
-  }
-
-  // Create development dashboard key (fleet admin - can see all tenants)
-  await prisma.apiKey.create({
-    data: {
-      tenantId: 'tenant-acme', // Associated with Acme but has fleet:admin
-      keyHash: await hashApiKey('dev-dashboard-key'),
-      name: 'Development Dashboard',
-      scopes: [
-        'admin',
-        'auth-coverage:read',
-        'dashboard:read', 'dashboard:write',
-        'fleet:admin', 'fleet:read', 'fleet:write',
-        'sensor:diag', 'sensor:files', 'sensor:admin', 'sensor:control',
-        'config:read', 'config:write',
-        'policy:read', 'policy:write',
-        'releases:read', 'releases:write',
-        'signal:write',
-      ],
-      rateLimit: 1000,
-    },
-  });
-  console.log('Created dev dashboard key: dev-dashboard-key');
-
   // Create sensors with predictable IDs for testing
   const sensors = await Promise.all([
     prisma.sensor.create({
@@ -142,6 +100,51 @@ async function main() {
   ]);
 
   console.log(`Created ${sensors.length} sensors`);
+
+  // Create Sensor API keys for development
+  // We map predictable keys to specific sensors
+  const sensorKeys = [
+    { sensorId: 'sensor-acme-1', key: 'sk-acme-dev-12345', name: 'Acme Dev Key 1' },
+    { sensorId: 'sensor-globex-1', key: 'sk-globex-dev-67890', name: 'Globex Dev Key 1' },
+    { sensorId: 'sensor-initech-1', key: 'sk-initech-dev-54321', name: 'Initech Dev Key 1' },
+  ];
+
+  for (const { sensorId, key, name } of sensorKeys) {
+    await prisma.sensorApiKey.create({
+      data: {
+        sensorId,
+        keyHash: await hashApiKey(key),
+        keyPrefix: key.substring(0, 8),
+        name,
+        permissions: ['signal:write', 'blocklist:read'],
+        status: 'ACTIVE',
+      },
+    });
+    console.log(`Created Sensor API key for ${sensorId}: ${key}`);
+  }
+
+  // Create development dashboard key (fleet admin - can see all tenants)
+  // This uses the legacy ApiKey table for admin/user access to API
+  await prisma.apiKey.create({
+    data: {
+      tenantId: 'tenant-acme', // Associated with Acme but has fleet:admin
+      keyHash: await hashApiKey('dev-dashboard-key'),
+      name: 'Development Dashboard',
+      scopes: [
+        'admin',
+        'auth-coverage:read',
+        'dashboard:read', 'dashboard:write',
+        'fleet:admin', 'fleet:read', 'fleet:write',
+        'sensor:diag', 'sensor:files', 'sensor:admin', 'sensor:control',
+        'config:read', 'config:write',
+        'policy:read', 'policy:write',
+        'releases:read', 'releases:write',
+        'signal:write',
+      ],
+      rateLimit: 1000,
+    },
+  });
+  console.log('Created dev dashboard key: dev-dashboard-key');
 
   // Create a sample cross-tenant campaign
   const campaign = await prisma.campaign.create({

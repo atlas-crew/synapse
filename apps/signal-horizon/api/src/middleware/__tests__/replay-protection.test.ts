@@ -23,19 +23,23 @@ function createMockRequest(
     method: options.method ?? 'POST',
     path: options.path ?? '/api/test',
     headers: headers as Request['headers'],
-    socket: { remoteAddress: '127.0.0.1' } as any,
+    socket: { remoteAddress: '127.0.0.1' } as unknown as Request['socket'],
   };
 }
 
-function createMockResponse(): { res: Partial<Response>; getStatusCode: () => number; getJsonBody: () => any } {
-  const state = { statusCode: 200, jsonBody: null as any };
+function createMockResponse(): {
+  res: Partial<Response>;
+  getStatusCode: () => number;
+  getJsonBody: () => unknown;
+} {
+  const state: { statusCode: number; jsonBody: unknown } = { statusCode: 200, jsonBody: null };
 
   const res: Partial<Response> = {
     status: vi.fn().mockImplementation((code: number) => {
       state.statusCode = code;
       return res as Response;
     }),
-    json: vi.fn().mockImplementation((body: any) => {
+    json: vi.fn().mockImplementation((body: unknown) => {
       state.jsonBody = body;
       return res as Response;
     }),
@@ -133,6 +137,111 @@ describe('replay-protection', () => {
         expect(store.size).toBe(0);
       });
     });
+
+    describe('capacity', () => {
+      test('returns configured capacity', () => {
+        const smallStore = new NonceStore(5000, 60000, 50);
+        expect(smallStore.capacity).toBe(50);
+        smallStore.destroy();
+      });
+
+      test('defaults to 100000 capacity', () => {
+        expect(store.capacity).toBe(100000);
+      });
+    });
+
+    describe('capacity enforcement', () => {
+      let smallStore: NonceStore;
+
+      afterEach(() => {
+        smallStore?.destroy();
+      });
+
+      test('evicts entries when at capacity', () => {
+        smallStore = new NonceStore(300000, 60000, 10);
+
+        // Fill the store to capacity
+        for (let i = 0; i < 10; i++) {
+          const result = smallStore.checkAndAdd(`nonce-fill-${i}`, i * 1000 + 1000);
+          expect(result).toBe(true);
+        }
+        expect(smallStore.size).toBe(10);
+
+        // Adding one more should trigger eviction of oldest 10% (1 entry)
+        const result = smallStore.checkAndAdd('nonce-overflow', 11000);
+        expect(result).toBe(true);
+        // Size should be at most maxNonces (10) since eviction freed space
+        expect(smallStore.size).toBeLessThanOrEqual(10);
+      });
+
+      test('accepts new nonces after eviction', () => {
+        smallStore = new NonceStore(300000, 60000, 5);
+
+        // Fill the store
+        for (let i = 0; i < 5; i++) {
+          smallStore.checkAndAdd(`nonce-${i}`, i * 1000 + 1000);
+        }
+
+        // Should still accept new nonces after eviction
+        const result = smallStore.checkAndAdd('nonce-new', 6000);
+        expect(result).toBe(true);
+      });
+
+      test('calls onCapacityEvent when at capacity', () => {
+        const events: Array<{ event: string; detail: unknown }> = [];
+        smallStore = new NonceStore(300000, 60000, 5, (event, detail) => {
+          events.push({ event, detail });
+        });
+
+        // Fill the store to capacity
+        for (let i = 0; i < 5; i++) {
+          smallStore.checkAndAdd(`nonce-${i}`, i * 1000 + 1000);
+        }
+
+        // This should trigger capacity enforcement
+        smallStore.checkAndAdd('nonce-overflow', 6000);
+
+        // Should have at_capacity event (from enforceCapacity) and possibly pressure events
+        const capacityEvents = events.filter(e => e.event === 'at_capacity');
+        expect(capacityEvents.length).toBeGreaterThanOrEqual(1);
+      });
+
+      test('calls onCapacityEvent pressure warning at 80%', () => {
+        const events: Array<{ event: string; detail: unknown }> = [];
+        smallStore = new NonceStore(300000, 60000, 10, (event, detail) => {
+          events.push({ event, detail });
+        });
+
+        // Fill to 80% (8 entries for maxNonces=10)
+        for (let i = 0; i < 8; i++) {
+          smallStore.checkAndAdd(`nonce-${i}`, i * 1000 + 1000);
+        }
+
+        const pressureEvents = events.filter(e => e.event === 'pressure');
+        expect(pressureEvents.length).toBeGreaterThanOrEqual(1);
+      });
+
+      test('evicts expired entries before oldest entries', () => {
+        smallStore = new NonceStore(100, 60000, 5); // 100ms window
+
+        // Add entries that will expire quickly
+        for (let i = 0; i < 5; i++) {
+          smallStore.checkAndAdd(`nonce-expired-${i}`, i * 1000 + 1000);
+        }
+
+        // Wait for entries to expire
+        vi.useFakeTimers();
+        vi.advanceTimersByTime(200);
+
+        // Adding a new one should trigger cleanup of expired entries
+        const result = smallStore.checkAndAdd('nonce-fresh', Date.now());
+        expect(result).toBe(true);
+        // After cleanup, only the fresh nonce should remain
+        expect(smallStore.size).toBe(1);
+
+        vi.useRealTimers();
+      });
+    });
   });
 
   describe('validateTimestamp', () => {
@@ -190,8 +299,8 @@ describe('replay-protection', () => {
 
     test('returns false for empty or null', () => {
       expect(validateNonceFormat('')).toBe(false);
-      expect(validateNonceFormat(null as any)).toBe(false);
-      expect(validateNonceFormat(undefined as any)).toBe(false);
+      expect(validateNonceFormat(null as unknown as string)).toBe(false);
+      expect(validateNonceFormat(undefined as unknown as string)).toBe(false);
     });
   });
 

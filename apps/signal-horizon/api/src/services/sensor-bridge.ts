@@ -120,7 +120,11 @@ export class SensorBridge {
     try {
       this.logger.info({ url: this.config.hubWsUrl }, 'Connecting to Signal Horizon...');
 
-      this.ws = new WebSocket(this.config.hubWsUrl);
+      this.ws = new WebSocket(this.config.hubWsUrl, {
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+      });
 
       this.ws.on('open', () => {
         this.logger.info('WebSocket connected, sending auth...');
@@ -138,7 +142,28 @@ export class SensorBridge {
       });
 
       this.ws.on('error', (error) => {
-        this.logger.error({ error }, 'WebSocket error');
+        const wsError = error as Error & { code?: string };
+        this.logger.error(
+          {
+            error: {
+              message: wsError.message,
+              name: wsError.name,
+              code: wsError.code,
+            },
+          },
+          'WebSocket error'
+        );
+      });
+
+      this.ws.on('unexpected-response', (_req, res) => {
+        this.logger.error(
+          {
+            statusCode: res.statusCode,
+            statusMessage: res.statusMessage,
+            headers: res.headers,
+          },
+          'WebSocket upgrade rejected'
+        );
       });
     } catch (error) {
       this.logger.error({ error }, 'Failed to connect');

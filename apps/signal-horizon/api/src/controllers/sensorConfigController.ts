@@ -9,8 +9,20 @@ export class SensorConfigController {
 
   async getConfig(req: Request, res: Response) {
     const { sensorId } = req.params;
+    const tenantId = req.auth?.tenantId;
+
+    if (!tenantId) {
+      const entry = ErrorCatalog.UNAUTHORIZED;
+      return sendProblem(res, entry.status, entry.message, {
+        code: entry.code,
+        hint: entry.hint,
+        instance: req.originalUrl,
+        context: { sensorId, operation: 'getConfig' },
+      });
+    }
+
     try {
-      const config = await this.service.getConfig(sensorId);
+      const config = await this.service.getConfig(sensorId, tenantId);
 
       if (!config) {
         const entry = ErrorCatalog.NOT_FOUND;

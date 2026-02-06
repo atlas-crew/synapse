@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CommandSender, DEFAULT_CONFIG } from '../command-sender.js';
-import type { Command, CommandSenderConfig } from '../command-sender.js';
+import type { Command } from '../command-sender.js';
 import type WebSocket from 'ws';
 
 // Mock WebSocket
@@ -106,6 +106,7 @@ describe('CommandSender', () => {
       // 3rd command should evict oldest
       const id3 = limitedSender.sendCommand('sensor-1', 'restart', {});
 
+      expect(id2).not.toBeNull();
       expect(id3).not.toBeNull();
       expect(evicted.length).toBe(1);
       expect(evicted[0].id).toBe(id1);
@@ -255,6 +256,97 @@ describe('CommandSender', () => {
 
       expect(result).toBeNull();
       limitedSender.stop();
+    });
+  });
+
+  describe('cleanupSensor (labs-ry6l)', () => {
+    it('cleans up pending commands for disconnected sensor', () => {
+      const failed: Command[] = [];
+      sender.on('command-failed', (c) => failed.push(c));
+
+      sender.sendCommand('sensor-1', 'push_config', { seq: 1 });
+      sender.sendCommand('sensor-1', 'push_rules', { seq: 2 });
+      sender.sendCommand('sensor-2', 'push_config', { seq: 3 }); // Different sensor
+
+      expect(sender.getPendingCommands('sensor-1').length).toBe(2);
+
+      const cleaned = sender.cleanupSensor('sensor-1');
+
+      expect(cleaned).toBe(2);
+      expect(sender.getPendingCommands('sensor-1').length).toBe(0);
+      expect(failed.length).toBe(2);
+      expect(failed[0].error).toBe('Sensor disconnected');
+      expect(failed[1].error).toBe('Sensor disconnected');
+
+      // sensor-2 should be unaffected
+      expect(sender.getPendingCommands('sensor-2').length).toBe(1);
+    });
+
+    it('cleans up inflight command for disconnected sensor', () => {
+      const ws = createMockWs();
+      sender.registerConnection('sensor-1', ws);
+
+      const failed: Command[] = [];
+      sender.on('command-failed', (c) => failed.push(c));
+
+      const id = sender.sendCommand('sensor-1', 'push_config', {});
+      expect(sender.getCommand(id!)?.status).toBe('sent');
+
+      const cleaned = sender.cleanupSensor('sensor-1');
+
+      expect(cleaned).toBe(1);
+      expect(failed.length).toBe(1);
+      expect(failed[0].id).toBe(id);
+      expect(failed[0].status).toBe('failed');
+      expect(failed[0].error).toBe('Sensor disconnected');
+    });
+
+    it('cleans up both inflight and pending commands', () => {
+      const ws = createMockWs();
+      sender.registerConnection('sensor-1', ws);
+
+      sender.sendCommand('sensor-1', 'push_config', { seq: 1 });
+      sender.sendCommand('sensor-1', 'push_rules', { seq: 2 });
+
+      // First is inflight (sent), second is pending
+      const cleaned = sender.cleanupSensor('sensor-1');
+
+      expect(cleaned).toBe(2);
+      expect(sender.getPendingCommands('sensor-1').length).toBe(0);
+    });
+
+    it('returns 0 when sensor has no commands', () => {
+      const cleaned = sender.cleanupSensor('nonexistent-sensor');
+      expect(cleaned).toBe(0);
+    });
+  });
+
+  describe('stale inflight cleanup (labs-ry6l)', () => {
+    it('fails stale inflight commands for disconnected sensors after 60 seconds', () => {
+      vi.useFakeTimers();
+
+      const staleSender = new CommandSender();
+      staleSender.start();
+
+      const ws = createMockWs();
+      staleSender.registerConnection('sensor-1', ws);
+
+      const failed: Command[] = [];
+      staleSender.on('command-failed', (c) => failed.push(c));
+
+      staleSender.sendCommand('sensor-1', 'push_config', {});
+
+      // Disconnect sensor (connection goes away, but command stays inflight)
+      staleSender.unregisterConnection('sensor-1');
+
+      // Advance past stale TTL (60s) + cleanup interval (60s)
+      vi.advanceTimersByTime(130000);
+
+      expect(failed.length).toBeGreaterThanOrEqual(1);
+      expect(failed[0].error).toContain('Stale command');
+
+      staleSender.stop();
+      vi.useRealTimers();
     });
   });
 

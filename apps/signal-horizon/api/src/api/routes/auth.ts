@@ -42,7 +42,14 @@ const RevokeTokenSchema = z.object({
   if (!data.token && !data.expiresInSeconds) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'expiresInSeconds or token is required',
+      message: 'Either expiresInSeconds or token must be provided',
+      path: ['expiresInSeconds'],
+    });
+  }
+  if (data.token && data.expiresInSeconds) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'token and expiresInSeconds are mutually exclusive',
       path: ['expiresInSeconds'],
     });
   }

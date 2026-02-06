@@ -123,17 +123,21 @@ describe('Crypto Utilities', () => {
       const encrypted = encryptSensitiveFields(config);
 
       // password should be encrypted
-      expect((encrypted.server as any).credentials.password).toHaveProperty('_encrypted', true);
+      const encryptedServer = encrypted.server as { credentials: { password: { _encrypted: boolean } } };
+      expect(encryptedServer.credentials.password).toHaveProperty('_encrypted', true);
 
       // privateKey should be encrypted
-      expect((encrypted.tls as any).privateKey).toHaveProperty('_encrypted', true);
+      const encryptedTls = encrypted.tls as { privateKey: { _encrypted: boolean }; cert: string };
+      expect(encryptedTls.privateKey).toHaveProperty('_encrypted', true);
 
       // cert should NOT be encrypted (doesn't match patterns)
-      expect((encrypted.tls as any).cert).toBe('cert-content');
+      expect(encryptedTls.cert).toBe('cert-content');
 
       const decrypted = decryptSensitiveFields(encrypted);
-      expect((decrypted.server as any).credentials.password).toBe('secret123');
-      expect((decrypted.tls as any).privateKey).toBe('key-content');
+      const decryptedServer = decrypted.server as { credentials: { password: string } };
+      const decryptedTls = decrypted.tls as { privateKey: string };
+      expect(decryptedServer.credentials.password).toBe('secret123');
+      expect(decryptedTls.privateKey).toBe('key-content');
     });
 
     it('should handle null and undefined values', () => {

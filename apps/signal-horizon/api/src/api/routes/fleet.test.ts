@@ -10,23 +10,30 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import request from '../../__tests__/test-request.js';
 import { createFleetRoutes } from './fleet.js';
 import type { PrismaClient, Sensor } from '@prisma/client';
+import type { ConfigManager } from '../../services/fleet/config-manager.js';
+import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
+import type { ConfigTemplate } from '../../services/fleet/types.js';
 import type { Logger } from 'pino';
 
 // Mock the auth middleware module
-vi.mock('../middleware/auth.js', () => ({
-  requireScope: (scope: string) => (req: Request, _res: Response, next: NextFunction) => {
-    // Check if auth has the required scope
-    if (req.auth?.scopes?.includes(scope)) {
-      return next();
-    }
-    // For read scopes, allow if any fleet:* scope exists
-    if (scope === 'fleet:read' && req.auth?.scopes?.some((s: string) => s.startsWith('fleet:'))) {
-      return next();
-    }
-    _res.status(403).json({ error: 'Forbidden' });
-  },
-  requireRole: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-}));
+vi.mock('../middleware/auth.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../middleware/auth.js')>();
+  return {
+    ...actual,
+    requireScope: (scope: string) => (req: Request, _res: Response, next: NextFunction) => {
+      // Check if auth has the required scope
+      if (req.auth?.scopes?.includes(scope)) {
+        return next();
+      }
+      // For read scopes, allow if any fleet:* scope exists
+      if (scope === 'fleet:read' && req.auth?.scopes?.some((s: string) => s.startsWith('fleet:'))) {
+        return next();
+      }
+      _res.status(403).json({ error: 'Forbidden' });
+    },
+    requireRole: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  };
+});
 
 // Mock validation middleware
 vi.mock('../middleware/validation.js', () => ({
@@ -217,12 +224,12 @@ describe('Fleet Routes', () => {
       expect(res.body.name).toBe('Test Sensor');
     });
 
-    it('should return 404 for non-existent sensor', async () => {
+    it('should return 403 for non-existent sensor', async () => {
       vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(null);
 
       await request(app)
         .get('/fleet/sensors/non-existent')
-        .expect(404);
+        .expect(403);
     });
 
     it('should enforce tenant isolation', async () => {
@@ -235,7 +242,7 @@ describe('Fleet Routes', () => {
 
       await request(app)
         .get('/fleet/sensors/sensor-1')
-        .expect(404);
+        .expect(403);
     });
   });
 
@@ -258,12 +265,12 @@ describe('Fleet Routes', () => {
       expect(res.body).toHaveProperty('connection');
     });
 
-    it('should return 404 if sensor not found', async () => {
+    it('should return 403 if sensor not found', async () => {
       vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(null);
 
       await request(app)
         .get('/fleet/sensors/non-existent/system')
-        .expect(404);
+        .expect(403);
     });
   });
 
@@ -282,12 +289,12 @@ describe('Fleet Routes', () => {
       expect(res.body).toHaveProperty('history');
     });
 
-    it('should return 404 if sensor not found', async () => {
+    it('should return 403 if sensor not found', async () => {
       vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(null);
 
       await request(app)
         .get('/fleet/sensors/non-existent/performance')
-        .expect(404);
+        .expect(403);
     });
 
     it('should enforce tenant isolation on performance endpoint', async () => {
@@ -296,7 +303,138 @@ describe('Fleet Routes', () => {
 
       await request(app)
         .get('/fleet/sensors/sensor-1/performance')
+        .expect(403);
+    });
+  });
+
+  describe('Sensor Config Tenant Isolation', () => {
+    const buildSensorConfigApp = () => {
+      const fleetCommander = {
+        sendCommand: vi.fn(),
+      } as unknown as FleetCommander;
+
+      const configApp = express();
+      configApp.use(express.json());
+      configApp.use(injectAuth('tenant-1', ['fleet:read', 'fleet:write']));
+      configApp.use(
+        '/fleet',
+        createFleetRoutes(mockPrisma as PrismaClient, mockLogger, {
+          fleetCommander,
+        })
+      );
+
+      return { configApp };
+    };
+
+    it('should enforce tenant isolation on GET config endpoint', async () => {
+      const { configApp } = buildSensorConfigApp();
+      const otherTenantSensor = createMockSensor({ tenantId: 'other-tenant' });
+      vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(otherTenantSensor);
+
+      await request(configApp)
+        .get('/fleet/sensors/sensor-1/config/pingora')
+        .expect(403);
+    });
+
+    it('should enforce tenant isolation on POST config endpoint', async () => {
+      const { configApp } = buildSensorConfigApp();
+      const otherTenantSensor = createMockSensor({ tenantId: 'other-tenant' });
+      vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(otherTenantSensor);
+
+      await request(configApp)
+        .post('/fleet/sensors/sensor-1/config/pingora')
+        .send({ config: { sample: true } })
+        .expect(403);
+    });
+  });
+
+  describe('POST /fleet/config/push', () => {
+    const buildConfigApp = () => {
+      const configManager = {
+        getTemplate: vi.fn(),
+      } as unknown as ConfigManager;
+      const fleetCommander = {
+        sendCommand: vi.fn(),
+      } as unknown as FleetCommander;
+
+      const configApp = express();
+      configApp.use(express.json());
+      configApp.use(injectAuth('tenant-1', ['config:write', 'fleet:write']));
+      configApp.use(
+        '/fleet',
+        createFleetRoutes(mockPrisma as PrismaClient, mockLogger, {
+          configManager,
+          fleetCommander,
+        })
+      );
+
+      return { configApp, configManager, fleetCommander };
+    };
+
+    it('should 404 when sensorIds include other-tenant sensors', async () => {
+      const { configApp, configManager, fleetCommander } = buildConfigApp();
+      const template: ConfigTemplate = {
+        id: 'template-1',
+        name: 'Template',
+        environment: 'production',
+        config: {},
+        hash: 'hash',
+        version: '1',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(configManager.getTemplate).mockResolvedValue(template);
+      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue([
+        createMockSensor({ id: 'sensor-1', tenantId: 'tenant-1' }),
+      ]);
+
+      await request(configApp)
+        .post('/fleet/config/push')
+        .send({ templateId: 'template-1', sensorIds: ['sensor-1', 'sensor-2'] })
         .expect(404);
+
+      expect(fleetCommander.sendCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /fleet/commands', () => {
+    const buildCommandApp = () => {
+      const fleetCommander = {
+        sendCommand: vi.fn(),
+      } as unknown as FleetCommander;
+
+      const commandApp = express();
+      commandApp.use(express.json());
+      commandApp.use(injectAuth('tenant-1', ['fleet:write']));
+      commandApp.use(
+        '/fleet',
+        createFleetRoutes(mockPrisma as PrismaClient, mockLogger, {
+          fleetCommander,
+        })
+      );
+
+      return { commandApp, fleetCommander };
+    };
+
+    it('should 404 when sensorIds include other-tenant sensors', async () => {
+      const { commandApp, fleetCommander } = buildCommandApp();
+
+      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue([
+        createMockSensor({ id: 'sensor-1', tenantId: 'tenant-1' }),
+      ]);
+
+      await request(commandApp)
+        .post('/fleet/commands')
+        .send({
+          commandType: 'restart',
+          sensorIds: ['sensor-1', 'sensor-2'],
+          payload: {},
+        })
+        .expect(404);
+
+      expect(fleetCommander.sendCommand).not.toHaveBeenCalled();
     });
   });
 

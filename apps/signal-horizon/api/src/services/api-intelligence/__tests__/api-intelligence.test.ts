@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { APIIntelligenceService } from '../index.js';
-import type { PrismaClient, SignalType } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { APIIntelligenceSignal, SignalBatch } from '../../../schemas/api-intelligence.js';
 

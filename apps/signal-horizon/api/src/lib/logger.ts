@@ -2,6 +2,8 @@
  * Structured logging with pino
  */
 import pino from 'pino';
+import type { Request, Response, NextFunction } from 'express';
+import type { Logger as PinoLogger } from 'pino';
 
 /**
  * Create base logger instance with appropriate configuration
@@ -37,13 +39,14 @@ export function createLogger(context: Record<string, unknown>) {
 /**
  * Express middleware to add request ID and logger to request context
  */
-export function requestLoggerMiddleware(req: any, res: any, next: any) {
+export function requestLoggerMiddleware(req: Request, res: Response, next: NextFunction) {
+  const request = req as Request & { requestId?: string; logger?: PinoLogger };
   const requestId = req.headers['x-request-id'] ||
                     req.headers['x-correlation-id'] ||
                     crypto.randomUUID();
 
-  req.requestId = requestId;
-  req.logger = logger.child({ requestId });
+  request.requestId = requestId;
+  request.logger = logger.child({ requestId });
 
   res.setHeader('x-request-id', requestId);
 

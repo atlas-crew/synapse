@@ -12,27 +12,34 @@ export interface BaseJwtPayload {
   iat: number;
   exp: number;
   jti?: string;
-  // Legacy aliases (deprecated)
-  tenant_id?: string;
-  user_id?: string;
-  sensor_id?: string;
 }
 
 export interface UserSessionPayload extends BaseJwtPayload {
   userId: string;
   tenantId: string;
   scopes: string[];
-  sensorId?: never;
 }
 
 export interface TelemetryPayload extends BaseJwtPayload {
   sensorId: string;
   tenantId: string;
-  userId?: never;
-  scopes?: never;
 }
 
-export type JwtPayload = UserSessionPayload | TelemetryPayload | BaseJwtPayload;
+// Permissive type for backward compatibility and ease of use without strict narrowing everywhere
+export type JwtPayload = {
+  iat: number;
+  exp: number;
+  jti?: string;
+  // Standardized fields
+  tenantId?: string;
+  userId?: string;
+  sensorId?: string;
+  scopes?: string[];
+  // Legacy aliases
+  tenant_id?: string;
+  user_id?: string;
+  sensor_id?: string;
+};
 
 /**
  * Check if token is revoked in database.
@@ -55,8 +62,16 @@ export async function isTokenRevoked(
     if (options?.logger) {
       options.logger.warn({ error, jti, tenantId }, 'Token revocation check failed');
     }
-    // Fail open on DB error to avoid blocking valid traffic.
-    // This prioritizes availability but should be monitored via metrics.
+    
+    // SECURITY DECISION: Fail-Open
+    // We choose to return false (not revoked) when the database is unreachable.
+    // 
+    // Rationale:
+    // 1. Availability: We prioritize service availability. A DB outage shouldn't lock out all valid users.
+    // 2. Risk: The window of exposure is limited to the duration of the DB outage.
+    // 3. Mitigation: We strictly monitor 'horizon_auth_blacklist_db_errors_total' to detect this state.
+    // 
+    // If strict security is required (e.g. FedRAMP High), this should be changed to return true (fail-closed).
     return false;
   }
 }

@@ -16,7 +16,7 @@
  * E009 external_service_error
  * E999 internal_error
  */
-import type { Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import type { Logger } from 'pino';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -406,11 +406,12 @@ export function handleRouteError(
  * Catches async errors and forwards to error handler
  */
 export function asyncHandler(
-  fn: (req: any, res: Response, next?: any) => Promise<any>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ) {
-  return (req: any, res: Response, next: any) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const requestLogger = (req as Request & { logger?: Logger }).logger ?? console;
     Promise.resolve(fn(req, res, next)).catch((error) => {
-      handleRouteError(res, error, req.logger || console, {
+      handleRouteError(res, error, requestLogger, {
         route: req.route?.path,
         method: req.method,
         instance: req.originalUrl,

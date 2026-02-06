@@ -40,11 +40,11 @@ export const DEFAULT_RETRY_CONFIG: RetryBufferConfig = {
   retryBatchSize: 100,
 };
 
-/** Types of buffered items */
-type BufferItemType = 'signal' | 'campaign' | 'blocklist' | 'transaction' | 'log';
+  /** Buffered item with retry metadata - uses discriminated union for type safety (labs-mmft.22) */
 
-/** Buffered item with retry metadata - uses discriminated union for type safety (labs-mmft.22) */
-type BufferedItem =
+  export type BufferedItem =
+
+
   | { type: 'signal'; data: SignalEventRow[]; attempts: number; nextRetryAt: number; addedAt: number }
   | { type: 'campaign'; data: CampaignHistoryRow; attempts: number; nextRetryAt: number; addedAt: number }
   | { type: 'blocklist'; data: BlocklistHistoryRow[]; attempts: number; nextRetryAt: number; addedAt: number }
@@ -319,7 +319,8 @@ export class ClickHouseRetryBuffer {
         'Processing retry batch'
       );
 
-      for (const item of readyItems) {
+      for (let i = 0; i < readyItems.length; i++) {
+        const item = readyItems[i];
         this.totalAttempts++;
 
         let timerId: NodeJS.Timeout | undefined;
@@ -335,10 +336,10 @@ export class ClickHouseRetryBuffer {
             timeoutPromise
           ]);
 
-          // Success - remove from buffer
-          const index = this.buffer.indexOf(item);
-          if (index > -1) {
-            this.buffer.splice(index, 1);
+          // Remove immediately to free buffer capacity during long batches
+          const bufferIndex = this.buffer.indexOf(item);
+          if (bufferIndex !== -1) {
+            this.buffer.splice(bufferIndex, 1);
           }
           this.successfulRetries++;
         } catch (error) {
@@ -346,10 +347,10 @@ export class ClickHouseRetryBuffer {
           this.failedRetries++;
 
           if (item.attempts >= this.config.maxRetries) {
-            // Max retries exceeded - drop the item
-            const index = this.buffer.indexOf(item);
-            if (index > -1) {
-              this.buffer.splice(index, 1);
+            // Max retries exceeded - remove immediately
+            const bufferIndex = this.buffer.indexOf(item);
+            if (bufferIndex !== -1) {
+              this.buffer.splice(bufferIndex, 1);
             }
             this.droppedItems++;
             this.logToDeadLetterQueue(item, 'max_retries_exceeded', error);
@@ -371,6 +372,7 @@ export class ClickHouseRetryBuffer {
           }
         }
       }
+
     } finally {
       this.isProcessing = false;
     }
@@ -437,21 +439,45 @@ export class ClickHouseRetryBuffer {
   }
 
   /**
-   * Flush all pending retries (best-effort, for graceful shutdown)
+   * Flush all pending retries (best-effort, for graceful shutdown).
+   * Accepts an optional timeout to prevent hanging during shutdown.
    */
-  async flush(): Promise<{ succeeded: number; failed: number }> {
-    this.stop(); // Stop background processing
+  async flush(timeoutMs = 5000): Promise<{ succeeded: number; failed: number }> {
+    await this.stop(); // Stop background processing
 
     let succeeded = 0;
     let failed = 0;
 
-    for (const item of [...this.buffer]) {
-      try {
-        await this.retryItem(item);
-        succeeded++;
-      } catch {
-        failed++;
+    const items = [...this.buffer];
+    if (items.length === 0) {
+      return { succeeded, failed };
+    }
+
+    const flushWork = async () => {
+      for (const item of items) {
+        try {
+          await this.retryItem(item);
+          succeeded++;
+        } catch {
+          failed++;
+        }
       }
+    };
+
+    try {
+      await Promise.race([
+        flushWork(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Flush timed out after ${timeoutMs}ms`)), timeoutMs)
+        ),
+      ]);
+    } catch (error) {
+      const remaining = items.length - succeeded - failed;
+      failed += remaining;
+      this.logger.warn(
+        { error: error instanceof Error ? error.message : error, succeeded, failed, remaining },
+        'Retry buffer flush timed out, some items were not flushed'
+      );
     }
 
     this.buffer = [];

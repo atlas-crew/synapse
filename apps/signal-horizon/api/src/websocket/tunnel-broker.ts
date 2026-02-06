@@ -39,6 +39,7 @@ import {
   validateTunnelMessage,
   validateSessionMessage,
   hasValidTunnelStructure,
+  LegacyTunnelMessageSchema,
 } from '../schemas/tunnel.js';
 
 // =============================================================================
@@ -341,6 +342,7 @@ export class TunnelBroker extends EventEmitter {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL = 30000;
   private readonly HEARTBEAT_TIMEOUT = 60000;
+  private permissionChecker?: (userId: string, tenantId: string) => Promise<boolean>;
 
   constructor(
     logger: Logger,
@@ -351,12 +353,15 @@ export class TunnelBroker extends EventEmitter {
       maxSessionsPerSensor?: number;
       /** Custom rate limits per channel */
       rateLimits?: Partial<Record<TunnelChannel, ChannelRateLimits>>;
+      /** Async permission checker for real-time revocation (labs-zbjy) */
+      permissionChecker?: (userId: string, tenantId: string) => Promise<boolean>;
     } = {}
   ) {
     super();
     this.logger = logger.child({ component: 'tunnel-broker' });
     this.sessionTimeoutMs = options.sessionTimeoutMs ?? 300000; // 5 minutes
     this.maxSessionsPerSensor = options.maxSessionsPerSensor ?? 10;
+    this.permissionChecker = options.permissionChecker;
     this.rateLimiter = new ChannelRateLimiter();
 
     // Default rate limits per channel
@@ -1209,15 +1214,24 @@ export class TunnelBroker extends EventEmitter {
 
   private handleLegacySensorMessage(sensorId: string, data: unknown): void {
     try {
-      const message = this.parseMessage(data);
+      const str = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+      const parsed = JSON.parse(str);
+      const validation = LegacyTunnelMessageSchema.safeParse(parsed);
+
+      if (!validation.success) {
+        this.logger.warn({ sensorId, errors: validation.error.issues }, 'Invalid legacy message from sensor');
+        return;
+      }
+
+      const message = validation.data as LegacyTunnelMessage;
 
       const rawMessage = message as unknown as Record<string, unknown>;
       const channel = rawMessage.channel;
       if (typeof channel === 'string') {
         const handler = this.channelHandlers.get(channel as TunnelChannel);
         if (handler) {
-          const validation = validateTunnelMessage(rawMessage);
-          if (validation.success) {
+          const tunnelValidation = validateTunnelMessage(rawMessage);
+          if (tunnelValidation.success) {
             const tunnel = this.legacyTunnels.get(sensorId);
             const now = Date.now();
             const clientWs = {
@@ -1227,8 +1241,8 @@ export class TunnelBroker extends EventEmitter {
               on: () => undefined,
             } as unknown as WebSocket;
             const systemSession: ChannelSession = {
-              sessionId: validation.data.sessionId,
-              channel: validation.data.channel,
+              sessionId: tunnelValidation.data.sessionId,
+              channel: tunnelValidation.data.channel,
               clientWs,
               sensorWs: null,
               sensorId,
@@ -1248,13 +1262,13 @@ export class TunnelBroker extends EventEmitter {
               cleanupTimeout: null,
             };
 
-            void handler(systemSession, validation.data);
-            this.emit('message-routed', validation.data.sessionId, validation.data.channel, 'sensor-to-client');
+            void handler(systemSession, tunnelValidation.data);
+            this.emit('message-routed', tunnelValidation.data.sessionId, tunnelValidation.data.channel, 'sensor-to-client');
             return;
           }
 
           this.logger.warn(
-            { sensorId, errors: validation.errors },
+            { sensorId, errors: tunnelValidation.errors },
             'Invalid channel message from sensor'
           );
           return;
@@ -1361,7 +1375,7 @@ export class TunnelBroker extends EventEmitter {
 
     this.legacySessions.set(sessionId, session);
 
-    ws.on('message', (data) => this.handleUserMessage(sessionId, data));
+    ws.on('message', (data) => void this.handleUserMessage(sessionId, data));
     ws.on('close', () => this.endUserSession(sessionId, 'User disconnected'));
     ws.on('error', () => this.endUserSession(sessionId, 'Socket error'));
 
@@ -1429,7 +1443,7 @@ export class TunnelBroker extends EventEmitter {
 
     this.legacySessions.set(sessionId, session);
 
-    ws.on('message', (data) => this.handleUserMessage(sessionId, data));
+    ws.on('message', (data) => void this.handleUserMessage(sessionId, data));
     ws.on('close', () => this.endUserSession(sessionId, 'User disconnected'));
     ws.on('error', () => this.endUserSession(sessionId, 'Socket error'));
 
@@ -1489,7 +1503,7 @@ export class TunnelBroker extends EventEmitter {
 
     this.legacySessions.set(sessionId, session);
 
-    ws.on('message', (data) => this.handleUserMessage(sessionId, data));
+    ws.on('message', (data) => void this.handleUserMessage(sessionId, data));
     ws.on('close', () => this.endUserSession(sessionId, 'User disconnected'));
     ws.on('error', () => this.endUserSession(sessionId, 'Socket error'));
 
@@ -1537,14 +1551,40 @@ export class TunnelBroker extends EventEmitter {
     this.emit('session:ended', sessionId, reason);
   }
 
-  private handleUserMessage(sessionId: string, data: unknown): void {
+  private async handleUserMessage(sessionId: string, data: unknown): Promise<void> {
     const session = this.legacySessions.get(sessionId);
     if (!session) return;
+
+    // Real-time permission check (labs-zbjy)
+    if (this.permissionChecker) {
+      try {
+        const allowed = await this.permissionChecker(session.userId, session.tenantId);
+        if (!allowed) {
+          this.logger.warn({ sessionId, userId: session.userId }, 'User permission revoked during session');
+          this.endUserSession(sessionId, 'Permission revoked');
+          return;
+        }
+      } catch (error) {
+        this.logger.error({ sessionId, error }, 'Permission check failed');
+        // Fail closed
+        this.endUserSession(sessionId, 'Authorization error');
+        return;
+      }
+    }
 
     session.lastActivity = new Date();
 
     try {
-      const message = this.parseMessage(data);
+      const str = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+      const parsed = JSON.parse(str);
+      const validation = LegacyTunnelMessageSchema.safeParse(parsed);
+
+      if (!validation.success) {
+        this.logger.warn({ sessionId, errors: validation.error.issues }, 'Invalid user message in tunnel');
+        return;
+      }
+
+      const message = validation.data as LegacyTunnelMessage;
       message.sessionId = sessionId;
       this.sendToSensor(sessionId, message);
     } catch (error) {
@@ -1804,13 +1844,155 @@ export class TunnelBroker extends EventEmitter {
     this.heartbeatInterval = setInterval(() => {
       const now = Date.now();
 
+      // Check sensor tunnels
       for (const [sensorId, tunnel] of this.legacyTunnels) {
         if (now - tunnel.lastHeartbeat.getTime() > this.HEARTBEAT_TIMEOUT) {
           this.logger.warn({ sensorId }, 'Tunnel heartbeat timeout');
           this.handleSensorDisconnect(sensorId, 'heartbeat timeout');
         }
       }
+
+      // Check user sessions (labs-ed2y)
+      // Default idle timeout: 10 minutes (600000ms)
+      const IDLE_TIMEOUT = 600000;
+      
+      for (const [sessionId, session] of this.legacySessions) {
+        // Check for idle timeout
+        if (now - session.lastActivity.getTime() > IDLE_TIMEOUT) {
+          this.logger.warn({ sessionId, userId: session.userId }, 'User session idle timeout');
+          this.endUserSession(sessionId, 'Idle timeout');
+          continue;
+        }
+
+        // Send keepalive Ping
+        if (session.socket.readyState === WebSocket.OPEN) {
+          try {
+            session.socket.ping();
+          } catch {
+            // Ignore ping errors, will be caught by next activity check or close event
+          }
+        }
+      }
     }, this.HEARTBEAT_INTERVAL);
+  }
+
+  // ==========================================================================
+  // First-Message Auth for User Tunnel Connections (labs-c4hh)
+  // ==========================================================================
+
+  /** Timeout for first-message auth (10 seconds) */
+  private readonly AUTH_TIMEOUT_MS = 10000;
+
+  /**
+   * Handle a new user tunnel WebSocket connection using first-message auth.
+   *
+   * The WebSocket is held in an unauthenticated state until the client sends
+   * an auth message as its first message: `{ type: 'auth', sessionId: string }`.
+   * If no valid auth message is received within AUTH_TIMEOUT_MS, the connection
+   * is closed.
+   *
+   * @param ws - Raw WebSocket connection (not yet authenticated)
+   * @param sessionLookup - Async function to look up and validate a session by ID
+   */
+  handleUserConnection(
+    ws: WebSocket,
+    sessionLookup: (sessionId: string) => Promise<{
+      sessionId: string;
+      sensorId: string;
+      tenantId: string;
+      userId: string;
+      type: 'shell' | 'dashboard' | 'logs';
+    } | null>
+  ): void {
+    let authenticated = false;
+
+    // Set auth timeout - disconnect if not authenticated in time
+    const authTimeout = setTimeout(() => {
+      if (!authenticated) {
+        this.logger.warn('Tunnel user connection auth timeout');
+        ws.close(4001, 'Authentication timeout');
+      }
+    }, this.AUTH_TIMEOUT_MS);
+
+    // Wait for the first message as auth
+    ws.once('message', async (data: Buffer | string | ArrayBuffer) => {
+      try {
+        const str = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+        let parsed: { type?: string; sessionId?: string };
+
+        try {
+          parsed = JSON.parse(str);
+        } catch {
+          this.logger.warn('Invalid JSON in tunnel user auth message');
+          ws.close(4002, 'Invalid auth message');
+          clearTimeout(authTimeout);
+          return;
+        }
+
+        if (parsed.type !== 'auth' || !parsed.sessionId) {
+          this.logger.warn({ type: parsed.type }, 'Expected auth message with sessionId');
+          ws.close(4002, 'Expected auth message');
+          clearTimeout(authTimeout);
+          return;
+        }
+
+        const session = await sessionLookup(parsed.sessionId);
+        if (!session) {
+          this.logger.warn({ sessionId: parsed.sessionId }, 'Tunnel session not found or expired');
+          ws.send(JSON.stringify({ type: 'auth-error', error: 'Session not found or expired' }));
+          ws.close(4004, 'Session not found');
+          clearTimeout(authTimeout);
+          return;
+        }
+
+        // Authentication successful
+        authenticated = true;
+        clearTimeout(authTimeout);
+
+        // Send auth success to client
+        ws.send(JSON.stringify({
+          type: 'auth-success',
+          sessionId: session.sessionId,
+        }));
+
+        // Start the appropriate session type using legacy methods
+        const { sessionId, sensorId, tenantId, userId, type } = session;
+        let started: string | null = null;
+
+        if (type === 'shell') {
+          started = this.startShellSessionWithId(ws, userId, tenantId, sensorId, sessionId);
+        } else if (type === 'logs') {
+          started = this.startLogsSessionWithId(ws, userId, tenantId, sensorId, sessionId);
+        } else {
+          started = this.startDashboardProxyWithId(ws, userId, tenantId, sensorId, sessionId);
+        }
+
+        if (!started) {
+          this.logger.warn({ sessionId, sensorId, type }, 'Failed to start tunnel session');
+          ws.send(JSON.stringify({ type: 'auth-error', error: 'Sensor tunnel not connected' }));
+          ws.close(4007, 'Sensor tunnel not connected');
+          return;
+        }
+
+        this.logger.info(
+          { sessionId, sensorId, userId, type },
+          'Tunnel user authenticated via first-message auth'
+        );
+      } catch (error) {
+        this.logger.error({ error }, 'Error processing tunnel user auth');
+        ws.close(4000, 'Auth error');
+        clearTimeout(authTimeout);
+      }
+    });
+
+    ws.on('error', (error) => {
+      this.logger.error({ error: error.message }, 'Tunnel user WebSocket error during auth');
+      clearTimeout(authTimeout);
+    });
+
+    ws.on('close', () => {
+      clearTimeout(authTimeout);
+    });
   }
 
   /**

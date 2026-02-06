@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../../middleware/auth.js';
 import { asyncHandler, handleValidationError } from '../../../lib/errors.js';
@@ -22,7 +22,7 @@ export function createThreatsRouter(prisma: PrismaClient, logger: Logger): Route
     const { severity, status, timeRange, limit, offset } = queryValidation.data;
 
     // Build where clause with filters
-    const where: any = { tenantId };
+    const where: Prisma.BlockDecisionWhereInput = { tenantId };
 
     if (severity) {
       where.severity = severity;

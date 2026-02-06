@@ -8,7 +8,7 @@ describe('safeStringify', () => {
   });
 
   it('should handle circular references', () => {
-    const obj: any = { a: 1 };
+    const obj: Record<string, unknown> = { a: 1 };
     obj.self = obj;
     expect(safeStringify(obj)).toBe('{"a":1,"self":"[Circular]"}');
   });
@@ -35,7 +35,7 @@ describe('safeStringify', () => {
   });
 
   it('should handle massive objects without crashing', () => {
-    const massiveObj: any = {};
+    const massiveObj: Record<string, { nested: string }> = {};
     for (let i = 0; i < 10000; i++) {
       massiveObj[`key${i}`] = { nested: 'value'.repeat(100) };
     }

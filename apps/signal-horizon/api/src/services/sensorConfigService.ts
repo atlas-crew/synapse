@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { Logger } from 'pino';
 import { FleetCommander } from './fleet/fleet-commander.js';
 import { SensorConfig, SensorConfigSchema } from '../schemas/sensorConfig.js';
@@ -34,11 +34,22 @@ export class SensorConfigService {
 
   /**
    * Get configuration for a sensor.
-   * Returns null if no config exists.
+   * Returns null if no config exists or if tenant doesn't own the sensor.
    *
    * Security: Decrypts sensitive fields that were encrypted at rest.
+   * Enforces tenant isolation.
    */
-  async getConfig(sensorId: string): Promise<SensorConfig | null> {
+  async getConfig(sensorId: string, tenantId: string): Promise<SensorConfig | null> {
+    // Verify sensor ownership first
+    const sensor = await this.prisma.sensor.findUnique({
+      where: { id: sensorId },
+      select: { tenantId: true },
+    });
+
+    if (!sensor || sensor.tenantId !== tenantId) {
+      return null;
+    }
+
     const record = await this.prisma.sensorPingoraConfig.findUnique({
       where: { sensorId },
     });
@@ -111,7 +122,7 @@ export class SensorConfigService {
       where: { sensorId },
       create: {
         sensorId,
-        fullConfig: encryptedConfig as any,
+        fullConfig: encryptedConfig as Prisma.InputJsonValue,
         version: newVersion,
         // Populate legacy fields for backward compatibility
         wafEnabled: validatedConfig.server.waf_enabled,
@@ -122,7 +133,7 @@ export class SensorConfigService {
         denyList: [],
       },
       update: {
-        fullConfig: encryptedConfig as any,
+        fullConfig: encryptedConfig as Prisma.InputJsonValue,
         version: newVersion,
         // Sync legacy fields
         wafEnabled: validatedConfig.server.waf_enabled,

@@ -716,7 +716,32 @@ const createKeySchema = z.object({
   sensorId: z.string().uuid(),
   expiresAt: z.string().datetime().optional(),
   permissions: z.array(z.string()).optional(),
+  purpose: z.string().max(255).optional(), // labs-afxu: Track token purpose
 });
+
+/**
+ * Allowed scopes for sensor API keys. (labs-afxu)
+ * Sensors should only have access to telemetry and blocklist sync.
+ */
+const ALLOWED_SENSOR_SCOPES = [
+  'signal:write',
+  'blocklist:read',
+  'heartbeat:write',
+  'config:read',
+  'diag:write',
+];
+
+/**
+ * Validates that requested scopes are appropriate for a sensor. (labs-afxu)
+ */
+function validateSensorScopes(requested: string[]): { valid: boolean; forbidden?: string[] } {
+  const forbidden = requested.filter(s => !ALLOWED_SENSOR_SCOPES.includes(s));
+  return {
+    valid: forbidden.length === 0,
+    forbidden: forbidden.length > 0 ? forbidden : undefined,
+  };
+}
+
 
 const rotateKeySchema = z.object({
   expiresAt: z.string().datetime().optional(),
@@ -772,10 +797,14 @@ export function createManagementRoutes(
       });
 
       // Sanitize: don't include key hash in response
-      const sanitizedKeys = keys.map(({ keyHash, ...key }) => ({
-        ...key,
-        sensor: key.sensor,
-      }));
+      const sanitizedKeys = keys.map((key) => {
+        const { keyHash, ...rest } = key;
+        void keyHash;
+        return {
+          ...rest,
+          sensor: key.sensor,
+        };
+      });
 
       res.json({
         keys: sanitizedKeys,
@@ -806,7 +835,19 @@ export function createManagementRoutes(
         return;
       }
 
-      const { name, sensorId, expiresAt, permissions } = validation.data;
+      const { name, sensorId, expiresAt, permissions, purpose } = validation.data;
+
+      // labs-afxu: Validate requested scopes
+      const requestedScopes = permissions || ['signal:write'];
+      const scopeCheck = validateSensorScopes(requestedScopes);
+      if (!scopeCheck.valid) {
+        this.logger.warn({ sensorId, tenantId, forbidden: scopeCheck.forbidden }, 'Rejected unauthorized scopes for sensor token');
+        return sendProblem(res, 403, 'Unauthorized scopes for sensor', {
+          code: 'FORBIDDEN_SCOPES',
+          details: { forbidden: scopeCheck.forbidden, allowed: ALLOWED_SENSOR_SCOPES },
+          instance: req.originalUrl,
+        });
+      }
 
       // Verify sensor belongs to tenant
       const sensor = await prisma.sensor.findFirst({
@@ -833,7 +874,7 @@ export function createManagementRoutes(
           keyPrefix: prefix,
           sensorId,
           expiresAt: expiresAt ? new Date(expiresAt) : null,
-          permissions: permissions || [],
+          permissions: requestedScopes,
           createdBy: userId,
           status: 'ACTIVE',
         },
@@ -849,9 +890,17 @@ export function createManagementRoutes(
       });
 
       // Return key only once - cannot be retrieved again
-      const { keyHash: _, ...sanitizedKey } = apiKey;
+      const { keyHash, ...sanitizedKey } = apiKey;
+      void keyHash;
 
-      logger.info({ keyId: apiKey.id, sensorId }, 'API key created');
+      logger.info({ 
+        keyId: apiKey.id, 
+        sensorId, 
+        tenantId, 
+        userId, 
+        scopes: requestedScopes,
+        purpose: purpose || 'unspecified'
+      }, 'Sensor API key created');
 
       res.status(201).json({
         ...sanitizedKey,
@@ -982,7 +1031,8 @@ export function createManagementRoutes(
         },
       });
 
-      const { keyHash: _, ...sanitizedKey } = updatedKey;
+      const { keyHash, ...sanitizedKey } = updatedKey;
+      void keyHash;
 
       logger.info({ keyId }, 'API key rotated');
 

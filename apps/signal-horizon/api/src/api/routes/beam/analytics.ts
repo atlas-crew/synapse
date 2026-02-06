@@ -55,25 +55,6 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
   router.get('/', requireScope('dashboard:read'), asyncHandler(async (req, res) => {
     const tenantId = req.auth!.tenantId;
 
-    const now = new Date();
-    const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    // Fetch data in parallel
-    const [
-      blockDecisions,
-      totalEndpoints,
-    ] = await Promise.all([
-      (prisma as any).blockDecision.findMany({
-        where: {
-          tenantId,
-          decidedAt: { gte: dayAgo },
-        },
-        orderBy: { decidedAt: 'desc' },
-        take: 1000,
-      }),
-      (prisma as any).endpoint.count({ where: { tenantId } }),
-    ]);
-
     // Type for block decisions from database
     interface BlockDecision {
       id: string;
@@ -89,6 +70,38 @@ export function createAnalyticsRouter(prisma: PrismaClient, logger: Logger): Rou
       riskScore: number;
       decidedAt: Date;
     }
+
+    const beamPrisma = prisma as unknown as {
+      blockDecision: {
+        findMany: (args: {
+          where: { tenantId: string; decidedAt: { gte: Date } };
+          orderBy: { decidedAt: 'desc' };
+          take: number;
+        }) => Promise<BlockDecision[]>;
+      };
+      endpoint: {
+        count: (args: { where: { tenantId: string } }) => Promise<number>;
+      };
+    };
+
+    const now = new Date();
+    const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // Fetch data in parallel
+    const [
+      blockDecisions,
+      totalEndpoints,
+    ] = await Promise.all([
+      beamPrisma.blockDecision.findMany({
+        where: {
+          tenantId,
+          decidedAt: { gte: dayAgo },
+        },
+        orderBy: { decidedAt: 'desc' },
+        take: 1000,
+      }),
+      beamPrisma.endpoint.count({ where: { tenantId } }),
+    ]);
 
     // Check for synapse-direct adapter for live sensor metrics
     const synapseAdapter = getSynapseDirectAdapter();

@@ -99,7 +99,8 @@ export function createAuthMiddleware(prisma: PrismaClient) {
           return;
         }
 
-        const tenantId = jwtPayload.tenantId ?? jwtPayload.tenant_id;
+        // Type narrowing: Check if it's a UserSessionPayload
+        const tenantId = 'tenantId' in jwtPayload ? jwtPayload.tenantId : jwtPayload.tenant_id;
         if (!tenantId) {
           recordFailedAuth(clientIp);
           sendProblem(res, 401, 'Invalid token payload', {
@@ -120,8 +121,8 @@ export function createAuthMiddleware(prisma: PrismaClient) {
           return;
         }
 
-        const scopes = Array.isArray(jwtPayload.scopes) ? jwtPayload.scopes : [];
-        const userId = jwtPayload.userId ?? jwtPayload.user_id;
+        const scopes = 'scopes' in jwtPayload && Array.isArray(jwtPayload.scopes) ? jwtPayload.scopes : [];
+        const userId = 'userId' in jwtPayload ? jwtPayload.userId : jwtPayload.user_id;
 
         clearFailedAuth(clientIp);
 

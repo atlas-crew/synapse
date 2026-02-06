@@ -29,7 +29,7 @@ import type { Express } from 'express';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-export interface TestResponse<T = any> {
+export interface TestResponse<T = unknown> {
   status: number;
   body: T;
   headers: Record<string, string>;
@@ -168,7 +168,7 @@ class MockResponse extends EventEmitter {
   }
 }
 
-class TestRequest<T = any> {
+class TestRequest<T = unknown> {
   private headers: Record<string, string> = {};
   private payload: unknown;
   private expectedStatus?: number;
@@ -212,7 +212,7 @@ class TestRequest<T = any> {
   }
 }
 
-function dispatchRequest<T = any>(
+function dispatchRequest<T = unknown>(
   app: Express,
   method: HttpMethod,
   path: string,
@@ -220,11 +220,16 @@ function dispatchRequest<T = any>(
   payload?: unknown
 ): Promise<TestResponse<T>> {
   return new Promise((resolve, reject) => {
-    const req = createMockRequest(method, path, { ...headers }, payload) as any;
-    const res = new MockResponse(resolve) as any;
+    const req = (createMockRequest(method, path, { ...headers }, payload) as unknown) as Parameters<Express['handle']>[0];
+    const res = (new MockResponse(resolve) as unknown) as Parameters<Express['handle']>[1];
+    const handle = (app.handle.bind(app) as unknown) as (
+        req: Parameters<Express['handle']>[0],
+        res: Parameters<Express['handle']>[1],
+        next: Parameters<Express['handle']>[2]
+      ) => void;
 
     try {
-      (app as any).handle(req, res, (err: unknown) => {
+      handle(req, res, (err: unknown) => {
         if (err) {
           reject(err);
         }
@@ -237,10 +242,10 @@ function dispatchRequest<T = any>(
 
 export default function request(app: Express) {
   return {
-    get: <T = any>(path: string) => new TestRequest<T>(app, 'GET', path),
-    post: <T = any>(path: string) => new TestRequest<T>(app, 'POST', path),
-    put: <T = any>(path: string) => new TestRequest<T>(app, 'PUT', path),
-    patch: <T = any>(path: string) => new TestRequest<T>(app, 'PATCH', path),
-    delete: <T = any>(path: string) => new TestRequest<T>(app, 'DELETE', path),
+    get: <T = unknown>(path: string) => new TestRequest<T>(app, 'GET', path),
+    post: <T = unknown>(path: string) => new TestRequest<T>(app, 'POST', path),
+    put: <T = unknown>(path: string) => new TestRequest<T>(app, 'PUT', path),
+    patch: <T = unknown>(path: string) => new TestRequest<T>(app, 'PATCH', path),
+    delete: <T = unknown>(path: string) => new TestRequest<T>(app, 'DELETE', path),
   };
 }

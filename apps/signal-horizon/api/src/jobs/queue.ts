@@ -11,6 +11,7 @@ import type { Logger } from 'pino';
 // Queue names for different job types
 export const QUEUE_NAMES = {
   ROLLOUT: 'rollout-jobs',
+  RETENTION: 'data-retention',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

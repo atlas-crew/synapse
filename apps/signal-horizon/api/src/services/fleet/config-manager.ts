@@ -39,11 +39,15 @@ export class ConfigManager {
   /**
    * Create a new configuration template
    */
-  async createTemplate(template: Omit<ConfigTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<ConfigTemplate> {
-    this.logger.info({ name: template.name, environment: template.environment }, 'Creating config template');
+  async createTemplate(
+    tenantId: string,
+    template: Omit<ConfigTemplate, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>
+  ): Promise<ConfigTemplate> {
+    this.logger.info({ tenantId, name: template.name, environment: template.environment }, 'Creating config template');
 
     const created = await this.prisma.configTemplate.create({
       data: {
+        tenantId,
         name: template.name,
         description: template.description,
         environment: template.environment,
@@ -60,9 +64,13 @@ export class ConfigManager {
   /**
    * Get a configuration template by ID
    */
-  async getTemplate(templateId: string): Promise<ConfigTemplate | null> {
-    const template = await this.prisma.configTemplate.findUnique({
-      where: { id: templateId },
+  async getTemplate(templateId: string, tenantId?: string): Promise<ConfigTemplate | null> {
+    const template = await this.prisma.configTemplate.findFirst({
+      where: { 
+        id: templateId,
+        // If tenantId provided, enforce ownership
+        ...(tenantId ? { tenantId } : {}),
+      },
     });
 
     return template ? this.mapTemplate(template) : null;
@@ -71,9 +79,13 @@ export class ConfigManager {
   /**
    * List all configuration templates
    */
-  async listTemplates(filters?: { environment?: string; isActive?: boolean }): Promise<ConfigTemplate[]> {
+  async listTemplates(
+    tenantId: string,
+    filters?: { environment?: string; isActive?: boolean }
+  ): Promise<ConfigTemplate[]> {
     const templates = await this.prisma.configTemplate.findMany({
       where: {
+        tenantId, // Enforce isolation
         environment: filters?.environment,
         isActive: filters?.isActive,
       },
@@ -88,9 +100,19 @@ export class ConfigManager {
    */
   async updateTemplate(
     templateId: string,
-    updates: Partial<Omit<ConfigTemplate, 'id' | 'createdAt' | 'updatedAt'>>
+    tenantId: string,
+    updates: Partial<Omit<ConfigTemplate, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>>
   ): Promise<ConfigTemplate> {
-    this.logger.info({ templateId }, 'Updating config template');
+    this.logger.info({ templateId, tenantId }, 'Updating config template');
+
+    // Verify ownership first
+    const existing = await this.prisma.configTemplate.findFirst({
+      where: { id: templateId, tenantId },
+    });
+
+    if (!existing) {
+      throw new Error('Template not found or access denied');
+    }
 
     const updated = await this.prisma.configTemplate.update({
       where: { id: templateId },
@@ -111,8 +133,17 @@ export class ConfigManager {
   /**
    * Delete a configuration template
    */
-  async deleteTemplate(templateId: string): Promise<void> {
-    this.logger.info({ templateId }, 'Deleting config template');
+  async deleteTemplate(templateId: string, tenantId: string): Promise<void> {
+    this.logger.info({ templateId, tenantId }, 'Deleting config template');
+
+    // Verify ownership first
+    const existing = await this.prisma.configTemplate.findFirst({
+      where: { id: templateId, tenantId },
+    });
+
+    if (!existing) {
+      throw new Error('Template not found or access denied');
+    }
 
     await this.prisma.configTemplate.delete({
       where: { id: templateId },
@@ -347,9 +378,9 @@ export class ConfigManager {
 
     // Track deployment results
     const results: DeploymentResult['results'] = [];
-    let successCount = 0;
-    let failureCount = 0;
-    let pendingCount = sensorIds.length;
+    const successCount = 0;
+    const failureCount = 0;
+    const pendingCount = sensorIds.length;
 
     for (let i = 0; i < sensorIds.length; i++) {
       results.push({

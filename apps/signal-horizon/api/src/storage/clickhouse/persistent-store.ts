@@ -46,7 +46,11 @@ export class FileRetryStore implements IRetryPersistentStore {
       
       return items;
     } catch (error) {
-      if ((error as any).code === 'ENOENT') {
+      const errorCode =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as { code?: unknown }).code
+          : undefined;
+      if (errorCode === 'ENOENT') {
         return [];
       }
       this.logger.error({ error, path: this.filePath }, 'Failed to load items from disk');

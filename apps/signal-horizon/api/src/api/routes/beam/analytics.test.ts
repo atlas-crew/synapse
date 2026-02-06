@@ -69,14 +69,14 @@ describe('Beam Analytics Route', () => {
       beforeEach(() => {
         // Simulate authenticated request
         app.use((req, _res, next) => {
-          (req as any).auth = { tenantId: 'test-tenant-123', scopes: ['dashboard:read'] };
+          req.auth = { tenantId: 'test-tenant-123', scopes: ['dashboard:read'] };
           next();
         });
         app.use('/analytics', createAnalyticsRouter(mockPrisma, mockLogger));
 
         // Mock empty data
-        (mockPrisma.blockDecision.findMany as any).mockResolvedValue([]);
-        (mockPrisma.endpoint.count as any).mockResolvedValue(0);
+        vi.mocked(mockPrisma.blockDecision.findMany).mockResolvedValue([]);
+        vi.mocked(mockPrisma.endpoint.count).mockResolvedValue(0);
       });
 
       it('should return 200 with analytics data when authenticated', async () => {
@@ -154,7 +154,7 @@ describe('Beam Analytics Route', () => {
     describe('With Block Decisions', () => {
       beforeEach(() => {
         app.use((req, _res, next) => {
-          (req as any).auth = { tenantId: 'test-tenant-123', scopes: ['dashboard:read'] };
+          req.auth = { tenantId: 'test-tenant-123', scopes: ['dashboard:read'] };
           next();
         });
         app.use('/analytics', createAnalyticsRouter(mockPrisma, mockLogger));
@@ -166,8 +166,8 @@ describe('Beam Analytics Route', () => {
           { id: '2', riskScore: 70, threatType: 'XSS', sourceIp: '2.2.2.2', path: '/login', action: 'BLOCK', decidedAt: new Date() },
           { id: '3', riskScore: 30, threatType: 'BOT', sourceIp: '3.3.3.3', path: '/home', action: 'BLOCK', decidedAt: new Date() },
         ];
-        (mockPrisma.blockDecision.findMany as any).mockResolvedValue(mockBlocks);
-        (mockPrisma.endpoint.count as any).mockResolvedValue(50);
+        vi.mocked(mockPrisma.blockDecision.findMany).mockResolvedValue(mockBlocks);
+        vi.mocked(mockPrisma.endpoint.count).mockResolvedValue(50);
 
         const response = await request(app).get('/analytics');
 
@@ -185,8 +185,8 @@ describe('Beam Analytics Route', () => {
           { id: '2', riskScore: 70, threatType: 'SQLI', sourceIp: '2.2.2.2', path: '/login', action: 'BLOCK', decidedAt: new Date() },
           { id: '3', riskScore: 30, threatType: 'XSS', sourceIp: '3.3.3.3', path: '/home', action: 'BLOCK', decidedAt: new Date() },
         ];
-        (mockPrisma.blockDecision.findMany as any).mockResolvedValue(mockBlocks);
-        (mockPrisma.endpoint.count as any).mockResolvedValue(50);
+        vi.mocked(mockPrisma.blockDecision.findMany).mockResolvedValue(mockBlocks);
+        vi.mocked(mockPrisma.endpoint.count).mockResolvedValue(50);
 
         const response = await request(app).get('/analytics');
 
@@ -200,8 +200,8 @@ describe('Beam Analytics Route', () => {
         const mockBlocks = [
           { id: '1', riskScore: 90, threatType: 'SQLI', sourceIp: '1.1.1.1', path: '/api', action: 'BLOCK', decidedAt: new Date() },
         ];
-        (mockPrisma.blockDecision.findMany as any).mockResolvedValue(mockBlocks);
-        (mockPrisma.endpoint.count as any).mockResolvedValue(50);
+        vi.mocked(mockPrisma.blockDecision.findMany).mockResolvedValue(mockBlocks);
+        vi.mocked(mockPrisma.endpoint.count).mockResolvedValue(50);
 
         const response = await request(app).get('/analytics');
 
@@ -209,8 +209,8 @@ describe('Beam Analytics Route', () => {
       });
 
       it('should return live dataSource when no blocks exist', async () => {
-        (mockPrisma.blockDecision.findMany as any).mockResolvedValue([]);
-        (mockPrisma.endpoint.count as any).mockResolvedValue(0);
+        vi.mocked(mockPrisma.blockDecision.findMany).mockResolvedValue([]);
+        vi.mocked(mockPrisma.endpoint.count).mockResolvedValue(0);
 
         const response = await request(app).get('/analytics');
 
@@ -221,12 +221,12 @@ describe('Beam Analytics Route', () => {
     describe('Response Content-Type', () => {
       beforeEach(() => {
         app.use((req, _res, next) => {
-          (req as any).auth = { tenantId: 'test-tenant', scopes: ['dashboard:read'] };
+          req.auth = { tenantId: 'test-tenant', scopes: ['dashboard:read'] };
           next();
         });
         app.use('/analytics', createAnalyticsRouter(mockPrisma, mockLogger));
-        (mockPrisma.blockDecision.findMany as any).mockResolvedValue([]);
-        (mockPrisma.endpoint.count as any).mockResolvedValue(0);
+        vi.mocked(mockPrisma.blockDecision.findMany).mockResolvedValue([]);
+        vi.mocked(mockPrisma.endpoint.count).mockResolvedValue(0);
       });
 
       it('should return JSON content type', async () => {

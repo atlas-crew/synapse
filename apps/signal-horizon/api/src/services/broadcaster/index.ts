@@ -15,6 +15,9 @@ import type {
 } from '../../types/protocol.js';
 import type { ClickHouseService, BlocklistHistoryRow } from '../../storage/clickhouse/index.js';
 
+import type { BlocklistJobData } from '../../jobs/blocklist-queue.js';
+import type { Queue } from 'bullmq';
+
 export interface BroadcasterConfig {
   pushDelayMs: number;
   cacheSize: number;
@@ -24,13 +27,20 @@ export class Broadcaster {
   private prisma: PrismaClient;
   private logger: Logger;
   private clickhouse: ClickHouseService | null;
-  // Config will be used for push delay and cache eviction in future phases
+  // Config will be used for push delay and cache eviction
   private _config: BroadcasterConfig;
   private dashboardGateway: DashboardGateway | null = null;
   private sensorGateway: SensorGateway | null = null;
+  private blocklistQueue: Queue<BlocklistJobData> | null = null;
 
   // In-memory blocklist cache for fast lookup
   private blocklistCache: Map<string, BlocklistUpdate> = new Map();
+
+  // labs-l5z3: Blocklist update buffer for batching
+  private blockBuffer: BlocklistUpdate[] = [];
+  private flushTimer: NodeJS.Timeout | null = null;
+  private readonly MAX_BATCH_SIZE = 100;
+  private readonly FLUSH_INTERVAL_MS = 5000;
 
   // War room service for automatic incident creation
   private warRoomService: WarRoomService | null = null;
@@ -55,8 +65,63 @@ export class Broadcaster {
     this.sensorGateway = gateway;
   }
 
+  setBlocklistQueue(queue: Queue<BlocklistJobData>): void {
+    this.blocklistQueue = queue;
+  }
+
   setWarRoomService(service: WarRoomService): void {
     this.warRoomService = service;
+  }
+
+  /**
+   * Add a block to the buffer and schedule flush. (labs-l5z3)
+   */
+  private queueBlock(block: BlocklistUpdate): void {
+    this.blockBuffer.push(block);
+
+    // Update local cache immediately for fast lookup
+    this.blocklistCache.set(`${block.blockType}:${block.indicator}`, block);
+
+    if (this.blockBuffer.length >= this.MAX_BATCH_SIZE) {
+      this.flushBlocks();
+    } else if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flushBlocks(), this.FLUSH_INTERVAL_MS);
+    }
+  }
+
+  /**
+   * Flush buffered blocks to sensors and dashboards. (labs-l5z3, labs-aoyv)
+   */
+  private flushBlocks(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    if (this.blockBuffer.length === 0) return;
+
+    const blocks = [...this.blockBuffer];
+    this.blockBuffer = [];
+
+    this.logger.info({ count: blocks.length }, 'Flushing blocklist batch');
+
+    // Broadcast to dashboards
+    this.dashboardGateway?.broadcastBlocklistUpdate({
+      updates: blocks,
+    });
+
+    // labs-aoyv: Broadcast to sensors via async queue if available, fallback to direct push
+    if (this.blocklistQueue) {
+      this.blocklistQueue.add('broadcast', { 
+        updates: blocks, 
+        isFleetEvent: true 
+      }).catch(error => {
+        this.logger.error({ error }, 'Failed to queue blocklist push - falling back to direct push');
+        this.sensorGateway?.broadcastBlocklistPush(blocks);
+      });
+    } else {
+      this.sensorGateway?.broadcastBlocklistPush(blocks);
+    }
   }
 
   /**
@@ -108,8 +173,6 @@ export class Broadcaster {
    * Create blocklist entries from campaign signals
    */
   private async createCampaignBlocks(campaign: Campaign, signals: EnrichedSignal[]): Promise<void> {
-    const blocks: BlocklistUpdate[] = [];
-
     for (const signal of signals) {
       if (signal.sourceIp) {
         const block: BlocklistUpdate = {
@@ -120,7 +183,7 @@ export class Broadcaster {
           source: 'FLEET_INTEL',
         };
 
-        blocks.push(block);
+        this.queueBlock(block); // labs-l5z3
 
         // Store in database - upsert fleet-wide block (null tenantId)
         // Note: Prisma compound unique with nullable field requires type assertion
@@ -165,7 +228,7 @@ export class Broadcaster {
           source: 'FLEET_INTEL',
         };
 
-        blocks.push(block);
+        this.queueBlock(block); // labs-l5z3
 
         await this.prisma.blocklistEntry.upsert({
           where: {
@@ -198,26 +261,6 @@ export class Broadcaster {
           campaign_id: campaign.id,
         });
       }
-    }
-
-    // Broadcast blocklist updates to dashboards and sensors
-    if (blocks.length > 0) {
-      this.dashboardGateway?.broadcastBlocklistUpdate({
-        updates: blocks,
-        campaign: campaign.id,
-      });
-
-      this.sensorGateway?.broadcastBlocklistPush(blocks);
-
-      // Update cache
-      for (const block of blocks) {
-        this.blocklistCache.set(`${block.blockType}:${block.indicator}`, block);
-      }
-
-      this.logger.info(
-        { campaignId: campaign.id, blockCount: blocks.length },
-        'Created and pushed blocklist entries from campaign'
-      );
     }
   }
 

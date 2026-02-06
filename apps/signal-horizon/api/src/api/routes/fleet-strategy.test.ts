@@ -17,18 +17,22 @@ import type { Logger } from 'pino';
 import type { RuleDistributor } from '../../services/fleet/rule-distributor.js';
 
 // Mock the auth middleware module
-vi.mock('../middleware/auth.js', () => ({
-  requireScope: (scope: string) => (req: Request, _res: Response, next: NextFunction) => {
-    if (req.auth?.scopes?.includes(scope)) {
-      return next();
-    }
-    if (scope === 'fleet:read' && req.auth?.scopes?.some((s: string) => s.startsWith('fleet:'))) {
-      return next();
-    }
-    _res.status(403).json({ error: 'Forbidden' });
-  },
-  requireRole: () => (_req: Request, _res: Response, next: NextFunction) => next(),
-}));
+vi.mock('../middleware/auth.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../middleware/auth.js')>();
+  return {
+    ...actual,
+    requireScope: (scope: string) => (req: Request, _res: Response, next: NextFunction) => {
+      if (req.auth?.scopes?.includes(scope)) {
+        return next();
+      }
+      if (scope === 'fleet:read' && req.auth?.scopes?.some((s: string) => s.startsWith('fleet:'))) {
+        return next();
+      }
+      _res.status(403).json({ error: 'Forbidden' });
+    },
+    requireRole: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  };
+});
 
 vi.mock('../../middleware/rate-limiter.js', () => ({
   rateLimiters: {
@@ -91,6 +95,14 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
   ...overrides,
 });
 
+type SensorFindManyArgs = Parameters<PrismaClient['sensor']['findMany']>[0];
+
+const extractRequestedSensorIds = (args?: SensorFindManyArgs): string[] => {
+  const where = (args?.where ?? {}) as { id?: { in?: string[] } };
+  const ids = where.id?.in ?? [];
+  return Array.isArray(ids) ? ids : [];
+};
+
 describe('Fleet Routes - Strategy Validation', () => {
   let app: Express;
   let mockPrisma: Partial<PrismaClient>;
@@ -144,14 +156,16 @@ describe('Fleet Routes - Strategy Validation', () => {
     beforeEach(() => {
       // Mock sensor lookup for tenant validation
       // Returns sensors that match the requested IDs
-      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
-        .mockImplementation(async (args: any) => {
-        const requestedIds = args?.where?.id?.in || [];
+      const findMany = vi.mocked(
+        mockPrisma.sensor!.findMany as unknown as PrismaClient['sensor']['findMany']
+      );
+      findMany.mockImplementation(async (args?: SensorFindManyArgs) => {
+        const requestedIds = extractRequestedSensorIds(args);
         const allSensors = [
           createMockSensor({ id: 'sensor-1' }),
           createMockSensor({ id: 'sensor-2' }),
         ];
-        return allSensors.filter(s => requestedIds.includes(s.id));
+        return allSensors.filter((s) => requestedIds.includes(s.id));
       });
     });
 
@@ -284,11 +298,13 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Rolling Strategy Options Validation', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
-        .mockImplementation(async (args: any) => {
-        const requestedIds = args?.where?.id?.in || [];
+      const findMany = vi.mocked(
+        mockPrisma.sensor!.findMany as unknown as PrismaClient['sensor']['findMany']
+      );
+      findMany.mockImplementation(async (args?: SensorFindManyArgs) => {
+        const requestedIds = extractRequestedSensorIds(args);
         const allSensors = [createMockSensor({ id: 'sensor-1' })];
-        return allSensors.filter(s => requestedIds.includes(s.id));
+        return allSensors.filter((s) => requestedIds.includes(s.id));
       });
     });
 
@@ -431,11 +447,13 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Blue/Green Strategy Options Validation', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
-        .mockImplementation(async (args: any) => {
-        const requestedIds = args?.where?.id?.in || [];
+      const findMany = vi.mocked(
+        mockPrisma.sensor!.findMany as unknown as PrismaClient['sensor']['findMany']
+      );
+      findMany.mockImplementation(async (args?: SensorFindManyArgs) => {
+        const requestedIds = extractRequestedSensorIds(args);
         const allSensors = [createMockSensor({ id: 'sensor-1' })];
-        return allSensors.filter(s => requestedIds.includes(s.id));
+        return allSensors.filter((s) => requestedIds.includes(s.id));
       });
     });
 
@@ -577,11 +595,13 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Invalid Strategy Options Rejection', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
-        .mockImplementation(async (args: any) => {
-        const requestedIds = args?.where?.id?.in || [];
+      const findMany = vi.mocked(
+        mockPrisma.sensor!.findMany as unknown as PrismaClient['sensor']['findMany']
+      );
+      findMany.mockImplementation(async (args?: SensorFindManyArgs) => {
+        const requestedIds = extractRequestedSensorIds(args);
         const allSensors = [createMockSensor({ id: 'sensor-1' })];
-        return allSensors.filter(s => requestedIds.includes(s.id));
+        return allSensors.filter((s) => requestedIds.includes(s.id));
       });
     });
 
@@ -809,14 +829,16 @@ describe('Fleet Routes - Strategy Validation', () => {
 
   describe('Strategy Options Passed to RuleDistributor', () => {
     beforeEach(() => {
-      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
-        .mockImplementation(async (args: any) => {
-        const requestedIds = args?.where?.id?.in || [];
+      const findMany = vi.mocked(
+        mockPrisma.sensor!.findMany as unknown as PrismaClient['sensor']['findMany']
+      );
+      findMany.mockImplementation(async (args?: SensorFindManyArgs) => {
+        const requestedIds = extractRequestedSensorIds(args);
         const allSensors = [
           createMockSensor({ id: 'sensor-1' }),
           createMockSensor({ id: 'sensor-2' }),
         ];
-        return allSensors.filter(s => requestedIds.includes(s.id));
+        return allSensors.filter((s) => requestedIds.includes(s.id));
       });
     });
 
@@ -968,8 +990,9 @@ describe('Fleet Routes - Strategy Validation', () => {
     });
 
     it('should return 400 when some sensors do not belong to tenant', async () => {
-      vi.mocked(mockPrisma.sensor!.findMany as unknown as (args?: any) => Promise<Sensor[]>)
-        .mockResolvedValue([
+      vi.mocked(
+        mockPrisma.sensor!.findMany as unknown as PrismaClient['sensor']['findMany']
+      ).mockResolvedValue([
         createMockSensor({ id: 'sensor-1' }),
         // sensor-2 missing - simulates not belonging to tenant
       ]);
