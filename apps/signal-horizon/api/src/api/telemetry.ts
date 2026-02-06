@@ -145,6 +145,17 @@ function normalizeOptionalRequestId(value: unknown): string | null {
   return trimmed;
 }
 
+function safeJsonStringify(value: unknown, maxLen: number): string | null {
+  try {
+    const str = JSON.stringify(value);
+    if (typeof str !== 'string') return null;
+    if (str.length <= maxLen) return str;
+    return str.slice(0, maxLen);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Normalizes an optional numeric value.
  * Useful for fields that can be null in the database.
@@ -242,6 +253,214 @@ function parseTelemetryPayload(
         status_code: Math.max(0, Math.floor(normalizeNumber(data.status_code ?? data.status, 0))),
         latency_ms: Math.max(0, Math.floor(normalizeNumber(data.latency_ms, 0))),
         waf_action: normalizeOptionalString(data.waf_action),
+      });
+      continue;
+    }
+
+    if (eventType === 'waf_block') {
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
+
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
+
+      const severityRaw = normalizeString(data.severity, 'LOW', 32);
+      const severity = severityRaw.toUpperCase();
+
+      signalRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        request_id: effectiveRequestId,
+        signal_type: 'WAF_BLOCK',
+        source_ip: normalizeString(data.client_ip ?? data.clientIp, '0.0.0.0', 50),
+        fingerprint: '',
+        anon_fingerprint: '',
+        severity,
+        confidence: 1.0,
+        event_count: 1,
+        metadata: JSON.stringify({
+          rule_id: normalizeOptionalString(data.rule_id ?? data.ruleId, 256),
+          site: normalizeOptionalString(data.site, 255),
+          path: normalizeOptionalString(data.path, 2048),
+          waf_action: 'block',
+        }),
+      });
+      continue;
+    }
+
+    if (eventType === 'rate_limit_hit') {
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
+
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
+
+      signalRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        request_id: effectiveRequestId,
+        signal_type: 'RATE_LIMIT_HIT',
+        source_ip: normalizeString(data.client_ip ?? data.clientIp, '0.0.0.0', 50),
+        fingerprint: '',
+        anon_fingerprint: '',
+        severity: 'MEDIUM',
+        confidence: 1.0,
+        event_count: 1,
+        metadata: JSON.stringify({
+          site: normalizeOptionalString(data.site, 255),
+          limit: normalizeOptionalNumber(data.limit),
+          window_secs: normalizeOptionalNumber(data.window_secs ?? data.windowSecs),
+        }),
+      });
+      continue;
+    }
+
+    if (eventType === 'config_reload') {
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
+
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
+
+      const logId = normalizeString(
+        data.id ?? data.log_id,
+        `config-reload-${instanceId}-${timestampMs}`
+      );
+      const success = Boolean(data.success);
+
+      logRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        request_id: effectiveRequestId,
+        log_id: logId,
+        source: 'system',
+        level: success ? 'info' : 'error',
+        message: 'config_reload',
+        fields: JSON.stringify({
+          sites_loaded: normalizeOptionalNumber(data.sites_loaded ?? data.sitesLoaded),
+          duration_ms: normalizeOptionalNumber(data.duration_ms ?? data.durationMs),
+          success,
+          error: normalizeOptionalString(data.error, 2048),
+          site: normalizeOptionalString(data.site, 255),
+        }),
+        method: null,
+        path: null,
+        status_code: null,
+        latency_ms: null,
+        client_ip: null,
+        rule_id: null,
+      });
+      continue;
+    }
+
+    if (eventType === 'service_health') {
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
+
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
+
+      const logId = normalizeString(
+        data.id ?? data.log_id,
+        `service-health-${instanceId}-${timestampMs}`
+      );
+
+      logRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        request_id: effectiveRequestId,
+        log_id: logId,
+        source: 'system',
+        level: 'info',
+        message: 'service_health',
+        fields: JSON.stringify({
+          uptime_secs: normalizeOptionalNumber(data.uptime_secs ?? data.uptimeSecs),
+          memory_mb: normalizeOptionalNumber(data.memory_mb ?? data.memoryMb),
+          active_connections: normalizeOptionalNumber(data.active_connections ?? data.activeConnections),
+          requests_per_sec: normalizeOptionalNumber(data.requests_per_sec ?? data.requestsPerSec),
+        }),
+        method: null,
+        path: null,
+        status_code: null,
+        latency_ms: null,
+        client_ip: null,
+        rule_id: null,
+      });
+      continue;
+    }
+
+    if (eventType === 'auth_coverage' || eventType === 'campaign_report') {
+      const timestampMs = normalizeNumber(
+        entry.timestamp_ms ?? data.timestamp_ms,
+        Date.now()
+      );
+
+      const providedInstanceId = normalizeOptionalString(entry.instance_id ?? data.instance_id);
+      if (providedInstanceId && providedInstanceId !== defaultSensorId) {
+        log.warn(
+          { providedInstanceId, sensorId: defaultSensorId },
+          'Telemetry instance_id does not match token sensorId'
+        );
+      }
+      const instanceId = defaultSensorId;
+
+      const logId = normalizeString(
+        data.id ?? data.log_id,
+        `${eventType}-${instanceId}-${timestampMs}`
+      );
+
+      logRows.push({
+        timestamp: new Date(timestampMs).toISOString(),
+        tenant_id: tenantId,
+        sensor_id: instanceId,
+        request_id: effectiveRequestId,
+        log_id: logId,
+        source: 'system',
+        level: 'info',
+        message: eventType,
+        fields: safeJsonStringify(data, 10000),
+        method: null,
+        path: null,
+        status_code: null,
+        latency_ms: null,
+        client_ip: null,
+        rule_id: null,
       });
       continue;
     }

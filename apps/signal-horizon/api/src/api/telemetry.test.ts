@@ -171,6 +171,239 @@ describe('Telemetry routes', () => {
     expect(rows[0]?.request_id).toBe('req_123');
   });
 
+  it('ingests waf_block as WAF_BLOCK signal event with request_id', async () => {
+    const token = createJwt({ jti: 'valid-jti-waf-block' });
+    const perEvent = {
+      event_type: 'waf_block',
+      data: {
+        request_id: 'req_abc',
+        rule_id: '941100',
+        severity: 'high',
+        client_ip: '203.0.113.10',
+        site: 'example.com',
+        path: '/login',
+      },
+    };
+
+    // Override clickhouse impl used by telemetry router for this test
+    const signalSpy = vi.fn().mockResolvedValue(undefined);
+    clickhouse = {
+      isEnabled: () => true,
+      insertHttpTransactions: vi.fn(),
+      insertLogEntries: vi.fn(),
+      insertSignalEvents: signalSpy,
+    } as unknown as ClickHouseService;
+    app = express();
+    app.use(express.json());
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    expect(signalSpy).toHaveBeenCalledTimes(1);
+    const [rows] = signalSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({
+      request_id: 'req_abc',
+      signal_type: 'WAF_BLOCK',
+      source_ip: '203.0.113.10',
+      severity: 'HIGH',
+    });
+  });
+
+  it('ingests rate_limit_hit as RATE_LIMIT_HIT signal event', async () => {
+    const token = createJwt({ jti: 'valid-jti-rate-limit-hit' });
+    const perEvent = {
+      event_type: 'rate_limit_hit',
+      data: {
+        client_ip: '203.0.113.11',
+        limit: 100,
+        window_secs: 60,
+        site: 'example.com',
+      },
+    };
+
+    const signalSpy = vi.fn().mockResolvedValue(undefined);
+    clickhouse = {
+      isEnabled: () => true,
+      insertHttpTransactions: vi.fn(),
+      insertLogEntries: vi.fn(),
+      insertSignalEvents: signalSpy,
+    } as unknown as ClickHouseService;
+    app = express();
+    app.use(express.json());
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    const [rows] = signalSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({
+      signal_type: 'RATE_LIMIT_HIT',
+      source_ip: '203.0.113.11',
+      severity: 'MEDIUM',
+    });
+  });
+
+  it('ingests config_reload into sensor_logs', async () => {
+    const token = createJwt({ jti: 'valid-jti-config-reload' });
+    const perEvent = {
+      event_type: 'config_reload',
+      data: {
+        sites_loaded: 3,
+        duration_ms: 120,
+        success: true,
+      },
+    };
+
+    const logSpy = vi.fn().mockResolvedValue(undefined);
+    clickhouse = {
+      isEnabled: () => true,
+      insertHttpTransactions: vi.fn(),
+      insertLogEntries: logSpy,
+      insertSignalEvents: vi.fn(),
+    } as unknown as ClickHouseService;
+    app = express();
+    app.use(express.json());
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const [rows] = logSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({
+      message: 'config_reload',
+      source: 'system',
+      level: 'info',
+    });
+  });
+
+  it('ingests service_health into sensor_logs', async () => {
+    const token = createJwt({ jti: 'valid-jti-service-health' });
+    const perEvent = {
+      event_type: 'service_health',
+      data: {
+        uptime_secs: 3600,
+        memory_mb: 512,
+        active_connections: 12,
+        requests_per_sec: 100.5,
+      },
+    };
+
+    const logSpy = vi.fn().mockResolvedValue(undefined);
+    clickhouse = {
+      isEnabled: () => true,
+      insertHttpTransactions: vi.fn(),
+      insertLogEntries: logSpy,
+      insertSignalEvents: vi.fn(),
+    } as unknown as ClickHouseService;
+    app = express();
+    app.use(express.json());
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    const [rows] = logSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({
+      message: 'service_health',
+      source: 'system',
+      level: 'info',
+    });
+  });
+
+  it('ingests auth_coverage into sensor_logs', async () => {
+    const token = createJwt({ jti: 'valid-jti-auth-coverage' });
+    const perEvent = {
+      event_type: 'auth_coverage',
+      data: {
+        request_id: 'req_auth_1',
+        site: 'example.com',
+        total_endpoints: 10,
+        covered_endpoints: 7,
+      },
+    };
+
+    const logSpy = vi.fn().mockResolvedValue(undefined);
+    clickhouse = {
+      isEnabled: () => true,
+      insertHttpTransactions: vi.fn(),
+      insertLogEntries: logSpy,
+      insertSignalEvents: vi.fn(),
+    } as unknown as ClickHouseService;
+    app = express();
+    app.use(express.json());
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const [rows] = logSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({
+      request_id: 'req_auth_1',
+      message: 'auth_coverage',
+      source: 'system',
+      level: 'info',
+    });
+    expect(typeof rows[0]?.fields).toBe('string');
+  });
+
+  it('ingests campaign_report into sensor_logs', async () => {
+    const token = createJwt({ jti: 'valid-jti-campaign-report' });
+    const perEvent = {
+      event_type: 'campaign_report',
+      data: {
+        request_id: 'req_campaign_1',
+        campaign_id: 'camp_1',
+        status: 'running',
+        counters: { ok: 12, blocked: 3 },
+      },
+    };
+
+    const logSpy = vi.fn().mockResolvedValue(undefined);
+    clickhouse = {
+      isEnabled: () => true,
+      insertHttpTransactions: vi.fn(),
+      insertLogEntries: logSpy,
+      insertSignalEvents: vi.fn(),
+    } as unknown as ClickHouseService;
+    app = express();
+    app.use(express.json());
+    app.use(createTelemetryRouter(createLogger(), { clickhouse, prisma }));
+
+    await request(app)
+      .post('/_sensor/report')
+      .set('Authorization', `Bearer ${token}`)
+      .send(perEvent)
+      .expect(202);
+
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const [rows] = logSpy.mock.calls[0] ?? [];
+    expect(rows[0]).toMatchObject({
+      request_id: 'req_campaign_1',
+      message: 'campaign_report',
+      source: 'system',
+      level: 'info',
+    });
+    expect(typeof rows[0]?.fields).toBe('string');
+  });
+
   it('rejects payloads exceeding the event batch limit', async () => {
     const token = createJwt({ jti: 'oversized-batch' });
     const oversized = {
