@@ -6,6 +6,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   Shield,
   Target,
@@ -356,6 +357,7 @@ function PatternCard({
 }
 
 export default function AttackPatternsPage() {
+  useDocumentTitle('Beam - Attack Patterns');
   const [expandedPatterns, setExpandedPatterns] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const isLoading = false;

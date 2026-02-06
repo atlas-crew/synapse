@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 import {
   AlertCircle,
   AlertTriangle,
@@ -148,6 +150,7 @@ async function runPingoraAction(id: string, action: 'test' | 'reload' | 'restart
 // ======================== Main Component ========================
 
 export function SensorDetailPage() {
+  useDocumentTitle('Sensor Detail');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -232,6 +235,10 @@ export function SensorDetailPage() {
 
   return (
     <div className="space-y-6 p-6">
+      <Breadcrumb items={[
+        { label: 'Fleet', to: '/fleet' },
+        { label: sensor.name || 'Sensor Detail' },
+      ]} />
       {/* Header */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
         <div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">

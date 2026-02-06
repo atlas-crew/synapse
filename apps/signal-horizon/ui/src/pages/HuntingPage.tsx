@@ -8,8 +8,10 @@ import { Database, AlertCircle } from 'lucide-react';
 import { HuntQueryBuilder, HuntResultsTable, SavedQueries } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export default function HuntingPage() {
+  useDocumentTitle('Threat Hunting');
   const {
     isLoading,
     error,

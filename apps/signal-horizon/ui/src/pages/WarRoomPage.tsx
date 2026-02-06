@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Users,
   Clock,
@@ -60,6 +61,7 @@ const mockActivities: Activity[] = [
 
 // ======================== Main Component ========================
 export default function WarRoomPage() {
+  useDocumentTitle('War Room');
   const { id } = useParams();
   const [message, setMessage] = useState('');
   const [activePlaybook, setActivePlaybook] = useState<Playbook | null>(null);

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Search, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchActorDetail, fetchActors, fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import type { SocActor, SocSession } from '../../types/soc';
@@ -53,6 +54,7 @@ function detectSearchType(input: string): Exclude<SearchType, 'auto'> {
 }
 
 export default function SocSearchPage() {
+  useDocumentTitle('SOC - Search');
   const { sensorId, setSensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
   const [query, setQuery] = useState('');

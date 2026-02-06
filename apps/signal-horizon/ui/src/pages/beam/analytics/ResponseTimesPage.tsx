@@ -13,6 +13,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   LineChart,
   Line,
@@ -354,6 +355,7 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
 }
 
 export default function ResponseTimesPage() {
+  useDocumentTitle('Beam - Response Times');
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const isLoading = false;
 

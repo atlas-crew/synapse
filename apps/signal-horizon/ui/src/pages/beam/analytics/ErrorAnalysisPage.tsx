@@ -13,6 +13,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   AreaChart,
   Area,
@@ -414,6 +415,7 @@ function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }
 }
 
 export default function ErrorAnalysisPage() {
+  useDocumentTitle('Beam - Error Analysis');
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const isLoading = false;
 

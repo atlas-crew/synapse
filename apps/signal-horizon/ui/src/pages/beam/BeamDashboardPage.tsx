@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import {
   Shield,
   AlertTriangle,
@@ -93,7 +94,7 @@ function StatCard({ icon: Icon, label, value, trend, color, bgColor }: StatCardP
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-ink-secondary">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-ink-primary">{value.toLocaleString()}</p>
+          <p className="mt-2 text-3xl font-light text-ink-primary">{value.toLocaleString()}</p>
           {trend && (
             <div className={clsx('mt-2 flex items-center gap-1 text-sm', trendColor)}>
               <TrendIcon className="w-4 h-4" />
@@ -504,6 +505,7 @@ const DEMO_ALERTS: ProtectionAlert[] = [
 
 // Main Dashboard Component
 export default function BeamDashboardPage() {
+  useDocumentTitle('Beam - Dashboard');
   const storeLoading = useBeamLoading();
   const stats = useBeamStats();
   const storeBlockedRequests = useBlockedRequests();

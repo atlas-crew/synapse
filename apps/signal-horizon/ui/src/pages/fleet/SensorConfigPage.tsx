@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -11,6 +13,7 @@ import {
   type AdvancedConfigData,
 } from '../../components/fleet/pingora/AdvancedConfigPanel';
 import { deepMergeConfig } from '../../utils';
+import { ApiError, formatApiError } from '../../lib/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -22,7 +25,20 @@ const authHeaders = {
 
 async function fetchFullConfig(id: string) {
   const response = await fetch(`${API_BASE}/api/v1/fleet/sensors/${id}/config/pingora`, { headers: authHeaders });
-  if (!response.ok) throw new Error('Failed to fetch full configuration');
+  if (!response.ok) {
+    let serverMessage: string | undefined;
+    try {
+      const body = await response.json();
+      serverMessage = body.error ?? body.message;
+    } catch { /* no parseable body */ }
+    throw new ApiError(
+      response.status,
+      serverMessage
+        ? `Failed to fetch configuration (${response.status}: ${serverMessage})`
+        : `Failed to fetch configuration (${response.status} ${response.statusText})`,
+      serverMessage,
+    );
+  }
   return response.json();
 }
 
@@ -33,8 +49,16 @@ async function updateFullConfig(id: string, config: unknown) {
     body: JSON.stringify(config),
   });
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Failed to update configuration');
+    let serverMessage: string | undefined;
+    try {
+      const body = await response.json();
+      serverMessage = body.error ?? body.message;
+    } catch { /* no parseable body */ }
+    throw new ApiError(
+      response.status,
+      serverMessage || `Failed to update configuration (${response.status} ${response.statusText})`,
+      serverMessage,
+    );
   }
   return response.json();
 }
@@ -71,6 +95,7 @@ function mergeAdvancedConfig(
 }
 
 export function SensorConfigPage() {
+  useDocumentTitle('Sensor Configuration');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -113,8 +138,8 @@ export function SensorConfigPage() {
       setIsDirty(false);
       toast.success('Configuration updated successfully and push initiated');
     },
-    onError: (err: Error) => {
-      toast.error(`Update failed: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(`Update failed: ${formatApiError(err, 'Unknown error')}`);
     }
   });
 
@@ -170,7 +195,7 @@ export function SensorConfigPage() {
     <div className="p-12 flex flex-col items-center justify-center gap-4">
       <div className="flex items-center gap-2 text-status-error">
         <AlertCircle className="w-5 h-5" />
-        <span>Error: {(error as Error).message}</span>
+        <span>Error: {formatApiError(error, 'Failed to load configuration')}</span>
       </div>
       <button
         onClick={() => refetch()}
@@ -189,13 +214,11 @@ export function SensorConfigPage() {
       {/* Header */}
       <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-card">
         <div>
-          <div className="flex items-center gap-2 text-xs text-ink-muted mb-1">
-            <button onClick={() => navigate('/fleet')} className="hover:text-accent-primary focus:outline-none focus:ring-2 focus:ring-ac-blue/50">Fleet</button>
-            <span>/</span>
-            <button onClick={() => navigate(`/fleet/sensors/${id}`)} className="hover:text-accent-primary focus:outline-none focus:ring-2 focus:ring-ac-blue/50">{sensor?.name || id}</button>
-            <span>/</span>
-            <span className="text-ink-secondary">Advanced Configuration</span>
-          </div>
+          <Breadcrumb items={[
+            { label: 'Fleet', to: '/fleet' },
+            { label: sensor?.name || 'Sensor', to: `/fleet/sensors/${id}` },
+            { label: 'Advanced Configuration' },
+          ]} />
           <h1 className="text-xl font-semibold text-ink-primary">Advanced Configuration</h1>
         </div>
         <div className="flex items-center gap-3">

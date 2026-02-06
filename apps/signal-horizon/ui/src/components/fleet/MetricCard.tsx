@@ -96,7 +96,7 @@ export const MetricCard = memo(function MetricCard({
         <div className="flex items-start justify-between pt-1">
           <div className="flex-1">
             {/* Large value - Rubik Light (300) per design system */}
-            <p className={`text-3xl font-light ${accentValueColors[accent]}`}>
+            <p className={`text-3xl font-light ${accentValueColors[accent]}`} aria-live="polite">
               {value}
             </p>
 
@@ -142,7 +142,7 @@ export const MetricCard = memo(function MetricCard({
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className={`text-sm font-medium text-ink-secondary ${labelClassName}`}>{label}</p>
-          <p className={`mt-2 text-3xl font-light text-ink-primary ${valueClassName}`}>{value}</p>
+          <p className={`mt-2 text-3xl font-light text-ink-primary ${valueClassName}`} aria-live="polite">{value}</p>
           {trend && (
             <p className={`mt-2 text-sm font-medium ${trendColor}`}>
               {trend.value > 0 ? '\u2191' : trend.value < 0 ? '\u2193' : '\u2192'} {Math.abs(trend.value)}%{trendLabel ? ` ${trendLabel}` : ''}

@@ -33,6 +33,7 @@ export const EndpointsTable: React.FC<Props> = ({ endpoints, onSelectEndpoint })
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
+        <caption className="sr-only">API endpoints with authentication coverage and risk assessment</caption>
         <thead>
           <tr className="bg-surface-subtle border-b border-border-subtle">
             <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-ink-muted">Logical Endpoint</th>

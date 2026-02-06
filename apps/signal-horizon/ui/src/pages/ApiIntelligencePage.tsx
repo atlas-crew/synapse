@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   BarChart3,
   Search,
@@ -27,6 +28,7 @@ import { ApiTreemap } from '../components/api-intelligence/ApiTreemap';
 import { SchemaDriftDiff } from '../components/api-intelligence/SchemaDriftDiff';
 
 export default function ApiIntelligencePage() {
+  useDocumentTitle('API Intelligence');
   const {
     stats,
     endpoints,

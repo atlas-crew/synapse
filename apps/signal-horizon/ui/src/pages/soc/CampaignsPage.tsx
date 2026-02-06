@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Target, Activity, Shield, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchCampaigns } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
@@ -43,6 +44,7 @@ function buildDemoCampaigns(scenario: string): SocCampaignListResponse {
 }
 
 export default function CampaignsPage() {
+  useDocumentTitle('SOC - Campaigns');
   const { sensorId, setSensorId } = useSocSensor();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const [statusFilter, setStatusFilter] = useState('ACTIVE');

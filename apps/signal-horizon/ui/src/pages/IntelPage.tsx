@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   BarChart3,
   TrendingUp,
@@ -80,6 +81,7 @@ const mockIOCs = [
 ];
 
 export default function IntelPage() {
+  useDocumentTitle('Intel');
   const [timeRange, setTimeRange] = useState('7d');
 
   return (

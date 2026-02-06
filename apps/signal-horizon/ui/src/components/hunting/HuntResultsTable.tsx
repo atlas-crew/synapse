@@ -170,6 +170,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
       ) : (
         <div className="overflow-x-auto">
           <table className="data-table">
+            <caption className="sr-only">Threat hunting query results with severity and metadata</caption>
             <thead>
               <tr>
                 <th className="w-10"></th>

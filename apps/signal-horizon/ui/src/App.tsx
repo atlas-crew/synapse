@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { useEffect, Suspense, useMemo, useState, lazy } from 'react';
+import { useEffect, useCallback, Suspense, useMemo, useState, lazy } from 'react';
 import {
   LayoutDashboard,
   Target,
@@ -22,6 +22,8 @@ import {
   UserPlus,
   Globe,
   HelpCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -101,7 +103,8 @@ function getInitialTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'dark';
   const stored = window.localStorage.getItem('signal-horizon-theme');
   if (stored === 'light' || stored === 'dark') return stored;
-  // Default to dark mode (war room aesthetic)
+  // Respect OS color scheme preference
+  if (window.matchMedia?.('(prefers-color-scheme: light)').matches) return 'light';
   return 'dark';
 }
 
@@ -112,6 +115,18 @@ function App() {
   const threats = useHorizonStore((s) => s.threats);
   const alerts = useHorizonStore((s) => s.alerts);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getInitialTheme());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('signal-horizon-sidebar-collapsed') === 'true';
+  });
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem('signal-horizon-sidebar-collapsed', String(next));
+      return next;
+    });
+  }, []);
 
   const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;
   const criticalThreats = threats.filter((t) => t.riskScore >= 80).length;
@@ -131,6 +146,36 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     window.localStorage.setItem('signal-horizon-theme', theme);
   }, [theme]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+B / Cmd+B: toggle sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+      // Ctrl+K / Cmd+K: focus search (placeholder for CommandPalette)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        // CommandPalette not implemented yet - no-op
+      }
+      // / : focus search (like GitHub) - only if not in an input
+      if (
+        e.key === '/' &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement) &&
+        !(e.target instanceof HTMLSelectElement)
+      ) {
+        // CommandPalette not implemented yet - no-op
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [toggleSidebar]);
 
   const themeIcon = useMemo(() => (theme === 'dark' ? Sun : Moon), [theme]);
   const ThemeIcon = themeIcon;
@@ -233,10 +278,10 @@ function App() {
 
       <div className="flex flex-1 min-h-0">
         {/* Sidebar with gradient depth */}
-        <aside className="w-64 bg-surface-subtle border-r border-border-subtle flex flex-col surface-sidebar relative">
-          <div className="p-4 border-b border-border-subtle">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 flex items-center justify-center">
+        <aside className={clsx('transition-all duration-200 bg-surface-subtle border-r border-border-subtle flex flex-col surface-sidebar relative', sidebarCollapsed ? 'w-16' : 'w-64')}>
+          <div className={clsx('border-b border-border-subtle overflow-hidden', sidebarCollapsed ? 'p-2' : 'p-4')}>
+            <div className={clsx('flex items-center', sidebarCollapsed ? 'justify-center' : 'gap-3')}>
+              <div className="w-11 h-11 flex-shrink-0 flex items-center justify-center">
                 <img
                   src={signalHorizonLogoLight}
                   alt="Signal Horizon"
@@ -248,151 +293,200 @@ function App() {
                   className="w-11 h-11 hidden dark:block"
                 />
               </div>
-              <div>
-                <h1 className="text-sm font-medium text-ink-primary tracking-wide">SIGNAL HORIZON</h1>
-                <p className="text-xs text-ink-muted">See Further. Act Faster.</p>
+              {!sidebarCollapsed && (
+                <div>
+                  <div className="text-sm font-medium text-ink-primary tracking-wide">SIGNAL HORIZON</div>
+                  <p className="text-xs text-ink-muted">See Further. Act Faster.</p>
+                </div>
+              )}
+            </div>
+            {!sidebarCollapsed && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-[10px] tracking-[0.18em] uppercase text-ac-magenta border border-ac-magenta/40 px-2 py-0.5 status-blink">
+                  LIVE
+                </span>
+                <span className="text-[10px] tracking-[0.1em] uppercase text-ink-muted">
+                  Collective Defense
+                </span>
               </div>
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[10px] tracking-[0.18em] uppercase text-ac-magenta border border-ac-magenta/40 px-2 py-0.5 status-blink">
-                LIVE
-              </span>
-              <span className="text-[10px] tracking-[0.1em] uppercase text-ink-muted">
-                Collective Defense
-              </span>
-            </div>
+            )}
           </div>
 
-          <nav aria-label="Main navigation" className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+          <nav aria-label="Main navigation" className={clsx('flex-1 py-4 space-y-6 overflow-y-auto', sidebarCollapsed ? 'px-1' : 'px-3')}>
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Threat Intelligence</p>
+              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Threat Intelligence</p>}
               <div className="space-y-1">
                 {primaryNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    end={item.path === '/'}
+                    title={sidebarCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
+                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
+                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
                       )
                     }
                   >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 ))}
               </div>
             </div>
 
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Sensor Console</p>
+              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Sensor Console</p>}
               <div className="space-y-1">
                 {beamNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    title={sidebarCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
+                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
+                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
                       )
                     }
                   >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 ))}
               </div>
             </div>
 
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Fleet Operations</p>
+              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Fleet Operations</p>}
               <div className="space-y-1">
                 {fleetNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    title={sidebarCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
+                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
+                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
                       )
                     }
                   >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 ))}
               </div>
             </div>
 
-            <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Settings</p>
-              <div className="space-y-1">
-                {settingsItems.map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center gap-3 px-3 py-2 text-sm text-ink-disabled cursor-not-allowed opacity-50"
-                    aria-disabled="true"
-                    title={`${item.label} (coming soon)`}
-                  >
-                    {item.label}
-                  </div>
-                ))}
+            {!sidebarCollapsed && (
+              <div>
+                <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Settings</p>
+                <div className="space-y-1">
+                  {settingsItems.map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center gap-3 px-3 py-2 text-sm text-ink-disabled cursor-not-allowed opacity-50"
+                      aria-disabled="true"
+                      title={`${item.label} (coming soon)`}
+                    >
+                      {item.label}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div>
-              <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Support</p>
+              {!sidebarCollapsed && <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-secondary mb-2">Support</p>}
               <div className="space-y-1">
                 {supportNavItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    title={sidebarCollapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
+                        'flex items-center py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50 overflow-hidden whitespace-nowrap',
+                        sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
                       )
                     }
                   >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 ))}
               </div>
             </div>
           </nav>
 
-          {/* Connection Status */}
-          <div className="p-4 border-t border-border-subtle">
-            <div className="flex items-center gap-2 text-sm">
-              {isConnected ? (
-                <>
+          {/* Connection Status & Collapse Toggle */}
+          <div className={clsx('border-t border-border-subtle', sidebarCollapsed ? 'p-2' : 'p-4')}>
+            {sidebarCollapsed ? (
+              <div className="flex flex-col items-center gap-2">
+                {isConnected ? (
                   <Wifi className="w-4 h-4 text-ac-green" />
-                  <span className="text-ac-green">Connected</span>
-                </>
-              ) : (
-                <>
+                ) : (
                   <WifiOff className="w-4 h-4 text-ac-gray-mid" />
-                  <span className="text-ink-muted">
-                    {connectionState === 'connecting' ? 'Connecting...' : 'Disconnected'}
-                  </span>
-                </>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm">
+                  {isConnected ? (
+                    <>
+                      <Wifi className="w-4 h-4 text-ac-green" />
+                      <span className="text-ac-green">Connected</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="w-4 h-4 text-ac-gray-mid" />
+                      <span className="text-ink-muted">
+                        {connectionState === 'connecting' ? 'Connecting...' : 'Disconnected'}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-ink-muted">
+                  {sensorCount} sensors online
+                </div>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className={clsx(
+                'flex items-center justify-center text-ink-muted hover:text-ink-primary transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
+                sidebarCollapsed ? 'w-full mt-2 py-1' : 'mt-3 w-full py-1'
               )}
-            </div>
-            <div className="mt-2 text-xs text-ink-muted">
-              {sensorCount} sensors online
-            </div>
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={sidebarCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="w-4 h-4" />
+              ) : (
+                <div className="flex items-center gap-2 text-xs">
+                  <PanelLeftClose className="w-4 h-4" />
+                  <span>Collapse</span>
+                  <kbd className="ml-auto text-[10px] text-ink-muted border border-border-subtle px-1 py-0.5">
+                    {navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl'}B
+                  </kbd>
+                </div>
+              )}
+            </button>
           </div>
         </aside>
 
@@ -404,7 +498,7 @@ function App() {
           />
 
           <ErrorBoundary>
-            <Suspense fallback={<LoadingSpinner message="Loading page..." size="lg" />}>
+            <Suspense fallback={<LoadingSpinner message="Loading Signal Horizon..." size="lg" />}>
               <Routes>
                 <Route path="/" element={<SignalHorizonPageWrapper><OverviewPage /></SignalHorizonPageWrapper>} />
                 <Route path="/live-map" element={<SignalHorizonPageWrapper><LiveMapPage /></SignalHorizonPageWrapper>} />
@@ -420,7 +514,7 @@ function App() {
                 <Route path="/hunting" element={<SignalHorizonPageWrapper><HuntingPage /></SignalHorizonPageWrapper>} />
                 <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
-                <Route path="/auth-coverage" element={<SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper>} />
+                <Route path="/auth-coverage" element={<Suspense fallback={<LoadingSpinner message="Loading auth coverage map..." size="lg" />}><SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support" element={<SupportPage />} />
                 

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import { useQuery } from '@tanstack/react-query';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 import {
   Target,
   Clock,
@@ -104,6 +106,7 @@ function buildDemoCampaignActors(id?: string): SocCampaignActorsResponse {
 }
 
 export default function CampaignDetailPage() {
+  useDocumentTitle('SOC - Campaign Detail');
   const { id } = useParams();
   const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
@@ -154,6 +157,10 @@ export default function CampaignDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <Breadcrumb items={[
+        { label: 'Campaigns', to: '/campaigns' },
+        { label: campaign.name },
+      ]} />
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <Link to="/campaigns" className="text-sm text-link hover:text-link-hover flex items-center gap-1">

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Shield, Activity, Fingerprint } from 'lucide-react';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchSessionDetail } from '../../hooks/soc/api';
@@ -39,6 +41,7 @@ const demoSession: SocSession = {
 };
 
 export default function SessionDetailPage() {
+  useDocumentTitle('SOC - Session Detail');
   const { id } = useParams();
   const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
@@ -82,6 +85,10 @@ export default function SessionDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <Breadcrumb items={[
+        { label: 'Sessions', to: '/sessions' },
+        { label: session.sessionId },
+      ]} />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link to="/sessions" className="text-sm text-link hover:text-link-hover">Back to Sessions</Link>

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Activity, Shield, Star } from 'lucide-react';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchActorDetail, fetchActorTimeline } from '../../hooks/soc/api';
@@ -58,6 +60,7 @@ const eventTone: Record<string, string> = {
 };
 
 export default function ActorDetailPage() {
+  useDocumentTitle('SOC - Actor Detail');
   const { id } = useParams();
   const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
@@ -114,6 +117,10 @@ export default function ActorDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <Breadcrumb items={[
+        { label: 'Actors', to: '/actors' },
+        { label: actor.actorId },
+      ]} />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link to="/actors" className="text-sm text-link hover:text-link-hover">Back to Actors</Link>

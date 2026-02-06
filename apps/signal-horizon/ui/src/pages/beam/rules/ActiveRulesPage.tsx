@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   Shield,
   ShieldCheck,
@@ -357,6 +358,7 @@ function RuleCard({
 }
 
 export default function ActiveRulesPage() {
+  useDocumentTitle('Beam - Active Rules');
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
 
   // Fetch rules from API

@@ -6,6 +6,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE } from '../../../lib/chartTheme';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   GitBranch,
   AlertTriangle,
@@ -229,6 +230,7 @@ function SchemaChangeCard({
 }
 
 export default function SchemaChangesPage() {
+  useDocumentTitle('Beam - Schema Changes');
   const [expandedChanges, setExpandedChanges] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [showBreakingOnly, setShowBreakingOnly] = useState(false);

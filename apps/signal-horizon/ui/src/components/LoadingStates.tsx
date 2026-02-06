@@ -181,7 +181,7 @@ export function LoadingSpinner({
         )}
         aria-hidden="true"
       />
-      <span className="text-ink-secondary text-sm">{message}</span>
+      <span className="text-ink-secondary text-sm" aria-hidden="true">{message}</span>
       <span className="sr-only">{message}</span>
     </div>
   );
@@ -404,11 +404,20 @@ export function TokenListSkeleton({ rows = 3 }: { rows?: number }) {
 export function ConnectionBanner({
   isConnected,
   isReconnecting,
+  reconnectAttempt,
+  maxReconnectAttempts,
 }: {
   isConnected: boolean;
   isReconnecting: boolean;
+  reconnectAttempt?: number;
+  maxReconnectAttempts?: number;
 }) {
   if (isConnected) return null;
+
+  const hasExhaustedAttempts =
+    reconnectAttempt != null &&
+    maxReconnectAttempts != null &&
+    reconnectAttempt >= maxReconnectAttempts;
 
   return (
     <div
@@ -416,15 +425,27 @@ export function ConnectionBanner({
       aria-live="polite"
       className={clsx(
         'flex items-center justify-center gap-2 py-2 px-4 text-sm',
-        isReconnecting
+        isReconnecting && !hasExhaustedAttempts
           ? 'bg-ac-orange/15 text-ac-orange'
           : 'bg-ac-red/15 text-ac-red'
       )}
     >
-      {isReconnecting ? (
+      {isReconnecting && !hasExhaustedAttempts ? (
         <>
           <div className="w-3 h-3 border-2 border-ac-orange border-t-transparent animate-spin" />
-          <span>Reconnecting to server...</span>
+          <span>
+            Reconnecting to server...
+            {reconnectAttempt != null && maxReconnectAttempts != null && (
+              <span className="ml-1 opacity-80">
+                (attempt {reconnectAttempt}/{maxReconnectAttempts})
+              </span>
+            )}
+          </span>
+        </>
+      ) : hasExhaustedAttempts ? (
+        <>
+          <span className="w-2 h-2 bg-ac-red" />
+          <span>Unable to reconnect after {maxReconnectAttempts} attempts. Please refresh the page.</span>
         </>
       ) : (
         <>

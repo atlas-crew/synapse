@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Activity, Shield, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchSessions } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
@@ -58,6 +59,7 @@ function buildDemoSessions(scenario: string): SocSessionListResponse {
 }
 
 export default function SessionsPage() {
+  useDocumentTitle('SOC - Sessions');
   const { sensorId, setSensorId } = useSocSensor();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const [actorFilter, setActorFilter] = useState('');

@@ -1,7 +1,9 @@
 import { LiveAttackMap } from '../../components/soc/LiveAttackMap';
 import { Shield, Globe } from 'lucide-react';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 export default function LiveMapPage() {
+  useDocumentTitle('SOC - Live Map');
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">

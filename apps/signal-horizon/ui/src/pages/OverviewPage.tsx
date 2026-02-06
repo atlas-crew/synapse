@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useHorizonStore } from '../stores/horizonStore';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { apiFetch } from '../lib/api';
 import {
   StatsGridSkeleton,
@@ -31,6 +32,7 @@ import {
   TableSkeleton,
 } from '../components/LoadingStates';
 import { useAttackMap, type AttackPoint, type AttackRoute, type AttackSeverity } from '../hooks/useAttackMap';
+import { useRelativeTime } from '../hooks/useRelativeTime';
 
 const severityColors = {
   LOW: 'text-ac-blue bg-ac-blue/10 border-ac-blue/30',
@@ -74,11 +76,21 @@ function getRiskBadge(score: number): string {
 }
 
 export default function OverviewPage() {
+  useDocumentTitle('Overview');
   const { campaigns, threats, alerts, stats, isLoading: isStoreLoading, updateThreat } = useHorizonStore();
   const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading, error, refetch } = useAttackMap();
   const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'idle' | 'pending' | 'success' | 'error'>>({});
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const lastUpdatedText = useRelativeTime(lastUpdated);
+
+  // Track when data finishes loading
+  useEffect(() => {
+    if (!isLoading && (campaigns.length > 0 || threats.length > 0 || alerts.length > 0)) {
+      setLastUpdated(Date.now());
+    }
+  }, [isLoading, campaigns.length, threats.length, alerts.length]);
 
   const filteredMapPoints = useMemo(() => {
     if (activeFilter === 'Top Bots (1h)') {
@@ -205,6 +217,11 @@ export default function OverviewPage() {
           <h1 className="text-3xl font-light text-ink-primary">Threat Overview</h1>
           <p className="text-ink-secondary mt-1">
             Fleet threat intelligence and collective defense across {stats.sensorsOnline} sensors
+            {lastUpdatedText && (
+              <span className="ml-2 text-xs text-ink-muted">
+                &middot; Updated {lastUpdatedText}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">

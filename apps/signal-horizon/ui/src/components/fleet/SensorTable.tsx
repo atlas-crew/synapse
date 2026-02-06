@@ -59,6 +59,7 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-border-subtle">
+        <caption className="sr-only">Fleet sensors with status and metrics</caption>
         <thead className="bg-surface-subtle">
           <tr>
             {columns.map((col) => (

@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle,
@@ -18,6 +19,7 @@ import { useFleetStore } from '../../stores/fleetStore';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
+import { useRelativeTime } from '../../hooks/useRelativeTime';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
@@ -80,10 +82,13 @@ async function fetchSensors(): Promise<SensorSummary[]> {
 }
 
 export function FleetOverviewPage() {
+  useDocumentTitle('Fleet Overview');
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const { filters, setStatusFilter } = useFleetStore();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const lastUpdatedText = useRelativeTime(lastUpdated);
 
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ['fleet', 'overview', isDemoMode ? scenario : 'live'],
@@ -110,6 +115,13 @@ export function FleetOverviewPage() {
     refetchInterval: isDemoMode ? false : 5000,
     staleTime: isDemoMode ? Infinity : 4000,
   });
+
+  // Track when data finishes loading
+  useEffect(() => {
+    if (!overviewLoading && !sensorsLoading && (overview || sensors.length > 0)) {
+      setLastUpdated(Date.now());
+    }
+  }, [overviewLoading, sensorsLoading, overview, sensors.length]);
 
   const filteredSensors = sensors.filter((s) => {
     if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -143,7 +155,14 @@ export function FleetOverviewPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-ink-primary">Signal Array</h1>
-          <p className="text-ink-secondary">Sensor Fleet Command & Health Monitoring</p>
+          <p className="text-ink-secondary">
+            Sensor Fleet Command & Health Monitoring
+            {lastUpdatedText && (
+              <span className="ml-2 text-xs text-ink-muted">
+                &middot; Updated {lastUpdatedText}
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-3">
           <button className="btn-outline h-10 px-4 text-xs uppercase tracking-[0.2em]">
@@ -286,9 +305,16 @@ function StatsCard({ icon: Icon, iconBg, iconColor, value, label, borderClassNam
   );
 }
 
-function QuickAction({ icon: Icon, title, description, onClick, accentClassName, iconClassName }: { icon: LucideIcon; title: string; description: string; onClick?: () => void; accentClassName: string; iconClassName: string }) {
+function QuickAction({ icon: Icon, title, description, onClick, accentClassName, iconClassName, disabled = false }: { icon: LucideIcon; title: string; description: string; onClick?: () => void; accentClassName: string; iconClassName: string; disabled?: boolean }) {
+  const isDisabled = disabled || !onClick;
   return (
-    <button onClick={onClick} className={`card border border-border-subtle border-l-2 p-4 text-left hover:bg-surface-subtle transition-colors group focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50 ${accentClassName}`}>
+    <button
+      onClick={isDisabled ? undefined : onClick}
+      disabled={isDisabled}
+      title={isDisabled ? `${title} (coming soon)` : title}
+      aria-disabled={isDisabled}
+      className={`card border border-border-subtle border-l-2 p-4 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50 ${accentClassName} ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-subtle'}`}
+    >
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 border border-border-subtle bg-surface-subtle flex items-center justify-center">
           <Icon className={`w-5 h-5 ${iconClassName}`} />

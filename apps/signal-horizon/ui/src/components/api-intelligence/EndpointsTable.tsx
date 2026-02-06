@@ -20,6 +20,7 @@ export function EndpointsTable({ endpoints, totalCount, isLoading, emptyMessage 
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left" aria-label="Discovered API endpoints">
+          <caption className="sr-only">Discovered API endpoints with risk levels and schema status</caption>
           <thead className="text-xs text-ink-muted uppercase bg-surface-subtle border-b border-border-subtle">
             <tr>
               <th className="px-4 py-3">Method</th>

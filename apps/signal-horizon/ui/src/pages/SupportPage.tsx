@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
@@ -91,6 +92,7 @@ interface DocItem {
 }
 
 export function SupportPage() {
+  useDocumentTitle('Support');
 
   const [activeTab, setActiveTab] = useState<'docs' | 'diagnostics' | 'contact'>('docs');
 
@@ -212,7 +214,7 @@ export function SupportPage() {
 
           <div className="hidden md:block">
 
-            <span className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em]">
+            <span className="text-[10px] font-bold text-white/60 uppercase tracking-[0.2em]">
 
               Precision Security Fleet
 

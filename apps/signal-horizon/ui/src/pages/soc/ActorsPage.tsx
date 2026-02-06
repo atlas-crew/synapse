@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Shield, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchActors } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
@@ -46,6 +47,7 @@ function buildDemoActors(scenario: string): SocActorListResponse {
 }
 
 export default function ActorsPage() {
+  useDocumentTitle('SOC - Actors');
   const { sensorId, setSensorId } = useSocSensor();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const [ipFilter, setIpFilter] = useState('');

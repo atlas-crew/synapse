@@ -6,7 +6,7 @@
  * instead of connecting to the real WebSocket server.
  */
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useHorizonStore } from '../stores/horizonStore';
 import { useDemoMode } from '../stores/demoModeStore';
@@ -104,6 +104,7 @@ export function useWebSocket() {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCleaningUpRef = useRef(false);
   const lastLoadedScenarioRef = useRef<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   // Demo mode state
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
@@ -352,10 +353,12 @@ export function useWebSocket() {
 
     if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
       console.log('[WebSocket] Max reconnect attempts reached');
+      setReconnectAttempt(reconnectAttemptsRef.current);
       return;
     }
 
     reconnectAttemptsRef.current += 1;
+    setReconnectAttempt(reconnectAttemptsRef.current);
     const delay = RECONNECT_DELAY * reconnectAttemptsRef.current;
 
     console.log(
@@ -397,6 +400,7 @@ export function useWebSocket() {
         console.log('[WebSocket] Connected to Signal Horizon Hub');
         setConnectionState('connected');
         reconnectAttemptsRef.current = 0;
+        setReconnectAttempt(0);
       };
 
       ws.onmessage = handleMessage;
@@ -430,6 +434,7 @@ export function useWebSocket() {
     setConnectionState('disconnected');
     setSessionId(null);
     reconnectAttemptsRef.current = 0;
+    setReconnectAttempt(0);
   }, [cleanup, setConnectionState, setSessionId]);
 
   // Send message helper
@@ -483,5 +488,7 @@ export function useWebSocket() {
     isConnected: connectionState === 'connected',
     connectionState,
     isDemoMode,
+    reconnectAttempt,
+    maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
   };
 }

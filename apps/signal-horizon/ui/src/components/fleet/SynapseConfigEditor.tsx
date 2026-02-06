@@ -203,24 +203,35 @@ function Toggle({ label, description, checked, onChange }: {
   );
 }
 
-function Input({ label, description, value, onChange, type = 'text', placeholder }: {
+function Input({ label, description, value, onChange, type = 'text', placeholder, required, min, max, pattern }: {
   label: string;
   description?: string;
   value: string | number;
   onChange: (v: string) => void;
   type?: string;
   placeholder?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  pattern?: string;
 }) {
   return (
     <div>
-      <label className="block text-sm text-ink-secondary mb-1">{label}</label>
+      <label className="block text-sm text-ink-secondary mb-1">
+        {label}
+        {required && <span className="text-ac-red ml-0.5" aria-hidden="true">*</span>}
+      </label>
       {description && <p className="text-xs text-ink-muted mb-1">{description}</p>}
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm focus:outline-none focus:ring-1 focus:ring-ac-blue"
+        required={required}
+        min={min}
+        max={max}
+        pattern={pattern}
+        className="w-full px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm focus:outline-none focus:ring-1 focus:ring-ac-blue invalid:border-ac-red invalid:ring-ac-red/30"
       />
     </div>
   );
@@ -399,6 +410,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 value={config.server.http_addr}
                 onChange={(v) => updateServer({ http_addr: v })}
                 placeholder="0.0.0.0:80"
+                required
+                pattern="[^\s]+"
               />
               <Input
                 label="HTTPS Listen Address"
@@ -406,6 +419,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 value={config.server.https_addr}
                 onChange={(v) => updateServer({ https_addr: v })}
                 placeholder="0.0.0.0:443"
+                required
+                pattern="[^\s]+"
               />
               <Input
                 label="Workers"
@@ -413,6 +428,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 value={config.server.workers}
                 onChange={(v) => updateServer({ workers: parseInt(v) || 0 })}
                 type="number"
+                min={0}
+                max={256}
               />
               <Input
                 label="Shutdown Timeout (s)"
@@ -420,6 +437,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 value={config.server.shutdown_timeout_secs || 30}
                 onChange={(v) => updateServer({ shutdown_timeout_secs: parseInt(v) || 30 })}
                 type="number"
+                min={1}
+                max={300}
               />
               <Select
                 label="Log Level"
@@ -458,6 +477,9 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 value={config.server.waf_threshold}
                 onChange={(v) => updateServer({ waf_threshold: Math.min(100, Math.max(1, parseInt(v) || 70)) })}
                 type="number"
+                min={1}
+                max={100}
+                required
               />
               <Input
                 label="Regex Timeout (ms)"
@@ -465,6 +487,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 value={config.server.waf_regex_timeout_ms || 100}
                 onChange={(v) => updateServer({ waf_regex_timeout_ms: Math.min(500, parseInt(v) || 100) })}
                 type="number"
+                min={1}
+                max={500}
               />
             </div>
           </Section>
@@ -483,6 +507,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   value={config.rate_limit.rps}
                   onChange={(v) => updateConfigAndYaml({ ...config, rate_limit: { ...config.rate_limit, rps: parseInt(v) || 10000 } })}
                   type="number"
+                  min={1}
+                  required
                 />
                 <Input
                   label="Burst Allowance"
@@ -548,6 +574,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   value={activeSite.hostname}
                   onChange={(v) => updateSite(activeSiteIndex, { hostname: v })}
                   placeholder="example.com or *.example.com"
+                  required
                 />
                 <p className="text-xs text-ink-muted -mt-2">
                   Wildcards: Use * for subdomain matching. Examples: *.example.com, *.api.example.com, api-*.prod.example.com
@@ -568,7 +595,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                             updateSite(activeSiteIndex, { upstreams: newUpstreams });
                           }}
                           placeholder="hostname or IP"
-                          className="flex-1 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm"
+                          required
+                          className="flex-1 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm invalid:border-ac-red"
                         />
                         <input
                           type="number"
@@ -579,7 +607,10 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                             updateSite(activeSiteIndex, { upstreams: newUpstreams });
                           }}
                           placeholder="port"
-                          className="w-24 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm"
+                          required
+                          min={1}
+                          max={65535}
+                          className="w-24 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm invalid:border-ac-red"
                         />
                         <input
                           type="number"
@@ -590,7 +621,9 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                             updateSite(activeSiteIndex, { upstreams: newUpstreams });
                           }}
                           placeholder="weight"
-                          className="w-20 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm"
+                          min={1}
+                          max={100}
+                          className="w-20 px-3 py-2 bg-surface-elevated border border-border-subtle text-ink-primary text-sm invalid:border-ac-red"
                           title="Load balancing weight"
                         />
                         <button
@@ -749,6 +782,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                           shadow_mirror: { ...activeSite.shadow_mirror!, sample_rate: Math.min(100, parseInt(v) || 100) }
                         })}
                         type="number"
+                        min={1}
+                        max={100}
                       />
                     </div>
                   )}
@@ -773,6 +808,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   value={config.profiler.max_profiles || 1000}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, max_profiles: parseInt(v) || 1000 } })}
                   type="number"
+                  min={1}
+                  max={100000}
                 />
                 <Input
                   label="Max Schemas"
@@ -780,6 +817,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   value={config.profiler.max_schemas || 500}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, max_schemas: parseInt(v) || 500 } })}
                   type="number"
+                  min={1}
+                  max={100000}
                 />
                 <Input
                   label="Min Samples"
@@ -787,6 +826,8 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                   value={config.profiler.min_samples_for_validation || 100}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, min_samples_for_validation: parseInt(v) || 100 } })}
                   type="number"
+                  min={1}
+                  max={10000}
                 />
                 <Input
                   label="Payload Z-Score Threshold"

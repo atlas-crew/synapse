@@ -243,6 +243,7 @@ export function SessionSearchResults({
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border-default">
+              <caption className="sr-only">Session search results across fleet sensors</caption>
               <thead className="bg-surface-raised">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">

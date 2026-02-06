@@ -13,6 +13,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   AreaChart,
   Area,
@@ -384,6 +385,7 @@ function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
 }
 
 export default function TrafficAnalyticsPage() {
+  useDocumentTitle('Beam - Traffic Analytics');
   const [timeRange, setTimeRange] = useState<TimeRange>('24h');
   const trafficData = useTrafficTimeline();
   // Will be used when real-time stats are integrated

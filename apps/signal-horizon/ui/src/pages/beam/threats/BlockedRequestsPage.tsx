@@ -5,6 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   ShieldX,
   Search,
@@ -389,6 +390,7 @@ function DecisionTraceModal({
 }
 
 export default function BlockedRequestsPage() {
+  useDocumentTitle('Beam - Blocked Requests');
   const [search, setSearch] = useState('');
   const [reasonFilter, setReasonFilter] = useState<string>('');
   const [selectedRequest, setSelectedRequest] = useState<(typeof DEMO_BLOCKED_REQUESTS)[0] | null>(null);
