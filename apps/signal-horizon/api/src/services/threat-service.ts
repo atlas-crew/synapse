@@ -100,25 +100,61 @@ const SEVERITY_SCORES: Record<Severity, number> = {
   CRITICAL: 100,
 };
 
+/**
+ * Store interface for recent signal tracking data.
+ * Allows swapping between in-memory and Redis-backed implementations.
+ */
+export interface RecentSignalsStore {
+  get(key: string): Promise<{ count: number; lastSeen: number } | undefined>;
+  set(key: string, value: { count: number; lastSeen: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+  entries(): Promise<[string, { count: number; lastSeen: number }][]>;
+}
+
+/**
+ * In-memory implementation of RecentSignalsStore (default).
+ * Suitable for single-instance deployments.
+ */
+export class InMemoryRecentSignalsStore implements RecentSignalsStore {
+  private map = new Map<string, { count: number; lastSeen: number }>();
+
+  async get(key: string): Promise<{ count: number; lastSeen: number } | undefined> {
+    return this.map.get(key);
+  }
+
+  async set(key: string, value: { count: number; lastSeen: number }): Promise<void> {
+    this.map.set(key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.map.delete(key);
+  }
+
+  async entries(): Promise<[string, { count: number; lastSeen: number }][]> {
+    return Array.from(this.map.entries());
+  }
+}
+
 export class ThreatService {
   private logger: Logger;
   private config: ThreatScoringConfig;
 
   /** Track recent signals for volume-based scoring */
-  private recentSignals: Map<string, { count: number; lastSeen: number }> = new Map();
+  private recentSignals: RecentSignalsStore;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly WINDOW_MS = 5 * 60 * 1000; // 5 minute window
 
-  constructor(logger: Logger, config?: Partial<ThreatScoringConfig>) {
+  constructor(logger: Logger, config?: Partial<ThreatScoringConfig>, recentSignalsStore?: RecentSignalsStore) {
     this.logger = logger.child({ service: 'threat-service' });
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.recentSignals = recentSignalsStore ?? new InMemoryRecentSignalsStore();
     this.startCleanup();
   }
 
   /**
    * Calculate threat score for a signal
    */
-  calculateThreatScore(signal: SignalContext): ThreatScore {
+  async calculateThreatScore(signal: SignalContext): Promise<ThreatScore> {
     const factors: ThreatFactor[] = [];
 
     // 1. Severity factor
@@ -150,7 +186,7 @@ export class ThreatService {
 
     // 4. Volume factor (repeat offenders score higher)
     const volumeKey = this.buildVolumeKey(signal);
-    const volumeScore = this.updateVolumeTracking(volumeKey, signal.eventCount ?? 1);
+    const volumeScore = await this.updateVolumeTracking(volumeKey, signal.eventCount ?? 1);
     factors.push({
       name: 'volume',
       weight: this.config.volumeWeight,
@@ -195,15 +231,16 @@ export class ThreatService {
     return `type:${signal.signalType}`;
   }
 
-  private updateVolumeTracking(key: string, eventCount: number): number {
+  private async updateVolumeTracking(key: string, eventCount: number): Promise<number> {
     const now = Date.now();
-    const existing = this.recentSignals.get(key);
+    const existing = await this.recentSignals.get(key);
 
     if (existing) {
       existing.count += eventCount;
       existing.lastSeen = now;
+      await this.recentSignals.set(key, existing);
     } else {
-      this.recentSignals.set(key, { count: eventCount, lastSeen: now });
+      await this.recentSignals.set(key, { count: eventCount, lastSeen: now });
     }
 
     // Calculate volume score: logarithmic scaling for repeat offenders
@@ -223,24 +260,27 @@ export class ThreatService {
     // Clean up old entries every minute
     this.cleanupInterval = setInterval(() => {
       const cutoff = Date.now() - this.WINDOW_MS;
-      for (const [key, value] of this.recentSignals) {
-        if (value.lastSeen < cutoff) {
-          this.recentSignals.delete(key);
+      void this.recentSignals.entries().then((entries) => {
+        for (const [key, value] of entries) {
+          if (value.lastSeen < cutoff) {
+            void this.recentSignals.delete(key);
+          }
         }
-      }
+      });
     }, 60_000);
   }
 
   /**
    * Get current volume statistics
    */
-  getVolumeStats(): { trackedEntities: number; totalSignals: number } {
+  async getVolumeStats(): Promise<{ trackedEntities: number; totalSignals: number }> {
+    const allEntries = await this.recentSignals.entries();
     let totalSignals = 0;
-    for (const value of this.recentSignals.values()) {
+    for (const [, value] of allEntries) {
       totalSignals += value.count;
     }
     return {
-      trackedEntities: this.recentSignals.size,
+      trackedEntities: allEntries.length,
       totalSignals,
     };
   }
@@ -248,11 +288,14 @@ export class ThreatService {
   /**
    * Stop the service and clean up
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
-    this.recentSignals.clear();
+    const entries = await this.recentSignals.entries();
+    for (const [key] of entries) {
+      await this.recentSignals.delete(key);
+    }
   }
 }

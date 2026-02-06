@@ -364,10 +364,10 @@ export class Aggregator {
    * Calculate threat score for a signal using ThreatService
    * Returns null if ThreatService is not available
    */
-  private calculateThreatScore(signal: IncomingSignal): number | null {
+  private async calculateThreatScore(signal: IncomingSignal): Promise<number | null> {
     if (!this.threatService) return null;
 
-    const result = this.threatService.calculateThreatScore({
+    const result = await this.threatService.calculateThreatScore({
       signalType: signal.signalType,
       severity: signal.severity,
       confidence: signal.confidence,
@@ -499,7 +499,7 @@ export class Aggregator {
     }
 
     // 5. Calculate threat score using ThreatService
-    const threatScore = this.calculateThreatScore(signal) ?? undefined;
+    const threatScore = (await this.calculateThreatScore(signal)) ?? undefined;
 
     return {
       ...signal,

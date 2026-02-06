@@ -10,52 +10,52 @@ describe('ThreatService', () => {
     service = new ThreatService(logger);
   });
 
-  afterEach(() => {
-    service.stop();
+  afterEach(async () => {
+    await service.stop();
   });
 
   describe('calculateThreatScore', () => {
-    it('should score CREDENTIAL_STUFFING signals high', () => {
+    it('should score CREDENTIAL_STUFFING signals high', async () => {
       const signal: SignalContext = {
         signalType: 'CREDENTIAL_STUFFING',
         severity: 'HIGH',
         confidence: 0.9,
       };
 
-      const result = service.calculateThreatScore(signal);
+      const result = await service.calculateThreatScore(signal);
 
       expect(result.score).toBeGreaterThanOrEqual(60);
       expect(result.recommendedAction).toBe('alert');
     });
 
-    it('should score IMPOSSIBLE_TRAVEL as critical threat', () => {
+    it('should score IMPOSSIBLE_TRAVEL as critical threat', async () => {
       const signal: SignalContext = {
         signalType: 'IMPOSSIBLE_TRAVEL',
         severity: 'CRITICAL',
         confidence: 0.95,
       };
 
-      const result = service.calculateThreatScore(signal);
+      const result = await service.calculateThreatScore(signal);
 
       expect(result.score).toBeGreaterThanOrEqual(80);
       expect(result.recommendedAction).toBe('alert');
     });
 
-    it('should score TEMPLATE_DISCOVERY signals lower', () => {
+    it('should score TEMPLATE_DISCOVERY signals lower', async () => {
       const signal: SignalContext = {
         signalType: 'TEMPLATE_DISCOVERY',
         severity: 'LOW',
         confidence: 0.5,
       };
 
-      const result = service.calculateThreatScore(signal);
+      const result = await service.calculateThreatScore(signal);
 
       expect(result.score).toBeLessThan(40);
       // Low scores get 'allow' action (below monitor threshold of 30)
       expect(result.recommendedAction).toBe('allow');
     });
 
-    it('should increase score for repeat offenders', () => {
+    it('should increase score for repeat offenders', async () => {
       const signal: SignalContext = {
         signalType: 'BOT_SIGNATURE',
         severity: 'MEDIUM',
@@ -65,10 +65,10 @@ describe('ThreatService', () => {
       };
 
       // First signal
-      const first = service.calculateThreatScore(signal);
+      const first = await service.calculateThreatScore(signal);
 
       // Same IP, many events
-      const repeat = service.calculateThreatScore({
+      const repeat = await service.calculateThreatScore({
         ...signal,
         eventCount: 100,
       });
@@ -76,14 +76,14 @@ describe('ThreatService', () => {
       expect(repeat.score).toBeGreaterThan(first.score);
     });
 
-    it('should include factor breakdown', () => {
+    it('should include factor breakdown', async () => {
       const signal: SignalContext = {
         signalType: 'IP_THREAT',
         severity: 'HIGH',
         confidence: 0.8,
       };
 
-      const result = service.calculateThreatScore(signal);
+      const result = await service.calculateThreatScore(signal);
 
       expect(result.factors).toHaveLength(4);
       expect(result.factors.map((f) => f.name)).toEqual(
@@ -91,7 +91,7 @@ describe('ThreatService', () => {
       );
     });
 
-    it('should cap score at 100', () => {
+    it('should cap score at 100', async () => {
       const signal: SignalContext = {
         signalType: 'IMPOSSIBLE_TRAVEL',
         severity: 'CRITICAL',
@@ -99,7 +99,7 @@ describe('ThreatService', () => {
         eventCount: 1000,
       };
 
-      const result = service.calculateThreatScore(signal);
+      const result = await service.calculateThreatScore(signal);
 
       expect(result.score).toBeLessThanOrEqual(100);
     });
@@ -123,7 +123,7 @@ describe('ThreatService', () => {
   });
 
   describe('getVolumeStats', () => {
-    it('should track volume statistics', () => {
+    it('should track volume statistics', async () => {
       const signal: SignalContext = {
         signalType: 'RATE_ANOMALY',
         severity: 'MEDIUM',
@@ -131,11 +131,11 @@ describe('ThreatService', () => {
         sourceIp: '10.0.0.1',
       };
 
-      service.calculateThreatScore(signal);
-      service.calculateThreatScore({ ...signal, sourceIp: '10.0.0.2' });
-      service.calculateThreatScore({ ...signal, sourceIp: '10.0.0.3' });
+      await service.calculateThreatScore(signal);
+      await service.calculateThreatScore({ ...signal, sourceIp: '10.0.0.2' });
+      await service.calculateThreatScore({ ...signal, sourceIp: '10.0.0.3' });
 
-      const stats = service.getVolumeStats();
+      const stats = await service.getVolumeStats();
 
       expect(stats.trackedEntities).toBe(3);
       expect(stats.totalSignals).toBe(3);
@@ -143,19 +143,19 @@ describe('ThreatService', () => {
   });
 
   describe('recommended actions', () => {
-    it('should recommend allow for low scores', () => {
+    it('should recommend allow for low scores', async () => {
       const signal: SignalContext = {
         signalType: 'TEMPLATE_DISCOVERY',
         severity: 'LOW',
         confidence: 0.3,
       };
 
-      const result = service.calculateThreatScore(signal);
+      const result = await service.calculateThreatScore(signal);
 
       expect(result.recommendedAction).toBe('allow');
     });
 
-    it('should recommend block for high scores', () => {
+    it('should recommend block for high scores', async () => {
       // Create service with lower block threshold for testing
       const strictService = new ThreatService(logger, {
         thresholds: { monitor: 20, alert: 40, block: 60 },
@@ -167,10 +167,10 @@ describe('ThreatService', () => {
         confidence: 0.95,
       };
 
-      const result = strictService.calculateThreatScore(signal);
+      const result = await strictService.calculateThreatScore(signal);
 
       expect(result.recommendedAction).toBe('block');
-      strictService.stop();
+      await strictService.stop();
     });
   });
 });
