@@ -218,6 +218,7 @@ describe('Telemetry routes', () => {
     const perEvent = {
       event_type: 'rate_limit_hit',
       data: {
+        request_id: 'req_rl_1',
         client_ip: '203.0.113.11',
         limit: 100,
         window_secs: 60,
@@ -244,6 +245,7 @@ describe('Telemetry routes', () => {
 
     const [rows] = signalSpy.mock.calls[0] ?? [];
     expect(rows[0]).toMatchObject({
+      request_id: 'req_rl_1',
       signal_type: 'RATE_LIMIT_HIT',
       source_ip: '203.0.113.11',
       severity: 'MEDIUM',
