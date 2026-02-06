@@ -376,7 +376,11 @@ export function useWebSocket() {
       return;
     }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    const existing = wsRef.current;
+    if (
+      existing &&
+      (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
@@ -386,7 +390,7 @@ export function useWebSocket() {
     setConnectionState('connecting');
 
     try {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(`${WS_URL}?apiKey=${API_KEY}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -454,6 +458,13 @@ export function useWebSocket() {
   const requestSnapshot = useCallback(() => {
     send({ type: 'request-snapshot' });
   }, [send]);
+
+  // Trigger connection when state becomes 'connecting' (e.g. from reconnect scheduler)
+  useEffect(() => {
+    if (connectionState === 'connecting' && !isDemoMode) {
+      connect();
+    }
+  }, [connectionState, connect, isDemoMode]);
 
   // Cleanup on unmount - disconnect and clear all timers
   useEffect(() => {

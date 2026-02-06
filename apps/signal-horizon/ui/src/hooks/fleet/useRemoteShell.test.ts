@@ -1,5 +1,48 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+
+const terminalInstances: Array<{
+  write: ReturnType<typeof vi.fn>;
+  writeln: ReturnType<typeof vi.fn>;
+  onData: ReturnType<typeof vi.fn>;
+  loadAddon: ReturnType<typeof vi.fn>;
+  open: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+  focus: ReturnType<typeof vi.fn>;
+}> = [];
+
+vi.mock('@xterm/xterm', () => {
+  const Terminal = vi.fn().mockImplementation(() => {
+    const instance = {
+      write: vi.fn(),
+      writeln: vi.fn(),
+      onData: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      loadAddon: vi.fn(),
+      open: vi.fn(),
+      dispose: vi.fn(),
+      focus: vi.fn(),
+      options: {},
+    };
+    terminalInstances.push(instance);
+    return instance;
+  });
+  return { Terminal };
+});
+
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: vi.fn().mockImplementation(() => ({
+    fit: vi.fn(),
+    proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
+    dispose: vi.fn(),
+  })),
+}));
+
+vi.mock('@xterm/addon-web-links', () => ({
+  WebLinksAddon: vi.fn().mockImplementation(() => ({
+    dispose: vi.fn(),
+  })),
+}));
+
 import { useRemoteShell } from './useRemoteShell';
 
 const mockFetch = vi.fn();
@@ -44,10 +87,15 @@ class MockWebSocket {
     this.readyState = MockWebSocket.CLOSED;
     this.oncloseHandler?.({ code, reason } as CloseEvent);
   }
+
+  simulateMessage(data: string): void {
+    this.onmessage?.({ data } as MessageEvent);
+  }
 }
 
 let originalWebSocket: typeof WebSocket;
 let originalFetch: typeof fetch;
+let originalRaf: typeof requestAnimationFrame;
 let mockWebSocketInstances: MockWebSocket[] = [];
 
 const flushPromises = () => new Promise<void>((resolve) => queueMicrotask(resolve));
@@ -61,9 +109,11 @@ describe('useRemoteShell reconnect', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWebSocketInstances = [];
+    terminalInstances.length = 0;
 
     originalWebSocket = globalThis.WebSocket;
     originalFetch = globalThis.fetch;
+    originalRaf = globalThis.requestAnimationFrame;
 
     const PlaceholderWebSocket = Object.assign(
       class {} as unknown as typeof WebSocket,
@@ -77,12 +127,16 @@ describe('useRemoteShell reconnect', () => {
 
     globalThis.WebSocket = PlaceholderWebSocket;
     globalThis.fetch = mockFetch as unknown as typeof fetch;
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    }) as typeof requestAnimationFrame;
   });
 
   afterEach(() => {
     globalThis.WebSocket = originalWebSocket;
     globalThis.fetch = originalFetch;
-    vi.restoreAllMocks();
+    globalThis.requestAnimationFrame = originalRaf;
   });
 
   it('creates a new session on reconnect after abnormal close', async () => {
@@ -141,7 +195,8 @@ describe('useRemoteShell reconnect', () => {
 
     expect(mockWebSocketInstances).toHaveLength(2);
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockWebSocketInstances[1].url).toContain('/ws-2');
+    // labs-c4hh: URL is now a fixed tunnel endpoint (no session token in URL)
+    expect(mockWebSocketInstances[1].url).toContain('/ws/tunnel/user');
   });
 
   it('reconnects after a clean close when not manually disconnected', async () => {
@@ -199,7 +254,8 @@ describe('useRemoteShell reconnect', () => {
 
     expect(mockWebSocketInstances).toHaveLength(2);
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockWebSocketInstances[1].url).toContain('/ws-2');
+    // labs-c4hh: URL is now a fixed tunnel endpoint (no session token in URL)
+    expect(mockWebSocketInstances[1].url).toContain('/ws/tunnel/user');
   });
 
   it('retries session creation during reconnect until it succeeds', async () => {
@@ -272,9 +328,180 @@ describe('useRemoteShell reconnect', () => {
 
       expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(mockWebSocketInstances).toHaveLength(2);
-      expect(mockWebSocketInstances[1].url).toContain('/ws-2');
+      // labs-c4hh: URL is now a fixed tunnel endpoint (no session token in URL)
+      expect(mockWebSocketInstances[1].url).toContain('/ws/tunnel/user');
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('sets error when session creation fails', async () => {
+    const onError = vi.fn();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      text: async () => 'service unavailable',
+    });
+
+    const { result } = renderHook(() =>
+      useRemoteShell({
+        sensorId: 'sensor-1',
+        onError,
+        webSocketFactory: (url: string) => {
+          const instance = new MockWebSocket(url);
+          mockWebSocketInstances.push(instance);
+          return instance as unknown as WebSocket;
+        },
+      })
+    );
+
+    await act(async () => {
+      result.current.connect();
+    });
+
+    await act(async () => {
+      await flushAllPromises();
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.error).toBe('service unavailable');
+    expect(onError).toHaveBeenCalledWith('service unavailable');
+  });
+
+  it('writes raw output when message is not JSON (after auth)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sessionId: 'session-1', wsUrl: '/ws-1' }),
+    });
+
+    const webSocketFactory = (url: string) => {
+      const instance = new MockWebSocket(url);
+      mockWebSocketInstances.push(instance);
+      return instance as unknown as WebSocket;
+    };
+
+    const { result } = renderHook(() =>
+      useRemoteShell({
+        sensorId: 'sensor-1',
+        onError: vi.fn(),
+        webSocketFactory,
+      })
+    );
+
+    await act(async () => {
+      result.current.connect();
+    });
+
+    await act(async () => {
+      await flushAllPromises();
+    });
+
+    const terminal = terminalInstances[0];
+    expect(terminal).toBeDefined();
+
+    // labs-c4hh: Authenticate first via first-message auth
+    await act(async () => {
+      mockWebSocketInstances[0].simulateMessage(JSON.stringify({ type: 'auth-success', sessionId: 'session-1' }));
+      await flushAllPromises();
+    });
+
+    await act(async () => {
+      mockWebSocketInstances[0].simulateMessage('raw-output');
+      await flushAllPromises();
+    });
+
+    expect(terminal.write).toHaveBeenCalledWith('raw-output');
+  });
+
+  it('ignores raw output before auth is confirmed', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sessionId: 'session-1', wsUrl: '/ws-1' }),
+    });
+
+    const webSocketFactory = (url: string) => {
+      const instance = new MockWebSocket(url);
+      mockWebSocketInstances.push(instance);
+      return instance as unknown as WebSocket;
+    };
+
+    const { result } = renderHook(() =>
+      useRemoteShell({
+        sensorId: 'sensor-1',
+        onError: vi.fn(),
+        webSocketFactory,
+      })
+    );
+
+    await act(async () => {
+      result.current.connect();
+    });
+
+    await act(async () => {
+      await flushAllPromises();
+    });
+
+    const terminal = terminalInstances[0];
+    expect(terminal).toBeDefined();
+
+    // Send raw output without authenticating first
+    await act(async () => {
+      mockWebSocketInstances[0].simulateMessage('raw-output');
+      await flushAllPromises();
+    });
+
+    // Should NOT write to terminal before auth
+    expect(terminal.write).not.toHaveBeenCalled();
+  });
+
+  it('drops output when payload exceeds buffer limit', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ sessionId: 'session-1', wsUrl: '/ws-1' }),
+    });
+
+    const webSocketFactory = (url: string) => {
+      const instance = new MockWebSocket(url);
+      mockWebSocketInstances.push(instance);
+      return instance as unknown as WebSocket;
+    };
+
+    const { result } = renderHook(() =>
+      useRemoteShell({
+        sensorId: 'sensor-1',
+        onError: vi.fn(),
+        webSocketFactory,
+      })
+    );
+
+    await act(async () => {
+      result.current.connect();
+    });
+
+    await act(async () => {
+      await flushAllPromises();
+    });
+
+    // labs-c4hh: Authenticate first
+    await act(async () => {
+      mockWebSocketInstances[0].simulateMessage(JSON.stringify({ type: 'auth-success', sessionId: 'session-1' }));
+      await flushAllPromises();
+    });
+
+    const terminal = terminalInstances[0];
+    const bigPayload = 'a'.repeat(1024 * 1024 + 1);
+    const encoded = btoa(bigPayload);
+
+    const message = JSON.stringify({
+      type: 'shell-data',
+      payload: { data: encoded },
+    });
+
+    await act(async () => {
+      mockWebSocketInstances[0].simulateMessage(message);
+      await flushAllPromises();
+    });
+
+    expect(terminal.write).not.toHaveBeenCalled();
   });
 });

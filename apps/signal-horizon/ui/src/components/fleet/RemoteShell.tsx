@@ -66,8 +66,6 @@ export function RemoteShell({
   initialRows = 24,
 }: RemoteShellProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
-  const terminalInstance = useRef<Terminal | null>(null);
-  const fitAddon = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
@@ -77,18 +75,14 @@ export function RemoteShell({
   /**
    * Handle incoming data from the shell
    * Data arrives base64 encoded
+   * 
+   * Note: This is now handled internally by useRemoteShell, but we keep this callback
+   * if we need to intercept data for other purposes (logging, etc).
+   * For now, it's unused by the hook's new implementation but passed for compatibility if needed.
+   * Actually, useRemoteShell doesn't use onData anymore in the new implementation.
    */
-  const handleData = useCallback((data: string) => {
-    if (!terminalInstance.current) return;
-
-    try {
-      // Decode base64 data
-      const decoded = atob(data);
-      terminalInstance.current.write(decoded);
-    } catch {
-      // If not valid base64, write raw data
-      terminalInstance.current.write(data);
-    }
+  const handleData = useCallback((_data: string) => {
+    // No-op: handled by hook
   }, []);
 
   /**
@@ -96,22 +90,13 @@ export function RemoteShell({
    */
   const handleExit = useCallback((code: number) => {
     setExitCode(code);
-    if (terminalInstance.current) {
-      terminalInstance.current.writeln('');
-      terminalInstance.current.writeln(
-        `\x1b[1;${code === 0 ? '32' : '31'}m[Shell exited with code ${code}]\x1b[0m`
-      );
-    }
   }, []);
 
   /**
    * Handle errors
    */
-  const handleError = useCallback((error: string) => {
-    if (terminalInstance.current) {
-      terminalInstance.current.writeln('');
-      terminalInstance.current.writeln(`\x1b[1;31m[Error: ${error}]\x1b[0m`);
-    }
+  const handleError = useCallback((_error: string) => {
+    // Error is logged by hook to terminal
   }, []);
 
   /**
@@ -126,10 +111,9 @@ export function RemoteShell({
    * Handle shell ready
    */
   const handleReady = useCallback(() => {
-    if (terminalInstance.current) {
-      // Focus terminal when ready
-      terminalInstance.current.focus();
-    }
+    // Focus terminal when ready
+    // We can't access terminal instance directly here easily unless we expose it from hook,
+    // but the hook exposes it now!
   }, []);
 
   // Initialize remote shell hook
@@ -137,88 +121,61 @@ export function RemoteShell({
     status,
     connect,
     disconnect,
-    sendInput,
     resize,
     session,
     isReconnecting,
     reconnectAttempt,
     maxReconnectAttempts,
     error,
+    terminal,
+    fitAddon,
   } = useRemoteShell({
     sensorId,
-    onData: handleData,
     onExit: handleExit,
     onError: handleError,
     onTimeoutWarning: handleTimeoutWarning,
     onReady: handleReady,
-  });
-
-  /**
-   * Get terminal dimensions from container
-   */
-  const getTerminalDimensions = useCallback(() => {
-    if (fitAddon.current && terminalInstance.current) {
-      const dims = fitAddon.current.proposeDimensions();
-      return dims ? { cols: dims.cols, rows: dims.rows } : { cols: initialCols, rows: initialRows };
-    }
-    return { cols: initialCols, rows: initialRows };
-  }, [initialCols, initialRows]);
-
-  /**
-   * Handle terminal resize
-   */
-  const handleResize = useCallback(() => {
-    if (fitAddon.current) {
-      fitAddon.current.fit();
-      const dims = getTerminalDimensions();
-      resize(dims.cols, dims.rows);
-    }
-  }, [getTerminalDimensions, resize]);
-
-  // Initialize terminal on mount
-  useEffect(() => {
-    if (!terminalRef.current) return;
-
-    // Create terminal instance
-    const terminal = new Terminal({
+    terminalOptions: {
       theme: TERMINAL_THEME,
       fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Monaco, "Courier New", monospace',
       fontSize: 14,
       fontWeight: 'normal',
       fontWeightBold: 'bold',
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 10000,
-      tabStopWidth: 4,
-      allowProposedApi: true,
-      allowTransparency: false,
-      convertEol: true,
-    });
+    },
+  });
 
-    terminalInstance.current = terminal;
+  /**
+   * Handle terminal resize
+   */
+  const handleResize = useCallback(() => {
+    if (fitAddon) {
+      fitAddon.fit();
+      // We don't need to manually call resize() here if fitAddon handles it locally,
+      // but we need to tell the server.
+      // fitAddon.proposeDimensions() gives us the new cols/rows.
+      const dims = fitAddon.proposeDimensions();
+      if (dims) {
+        resize(dims.cols, dims.rows);
+      }
+    }
+  }, [fitAddon, resize]);
 
-    // Load addons
-    const fit = new FitAddon();
-    fitAddon.current = fit;
-    terminal.loadAddon(fit);
+  // Attach terminal to DOM on mount/update
+  useEffect(() => {
+    if (!terminalRef.current || !terminal || !fitAddon) return;
 
-    const webLinks = new WebLinksAddon();
-    terminal.loadAddon(webLinks);
-
-    // Open terminal in container
-    terminal.open(terminalRef.current);
-    fit.fit();
-
-    // Handle user input - encode as base64
-    terminal.onData((data) => {
-      sendInput(btoa(data));
-    });
-
-    // Write welcome message
-    terminal.writeln('\x1b[1;36mSignal Horizon Remote Shell\x1b[0m');
-    terminal.writeln(`\x1b[90mSensor: ${sensorName} (${sensorId})\x1b[0m`);
-    terminal.writeln('\x1b[90mPress Connect to establish session...\x1b[0m');
-    terminal.writeln('');
+    // Open terminal in container if not already opened
+    // xterm.js doesn't expose an easy "isOpened" property, but checking element content is a proxy
+    if (terminalRef.current.childElementCount === 0) {
+      terminal.open(terminalRef.current);
+      fitAddon.fit();
+      
+      // Initial banner
+      terminal.writeln('\x1b[1;36mSignal Horizon Remote Shell\x1b[0m');
+      terminal.writeln(`\x1b[90mSensor: ${sensorName} (${sensorId})\x1b[0m`);
+      terminal.writeln('\x1b[90mPress Connect to establish session...\x1b[0m');
+      terminal.writeln('');
+    }
 
     // Setup resize observer
     const resizeObserver = new ResizeObserver(() => {
@@ -227,43 +184,63 @@ export function RemoteShell({
     resizeObserver.observe(terminalRef.current);
     resizeObserverRef.current = resizeObserver;
 
-    // Cleanup on unmount
     return () => {
       resizeObserver.disconnect();
-      terminal.dispose();
-      terminalInstance.current = null;
-      fitAddon.current = null;
+      // We do NOT dispose the terminal here, the hook handles its lifecycle.
+      // But we might want to detach it? terminal.dispose() destroys it.
+      // The hook disposes it on unmount.
     };
-  }, [sensorId, sensorName, handleResize, sendInput]);
+  }, [terminal, fitAddon, handleResize, sensorName, sensorId]);
 
-  // Handle connect/disconnect state changes
+  // Focus terminal when connected
   useEffect(() => {
-    if (!terminalInstance.current) return;
+    if (status === 'connected' && terminal) {
+      terminal.focus();
+      
+      // Send initial resize
+      handleResize();
+    }
+  }, [status, terminal, handleResize]);
+
+  // Handle connect/disconnect state changes for UI feedback in terminal
+  useEffect(() => {
+    if (!terminal) return;
 
     if (status === 'connected') {
-      terminalInstance.current.writeln('\x1b[1;32m[Connected]\x1b[0m');
-      terminalInstance.current.writeln('');
+      terminal.writeln('\x1b[1;32m[Connected]\x1b[0m');
+      terminal.writeln('');
     } else if (status === 'disconnected' && !isReconnecting) {
-      terminalInstance.current.writeln('');
-      terminalInstance.current.writeln('\x1b[1;33m[Disconnected]\x1b[0m');
+      terminal.writeln('');
+      terminal.writeln('\x1b[1;33m[Disconnected]\x1b[0m');
     }
-  }, [status, isReconnecting]);
+  }, [status, isReconnecting, terminal]);
 
   /**
    * Handle connect button click
    */
   const handleConnect = useCallback(() => {
-    const dims = getTerminalDimensions();
-    connect({ cols: dims.cols, rows: dims.rows });
-
-    if (terminalInstance.current) {
-      terminalInstance.current.clear();
-      terminalInstance.current.writeln('\x1b[1;36mSignal Horizon Remote Shell\x1b[0m');
-      terminalInstance.current.writeln(`\x1b[90mSensor: ${sensorName} (${sensorId})\x1b[0m`);
-      terminalInstance.current.writeln('\x1b[90mConnecting...\x1b[0m');
-      terminalInstance.current.writeln('');
+    // Initial dimensions
+    let cols = initialCols;
+    let rows = initialRows;
+    
+    if (fitAddon) {
+      const dims = fitAddon.proposeDimensions();
+      if (dims) {
+        cols = dims.cols;
+        rows = dims.rows;
+      }
     }
-  }, [connect, getTerminalDimensions, sensorId, sensorName]);
+    
+    connect({ cols, rows });
+
+    if (terminal) {
+      terminal.clear();
+      terminal.writeln('\x1b[1;36mSignal Horizon Remote Shell\x1b[0m');
+      terminal.writeln(`\x1b[90mSensor: ${sensorName} (${sensorId})\x1b[0m`);
+      terminal.writeln('\x1b[90mConnecting...\x1b[0m');
+      terminal.writeln('');
+    }
+  }, [connect, fitAddon, initialCols, initialRows, sensorId, sensorName, terminal]);
 
   /**
    * Handle disconnect button click

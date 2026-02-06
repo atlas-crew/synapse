@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Component, type ReactNode } from 'react';
+import { Globe2 } from 'lucide-react';
 import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer, ArcLayer, ScatterplotLayer } from '@deck.gl/layers';
 import type { PickingInfo } from '@deck.gl/core';
@@ -176,7 +177,7 @@ export function LiveAttackMap() {
   const FallbackMap = () => (
     <div className="w-full h-full bg-gradient-to-br from-[#0a1628] to-[#1a2840] flex flex-col items-center justify-center p-8">
       <div className="text-center mb-8">
-        <div className="text-6xl mb-4">🌍</div>
+        <Globe2 className="h-12 w-12 text-ac-blue mb-4" />
         <h3 className="text-lg font-medium text-ink-primary mb-2">WebGL Map Unavailable</h3>
         <p className="text-sm text-ink-secondary max-w-md">
           The interactive globe requires WebGL which isn't available in this browser.

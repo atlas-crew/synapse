@@ -33,6 +33,9 @@ const COLORS: [number, number, number][] = [
   [255, 255, 0],  // Medium (Yellow)
 ];
 
+/** Maximum number of attack events to retain in state (labs-1gsa) */
+const MAX_EVENTS = 500;
+
 export function useLiveAttacks() {
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const attacksRef = useRef<Attack[]>([]);
@@ -40,21 +43,21 @@ export function useLiveAttacks() {
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      
+
       // Clean up old attacks (> 5 seconds)
       const activeAttacks = attacksRef.current.filter(a => now - a.timestamp < 5000);
-      
+
       // Generate 1-3 new attacks
       const newAttacks: Attack[] = [];
       const count = Math.floor(Math.random() * 3) + 1;
-      
+
       for (let i = 0; i < count; i++) {
         const target = SENSORS[Math.floor(Math.random() * SENSORS.length)];
-        
+
         // Random source roughly mapped to population centers
         const sourceLat = (Math.random() * 160) - 80;
         const sourceLon = (Math.random() * 360) - 180;
-        
+
         newAttacks.push({
           id: Math.random().toString(36).substr(2, 9),
           sourceIp: `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
@@ -66,10 +69,14 @@ export function useLiveAttacks() {
           timestamp: now,
         });
       }
-      
-      attacksRef.current = [...activeAttacks, ...newAttacks];
+
+      const combined = [...activeAttacks, ...newAttacks];
+      // labs-1gsa: Cap the array to prevent unbounded memory growth
+      attacksRef.current = combined.length > MAX_EVENTS
+        ? combined.slice(-MAX_EVENTS)
+        : combined;
       setAttacks([...attacksRef.current]);
-      
+
     }, 800);
 
     return () => clearInterval(interval);

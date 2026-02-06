@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { Globe2 } from 'lucide-react';
 import { ProgressBar } from '../../ctrlx/ProgressBar';
 
 interface RegionTraffic {
@@ -14,25 +15,6 @@ interface TrafficByRegionListProps {
   maxItems?: number;
   className?: string;
 }
-
-// Simple flag emoji lookup
-const countryFlags: Record<string, string> = {
-  US: '🇺🇸',
-  GB: '🇬🇧',
-  DE: '🇩🇪',
-  FR: '🇫🇷',
-  JP: '🇯🇵',
-  AU: '🇦🇺',
-  CA: '🇨🇦',
-  BR: '🇧🇷',
-  IN: '🇮🇳',
-  SG: '🇸🇬',
-  NL: '🇳🇱',
-  KR: '🇰🇷',
-  CN: '🇨🇳',
-  ES: '🇪🇸',
-  IT: '🇮🇹',
-};
 
 /**
  * TrafficByRegionList - Country list with flags, names, and percentage bars.
@@ -50,8 +32,11 @@ export const TrafficByRegionList = memo(function TrafficByRegionList({
       {displayData.map((region) => (
         <div key={region.code} className="flex items-center gap-3">
           {/* Flag */}
-          <span className="text-lg w-6 text-center" role="img" aria-label={region.name}>
-            {region.flag || countryFlags[region.code] || '🌍'}
+          <span
+            className="inline-flex h-6 w-6 items-center justify-center border border-border-subtle bg-surface-subtle"
+            aria-label={region.name}
+          >
+            <Globe2 className="h-3.5 w-3.5 text-ac-blue" />
           </span>
 
           {/* Country name and percentage */}

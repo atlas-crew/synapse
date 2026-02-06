@@ -4,6 +4,9 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Terminal, type ITerminalOptions } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import type {
   ShellSession,
   ShellSessionStatus,
@@ -32,8 +35,6 @@ const MAX_SESSION_DURATION = 30 * 60 * 1000;
 export interface UseRemoteShellOptions {
   /** Target sensor ID */
   sensorId: string;
-  /** Callback when data is received from the shell */
-  onData: (data: string) => void;
   /** Callback when shell session exits */
   onExit?: (code: number) => void;
   /** Callback when an error occurs */
@@ -48,6 +49,8 @@ export interface UseRemoteShellOptions {
   autoConnect?: boolean;
   /** Optional WebSocket factory (useful for deterministic tests) */
   webSocketFactory?: (url: string) => WebSocket;
+  /** Terminal configuration options */
+  terminalOptions?: ITerminalOptions;
 }
 
 export interface UseRemoteShellReturn {
@@ -57,8 +60,6 @@ export interface UseRemoteShellReturn {
   connect: (options?: ShellInitOptions) => void;
   /** Disconnect from the shell */
   disconnect: () => void;
-  /** Send input to the shell */
-  sendInput: (data: string) => void;
   /** Resize the terminal */
   resize: (cols: number, rows: number) => void;
   /** Current session information */
@@ -71,6 +72,10 @@ export interface UseRemoteShellReturn {
   maxReconnectAttempts: number;
   /** Error message if any */
   error: string | null;
+  /** The xterm.js Terminal instance */
+  terminal: Terminal | null;
+  /** The FitAddon instance for resizing */
+  fitAddon: FitAddon | null;
 }
 
 /**
@@ -79,7 +84,6 @@ export interface UseRemoteShellReturn {
 export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellReturn {
   const {
     sensorId,
-    onData,
     onExit,
     onError,
     onTimeoutWarning,
@@ -87,6 +91,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     reconnectOptions = {},
     autoConnect = false,
     webSocketFactory,
+    terminalOptions,
   } = options;
 
   const reconnectConfig: ShellReconnectOptions = {
@@ -115,6 +120,72 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
   const connectInternalRef = useRef<
     ((initOptions?: ShellInitOptions, isReconnectAttempt?: boolean) => void) | null
   >(null);
+
+  // Terminal Refs (labs-ejau)
+  const terminalRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+
+  // Initialize Terminal once
+  useEffect(() => {
+    if (terminalRef.current) return;
+
+    const term = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback: MAX_OUTPUT_LINES,
+      tabStopWidth: 4,
+      allowProposedApi: true,
+      allowTransparency: false,
+      convertEol: true,
+      ...terminalOptions,
+    });
+
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.loadAddon(new WebLinksAddon());
+
+    terminalRef.current = term;
+    fitAddonRef.current = fitAddon;
+
+    // Handle user input: send to WebSocket
+    term.onData((data) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        // Send as base64
+        const message: ShellMessage = {
+          type: 'shell-data',
+          sessionId: sessionIdRef.current, // Use ref to access current session ID
+          payload: { data: btoa(data) },
+        };
+        wsRef.current.send(JSON.stringify(message));
+      } else {
+        console.warn('[RemoteShell] Cannot send - not connected');
+      }
+    });
+
+    return () => {
+      term.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, []); // Run once on mount
+
+  // Keep track of current session ID in a ref for the terminal callback
+  const sessionIdRef = useRef<string>('');
+  useEffect(() => {
+    sessionIdRef.current = session?.id || '';
+  }, [session?.id]);
+
+  // Update terminal onData to use the ref (re-bind if needed, or just use ref inside)
+  // Actually, the closure in useEffect above captures the initial state. 
+  // We need to use a mutable ref for session ID inside the onData callback.
+  // The terminal instance is stable, but we need to ensure it sends the correct session ID.
+  
+  // Re-bind onData is not easily possible with xterm API (it returns IDisposable).
+  // So we MUST use a ref for session ID inside the initial onData handler.
+  // I updated the onData handler above to use `session?.id` which would be stale.
+  // Let's fix the useEffect above to use `sessionIdRef`.
+
+  // ... (Correcting the useEffect block in the actual replacement)
 
   const setReconnectState = useCallback((nextAttempt: number, nextIsReconnecting: boolean) => {
     reconnectAttemptRef.current = nextAttempt;
@@ -151,6 +222,7 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
   const cleanup = useCallback(() => {
     isCleaningUpRef.current = true;
     clearTimers();
+    authenticatedRef.current = false;
 
     if (wsRef.current) {
       manualCloseSocketRef.current = wsRef.current;
@@ -187,19 +259,100 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     }, MAX_SESSION_DURATION);
   }, [cleanup, clearTimers, onError, onTimeoutWarning]);
 
+  // Output buffer for rate limiting
+  const outputBufferRef = useRef<string[]>([]);
+  const outputRafIdRef = useRef<number | null>(null);
+  const MAX_WRITE_CHUNK_SIZE = 16384; // 16KB per frame
+  const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB max buffer
+  /** Maximum pending output chunks to retain (labs-1gsa) */
+  const MAX_OUTPUT_LINES = 5000;
+
+  const processOutputBuffer = useCallback(() => {
+    if (!terminalRef.current || outputBufferRef.current.length === 0) {
+      outputRafIdRef.current = null;
+      return;
+    }
+
+    const chunk = outputBufferRef.current.shift();
+    if (chunk) {
+      terminalRef.current.write(chunk);
+    }
+
+    // Continue processing if there's more data
+    if (outputBufferRef.current.length > 0) {
+      outputRafIdRef.current = requestAnimationFrame(processOutputBuffer);
+    } else {
+      outputRafIdRef.current = null;
+    }
+  }, []);
+
+  const queueOutput = useCallback((data: string) => {
+    // Check total buffer size to prevent memory exhaustion
+    const currentSize = outputBufferRef.current.reduce((acc, str) => acc + str.length, 0);
+
+    if (currentSize + data.length > MAX_BUFFER_SIZE) {
+      console.warn('[RemoteShell] Output buffer full, dropping data');
+      return;
+    }
+
+    // Chunk large updates
+    for (let i = 0; i < data.length; i += MAX_WRITE_CHUNK_SIZE) {
+      outputBufferRef.current.push(data.slice(i, i + MAX_WRITE_CHUNK_SIZE));
+    }
+
+    // labs-1gsa: Cap the pending output buffer to prevent unbounded memory growth
+    if (outputBufferRef.current.length > MAX_OUTPUT_LINES) {
+      outputBufferRef.current = outputBufferRef.current.slice(-MAX_OUTPUT_LINES);
+    }
+
+    if (outputRafIdRef.current === null) {
+      outputRafIdRef.current = requestAnimationFrame(processOutputBuffer);
+    }
+  }, [processOutputBuffer]);
+
+  // Track whether the WebSocket has been authenticated (labs-c4hh)
+  const authenticatedRef = useRef(false);
+
   /**
-   * Handle incoming WebSocket messages
+   * Handle incoming WebSocket messages.
+   * Messages are ignored until first-message auth is confirmed (labs-c4hh).
    */
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
         const message: ShellServerMessage = JSON.parse(event.data as string);
 
+        // labs-c4hh: Handle auth response before processing any other messages
+        if (message.type === 'auth-success') {
+          authenticatedRef.current = true;
+          console.log('[RemoteShell] Auth confirmed');
+          return;
+        }
+
+        if (message.type === 'auth-error') {
+          const authError = (message as unknown as { error?: string }).error || 'Authentication failed';
+          setError(authError);
+          setStatus('error');
+          resetReconnectState();
+          onError?.(authError);
+          return;
+        }
+
+        // Don't process data until authenticated
+        if (!authenticatedRef.current) {
+          console.warn('[RemoteShell] Ignoring message before auth:', message.type);
+          return;
+        }
+
         switch (message.type) {
           case 'shell-data':
             if (message.payload?.data) {
-              // Data comes base64 encoded from the server
-              onData(message.payload.data);
+              try {
+                const decoded = atob(message.payload.data);
+                queueOutput(decoded);
+              } catch {
+                queueOutput(message.payload.data);
+              }
             }
             break;
 
@@ -215,6 +368,13 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
             resetReconnectState();
             cleanup();
             onExit?.(message.payload?.code ?? 0);
+            if (terminalRef.current) {
+              const code = message.payload?.code ?? 0;
+              terminalRef.current.writeln('');
+              terminalRef.current.writeln(
+                `\x1b[1;${code === 0 ? '32' : '31'}m[Shell exited with code ${code}]\x1b[0m`
+              );
+            }
             break;
 
           case 'shell-error':
@@ -223,6 +383,10 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
             setStatus('error');
             resetReconnectState();
             onError?.(errorMsg);
+            if (terminalRef.current) {
+              terminalRef.current.writeln('');
+              terminalRef.current.writeln(`\x1b[1;31m[Error: ${errorMsg}]\x1b[0m`);
+            }
             break;
 
           case 'pong':
@@ -233,13 +397,13 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
             console.log('[RemoteShell] Unknown message type:', message.type);
         }
       } catch (err) {
-        // If parsing fails, treat as raw data
-        if (typeof event.data === 'string') {
-          onData(event.data);
+        // If parsing fails, treat as raw data (only if authenticated)
+        if (authenticatedRef.current && typeof event.data === 'string') {
+          queueOutput(event.data);
         }
       }
     },
-    [cleanup, onData, onError, onExit, onReady, resetReconnectState, setupSessionTimeouts]
+    [cleanup, onError, onExit, onReady, queueOutput, resetReconnectState, setupSessionTimeouts]
   );
 
   /**
@@ -357,18 +521,23 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
         }
       }
 
+      // labs-c4hh: Connect to the tunnel endpoint without session token in the URL.
+      // The session token is sent as the first WebSocket message (first-message auth).
       const wsProtocol = API_URL.startsWith('https') ? 'wss' : 'ws';
       const wsHost = API_URL.replace(/^https?:\/\//, '');
-      const wsUrl = wsPath.startsWith('ws')
-        ? wsPath
-        : `${wsProtocol}://${wsHost}${wsPath.startsWith('/') ? wsPath : `/${wsPath}`}`;
+      const wsUrl = `${wsProtocol}://${wsHost}/ws/tunnel/user`;
 
       try {
+        authenticatedRef.current = false;
         const ws = createWebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log('[RemoteShell] WebSocket connected');
+          console.log('[RemoteShell] WebSocket connected, sending auth');
+          // First message: authenticate with sessionId
+          ws.send(JSON.stringify({ type: 'auth', sessionId }));
+
+          // Then send initial resize
           const cols = initOptions?.cols ?? 80;
           const rows = initOptions?.rows ?? 24;
           ws.send(
@@ -530,12 +699,13 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
     status,
     connect,
     disconnect,
-    sendInput,
     resize,
     session,
     isReconnecting,
     reconnectAttempt,
     maxReconnectAttempts: reconnectConfig.maxAttempts,
     error,
+    terminal: terminalRef.current,
+    fitAddon: fitAddonRef.current,
   };
 }

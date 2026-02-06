@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS signal_events (
     timestamp DateTime64(3) CODEC(Delta, ZSTD),
     tenant_id LowCardinality(String),
     sensor_id LowCardinality(String),
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
 
     -- Signal Data
     signal_type LowCardinality(String),  -- IP_THREAT, FINGERPRINT_THREAT, etc.
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS campaign_history (
     timestamp DateTime64(3) CODEC(Delta, ZSTD),
     campaign_id String,
     tenant_id LowCardinality(String),     -- 'fleet' for cross-tenant campaigns
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
 
     -- Event that triggered this snapshot
     event_type LowCardinality(String),    -- created, updated, escalated, resolved
@@ -101,6 +103,7 @@ SETTINGS index_granularity = 4096;
 CREATE TABLE IF NOT EXISTS blocklist_history (
     timestamp DateTime64(3) CODEC(Delta, ZSTD),
     tenant_id LowCardinality(String),     -- 'fleet' for fleet-wide blocks
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
 
     -- Action taken
     action LowCardinality(String),        -- added, removed, expired
@@ -130,6 +133,7 @@ CREATE TABLE IF NOT EXISTS http_transactions (
     timestamp DateTime64(3) CODEC(Delta, ZSTD),
     tenant_id LowCardinality(String),
     sensor_id LowCardinality(String),
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
     site LowCardinality(String),
     method LowCardinality(String),
     path String CODEC(ZSTD),
@@ -153,6 +157,7 @@ CREATE TABLE IF NOT EXISTS sensor_logs (
     timestamp DateTime64(3) CODEC(Delta, ZSTD),
     tenant_id LowCardinality(String),
     sensor_id LowCardinality(String),
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
     log_id String,
     source LowCardinality(String),
     level LowCardinality(String),
@@ -227,6 +232,7 @@ CREATE TABLE IF NOT EXISTS actor_events (
     timestamp DateTime64(3),
     sensor_id String,
     actor_id String,
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
     event_type Enum('rule_match', 'risk_change', 'block', 'unblock', 'session_bind'),
     risk_score UInt16,
     risk_delta Int16,
@@ -244,6 +250,7 @@ CREATE TABLE IF NOT EXISTS session_events (
     sensor_id String,
     session_id String,
     actor_id String,
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
     event_type Enum('created', 'request', 'suspicious', 'hijack_alert', 'expired'),
     request_count UInt32,
     ja4_hash Nullable(String),
@@ -258,6 +265,7 @@ CREATE TABLE IF NOT EXISTS campaign_events (
     campaign_id String,
     sensor_id String,
     actor_id String,
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
     event_type Enum('actor_added', 'correlation_signal', 'status_change'),
     correlation_type Nullable(String),
     confidence Nullable(Float32)
@@ -270,6 +278,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     timestamp DateTime64(3),
     sensor_id String,
     actor_id String,
+    request_id Nullable(String) CODEC(ZSTD), -- Correlation ID (P1-OBSERVABILITY-001)
     session_id Nullable(String),
     reason String,
     rule_id Nullable(String),
