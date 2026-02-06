@@ -535,27 +535,37 @@ export class AutomatedPlaybookTrigger {
    * Check rate limit for tenant
    */
   private async checkRateLimit(tenantId: string): Promise<boolean> {
-    const now = Date.now();
-    const windowMs = 60_000; // 1 minute window
+    try {
+      const now = Date.now();
+      const windowMs = 60_000; // 1 minute window
 
-    const record = await this.triggerCounts.get(tenantId);
-    if (!record || now - record.windowStart > windowMs) {
-      // New window
-      await this.triggerCounts.set(tenantId, { count: 0, windowStart: now });
+      const record = await this.triggerCounts.get(tenantId);
+      if (!record || now - record.windowStart > windowMs) {
+        // New window
+        await this.triggerCounts.set(tenantId, { count: 0, windowStart: now });
+        return true;
+      }
+
+      return record.count < this.config.maxAutoTriggersPerMinute;
+    } catch (error) {
+      // Fail open: rate limiting is a safety rail, not correctness-critical.
+      this.logger.warn({ error, tenantId }, 'Rate limit check failed');
       return true;
     }
-
-    return record.count < this.config.maxAutoTriggersPerMinute;
   }
 
   /**
    * Increment rate count for tenant
    */
   private async incrementRateCount(tenantId: string): Promise<void> {
-    const record = await this.triggerCounts.get(tenantId);
-    if (record) {
-      record.count++;
-      await this.triggerCounts.set(tenantId, record);
+    try {
+      const record = await this.triggerCounts.get(tenantId);
+      if (record) {
+        record.count++;
+        await this.triggerCounts.set(tenantId, record);
+      }
+    } catch (error) {
+      this.logger.warn({ error, tenantId }, 'Rate limit increment failed');
     }
   }
 
@@ -564,16 +574,22 @@ export class AutomatedPlaybookTrigger {
    */
   private startCleanupInterval(): void {
     this.cleanupInterval = setInterval(() => {
-      // Clean up old rate limit windows
-      const windowCutoff = Date.now() - 60_000;
-      void this.triggerCounts.entries().then((entries) => {
-        for (const [tenantId, record] of entries) {
-          if (record.windowStart < windowCutoff) {
-            void this.triggerCounts.delete(tenantId);
-          }
-        }
-      });
+      void this.cleanupOnce();
     }, 60_000);
+  }
+
+  private async cleanupOnce(): Promise<void> {
+    try {
+      const windowCutoff = Date.now() - 60_000;
+      const entries = await this.triggerCounts.entries();
+      for (const [tenantId, record] of entries) {
+        if (record.windowStart < windowCutoff) {
+          await this.triggerCounts.delete(tenantId);
+        }
+      }
+    } catch (error) {
+      this.logger.warn({ error }, 'Automated trigger cleanup failed');
+    }
   }
 
   /**

@@ -20,7 +20,6 @@ import { Aggregator } from './services/aggregator/index.js';
 import { Correlator } from './services/correlator/index.js';
 import { Broadcaster } from './services/broadcaster/index.js';
 import { HuntService } from './services/hunt/index.js';
-import { RedisSavedQueryStore } from './services/hunt/saved-query-store.js';
 import { APIIntelligenceService } from './services/api-intelligence/index.js';
 import { createApiRouter } from './api/routes/index.js';
 import { ClickHouseService, ClickHouseRetryBuffer } from './storage/clickhouse/index.js';
@@ -34,10 +33,8 @@ import {
   RedisTriggerCooldownStore,
   ResilientTriggerCooldownStore,
 } from './services/warroom/automated-trigger.js';
-import { RedisTriggerRateLimitStore } from './services/warroom/trigger-rate-limit-store.js';
 import { PlaybookService } from './services/warroom/playbook-service.js';
 import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
-import { RedisSensorMetricsStore } from './services/fleet/sensor-metrics-store.js';
 import { PreferenceService } from './services/fleet/preference-service.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
@@ -62,7 +59,6 @@ import {
   RedisRecentSignalsStore,
   ResilientRecentSignalsStore,
 } from './services/threat-service.js';
-import { RedisBlocklistStore } from './services/broadcaster/blocklist-store.js';
 // Protocol handlers
 import { CommandSender } from './protocols/command-sender.js';
 // Job queue and workers
@@ -91,7 +87,6 @@ import { PrismaNonceStore } from './middleware/replay-protection.js';
 import { AuthCoverageAggregator } from './services/auth-coverage-aggregator.js';
 import { createAuthCoverageRoutes } from './api/routes/auth-coverage.js';
 import { getSharedRedisKv, type SharedRedisKv } from './storage/redis/shared-kv.js';
-import { RedisPubSub } from './storage/redis/pubsub.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -290,7 +285,6 @@ let retentionWorker: Worker<RetentionJobData, Record<string, number>> | null = n
 let retentionInterval: NodeJS.Timeout | null = null;
 let retentionTimeout: NodeJS.Timeout | null = null;
 let sharedRedis: SharedRedisKv | null = null;
-let redisPubSub: RedisPubSub | null = null;
 
 // ============================================================================
 // Tunnel Authentication Handler
@@ -645,8 +639,7 @@ async function start() {
   }
 
   // Initialize Hunt service (always available, routes to ClickHouse when enabled)
-  const savedQueryStore = sharedRedis ? new RedisSavedQueryStore(sharedRedis.kv) : undefined;
-  huntService = new HuntService(prisma, logger, clickhouse ?? undefined, savedQueryStore);
+  huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
   apiIntelligenceService = new APIIntelligenceService(prisma, logger);
 
   // Initialize protocol handlers for fleet management
@@ -657,12 +650,8 @@ async function start() {
   try {
     sharedRedis = await getSharedRedisKv(logger);
     logger.info('Shared Redis state KV ready');
-    
-    redisPubSub = new RedisPubSub(logger);
-    logger.info('Redis Pub/Sub ready');
   } catch (error) {
     sharedRedis = null;
-    redisPubSub = null;
     logger.warn({ error }, 'Shared Redis services unavailable; falling back to in-memory state stores');
   }
 
@@ -670,14 +659,13 @@ async function start() {
   const permissionCache = new Map<string, { allowed: boolean; expires: number }>();
 
   // Initialize fleet management services
-  const metricsStore = sharedRedis ? new RedisSensorMetricsStore(sharedRedis.kv) : undefined;
   fleetAggregator = new FleetAggregator(logger, {
     metricsRetentionMs: 5 * 60 * 1000, // 5 minutes
     heartbeatTimeoutMs: 90000, // 90 seconds
     cpuAlertThreshold: 80,
     memoryAlertThreshold: 85,
     diskAlertThreshold: 90,
-  }, metricsStore);
+  });
   configManager = new ConfigManager(prisma, logger);
   fleetCommander = new FleetCommander(prisma, logger, {
     defaultTimeoutMs: 30000,
@@ -710,9 +698,6 @@ async function start() {
       )
     : undefined;
   threatService = new ThreatService(logger, undefined, recentSignalsStore);
-
-  const blocklistStore = sharedRedis ? new RedisBlocklistStore(sharedRedis.kv) : undefined;
-  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined, blocklistStore);
 
   preferenceService = new PreferenceService(prisma, logger, clickhouse ?? undefined);
   
@@ -769,22 +754,20 @@ async function start() {
     warRoomService,
     securityAuditService
   );
-  const triggerCooldownStore = sharedRedis
-    ? new ResilientTriggerCooldownStore(
-        logger,
-        new RedisTriggerCooldownStore(sharedRedis.kv),
-        new InMemoryTriggerCooldownStore()
-      )
-    : undefined;
-  const triggerRateLimitStore = sharedRedis ? new RedisTriggerRateLimitStore(sharedRedis.kv) : undefined;
-  playbookTrigger = new AutomatedPlaybookTrigger(
-    prisma,
-    logger,
-    playbookService,
-    undefined,
-    triggerCooldownStore,
-    triggerRateLimitStore
-  );
+	  const triggerCooldownStore = sharedRedis
+	    ? new ResilientTriggerCooldownStore(
+	        logger,
+	        new RedisTriggerCooldownStore(sharedRedis.kv),
+	        new InMemoryTriggerCooldownStore()
+	      )
+	    : undefined;
+	  playbookTrigger = new AutomatedPlaybookTrigger(
+	    prisma,
+	    logger,
+	    playbookService,
+	    undefined,
+	    triggerCooldownStore
+	  );
 
   // labs-ohgy: Initialize Data Retention Service
   const retentionService = new DataRetentionService(
@@ -874,7 +857,7 @@ async function start() {
   logger.info('Auth coverage routes mounted at /api/v1/auth-coverage');
 
   // Initialize core services (pass ClickHouse for dual-write)
-  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
+  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined, blocklistStore);
   correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
   aggregator = new Aggregator(
     prisma,
@@ -895,13 +878,13 @@ async function start() {
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxSensorConnections,
     compatibility: config.sensorCompatibility,
-  }, authCoverageAggregator, redisPubSub ?? undefined);
+  }, authCoverageAggregator);
 
   dashboardGateway = new DashboardGateway(prisma, logger, {
     path: config.websocket.dashboardPath,
     heartbeatIntervalMs: config.websocket.heartbeatIntervalMs,
     maxConnections: config.websocket.maxDashboardConnections,
-  }, redisPubSub ?? undefined);
+  });
 
   // Wire up broadcaster to dashboard gateway and war room service
   broadcaster.setDashboardGateway(dashboardGateway);
@@ -1126,12 +1109,6 @@ async function shutdown(signal: string) {
     await sharedRedis.close();
     sharedRedis = null;
     logger.info('Shared Redis connection closed');
-  }
-
-  if (redisPubSub) {
-    await redisPubSub.close();
-    redisPubSub = null;
-    logger.info('Redis Pub/Sub closed');
   }
 
   // Disconnect database
