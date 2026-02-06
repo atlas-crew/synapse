@@ -8,6 +8,7 @@ import type { PrismaClient, Playbook, WarRoom } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { EnrichedSignal, Severity } from '../../types/protocol.js';
 import { PlaybookService, PlaybookConcurrencyError, type UserInfo } from './playbook-service.js';
+import { buildRedisKey, type RedisKv } from '../../storage/redis/index.js';
 
 /**
  * Configuration for the automated trigger service
@@ -34,12 +35,78 @@ const DEFAULT_CONFIG: AutomatedTriggerConfig = {
 };
 
 /**
- * Track recent triggers to prevent spam/loops
+ * Store interface for distributed cooldown tracking.
  */
-interface TriggerRecord {
-  playbookId: string;
-  tenantId: string;
-  triggeredAt: number;
+export interface TriggerCooldownStore {
+  tryAcquire(tenantId: string, playbookId: string, cooldownMs: number): Promise<boolean>;
+  release(tenantId: string, playbookId: string): Promise<void>;
+  stop(): void;
+}
+
+export class InMemoryTriggerCooldownStore implements TriggerCooldownStore {
+  private triggers = new Map<string, number>();
+
+  async tryAcquire(tenantId: string, playbookId: string, cooldownMs: number): Promise<boolean> {
+    const key = `${tenantId}:${playbookId}`;
+    const now = Date.now();
+    const last = this.triggers.get(key);
+
+    if (last !== undefined && now - last < cooldownMs) return false;
+
+    this.triggers.set(key, now);
+    return true;
+  }
+
+  async release(tenantId: string, playbookId: string): Promise<void> {
+    this.triggers.delete(`${tenantId}:${playbookId}`);
+  }
+
+  stop(): void {
+    this.triggers.clear();
+  }
+}
+
+export class RedisTriggerCooldownStore implements TriggerCooldownStore {
+  private kv: RedisKv;
+  private namespace: string;
+  private version: number;
+  private dataType: string;
+
+  constructor(
+    kv: RedisKv,
+    options: { namespace?: string; version?: number; dataType?: string } = {}
+  ) {
+    this.kv = kv;
+    this.namespace = options.namespace ?? 'horizon';
+    this.version = options.version ?? 1;
+    this.dataType = options.dataType ?? 'warroom-playbook-cooldown';
+  }
+
+  private key(tenantId: string, playbookId: string): string {
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId,
+      dataType: this.dataType,
+      id: playbookId,
+    });
+  }
+
+  async tryAcquire(tenantId: string, playbookId: string, cooldownMs: number): Promise<boolean> {
+    const ttlSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
+    return this.kv.set(this.key(tenantId, playbookId), String(Date.now()), {
+      ttlSeconds,
+      ifNotExists: true,
+    });
+  }
+
+  async release(tenantId: string, playbookId: string): Promise<void> {
+    await this.kv.del(this.key(tenantId, playbookId));
+  }
+
+  stop(): void {
+    // no-op
+  }
 }
 
 /**
@@ -57,8 +124,7 @@ export class AutomatedPlaybookTrigger {
   private playbookService: PlaybookService;
   private config: AutomatedTriggerConfig;
 
-  /** Recent trigger history for cooldown enforcement */
-  private recentTriggers: TriggerRecord[] = [];
+  private cooldownStore: TriggerCooldownStore;
   /** Rate limit tracking per tenant */
   private triggerCounts: Map<string, { count: number; windowStart: number }> = new Map();
 
@@ -68,12 +134,14 @@ export class AutomatedPlaybookTrigger {
     prisma: PrismaClient,
     logger: Logger,
     playbookService: PlaybookService,
-    config?: Partial<AutomatedTriggerConfig>
+    config?: Partial<AutomatedTriggerConfig>,
+    cooldownStore?: TriggerCooldownStore
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'automated-playbook-trigger' });
     this.playbookService = playbookService;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.cooldownStore = cooldownStore ?? new InMemoryTriggerCooldownStore();
 
     if (this.config.enabled) {
       this.startCleanupInterval();
@@ -245,8 +313,13 @@ export class AutomatedPlaybookTrigger {
       return;
     }
 
-    // Check cooldown
-    if (this.isInCooldown(playbook.id, tenantId)) {
+    // Acquire cooldown (distributed)
+    const cooldownAcquired = await this.cooldownStore.tryAcquire(
+      tenantId,
+      playbook.id,
+      this.config.cooldownMs
+    );
+    if (!cooldownAcquired) {
       this.logger.debug(
         { playbookId: playbook.id, tenantId },
         'Playbook trigger skipped (cooldown active)'
@@ -257,6 +330,7 @@ export class AutomatedPlaybookTrigger {
     // Find or create a war room for this automated response
     const warRoom = await this.findOrCreateWarRoom(tenantId, playbook, matchedSignals);
     if (!warRoom) {
+      await this.cooldownStore.release(tenantId, playbook.id);
       return;
     }
 
@@ -269,8 +343,6 @@ export class AutomatedPlaybookTrigger {
         this.config.systemUser
       );
 
-      // Record the trigger for cooldown tracking
-      this.recordTrigger(playbook.id, tenantId);
       this.incrementRateCount(tenantId);
 
       this.logger.info(
@@ -291,8 +363,11 @@ export class AutomatedPlaybookTrigger {
           { playbookId: playbook.id, warRoomId: warRoom.id },
           'Playbook already running in war room'
         );
+        await this.cooldownStore.release(tenantId, playbook.id);
         return;
       }
+
+      await this.cooldownStore.release(tenantId, playbook.id);
       throw error;
     }
   }
@@ -396,30 +471,6 @@ export class AutomatedPlaybookTrigger {
   }
 
   /**
-   * Check if playbook is in cooldown period
-   */
-  private isInCooldown(playbookId: string, tenantId: string): boolean {
-    const now = Date.now();
-    return this.recentTriggers.some(
-      (t) =>
-        t.playbookId === playbookId &&
-        t.tenantId === tenantId &&
-        now - t.triggeredAt < this.config.cooldownMs
-    );
-  }
-
-  /**
-   * Record a trigger for cooldown tracking
-   */
-  private recordTrigger(playbookId: string, tenantId: string): void {
-    this.recentTriggers.push({
-      playbookId,
-      tenantId,
-      triggeredAt: Date.now(),
-    });
-  }
-
-  /**
    * Check rate limit for tenant
    */
   private checkRateLimit(tenantId: string): boolean {
@@ -451,9 +502,6 @@ export class AutomatedPlaybookTrigger {
    */
   private startCleanupInterval(): void {
     this.cleanupInterval = setInterval(() => {
-      const cutoff = Date.now() - this.config.cooldownMs * 2;
-      this.recentTriggers = this.recentTriggers.filter((t) => t.triggeredAt > cutoff);
-
       // Clean up old rate limit windows
       const windowCutoff = Date.now() - 60_000;
       for (const [tenantId, record] of this.triggerCounts) {
@@ -472,7 +520,7 @@ export class AutomatedPlaybookTrigger {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
     }
-    this.recentTriggers = [];
+    this.cooldownStore.stop();
     this.triggerCounts.clear();
     this.logger.info('Automated playbook trigger service stopped');
   }
