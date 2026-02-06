@@ -219,12 +219,12 @@ function App() {
             <button
               type="button"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="h-8 px-2 text-white/70 hover:text-white transition-colors"
+              className="h-8 px-2 text-white/70 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
               aria-label="Toggle theme"
             >
               <ThemeIcon className="w-4 h-4" />
             </button>
-            <button type="button" className="h-8 px-2 text-white/70 hover:text-white transition-colors">
+            <button type="button" className="h-8 px-2 text-white/70 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50" aria-label="Settings">
               <Settings className="w-4 h-4" />
             </button>
           </div>
@@ -263,7 +263,7 @@ function App() {
             </div>
           </div>
 
-          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+          <nav aria-label="Main navigation" className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
             <div>
               <p className="px-3 text-[10px] tracking-[0.2em] uppercase text-ink-muted mb-2">Threat Intelligence</p>
               <div className="space-y-1">
@@ -273,7 +273,7 @@ function App() {
                     to={item.path}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2',
+                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
@@ -296,7 +296,7 @@ function App() {
                     to={item.path}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2',
+                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
@@ -319,7 +319,7 @@ function App() {
                     to={item.path}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2',
+                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
@@ -358,7 +358,7 @@ function App() {
                     to={item.path}
                     className={({ isActive }) =>
                       clsx(
-                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2',
+                        'flex items-center gap-3 px-3 py-2 text-sm transition-colors border-l-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50',
                         isActive
                           ? 'bg-surface-card text-link border-link'
                           : 'border-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-card'

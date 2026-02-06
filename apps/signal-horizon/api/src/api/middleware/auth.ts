@@ -66,21 +66,21 @@ export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) 
 
     const authHeader = req.headers.authorization;
 
-    if (!authHeader) {
-      recordFailedAuth(clientIp);
-      sendProblem(res, 401, 'Authorization header required', {
-        code: 'AUTH_REQUIRED',
-        instance: req.originalUrl,
-      });
-      return;
+    // labs-n6nf: Extract token from Authorization header (Bearer) or httpOnly cookie fallback.
+    // API keys and programmatic clients use the Authorization header.
+    // Browser sessions use the httpOnly access_token cookie set on login/refresh.
+    let token: string | undefined;
+
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies?.access_token) {
+      token = req.cookies.access_token;
     }
 
-    const [scheme, token] = authHeader.split(' ');
-
-    if (scheme !== 'Bearer' || !token) {
+    if (!token) {
       recordFailedAuth(clientIp);
-      sendProblem(res, 401, 'Invalid authorization format. Use: Bearer <api-key>', {
-        code: 'INVALID_AUTH_FORMAT',
+      sendProblem(res, 401, 'Authorization required', {
+        code: 'AUTH_REQUIRED',
         instance: req.originalUrl,
       });
       return;

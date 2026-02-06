@@ -224,7 +224,7 @@ export function WebTerminal({
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface-card rounded-lg border border-border-subtle overflow-hidden">
+    <div className="flex flex-col h-full bg-surface-card border border-border-subtle overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface-raised border-b border-border-subtle">
         <div className="flex items-center gap-3">
@@ -252,6 +252,9 @@ export function WebTerminal({
           ref={terminalRef}
           className="absolute inset-0 p-2"
           style={{ backgroundColor: '#1a1a1a' }}
+          role="log"
+          aria-label="Terminal session output"
+          aria-live="polite"
         />
 
         {/* Overlays */}

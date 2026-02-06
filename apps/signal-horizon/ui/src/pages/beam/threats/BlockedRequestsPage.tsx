@@ -335,7 +335,7 @@ function DecisionTraceModal({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className={clsx(
-                          'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium',
+                          'w-6 h-6 flex items-center justify-center text-xs font-medium',
                           step.result === 'fail' ? 'bg-red-500 text-white' : 'bg-surface-subtle text-ink-secondary'
                         )}>
                           {step.step}
@@ -471,6 +471,7 @@ export default function BlockedRequestsPage() {
             placeholder="Search by path, IP, or rule..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search blocked requests"
             className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
           />
         </div>

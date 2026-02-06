@@ -140,7 +140,7 @@ const LogRow = memo(function LogRow({ entry, style, isExpanded, onToggle }: LogR
         {/* Level badge */}
         <span
           className={`
-            px-1.5 py-0.5 rounded text-[10px] font-mono font-medium uppercase tracking-wide
+            px-1.5 py-0.5  text-[10px] font-mono font-medium uppercase tracking-wide
             ${levelColors.bg} ${levelColors.text}
             min-w-[3.5rem] text-center
           `}
@@ -218,7 +218,7 @@ const LogRow = memo(function LogRow({ entry, style, isExpanded, onToggle }: LogR
           {entry.fields && Object.keys(entry.fields).length > 0 && (
             <div className="mt-2">
               <span className="text-ink-muted text-xs">Fields:</span>
-              <pre className="mt-1 p-2 bg-surface-base rounded text-xs font-mono text-ink-secondary overflow-x-auto">
+              <pre className="mt-1 p-2 bg-surface-base text-xs font-mono text-ink-secondary overflow-x-auto">
                 {formatFields(entry.fields)}
               </pre>
             </div>
@@ -380,7 +380,7 @@ export function LogViewer({
   return (
     <div
       ref={containerRef}
-      className="flex flex-col bg-surface-base rounded-lg border border-border-subtle overflow-hidden"
+      className="flex flex-col bg-surface-base border border-border-subtle overflow-hidden"
       style={{ height: typeof height === 'string' ? height : `${height}px` }}
     >
       {/* Header */}
@@ -420,7 +420,7 @@ export function LogViewer({
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded hover:bg-surface-subtle transition-colors"
+              className="p-1 hover:bg-surface-subtle transition-colors"
               title="Close"
             >
               <X className="w-4 h-4 text-ink-muted" />
@@ -440,7 +440,8 @@ export function LogViewer({
               placeholder="Search logs..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm bg-surface-base border border-border-subtle rounded focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary"
+              aria-label="Search logs"
+              className="w-full pl-9 pr-3 py-1.5 text-sm bg-surface-base border border-border-subtle focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary"
             />
           </div>
 
@@ -448,7 +449,7 @@ export function LogViewer({
           <select
             value={levelPreset}
             onChange={(e) => setLevelPreset(e.target.value as LogLevelPreset)}
-            className="px-3 py-1.5 text-sm bg-surface-base border border-border-subtle rounded focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary"
+            className="px-3 py-1.5 text-sm bg-surface-base border border-border-subtle focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary"
           >
             <option value="all">All Levels</option>
             <option value="debug+">Debug+</option>
@@ -461,7 +462,7 @@ export function LogViewer({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`
-              flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors
+              flex items-center gap-1.5 px-3 py-1.5 text-sm  transition-colors
               ${showFilters ? 'bg-accent-primary text-white' : 'bg-surface-base border border-border-subtle hover:bg-surface-card'}
             `}
           >
@@ -472,7 +473,7 @@ export function LogViewer({
           {/* Clear filters */}
           <button
             onClick={clearFilters}
-            className="px-3 py-1.5 text-sm text-ink-secondary hover:text-ink-primary bg-surface-base border border-border-subtle rounded hover:bg-surface-card transition-colors"
+            className="px-3 py-1.5 text-sm text-ink-secondary hover:text-ink-primary bg-surface-base border border-border-subtle hover:bg-surface-card transition-colors"
           >
             Clear
           </button>
@@ -490,7 +491,7 @@ export function LogViewer({
                   type="checkbox"
                   checked={selectedSources.has(source)}
                   onChange={() => toggleSource(source)}
-                  className="w-4 h-4 rounded border-border-subtle text-accent-primary focus:ring-accent-primary/20"
+                  className="w-4 h-4 border-border-subtle text-accent-primary focus:ring-accent-primary/20"
                 />
                 <SourceIcon source={source} className="text-ink-secondary" />
                 <span className="text-sm text-ink-primary">{LOG_SOURCE_LABELS[source]}</span>
@@ -507,7 +508,7 @@ export function LogViewer({
           <button
             onClick={togglePause}
             className={`
-              flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors
+              flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium  transition-colors
               ${state.paused ? 'bg-status-warning/10 text-status-warning' : 'bg-surface-subtle hover:bg-surface-card text-ink-secondary'}
             `}
             title={state.paused ? 'Resume' : 'Pause'}
@@ -528,7 +529,7 @@ export function LogViewer({
           {/* Clear */}
           <button
             onClick={clear}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card rounded transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card transition-colors"
             title="Clear logs"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -538,7 +539,7 @@ export function LogViewer({
           {/* Export */}
           <button
             onClick={exportLogs}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card rounded transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-secondary bg-surface-subtle hover:bg-surface-card transition-colors"
             title="Export as JSON"
             disabled={state.entries.length === 0}
           >
@@ -554,7 +555,7 @@ export function LogViewer({
             listRef.current?.scrollToItem(0);
           }}
           className={`
-            flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors
+            flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium  transition-colors
             ${autoScroll ? 'text-status-success' : 'text-ink-muted hover:text-ink-primary bg-surface-subtle'}
           `}
           title={autoScroll ? 'Auto-scroll enabled' : 'Click to scroll to latest'}

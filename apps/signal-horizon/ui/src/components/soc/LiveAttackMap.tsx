@@ -190,11 +190,11 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
         </p>
       </div>
       <div className="grid grid-cols-2 gap-4 w-full max-w-lg">
-        <div className="bg-surface-card/50 p-4 rounded border border-border-subtle">
+        <div className="bg-surface-card/50 p-4 border border-border-subtle">
           <div className="text-3xl font-light text-ac-red">{attacks.length}</div>
           <div className="text-xs text-ink-secondary">Active Attacks</div>
         </div>
-        <div className="bg-surface-card/50 p-4 rounded border border-border-subtle">
+        <div className="bg-surface-card/50 p-4 border border-border-subtle">
           <div className="text-3xl font-light text-ac-green">{sensors.length}</div>
           <div className="text-xs text-ink-secondary">Sensors Online</div>
         </div>
@@ -204,7 +204,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-muted mb-2">Recent Attacks</h4>
           <div className="space-y-1 max-h-32 overflow-auto">
             {attacks.slice(0, 5).map((attack, i) => (
-              <div key={i} className="text-xs text-ink-secondary flex justify-between bg-surface-inset/50 px-2 py-1 rounded">
+              <div key={i} className="text-xs text-ink-secondary flex justify-between bg-surface-inset/50 px-2 py-1">
                 <span>{attack.sourceIp}</span>
                 <span className="text-ink-muted">→</span>
                 <span>Sensor</span>
@@ -217,10 +217,10 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
   );
 
   return (
-    <div className="relative w-full h-[600px] bg-[#111] overflow-hidden border border-border-subtle">
+    <div className="relative w-full h-[600px] bg-[#111] overflow-hidden border border-border-subtle" role="img" aria-label="Live attack map showing global threat activity with attack arcs and sensor locations">
       {isLoading ? (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ac-blue" />
+          <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue" />
         </div>
       ) : webglFailed ? (
         <FallbackMap />

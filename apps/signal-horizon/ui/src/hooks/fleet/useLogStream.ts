@@ -156,12 +156,14 @@ export function useLogStream(options: UseLogStreamOptions): UseLogStreamReturn {
   });
 
   const createSession = useCallback(async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (API_KEY && API_KEY !== 'dev-dashboard-key') {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
     const response = await fetch(`${API_URL}/api/v1/tunnel/logs/${sensorId}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
+      credentials: 'include', // labs-n6nf
     });
 
     if (!response.ok) {

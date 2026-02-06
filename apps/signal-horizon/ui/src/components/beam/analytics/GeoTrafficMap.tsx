@@ -121,7 +121,7 @@ export function GeoTrafficMap() {
   }
 
   return (
-    <div className="bg-surface-card border border-border-subtle p-0 h-[400px] relative overflow-hidden">
+    <div className="bg-surface-card border border-border-subtle p-0 h-[400px] relative overflow-hidden" role="img" aria-label="Geographic traffic map showing global request distribution by country">
       <div className="absolute top-4 left-4 z-10 pointer-events-none">
         <h3 className="text-lg font-semibold text-ink-primary">Global Traffic Distribution</h3>
         <p className="text-sm text-ink-secondary">Requests by Origin Country</p>
@@ -129,7 +129,7 @@ export function GeoTrafficMap() {
 
       {isLoading ? (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ac-blue" />
+          <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue" />
         </div>
       ) : (
         <div

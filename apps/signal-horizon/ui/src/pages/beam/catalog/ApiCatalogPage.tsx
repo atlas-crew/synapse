@@ -205,6 +205,7 @@ function SearchFilterBar({
           placeholder="Search endpoints..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
+          aria-label="Search API endpoints"
           className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
         />
       </div>

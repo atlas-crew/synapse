@@ -166,6 +166,7 @@ export default function CampaignsPage() {
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Search campaign"
+              aria-label="Search campaigns"
               className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
             />
           </div>
@@ -262,7 +263,7 @@ function StatCard({
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className={clsx('w-10 h-10 rounded-full flex items-center justify-center', tone, 'bg-surface-subtle')}>
+      <div className={clsx('w-10 h-10 flex items-center justify-center', tone, 'bg-surface-subtle')}>
         <Icon className="w-5 h-5" />
       </div>
       <div>

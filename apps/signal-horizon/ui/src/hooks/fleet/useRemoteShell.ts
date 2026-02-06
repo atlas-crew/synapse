@@ -19,6 +19,29 @@ import type {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_API_KEY || import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 
+/**
+ * Fetch a short-lived WebSocket ticket from the API (labs-n6nf).
+ * The ticket is used to authenticate the WebSocket connection since
+ * httpOnly cookies cannot be passed in WS handshakes.
+ */
+async function fetchWsTicket(): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (API_KEY && API_KEY !== 'dev-dashboard-key') {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
+    const res = await fetch(`${API_URL}/api/v1/auth/ws-ticket`, {
+      headers,
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.ticket ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Default reconnection options */
 const DEFAULT_RECONNECT_OPTIONS: ShellReconnectOptions = {
   maxAttempts: 10,
@@ -443,12 +466,14 @@ export function useRemoteShell(options: UseRemoteShellOptions): UseRemoteShellRe
   const sessionUrlRef = useRef<string | null>(null);
 
   const createSession = useCallback(async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (API_KEY && API_KEY !== 'dev-dashboard-key') {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
     const response = await fetch(`${API_URL}/api/v1/tunnel/shell/${sensorId}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
+      credentials: 'include', // labs-n6nf
     });
 
     if (!response.ok) {

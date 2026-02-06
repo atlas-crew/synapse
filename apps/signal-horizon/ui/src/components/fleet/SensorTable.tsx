@@ -64,7 +64,7 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest cursor-pointer hover:bg-surface-card"
+                className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest cursor-pointer hover:bg-surface-card focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50"
                 onClick={() => handleSort(col.key)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key); } }}
                 tabIndex={0}
@@ -85,7 +85,7 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
           {sortedSensors.map((sensor) => (
             <tr
               key={sensor.id}
-              className="hover:bg-surface-subtle cursor-pointer transition-colors group"
+              className="hover:bg-surface-subtle cursor-pointer transition-colors group focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ac-blue/50"
               onClick={() => onSensorClick?.(sensor)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSensorClick?.(sensor); } }}
               tabIndex={0}
@@ -106,8 +106,9 @@ export function SensorTable({ sensors, onSensorClick, onConfigureClick }: Sensor
                     e.stopPropagation();
                     onConfigureClick?.(sensor);
                   }}
-                  className="p-1 hover:bg-surface-card text-ink-muted hover:text-accent-primary transition-colors opacity-40 group-hover:opacity-100 focus:opacity-100"
+                  className="p-1 hover:bg-surface-card text-ink-muted hover:text-accent-primary transition-colors opacity-40 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                   title="Configure Sensor"
+                  aria-label={`Configure sensor ${sensor.name}`}
                 >
                   <Settings className="w-4 h-4" />
                 </button>

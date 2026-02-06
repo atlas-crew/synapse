@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
 
 interface ResponseTimeBucket {
   range: string;
@@ -39,7 +40,7 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
   className = '',
 }: ResponseTimeDistributionChartProps) {
   return (
-    <div className={`h-64 ${className}`}>
+    <div className={`h-64 ${className}`} role="img" aria-label="Bar chart showing response time distribution across latency buckets">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
@@ -62,15 +63,9 @@ export const ResponseTimeDistributionChart = memo(function ResponseTimeDistribut
               `${value.toFixed(1)}%`,
               'Requests',
             ]}
-            contentStyle={{
-              backgroundColor: '#001544',
-              border: '1px solid rgba(0, 87, 183, 0.4)',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-              borderRadius: '0',
-              fontSize: '12px',
-            }}
-            labelStyle={{ color: '#FFFFFF', fontWeight: 600 }}
-            itemStyle={{ color: '#B0C4DE' }}
+            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px' }}
+            labelStyle={{ ...TOOLTIP_LABEL_STYLE, fontWeight: 600 }}
+            itemStyle={TOOLTIP_ITEM_STYLE}
           />
           <Bar dataKey="percentage">
             {data.map((_entry, index) => (

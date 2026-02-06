@@ -143,6 +143,7 @@ export const AuthCoverageMap: React.FC = () => {
                 placeholder="Search endpoints..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search endpoints"
                 className="pl-10 pr-4 py-2 bg-surface-base border border-border-subtle text-sm focus:border-ac-blue focus:ring-1 focus:ring-ac-blue/20 outline-none w-64"
               />
             </div>

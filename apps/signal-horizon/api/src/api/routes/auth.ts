@@ -6,6 +6,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { config } from '../../config.js';
@@ -15,6 +16,55 @@ import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { validateBody } from '../middleware/validation.js';
 import { UserAuthService } from '../../services/user-auth.js';
 import { getErrorMessage } from '../../utils/errors.js';
+
+// =============================================================================
+// WebSocket Ticket Store (labs-n6nf)
+// Short-lived, one-time-use tickets for authenticating WebSocket connections.
+// Stored in-memory; automatically expired after WS_TICKET_TTL_MS.
+// =============================================================================
+
+const WS_TICKET_TTL_MS = 30_000; // 30 seconds
+
+interface WsTicket {
+  token: string;
+  userId: string;
+  tenantId: string;
+  scopes: string[];
+  expiresAt: number;
+}
+
+const wsTicketStore = new Map<string, WsTicket>();
+
+// Periodic cleanup every 60s to remove expired tickets
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ticket] of wsTicketStore) {
+    if (ticket.expiresAt <= now) {
+      wsTicketStore.delete(key);
+    }
+  }
+}, 60_000).unref();
+
+/**
+ * Validate and consume a WebSocket ticket (one-time use).
+ * Returns the ticket payload if valid, null otherwise.
+ */
+export function consumeWsTicket(token: string): Omit<WsTicket, 'token' | 'expiresAt'> | null {
+  const ticket = wsTicketStore.get(token);
+  if (!ticket) return null;
+
+  // Always delete (one-time use)
+  wsTicketStore.delete(token);
+
+  // Check expiry
+  if (Date.now() > ticket.expiresAt) return null;
+
+  return {
+    userId: ticket.userId,
+    tenantId: ticket.tenantId,
+    scopes: ticket.scopes,
+  };
+}
 
 // =============================================================================
 // Validation Schemas
@@ -71,6 +121,7 @@ export function createAuthRoutes(
   /**
    * POST /api/v1/auth/login
    * Authenticate user and return tokens.
+   * Sets accessToken as httpOnly cookie; returns refreshToken in body (labs-n6nf).
    */
   router.post('/login', rateLimiters.userAuth, validateBody(LoginSchema), async (req: Request, res: Response) => {
     try {
@@ -80,7 +131,19 @@ export function createAuthRoutes(
         ua: req.headers['user-agent'],
       });
 
-      res.json(result);
+      // Set access token as httpOnly cookie (labs-n6nf)
+      res.cookie('access_token', result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: (config.telemetry.jwtExpirationSeconds || 3600) * 1000,
+      });
+
+      // Return everything except the accessToken in the body.
+      // Clients should rely on the cookie for session auth.
+      const { accessToken: _at, ...body } = result;
+      res.json(body);
     } catch (error) {
       log.warn({ email: req.body.email, error: getErrorMessage(error) }, 'Login failed');
       res.status(401).json({ error: 'Invalid email or password' });
@@ -90,6 +153,7 @@ export function createAuthRoutes(
   /**
    * POST /api/v1/auth/refresh
    * Refresh access token using refresh token.
+   * Sets new accessToken as httpOnly cookie; returns new refreshToken in body (labs-n6nf).
    */
   router.post('/refresh', rateLimiters.userAuth, validateBody(RefreshSchema), async (req: Request, res: Response) => {
     try {
@@ -99,7 +163,17 @@ export function createAuthRoutes(
         ua: req.headers['user-agent'],
       });
 
-      res.json(result);
+      // Set access token as httpOnly cookie (labs-n6nf)
+      res.cookie('access_token', result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: (config.telemetry.jwtExpirationSeconds || 3600) * 1000,
+      });
+
+      // Return only the refresh token in the body
+      res.json({ refreshToken: result.refreshToken });
     } catch (error) {
       res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
@@ -111,8 +185,36 @@ export function createAuthRoutes(
   router.use(authMiddleware);
 
   /**
+   * GET /api/v1/auth/ws-ticket
+   * Issue a short-lived, one-time-use ticket for authenticating WebSocket connections (labs-n6nf).
+   *
+   * Because httpOnly cookies cannot be sent during WebSocket handshake,
+   * the UI first fetches a ticket (cookie-authenticated) and then passes
+   * it as a query parameter on the WS URL. The WS server consumes and
+   * immediately invalidates the ticket.
+   */
+  router.get('/ws-ticket', async (req: Request, res: Response) => {
+    if (!req.auth) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const token = randomUUID();
+
+    wsTicketStore.set(token, {
+      token,
+      userId: req.auth.userId ?? req.auth.authId,
+      tenantId: req.auth.tenantId,
+      scopes: req.auth.scopes,
+      expiresAt: Date.now() + WS_TICKET_TTL_MS,
+    });
+
+    res.json({ ticket: token, expiresIn: WS_TICKET_TTL_MS });
+  });
+
+  /**
    * POST /api/v1/auth/logout
-   * Revoke current session.
+   * Revoke current session and clear httpOnly cookie (labs-n6nf).
    */
   router.post('/logout', async (req: Request, res: Response) => {
     try {
@@ -122,6 +224,15 @@ export function createAuthRoutes(
       }
 
       await userAuthService.logout(req.auth.authId, req.auth.tenantId);
+
+      // Clear httpOnly access token cookie (labs-n6nf)
+      res.clearCookie('access_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+      });
+
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: 'Logout failed' });
@@ -177,6 +288,7 @@ export function createAuthRoutes(
   /**
    * POST /api/v1/auth/switch-tenant
    * Switch active tenant context.
+   * Sets new accessToken as httpOnly cookie (labs-n6nf).
    */
   router.post('/switch-tenant', validateBody(SwitchTenantSchema), async (req: Request, res: Response) => {
     try {
@@ -191,7 +303,17 @@ export function createAuthRoutes(
         ua: req.headers['user-agent'],
       });
 
-      res.json(result);
+      // Set access token as httpOnly cookie (labs-n6nf)
+      res.cookie('access_token', result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: (config.telemetry.jwtExpirationSeconds || 3600) * 1000,
+      });
+
+      // Return only refresh token in body
+      res.json({ refreshToken: result.refreshToken });
     } catch (error) {
       res.status(403).json({ error: getErrorMessage(error) });
     }

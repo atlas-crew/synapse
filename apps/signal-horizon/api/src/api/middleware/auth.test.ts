@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express, { type Express } from 'express';
+import cookieParser from 'cookie-parser';
 import { createHmac, createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { RedisKv } from '../../storage/redis/kv.js';
@@ -64,6 +65,7 @@ describe('Auth middleware JWT', () => {
     } as unknown as PrismaClient;
 
     app = express();
+    app.use(cookieParser());
     app.use(express.json());
     app.use(createAuthMiddleware(prisma));
     app.get('/secure', (req, res) => res.json({ auth: req.auth }));
@@ -319,5 +321,92 @@ describe('Auth middleware epoch validation (labs-wqy1)', () => {
       .expect(503);
 
     expect(response.body.code).toBe('EPOCH_SERVICE_UNAVAILABLE');
+  });
+});
+
+describe('Auth middleware cookie fallback (labs-n6nf)', () => {
+  let app: Express;
+  let prisma: PrismaClient;
+
+  beforeEach(() => {
+    mockConfig.telemetry.jwtSecret = 'test-secret';
+
+    prisma = {
+      tokenBlacklist: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+      apiKey: {
+        findUnique: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    } as unknown as PrismaClient;
+
+    app = express();
+    app.use(cookieParser());
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+  });
+
+  it('accepts JWT from access_token cookie when no Authorization header', async () => {
+    const token = createJwt({
+      jti: 'cookie-jti',
+      scopes: ['fleet:read'],
+      userId: 'user-cookie',
+    });
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Cookie', `access_token=${token}`)
+      .expect(200);
+
+    expect(res.body.auth).toMatchObject({
+      tenantId: 'tenant-1',
+      authId: 'cookie-jti',
+      userId: 'user-cookie',
+      scopes: ['fleet:read'],
+    });
+  });
+
+  it('prefers Authorization header over cookie when both present', async () => {
+    const headerToken = createJwt({
+      jti: 'header-jti',
+      userId: 'user-header',
+      scopes: ['fleet:admin'],
+    });
+
+    const cookieToken = createJwt({
+      jti: 'cookie-jti',
+      userId: 'user-cookie',
+      scopes: ['fleet:read'],
+    });
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${headerToken}`)
+      .set('Cookie', `access_token=${cookieToken}`)
+      .expect(200);
+
+    // Should use the header token, not the cookie
+    expect(res.body.auth.authId).toBe('header-jti');
+    expect(res.body.auth.userId).toBe('user-header');
+  });
+
+  it('rejects when neither Authorization header nor cookie is present', async () => {
+    const res = await request(app)
+      .get('/secure')
+      .expect(401);
+
+    expect(res.body).toMatchObject({ code: 'AUTH_REQUIRED' });
+  });
+
+  it('rejects invalid JWT in cookie', async () => {
+    const res = await request(app)
+      .get('/secure')
+      .set('Cookie', 'access_token=not-a-valid-jwt')
+      .expect(401);
+
+    // The invalid JWT will fall through to API key lookup which also fails
+    expect(res.body).toMatchObject({ code: 'INVALID_API_KEY' });
   });
 });

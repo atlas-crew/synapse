@@ -304,7 +304,7 @@ export function RemoteShell({
 
   return (
     <div
-      className={`flex flex-col h-full bg-surface-card rounded-lg border border-border-subtle overflow-hidden ${className}`}
+      className={`flex flex-col h-full bg-surface-card  border border-border-subtle overflow-hidden ${className}`}
     >
       {/* Header Bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface-raised border-b border-border-subtle">
@@ -323,14 +323,14 @@ export function RemoteShell({
             {status === 'disconnected' || status === 'error' ? (
               <button
                 onClick={handleConnect}
-                className="px-3 py-1.5 text-xs font-medium bg-accent-primary text-white rounded hover:bg-accent-primary/90 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
               >
                 Connect
               </button>
             ) : status === 'connected' ? (
               <button
                 onClick={handleDisconnect}
-                className="px-3 py-1.5 text-xs font-medium bg-status-error/10 text-status-error rounded hover:bg-status-error/20 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium bg-status-error/10 text-status-error hover:bg-status-error/20 transition-colors"
               >
                 Disconnect
               </button>
@@ -341,8 +341,9 @@ export function RemoteShell({
           {onClose && (
             <button
               onClick={handleClose}
-              className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+              className="p-1 text-ink-muted hover:text-ink-primary hover:bg-surface-subtle transition-colors"
               title="Close terminal"
+              aria-label="Close terminal"
             >
               <X className="w-4 h-4" />
             </button>
@@ -373,7 +374,7 @@ export function RemoteShell({
             {(status === 'error' || status === 'disconnected') && (
               <button
                 onClick={handleConnect}
-                className="flex items-center gap-1 px-2 py-1 text-xs text-status-error hover:bg-status-error/10 rounded transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-status-error hover:bg-status-error/10 transition-colors"
               >
                 <RefreshCw className="w-3 h-3" />
                 Retry
@@ -389,6 +390,9 @@ export function RemoteShell({
           ref={terminalRef}
           className="absolute inset-0 p-2"
           style={{ backgroundColor: TERMINAL_THEME.background }}
+          role="log"
+          aria-label="Remote shell terminal output"
+          aria-live="polite"
         />
 
         {/* Connecting Overlay */}
@@ -416,7 +420,7 @@ export function RemoteShell({
               </p>
               <button
                 onClick={handleConnect}
-                className="px-4 py-2 text-sm font-medium bg-accent-primary text-white rounded hover:bg-accent-primary/90 transition-colors"
+                className="px-4 py-2 text-sm font-medium bg-accent-primary text-white hover:bg-accent-primary/90 transition-colors"
               >
                 Retry Connection
               </button>
@@ -426,7 +430,7 @@ export function RemoteShell({
 
         {/* Exit Code Display */}
         {exitCode !== null && status === 'disconnected' && (
-          <div className="absolute bottom-4 right-4 px-3 py-2 bg-surface-raised border border-border-subtle rounded-lg">
+          <div className="absolute bottom-4 right-4 px-3 py-2 bg-surface-raised border border-border-subtle">
             <p className={`text-sm ${exitCode === 0 ? 'text-status-success' : 'text-status-error'}`}>
               Shell exited with code {exitCode}
             </p>

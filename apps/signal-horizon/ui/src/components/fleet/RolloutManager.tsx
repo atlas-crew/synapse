@@ -209,7 +209,7 @@ const StepIndicator = memo(function StepIndicator({
               onClick={() => isClickable && onStepClick(step.key)}
               disabled={!isClickable}
               className={clsx(
-                'flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors',
+                'flex items-center gap-2 px-3 py-1.5 transition-colors',
                 isActive && 'bg-ac-blue text-white',
                 isCompleted && 'bg-status-success/10 text-status-success',
                 !isActive && !isCompleted && 'bg-surface-subtle text-ink-muted',
@@ -253,7 +253,7 @@ const ReleaseCard = memo(function ReleaseCard({
     <button
       onClick={onClick}
       className={clsx(
-        'w-full p-4 text-left border rounded-lg transition-all',
+        'w-full p-4 text-left border transition-all',
         isSelected
           ? 'border-ac-blue bg-ac-blue/5 ring-1 ring-ac-blue/50'
           : 'border-border-subtle hover:border-ink-muted hover:bg-surface-subtle'
@@ -264,7 +264,7 @@ const ReleaseCard = memo(function ReleaseCard({
           <div className="flex items-center gap-2">
             <span className="text-lg font-semibold text-ink-primary">v{release.version}</span>
             {isLatest && (
-              <span className="px-2 py-0.5 text-xs font-medium bg-status-success/10 text-status-success border border-status-success/30 rounded">
+              <span className="px-2 py-0.5 text-xs font-medium bg-status-success/10 text-status-success border border-status-success/30">
                 Latest
               </span>
             )}
@@ -275,7 +275,7 @@ const ReleaseCard = memo(function ReleaseCard({
         </div>
         <div
           className={clsx(
-            'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+            'w-5 h-5 border-2 flex items-center justify-center',
             isSelected ? 'border-ac-blue bg-ac-blue' : 'border-border-subtle'
           )}
         >
@@ -305,7 +305,7 @@ const StrategyCard = memo(function StrategyCard({
     <button
       onClick={onClick}
       className={clsx(
-        'w-full p-4 text-left border rounded-lg transition-all',
+        'w-full p-4 text-left border transition-all',
         isSelected
           ? 'border-ac-blue bg-ac-blue/5 ring-1 ring-ac-blue/50'
           : 'border-border-subtle hover:border-ink-muted hover:bg-surface-subtle'
@@ -314,7 +314,7 @@ const StrategyCard = memo(function StrategyCard({
       <div className="flex items-start gap-3">
         <div
           className={clsx(
-            'p-2 rounded-lg',
+            'p-2',
             isSelected ? 'bg-ac-blue/10 text-ac-blue' : 'bg-surface-subtle text-ink-muted'
           )}
         >
@@ -325,7 +325,7 @@ const StrategyCard = memo(function StrategyCard({
             <span className="font-medium text-ink-primary">{option.label}</span>
             <div
               className={clsx(
-                'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                'w-5 h-5 border-2 flex items-center justify-center',
                 isSelected ? 'border-ac-blue bg-ac-blue' : 'border-border-subtle'
               )}
             >
@@ -344,12 +344,12 @@ const SensorProgressCard = memo(function SensorProgressCard({ progress }: { prog
   const config = STATUS_CONFIG[progress.status];
 
   return (
-    <div className="p-3 bg-surface-card border border-border-subtle rounded-lg">
+    <div className="p-3 bg-surface-card border border-border-subtle">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-ink-primary truncate">{progress.sensorName}</span>
         <div
           className={clsx(
-            'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium border rounded',
+            'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium border',
             config.className
           )}
         >
@@ -358,7 +358,7 @@ const SensorProgressCard = memo(function SensorProgressCard({ progress }: { prog
         </div>
       </div>
       {progress.error && (
-        <div className="mt-2 p-2 bg-status-error/10 border border-status-error/20 rounded text-xs text-status-error">
+        <div className="mt-2 p-2 bg-status-error/10 border border-status-error/20 text-xs text-status-error">
           {progress.error}
         </div>
       )}
@@ -536,11 +536,11 @@ export const RolloutManager = memo(function RolloutManager({
   // If there's an active rollout, show progress view
   if (activeRollout && (activeRollout.status === 'in_progress' || activeRollout.status === 'pending')) {
     return (
-      <div className={clsx('bg-surface-card border border-border-subtle rounded-lg overflow-hidden', className)}>
+      <div className={clsx('bg-surface-card border border-border-subtle overflow-hidden', className)}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-surface-raised border-b border-border-subtle">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-ac-blue/10 rounded-lg">
+            <div className="p-2 bg-ac-blue/10">
               <Layers className="w-5 h-5 text-ac-blue" />
             </div>
             <div>
@@ -553,7 +553,7 @@ export const RolloutManager = memo(function RolloutManager({
           <button
             onClick={() => setShowConfirmCancel(true)}
             disabled={isCancellingRollout}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-status-error bg-status-error/10 border border-status-error/30 rounded hover:bg-status-error/20 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-status-error bg-status-error/10 border border-status-error/30 hover:bg-status-error/20 transition-colors disabled:opacity-50"
           >
             {isCancellingRollout ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -571,7 +571,7 @@ export const RolloutManager = memo(function RolloutManager({
               <span className="text-sm font-medium text-ink-primary">Overall Progress</span>
               <span className="text-sm font-semibold text-ac-blue">{rolloutProgress.percentage}%</span>
             </div>
-            <div className="w-full h-3 bg-surface-subtle rounded-full overflow-hidden">
+            <div className="w-full h-3 bg-surface-subtle overflow-hidden">
               <div
                 className="h-full bg-ac-blue transition-all duration-500"
                 style={{ width: `${rolloutProgress.percentage}%` }}
@@ -615,7 +615,7 @@ export const RolloutManager = memo(function RolloutManager({
         {showConfirmCancel && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirmCancel(false)} />
-            <div className="relative bg-surface-card border border-border-subtle rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="relative bg-surface-card border border-border-subtle shadow-xl max-w-md w-full p-6">
               <div className="flex items-center gap-3 mb-4">
                 <AlertTriangle className="w-6 h-6 text-status-warning" />
                 <h3 className="text-lg font-semibold text-ink-primary">Cancel Rollout?</h3>
@@ -627,14 +627,14 @@ export const RolloutManager = memo(function RolloutManager({
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowConfirmCancel(false)}
-                  className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle rounded transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-colors"
                 >
                   Keep Running
                 </button>
                 <button
                   onClick={handleCancelRollout}
                   disabled={isCancellingRollout}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 rounded transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
                 >
                   {isCancellingRollout && <Loader2 className="w-4 h-4 animate-spin" />}
                   Cancel Rollout
@@ -649,7 +649,7 @@ export const RolloutManager = memo(function RolloutManager({
 
   // Render wizard
   return (
-    <div className={clsx('bg-surface-card border border-border-subtle rounded-lg overflow-hidden', className)}>
+    <div className={clsx('bg-surface-card border border-border-subtle overflow-hidden', className)}>
       {/* Step indicator */}
       <StepIndicator steps={WIZARD_STEPS} currentStep={currentStep} onStepClick={handleStepClick} />
 
@@ -709,7 +709,7 @@ export const RolloutManager = memo(function RolloutManager({
 
             {/* Rolling strategy options */}
             {strategy === 'rolling' && (
-              <div className="p-4 bg-surface-subtle rounded-lg space-y-4">
+              <div className="p-4 bg-surface-subtle space-y-4">
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-ink-muted" />
                   <span className="text-sm font-medium text-ink-primary">Rolling Options</span>
@@ -741,7 +741,7 @@ export const RolloutManager = memo(function RolloutManager({
                         max="600"
                         value={batchDelay}
                         onChange={(e) => setBatchDelay(parseIntSafe(e.target.value, batchDelay))}
-                        className="w-20 px-2 py-1 text-sm bg-surface-inset border border-border-subtle rounded text-ink-primary"
+                        className="w-20 px-2 py-1 text-sm bg-surface-inset border border-border-subtle text-ink-primary"
                       />
                       <span className="text-sm text-ink-muted">seconds</span>
                     </div>
@@ -770,7 +770,7 @@ export const RolloutManager = memo(function RolloutManager({
                   key={tag}
                   onClick={() => handleTagToggle(tag)}
                   className={clsx(
-                    'px-3 py-1.5 text-xs font-medium border rounded-full transition-colors',
+                    'px-3 py-1.5 text-xs font-medium border transition-colors',
                     selectedTags.includes(tag)
                       ? 'bg-ac-blue text-white border-ac-blue'
                       : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted'
@@ -789,12 +789,13 @@ export const RolloutManager = memo(function RolloutManager({
                 value={sensorSearch}
                 onChange={(e) => setSensorSearch(e.target.value)}
                 placeholder="Search sensors..."
-                className="w-full pl-9 pr-4 py-2 text-sm bg-surface-inset border border-border-subtle rounded text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-ac-blue"
+                aria-label="Search sensors for rollout"
+                className="w-full pl-9 pr-4 py-2 text-sm bg-surface-inset border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:outline-none focus:border-ac-blue"
               />
             </div>
 
             {/* Selected count */}
-            <div className="flex items-center justify-between px-3 py-2 bg-surface-subtle rounded">
+            <div className="flex items-center justify-between px-3 py-2 bg-surface-subtle">
               <span className="text-sm text-ink-secondary">
                 {filteredSensors.length} sensor{filteredSensors.length !== 1 ? 's' : ''} selected
               </span>
@@ -804,7 +805,7 @@ export const RolloutManager = memo(function RolloutManager({
             </div>
 
             {/* Sensor list preview */}
-            <div className="max-h-48 overflow-y-auto border border-border-subtle rounded divide-y divide-border-subtle">
+            <div className="max-h-48 overflow-y-auto border border-border-subtle divide-y divide-border-subtle">
               {filteredSensors.slice(0, 10).map((sensor) => (
                 <div key={sensor.id} className="px-3 py-2 flex items-center justify-between">
                   <span className="text-sm text-ink-primary">{sensor.name}</span>
@@ -832,13 +833,13 @@ export const RolloutManager = memo(function RolloutManager({
 
             {/* Summary cards */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-surface-subtle rounded-lg">
+              <div className="p-4 bg-surface-subtle">
                 <div className="text-xs text-ink-muted uppercase tracking-wide mb-1">Release</div>
                 <div className="text-lg font-semibold text-ink-primary">v{selectedRelease.version}</div>
                 <div className="text-xs text-ink-muted mt-1">{formatDate(selectedRelease.createdAt)}</div>
               </div>
 
-              <div className="p-4 bg-surface-subtle rounded-lg">
+              <div className="p-4 bg-surface-subtle">
                 <div className="text-xs text-ink-muted uppercase tracking-wide mb-1">Strategy</div>
                 <div className="text-lg font-semibold text-ink-primary capitalize">{strategy}</div>
                 {strategy === 'rolling' && (
@@ -848,13 +849,13 @@ export const RolloutManager = memo(function RolloutManager({
                 )}
               </div>
 
-              <div className="p-4 bg-surface-subtle rounded-lg">
+              <div className="p-4 bg-surface-subtle">
                 <div className="text-xs text-ink-muted uppercase tracking-wide mb-1">Target Tags</div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {selectedTags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2 py-0.5 text-xs font-medium bg-ac-blue/10 text-ac-blue rounded"
+                      className="px-2 py-0.5 text-xs font-medium bg-ac-blue/10 text-ac-blue"
                     >
                       {tag}
                     </span>
@@ -862,7 +863,7 @@ export const RolloutManager = memo(function RolloutManager({
                 </div>
               </div>
 
-              <div className="p-4 bg-surface-subtle rounded-lg">
+              <div className="p-4 bg-surface-subtle">
                 <div className="text-xs text-ink-muted uppercase tracking-wide mb-1">Sensors</div>
                 <div className="text-lg font-semibold text-ink-primary">{filteredSensors.length}</div>
                 <div className="text-xs text-ink-muted mt-1">sensors will be updated</div>
@@ -870,7 +871,7 @@ export const RolloutManager = memo(function RolloutManager({
             </div>
 
             {/* Warning */}
-            <div className="flex items-start gap-3 p-4 bg-status-warning/10 border border-status-warning/20 rounded-lg">
+            <div className="flex items-start gap-3 p-4 bg-status-warning/10 border border-status-warning/20">
               <AlertTriangle className="w-5 h-5 text-status-warning shrink-0 mt-0.5" />
               <div>
                 <div className="text-sm font-medium text-status-warning">Impact Warning</div>
@@ -890,7 +891,7 @@ export const RolloutManager = memo(function RolloutManager({
           onClick={handleBack}
           disabled={currentStep === 'release'}
           className={clsx(
-            'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded transition-colors',
+            'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
             currentStep === 'release'
               ? 'text-ink-muted cursor-not-allowed'
               : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
@@ -904,7 +905,7 @@ export const RolloutManager = memo(function RolloutManager({
           <button
             onClick={handleStartRollout}
             disabled={!canProceed || isStartingRollout}
-            className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isStartingRollout ? (
               <>
@@ -923,7 +924,7 @@ export const RolloutManager = memo(function RolloutManager({
             onClick={handleNext}
             disabled={!canProceed}
             className={clsx(
-              'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded transition-colors',
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
               canProceed
                 ? 'text-white bg-ac-blue hover:bg-ac-blue-dark'
                 : 'text-ink-muted bg-surface-subtle cursor-not-allowed'

@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../../lib/chartTheme';
 
 interface StatusCodeData {
   name: string;
@@ -31,7 +32,7 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
   const total = data.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <div className={`h-64 ${className}`}>
+    <div className={`h-64 ${className}`} role="img" aria-label="Donut chart showing HTTP status code distribution">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -52,15 +53,9 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
               `${value.toLocaleString()} (${((value / total) * 100).toFixed(1)}%)`,
               name,
             ]}
-            contentStyle={{
-              backgroundColor: '#001544',
-              border: '1px solid rgba(0, 87, 183, 0.4)',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-              fontSize: '12px',
-              color: '#FFFFFF',
-            }}
-            labelStyle={{ color: '#FFFFFF' }}
-            itemStyle={{ color: '#B0C4DE' }}
+            contentStyle={{ ...TOOLTIP_CONTENT_STYLE, fontSize: '12px' }}
+            labelStyle={TOOLTIP_LABEL_STYLE}
+            itemStyle={TOOLTIP_ITEM_STYLE}
           />
           <Legend
             verticalAlign="bottom"
