@@ -80,7 +80,7 @@ interface StatCardProps {
 }
 
 function StatCard({ icon: Icon, label, value, trend, color, bgColor }: StatCardProps) {
-  const trendColor = trend && trend.value >= 0 ? 'text-green-400' : 'text-red-400';
+  const trendColor = trend && trend.value >= 0 ? 'text-ac-green' : 'text-ac-red';
   const TrendIcon = trend && trend.value >= 0 ? TrendingUp : TrendingDown;
 
   return (
@@ -316,10 +316,10 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
 // Recent Blocked Requests Table
 function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
   const actionColors: Record<string, string> = {
-    blocked: 'text-red-400 bg-red-500/20',
-    challenged: 'text-sky-400 bg-sky-500/20',
-    throttled: 'text-orange-400 bg-orange-500/20',
-    logged: 'text-blue-400 bg-blue-500/20',
+    blocked: 'text-ac-red bg-ac-red/20',
+    challenged: 'text-ac-sky bg-ac-sky/20',
+    throttled: 'text-ac-orange bg-ac-orange/20',
+    logged: 'text-ac-blue bg-ac-blue/20',
   };
 
   return (
@@ -352,7 +352,7 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
                   </div>
                 </td>
                 <td className="px-5 py-3 text-sm">
-                  <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5">
+                  <code className="text-ac-blue bg-ac-blue/10 px-2 py-0.5">
                     {req.method} {req.endpoint}
                   </code>
                 </td>
@@ -392,10 +392,10 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
 // Protection Alerts
 function AlertsFeed({ alerts }: { alerts: ProtectionAlert[] }) {
   const severityColors: Record<string, string> = {
-    low: 'border-l-green-500 bg-green-500/5',
-    medium: 'border-l-sky-500 bg-sky-500/5',
-    high: 'border-l-orange-500 bg-orange-500/5',
-    critical: 'border-l-red-500 bg-red-500/5',
+    low: 'border-l-ac-green bg-ac-green/5',
+    medium: 'border-l-ac-sky bg-ac-sky/5',
+    high: 'border-l-ac-orange bg-ac-orange/5',
+    critical: 'border-l-ac-red bg-ac-red/5',
   };
 
   const typeIcons: Record<string, LucideIcon> = {
@@ -575,8 +575,8 @@ export default function BeamDashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" aria-hidden="true" />
-            <span className="text-green-400">Protected</span>
+            <span className="w-2 h-2 rounded-full bg-ac-green animate-pulse" aria-hidden="true" />
+            <span className="text-ac-green">Protected</span>
           </div>
         </div>
       </header>
@@ -588,31 +588,31 @@ export default function BeamDashboardPage() {
           label="Requests (24h)"
           value={`${(totalRequests / 1000).toFixed(1)}k`}
           trend={{ value: 12, period: 'vs yesterday' }}
-          color="text-blue-400"
-          bgColor="bg-blue-500/10"
+          color="text-ac-blue"
+          bgColor="bg-ac-blue/10"
         />
         <StatCard
           icon={Shield}
           label="Blocked"
           value={blockedCount}
           trend={{ value: -8, period: 'vs yesterday' }}
-          color="text-red-400"
-          bgColor="bg-red-500/10"
+          color="text-ac-red"
+          bgColor="bg-ac-red/10"
         />
         <StatCard
           icon={Target}
           label="Endpoints"
           value={endpointCount}
           trend={{ value: 3, period: 'new this week' }}
-          color="text-purple-400"
-          bgColor="bg-purple-500/10"
+          color="text-ac-purple"
+          bgColor="bg-ac-purple/10"
         />
         <StatCard
           icon={Shield}
           label="Coverage"
           value={`${coveragePercent}%`}
-          color="text-green-400"
-          bgColor="bg-green-500/10"
+          color="text-ac-green"
+          bgColor="bg-ac-green/10"
         />
       </section>
 
