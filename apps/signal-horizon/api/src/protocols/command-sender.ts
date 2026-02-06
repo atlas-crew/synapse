@@ -88,6 +88,49 @@ export class CommandSender extends EventEmitter {
   }
 
   /**
+   * Clean up all pending and inflight commands for a disconnected sensor (labs-ry6l).
+   * Rejects inflight commands and removes pending commands from queues.
+   * Should be called when a sensor disconnects to prevent memory leaks.
+   */
+  cleanupSensor(sensorId: string): number {
+    // Collect all commands to clean up first to avoid mutation during iteration.
+    // finalizeCommand calls trySendNext, which could promote pending commands to sent,
+    // so we gather everything upfront.
+    const toClean: Command[] = [];
+
+    const inflightId = this.inflightCommands.get(sensorId);
+    if (inflightId) {
+      const inflightCmd = this.commands.get(inflightId);
+      if (inflightCmd && (inflightCmd.status === 'sent' || inflightCmd.status === 'pending')) {
+        toClean.push(inflightCmd);
+      }
+    }
+
+    for (const cmd of this.commands.values()) {
+      if (cmd.sensorId === sensorId && cmd.status === 'pending' && !toClean.includes(cmd)) {
+        toClean.push(cmd);
+      }
+    }
+
+    // Remove the sensor queue and inflight tracking before finalizing
+    // to prevent trySendNext from re-promoting pending commands
+    this.sensorQueues.delete(sensorId);
+    this.inflightCommands.delete(sensorId);
+
+    // Now fail all collected commands
+    for (const cmd of toClean) {
+      this.clearCommandTimeout(cmd.id);
+      cmd.completedAt = Date.now();
+      cmd.status = 'failed';
+      cmd.error = 'Sensor disconnected';
+      this.commands.delete(cmd.id);
+      this.emit('command-failed', cmd);
+    }
+
+    return toClean.length;
+  }
+
+  /**
    * Send a command to a sensor.
    * Returns the command ID on success, or null if the command was dropped
    * due to queue limits being exceeded.
@@ -368,6 +411,8 @@ export class CommandSender extends EventEmitter {
   private cleanupOldCommands(): void {
     const now = Date.now();
     const completedTTL = 300000; // 5 minutes for completed commands
+    /** Max time a sent command can remain without a response before being timed out (labs-ry6l) */
+    const staleSentTTL = 60000; // 60 seconds
 
     for (const [id, cmd] of this.commands) {
       // Clean up completed commands after TTL
@@ -387,6 +432,14 @@ export class CommandSender extends EventEmitter {
           this.removeFromQueue(cmd.sensorId, id);
           this.evictedCommands++;
           this.emit('command-evicted', { ...cmd, reason: 'ttl_expired' });
+        }
+      }
+      // Clean up stale inflight commands whose sensor is no longer connected (labs-ry6l)
+      else if (cmd.status === 'sent' && cmd.sentAt) {
+        const sensorConnected = this.sensorConnections.has(cmd.sensorId);
+        if (!sensorConnected && now - cmd.sentAt > staleSentTTL) {
+          this.finalizeCommand(cmd, 'failed', 'Stale command: sensor disconnected');
+          this.emit('command-failed', cmd);
         }
       }
     }

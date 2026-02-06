@@ -14,7 +14,10 @@ import type { Logger } from 'pino';
 import { randomUUID } from 'crypto';
 import { requireScope, requireRole } from '../middleware/auth.js';
 import { createTunnelCreationRateLimiter } from '../middleware/rate-limit.js';
-import { TunnelSessionStore } from '../../websocket/tunnel-session-store.js';
+import { TunnelSessionStore, TunnelSessionCapacityError } from '../../websocket/tunnel-session-store.js';
+
+/** Maximum active sessions allowed globally */
+const MAX_SESSIONS = 1000;
 
 // ============================================================================
 // Route Factory
@@ -85,6 +88,16 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
 
       // Transactional check and create (labs-ox44)
       await prisma.$transaction(async (tx) => {
+        // 0. Enforce session capacity limit
+        const activeCount = await tx.tunnelSession.count({
+          where: { status: { in: ['pending', 'connected'] } },
+        });
+        if (activeCount >= MAX_SESSIONS) {
+          throw new TunnelSessionCapacityError(
+            `Maximum tunnel sessions reached (${MAX_SESSIONS})`
+          );
+        }
+
         // 1. Verify sensor exists and belongs to tenant (Atomic verification)
         const sensor = await tx.sensor.findFirst({
           where: { id: sensorId, tenantId },
@@ -148,11 +161,14 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
         expiresIn: 300, // 5 minutes to connect
       });
     } catch (error: unknown) {
+      if (error instanceof TunnelSessionCapacityError) {
+        return res.status(429).json({ error: error.message });
+      }
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'SENSOR_NOT_FOUND') return res.status(404).json({ error: 'Sensor not found' });
       if (message === 'SENSOR_OFFLINE') return res.status(503).json({ error: 'Sensor offline' });
       if (message === 'ACCESS_DENIED') return res.status(403).json({ error: 'Access denied' });
-      
+
       logger.error({ error, sensorId }, 'Failed to create shell session');
       return res.status(500).json({ error: 'Internal server error' });
     }
@@ -180,6 +196,16 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
       const expiresAt = Date.now() + 300000;
 
       await prisma.$transaction(async (tx) => {
+        // Enforce session capacity limit
+        const activeCount = await tx.tunnelSession.count({
+          where: { status: { in: ['pending', 'connected'] } },
+        });
+        if (activeCount >= MAX_SESSIONS) {
+          throw new TunnelSessionCapacityError(
+            `Maximum tunnel sessions reached (${MAX_SESSIONS})`
+          );
+        }
+
         const sensor = await tx.sensor.findFirst({
           where: { id: sensorId, tenantId },
           select: { id: true, connectionState: true, lastHeartbeat: true },
@@ -224,6 +250,9 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
         expiresIn: 300, // 5 minutes to connect
       });
     } catch (error: unknown) {
+      if (error instanceof TunnelSessionCapacityError) {
+        return res.status(429).json({ error: error.message });
+      }
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'SENSOR_NOT_FOUND') return res.status(404).json({ error: 'Sensor not found' });
       if (message === 'SENSOR_OFFLINE') return res.status(503).json({ error: 'Sensor offline' });
@@ -255,6 +284,16 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
       const expiresAt = Date.now() + 300000;
 
       await prisma.$transaction(async (tx) => {
+        // Enforce session capacity limit
+        const activeCount = await tx.tunnelSession.count({
+          where: { status: { in: ['pending', 'connected'] } },
+        });
+        if (activeCount >= MAX_SESSIONS) {
+          throw new TunnelSessionCapacityError(
+            `Maximum tunnel sessions reached (${MAX_SESSIONS})`
+          );
+        }
+
         const sensor = await tx.sensor.findFirst({
           where: { id: sensorId, tenantId },
           select: { id: true, connectionState: true, lastHeartbeat: true },
@@ -298,6 +337,9 @@ export function createTunnelRoutes(prisma: PrismaClient, logger: Logger): Router
         expiresIn: 300,
       });
     } catch (error: unknown) {
+      if (error instanceof TunnelSessionCapacityError) {
+        return res.status(429).json({ error: error.message });
+      }
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'SENSOR_NOT_FOUND') return res.status(404).json({ error: 'Sensor not found' });
       if (message === 'SENSOR_OFFLINE') return res.status(503).json({ error: 'Sensor offline' });
