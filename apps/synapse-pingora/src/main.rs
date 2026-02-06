@@ -280,6 +280,9 @@ pub struct ServerConfig {
     /// API key for authenticating privileged admin operations (unset = generated at startup)
     #[serde(default)]
     pub admin_api_key: Option<String>,
+    /// Disable admin authentication (local-only, non-production guardrails enforced)
+    #[serde(default)]
+    pub admin_auth_disabled: bool,
     /// Trusted proxy CIDR ranges for X-Forwarded-For validation
     /// When set, only X-Forwarded-For IPs from trusted proxies are used
     #[serde(default)]
@@ -368,6 +371,7 @@ impl Default for ServerConfig {
             admin_listen: default_admin_listen(),
             workers: 0,
             admin_api_key: None,
+            admin_auth_disabled: false,
             trusted_proxies: Vec::new(),
         }
     }
@@ -4281,17 +4285,15 @@ fn main() {
 
     // Check for dev/demo modes via CLI flags or environment variables
     let dev_mode = cli.dev || parse_bool_env("SYNAPSE_DEV");
-
     let demo_mode = cli.demo || parse_bool_env("SYNAPSE_DEMO");
+    let is_explicitly_non_production = parse_bool_env_neg("SYNAPSE_PRODUCTION")
+        || std::env::var("NODE_ENV")
+            .map(|v| matches!(v.to_lowercase().as_str(), "development" | "dev" | "local" | "test"))
+            .unwrap_or(false);
 
     if dev_mode {
         // SECURITY: Require explicit non-production environment for dev mode (secure-by-default)
         // Dev mode bypasses authentication, so we need explicit confirmation this is not production
-        let is_explicitly_non_production = parse_bool_env_neg("SYNAPSE_PRODUCTION")
-            || std::env::var("NODE_ENV")
-                .map(|v| matches!(v.to_lowercase().as_str(), "development" | "dev" | "local" | "test"))
-                .unwrap_or(false);
-
         if is_explicitly_non_production {
             synapse_pingora::admin_server::enable_dev_mode();
         } else {
@@ -4735,23 +4737,43 @@ fn main() {
         }
     };
     let admin_handler = Arc::clone(&api_handler);
+    let admin_auth_disabled =
+        config.server.admin_auth_disabled || parse_bool_env("SYNAPSE_ADMIN_AUTH_DISABLED");
+    if admin_auth_disabled {
+        if !admin_addr.ip().is_loopback() || !is_explicitly_non_production {
+            error!(
+                "SECURITY: Refusing to disable admin auth on {}. \
+                 Require loopback admin_listen and SYNAPSE_PRODUCTION=0 or NODE_ENV=development.",
+                config.server.admin_listen
+            );
+            std::process::exit(1);
+        }
+        warn!(
+            "SECURITY: Admin auth DISABLED (local-only). Do not expose {} publicly.",
+            config.server.admin_listen
+        );
+    }
     // SECURITY: Enforce authentication on admin API
     // If no API key is configured, generate a secure random token to prevent unauthorized access
-    let admin_api_key = match config.server.admin_api_key.clone() {
-        Some(key) => {
-            info!("Admin API authentication enabled (configured key)");
-            key
-        }
-        None => {
-            // Generate a secure random token using UUID v4
-            let generated_key = uuid::Uuid::new_v4().to_string();
-            warn!("==========================================================");
-            warn!("ADMIN API KEY NOT CONFIGURED - GENERATED SECURE TOKEN:");
-            warn!("  {}", generated_key);
-            warn!("Use this key in X-Admin-Key header for admin API access.");
-            warn!("To persist, set server.admin_api_key in your config file.");
-            warn!("==========================================================");
-            generated_key
+    let admin_api_key = if admin_auth_disabled {
+        String::new()
+    } else {
+        match config.server.admin_api_key.clone() {
+            Some(key) => {
+                info!("Admin API authentication enabled (configured key)");
+                key
+            }
+            None => {
+                // Generate a secure random token using UUID v4
+                let generated_key = uuid::Uuid::new_v4().to_string();
+                warn!("==========================================================");
+                warn!("ADMIN API KEY NOT CONFIGURED - GENERATED SECURE TOKEN:");
+                warn!("  {}", generated_key);
+                warn!("Use this key in X-Admin-Key header for admin API access.");
+                warn!("To persist, set server.admin_api_key in your config file.");
+                warn!("==========================================================");
+                generated_key
+            }
         }
     };
 
@@ -4860,7 +4882,14 @@ fn main() {
         };
 
         rt.block_on(async {
-            if let Err(e) = start_admin_server(admin_addr, admin_handler, admin_api_key).await {
+            if let Err(e) = start_admin_server(
+                admin_addr,
+                admin_handler,
+                admin_api_key,
+                admin_auth_disabled,
+            )
+            .await
+            {
                 error!("Admin server error: {}", e);
             }
         });

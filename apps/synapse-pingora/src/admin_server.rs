@@ -609,6 +609,8 @@ pub struct AdminState {
     pub handler: Arc<ApiHandler>,
     /// API key for authenticating privileged operations (SECURITY: now mandatory)
     pub admin_api_key: String,
+    /// Disable admin authentication (local-only)
+    pub admin_auth_disabled: bool,
     /// Scopes granted to the admin API key (defaults to ALL if not specified)
     pub admin_scopes: Vec<String>,
     /// Allowed signal types for external sensor reporting.
@@ -675,6 +677,9 @@ async fn require_auth(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if state.admin_auth_disabled {
+        return Ok(next.run(request).await);
+    }
     // DEV MODE: Skip authentication for local development
     if is_dev_mode() {
         return Ok(next.run(request).await);
@@ -808,6 +813,9 @@ async fn require_ws_auth(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if state.admin_auth_disabled {
+        return Ok(next.run(request).await);
+    }
     if is_dev_mode() {
         return Ok(next.run(request).await);
     }
@@ -915,6 +923,9 @@ async fn check_scope(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    if state.admin_auth_disabled {
+        return Ok(next.run(request).await);
+    }
     // Check if the required scope is granted (or wildcard "*" grants all)
     if state.admin_scopes.iter().any(|s| s == required_scope || s == "*") {
         Ok(next.run(request).await)
@@ -1128,10 +1139,12 @@ fn build_response(
 /// * `addr` - Socket address to bind (e.g., "0.0.0.0:6191")
 /// * `handler` - API handler with references to health, metrics, reloader, etc.
 /// * `admin_api_key` - Required API key for authenticating admin operations
+/// * `admin_auth_disabled` - Disables admin authentication (local-only)
 pub async fn start_admin_server(
     addr: SocketAddr,
     handler: Arc<ApiHandler>,
     admin_api_key: String,
+    admin_auth_disabled: bool,
 ) -> std::io::Result<()> {
     // SECURITY: Authentication is now mandatory - all admin scopes granted to the API key
     let admin_scopes: Vec<String> = scopes::ALL.iter().map(|s| s.to_string()).collect();
@@ -1157,6 +1170,7 @@ pub async fn start_admin_server(
     let state = AdminState {
         handler,
         admin_api_key,
+        admin_auth_disabled,
         admin_scopes,
         signal_permissions: Arc::new(SignalPermissions::default()),
         admin_rate_limiter,
@@ -5972,6 +5986,7 @@ mod tests {
         let state = AdminState {
             handler,
             admin_api_key: "test-key".to_string(),
+            admin_auth_disabled: false,
             admin_scopes: scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
@@ -6012,6 +6027,7 @@ mod tests {
         let state = AdminState {
             handler,
             admin_api_key: "test-key".to_string(),
+            admin_auth_disabled: false,
             admin_scopes: scopes,
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
@@ -7043,7 +7059,7 @@ mod tests {
     // =========================================================================
 
     /// Create a test app that includes the /console route with scope-based auth.
-    fn create_test_app_with_console(scopes: Vec<String>) -> Router {
+    fn create_test_app_with_console(scopes: Vec<String>, admin_auth_disabled: bool) -> Router {
         use governor::{Quota, RateLimiter};
         use std::num::NonZeroU32;
 
@@ -7056,6 +7072,7 @@ mod tests {
         let state = AdminState {
             handler,
             admin_api_key: "test-key".to_string(),
+            admin_auth_disabled,
             admin_scopes: scopes,
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
@@ -7085,7 +7102,7 @@ mod tests {
     #[tokio::test]
     async fn test_console_requires_auth() {
         // Create app with admin:read scope
-        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()]);
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
         // Request without X-Admin-Key should return 401
         let response = app
@@ -7108,7 +7125,7 @@ mod tests {
     #[tokio::test]
     async fn test_console_with_admin_read_scope() {
         // Create app with admin:read scope
-        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()]);
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
         // Request with valid key and admin:read scope should return 200
         let response = app
@@ -7132,7 +7149,7 @@ mod tests {
     #[tokio::test]
     async fn test_console_without_admin_read_scope() {
         // Create app with only sensor:read scope (not admin:read)
-        let app = create_test_app_with_console(vec![scopes::SENSOR_READ.to_string()]);
+        let app = create_test_app_with_console(vec![scopes::SENSOR_READ.to_string()], false);
 
         // Request with valid key but without admin:read scope should return 403
         let response = app
@@ -7156,7 +7173,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_remains_public() {
         // Create app with empty scopes (most restrictive)
-        let app = create_test_app_with_console(vec![]);
+        let app = create_test_app_with_console(vec![], false);
 
         // Health endpoint should work without any auth
         let response = app
@@ -7173,6 +7190,27 @@ mod tests {
             response.status(),
             StatusCode::OK,
             "/health should remain public and return 200 without authentication"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_auth_disabled_allows_access() {
+        let app = create_test_app_with_console(vec![], true);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "/console should return 200 when admin auth is disabled"
         );
     }
 
@@ -7194,6 +7232,7 @@ mod tests {
         let state = AdminState {
             handler,
             admin_api_key: "test-key".to_string(),
+            admin_auth_disabled: false,
             admin_scopes: scopes,
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
@@ -7235,6 +7274,7 @@ mod tests {
         let state = AdminState {
             handler,
             admin_api_key: "test-key".to_string(),
+            admin_auth_disabled: false,
             admin_scopes: scopes,
             signal_permissions: Arc::new(SignalPermissions::default()),
             admin_rate_limiter,
