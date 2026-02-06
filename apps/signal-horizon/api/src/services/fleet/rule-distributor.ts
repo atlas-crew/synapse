@@ -84,6 +84,21 @@ export class RuleDistributor {
     }
   }
 
+  private async maybeHydrateDeployment(deploymentId: string): Promise<BlueGreenDeploymentState | undefined> {
+    const existing = this.activeDeployments.get(deploymentId);
+    if (existing) return existing;
+
+    try {
+      const loaded = await this.deploymentStateStore.getByDeploymentId(deploymentId);
+      if (!loaded) return undefined;
+      this.activeDeployments.set(deploymentId, loaded);
+      return loaded;
+    } catch (error) {
+      this.logger.warn({ error, deploymentId }, 'Failed to hydrate deployment by id from state store');
+      return undefined;
+    }
+  }
+
   // =============================================================================
   // Tenant Isolation (Security)
   // =============================================================================
@@ -154,28 +169,19 @@ export class RuleDistributor {
       // We need to track command IDs -> deployment IDs mapping, or iterate active deployments
       // Since we don't have a direct map, we iterate active deployments to find matching sensor + context
       
-      // Optimization: If payload has deploymentId, use it.
-      if (deploymentId && this.activeDeployments.has(deploymentId)) {
-        // Determine if this was staging or activation
-        // This requires context from the command itself, which we don't have here easily
-        // But we can infer from the command type 'push_rules' and the payload structure if we had access to the original command payload
-        // However, `cmd` from event only has result.
-        
-        // BETTER APPROACH: Use the payload sent in the command acknowledgment
-        // The sensor should echo back the deploymentId and phase (staging/activation)
-        
-        // For now, let's assume if we get a success for a sensor in an active deployment, we check what we were waiting for
-        const deployment = this.activeDeployments.get(deploymentId);
-        if (deployment) {
-           const status = deployment.sensorStatus.get(cmd.sensorId);
-           if (status) {
-             if (deployment.status === 'staging' && status.stagingStatus === 'pending') {
-               this.updateSensorStagingStatus(deploymentId, cmd.sensorId, true);
-             } else if (deployment.status === 'switching') {
-               this.updateSensorActivationStatus(deploymentId, cmd.sensorId, true);
-             }
-           }
-        }
+      // If payload has deploymentId, use it even if this instance didn't initiate the deployment.
+      if (deploymentId) {
+        void this.maybeHydrateDeployment(deploymentId).then((deployment) => {
+          if (!deployment) return;
+          const status = deployment.sensorStatus.get(cmd.sensorId);
+          if (!status) return;
+
+          if (deployment.status === 'staging' && status.stagingStatus === 'pending') {
+            this.updateSensorStagingStatus(deploymentId, cmd.sensorId, true);
+          } else if (deployment.status === 'switching') {
+            this.updateSensorActivationStatus(deploymentId, cmd.sensorId, true);
+          }
+        });
       }
     });
 
@@ -1382,14 +1388,26 @@ export class RuleDistributor {
     error?: string
   ): void {
     const deployment = this.activeDeployments.get(deploymentId);
-    if (!deployment) return;
-
-    const status = deployment.sensorStatus.get(sensorId);
-    if (status) {
-      status.stagingStatus = staged ? 'staged' : 'failed';
-      status.error = error;
-      status.lastUpdated = new Date();
+    if (!deployment) {
+      void this.maybeHydrateDeployment(deploymentId).then((loaded) => {
+        if (!loaded) return;
+        this.updateSensorStagingStatus(deploymentId, sensorId, staged, error);
+      });
+      return;
     }
+
+    const now = new Date();
+    const status: BlueGreenSensorStatus = deployment.sensorStatus.get(sensorId) ?? {
+      sensorId,
+      stagingStatus: 'pending',
+      activeStatus: 'unknown',
+      lastUpdated: now,
+    };
+
+    status.stagingStatus = staged ? 'staged' : 'failed';
+    status.error = error;
+    status.lastUpdated = now;
+    deployment.sensorStatus.set(sensorId, status);
 
     void this.safeUpsertDeploymentState(deployment);
   }
@@ -1404,13 +1422,25 @@ export class RuleDistributor {
     activated: boolean
   ): void {
     const deployment = this.activeDeployments.get(deploymentId);
-    if (!deployment) return;
-
-    const status = deployment.sensorStatus.get(sensorId);
-    if (status) {
-      status.activeStatus = activated ? 'green' : 'blue';
-      status.lastUpdated = new Date();
+    if (!deployment) {
+      void this.maybeHydrateDeployment(deploymentId).then((loaded) => {
+        if (!loaded) return;
+        this.updateSensorActivationStatus(deploymentId, sensorId, activated);
+      });
+      return;
     }
+
+    const now = new Date();
+    const status: BlueGreenSensorStatus = deployment.sensorStatus.get(sensorId) ?? {
+      sensorId,
+      stagingStatus: activated ? 'staged' : 'pending',
+      activeStatus: 'unknown',
+      lastUpdated: now,
+    };
+
+    status.activeStatus = activated ? 'green' : 'blue';
+    status.lastUpdated = now;
+    deployment.sensorStatus.set(sensorId, status);
 
     void this.safeUpsertDeploymentState(deployment);
   }

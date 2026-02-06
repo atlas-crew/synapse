@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ThreatService, type SignalContext } from './threat-service.js';
 import pino from 'pino';
 
@@ -180,6 +180,22 @@ describe('ThreatService', () => {
 
       expect(result.recommendedAction).toBe('block');
       await strictService.stop();
+    });
+  });
+
+  describe('stop', () => {
+    it('should not delete shared store entries on shutdown', async () => {
+      const store = {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => {}),
+        delete: vi.fn(async () => {}),
+        entries: vi.fn(async () => [['t:tenant-1:ip:10.0.0.1', { count: 1, lastSeen: Date.now() }]]),
+      };
+
+      const svc = new ThreatService(logger, undefined, store);
+      await svc.stop();
+
+      expect(store.delete).not.toHaveBeenCalled();
     });
   });
 });

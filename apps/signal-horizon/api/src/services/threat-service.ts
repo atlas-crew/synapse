@@ -137,6 +137,71 @@ export class InMemoryRecentSignalsStore implements RecentSignalsStore {
   }
 }
 
+/**
+ * Best-effort wrapper: if the primary store errors (Redis outage), fall back to
+ * an in-memory store to keep the hub running in degraded mode.
+ *
+ * Note: this preserves single-node semantics during outages; it does not attempt
+ * to guarantee cross-node consistency while Redis is unhealthy.
+ */
+export class ResilientRecentSignalsStore implements RecentSignalsStore {
+  private logger: Logger;
+  private primary: RecentSignalsStore;
+  private fallback: RecentSignalsStore;
+  private lastWarnAtMs = 0;
+
+  constructor(logger: Logger, primary: RecentSignalsStore, fallback: RecentSignalsStore) {
+    this.logger = logger.child({ component: 'resilient-recent-signals-store' });
+    this.primary = primary;
+    this.fallback = fallback;
+  }
+
+  private warn(op: string, error: unknown): void {
+    const now = Date.now();
+    // Avoid flooding logs during Redis outages.
+    if (now - this.lastWarnAtMs < 30_000) return;
+    this.lastWarnAtMs = now;
+    this.logger.warn({ error, op }, 'RecentSignalsStore primary failed; using fallback');
+  }
+
+  async get(key: string): Promise<{ count: number; lastSeen: number } | undefined> {
+    try {
+      return await this.primary.get(key);
+    } catch (error) {
+      this.warn('get', error);
+      return this.fallback.get(key);
+    }
+  }
+
+  async set(key: string, value: { count: number; lastSeen: number }): Promise<void> {
+    // Keep fallback warm so we can continue locally if primary dies mid-flight.
+    await this.fallback.set(key, value);
+    try {
+      await this.primary.set(key, value);
+    } catch (error) {
+      this.warn('set', error);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.fallback.delete(key);
+    try {
+      await this.primary.delete(key);
+    } catch (error) {
+      this.warn('delete', error);
+    }
+  }
+
+  async entries(): Promise<[string, { count: number; lastSeen: number }][]> {
+    try {
+      return await this.primary.entries();
+    } catch (error) {
+      this.warn('entries', error);
+      return this.fallback.entries();
+    }
+  }
+}
+
 type StoredRecentSignalEntry = { count: number; lastSeen: number };
 type RecentSignalsIndexEntry = { tenantId: string; id: string };
 
@@ -293,7 +358,8 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
 
     // Best-effort index compaction.
     if (stillPresent.length !== entries.length) {
-      await this.kv.set(this.indexKey(), jsonEncode(stillPresent), { ttlSeconds: TTL_SECONDS.cacheMax });
+      const ttlSeconds = Math.max(1, Math.ceil(this.windowMs / 1000));
+      await this.kv.set(this.indexKey(), jsonEncode(stillPresent), { ttlSeconds });
     }
 
     return loaded;
@@ -398,21 +464,27 @@ export class ThreatService {
   }
 
   private async updateVolumeTracking(key: string, eventCount: number): Promise<number> {
-    const now = Date.now();
-    const existing = await this.recentSignals.get(key);
+    try {
+      const now = Date.now();
+      const existing = await this.recentSignals.get(key);
 
-    if (existing) {
-      existing.count += eventCount;
-      existing.lastSeen = now;
-      await this.recentSignals.set(key, existing);
-    } else {
-      await this.recentSignals.set(key, { count: eventCount, lastSeen: now });
+      if (existing) {
+        existing.count += eventCount;
+        existing.lastSeen = now;
+        await this.recentSignals.set(key, existing);
+      } else {
+        await this.recentSignals.set(key, { count: eventCount, lastSeen: now });
+      }
+
+      // Calculate volume score: logarithmic scaling for repeat offenders
+      const totalCount = existing?.count ?? eventCount;
+      // 1 signal = 0, 10 signals = 50, 100 signals = 100
+      return Math.min(100, Math.round(Math.log10(totalCount + 1) * 50));
+    } catch (error) {
+      // Fail open: volume factor becomes 0 if state store is unhealthy.
+      this.logger.warn({ error, key }, 'Volume tracking update failed');
+      return 0;
     }
-
-    // Calculate volume score: logarithmic scaling for repeat offenders
-    const totalCount = existing?.count ?? eventCount;
-    // 1 signal = 0, 10 signals = 50, 100 signals = 100
-    return Math.min(100, Math.round(Math.log10(totalCount + 1) * 50));
   }
 
   private determineAction(score: number): ThreatScore['recommendedAction'] {
@@ -423,17 +495,24 @@ export class ThreatService {
   }
 
   private startCleanup(): void {
-    // Clean up old entries every minute
+    // Clean up old entries every minute.
     this.cleanupInterval = setInterval(() => {
-      const cutoff = Date.now() - this.WINDOW_MS;
-      void this.recentSignals.entries().then((entries) => {
-        for (const [key, value] of entries) {
-          if (value.lastSeen < cutoff) {
-            void this.recentSignals.delete(key);
-          }
-        }
-      });
+      void this.cleanupOnce();
     }, 60_000);
+  }
+
+  private async cleanupOnce(): Promise<void> {
+    try {
+      const cutoff = Date.now() - this.WINDOW_MS;
+      const entries = await this.recentSignals.entries();
+      for (const [key, value] of entries) {
+        if (value.lastSeen < cutoff) {
+          await this.recentSignals.delete(key);
+        }
+      }
+    } catch (error) {
+      this.logger.warn({ error }, 'ThreatService cleanup failed');
+    }
   }
 
   /**
@@ -458,10 +537,6 @@ export class ThreatService {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-    }
-    const entries = await this.recentSignals.entries();
-    for (const [key] of entries) {
-      await this.recentSignals.delete(key);
     }
   }
 }

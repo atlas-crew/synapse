@@ -9,6 +9,11 @@ import type { Logger } from 'pino';
 import type { EnrichedSignal, Severity } from '../../types/protocol.js';
 import { PlaybookService, PlaybookConcurrencyError, type UserInfo } from './playbook-service.js';
 import { buildRedisKey, type RedisKv } from '../../storage/redis/index.js';
+import {
+  type TriggerRateLimitStore,
+  InMemoryTriggerRateLimitStore,
+  type TriggerCountRecord,
+} from './trigger-rate-limit-store.js';
 
 /**
  * Configuration for the automated trigger service
@@ -110,6 +115,60 @@ export class RedisTriggerCooldownStore implements TriggerCooldownStore {
 }
 
 /**
+ * Best-effort wrapper: if the primary store errors (Redis outage), fall back to
+ * in-memory cooldown tracking to keep automated triggering functional.
+ */
+export class ResilientTriggerCooldownStore implements TriggerCooldownStore {
+  private logger: Logger;
+  private primary: TriggerCooldownStore;
+  private fallback: TriggerCooldownStore;
+  private lastWarnAtMs = 0;
+
+  constructor(logger: Logger, primary: TriggerCooldownStore, fallback: TriggerCooldownStore) {
+    this.logger = logger.child({ component: 'resilient-trigger-cooldown-store' });
+    this.primary = primary;
+    this.fallback = fallback;
+  }
+
+  private warn(op: string, error: unknown): void {
+    const now = Date.now();
+    if (now - this.lastWarnAtMs < 30_000) return;
+    this.lastWarnAtMs = now;
+    this.logger.warn({ error, op }, 'TriggerCooldownStore primary failed; using fallback');
+  }
+
+  async tryAcquire(tenantId: string, playbookId: string, cooldownMs: number): Promise<boolean> {
+    const fallbackAcquired = await this.fallback.tryAcquire(tenantId, playbookId, cooldownMs);
+    try {
+      return await this.primary.tryAcquire(tenantId, playbookId, cooldownMs);
+    } catch (error) {
+      this.warn('tryAcquire', error);
+      return fallbackAcquired;
+    }
+  }
+
+  async release(tenantId: string, playbookId: string): Promise<void> {
+    await this.fallback.release(tenantId, playbookId);
+    try {
+      await this.primary.release(tenantId, playbookId);
+    } catch (error) {
+      this.warn('release', error);
+    }
+  }
+
+  stop(): void {
+    try {
+      this.fallback.stop();
+    } catch {}
+    try {
+      this.primary.stop();
+    } catch (error) {
+      this.warn('stop', error);
+    }
+  }
+}
+
+/**
  * Result of evaluating signals against playbook triggers
  */
 interface TriggerEvaluation {
@@ -125,8 +184,8 @@ export class AutomatedPlaybookTrigger {
   private config: AutomatedTriggerConfig;
 
   private cooldownStore: TriggerCooldownStore;
-  /** Rate limit tracking per tenant */
-  private triggerCounts: Map<string, { count: number; windowStart: number }> = new Map();
+  /** Rate limit tracking per tenant (distributed support) */
+  private triggerCounts: TriggerRateLimitStore;
 
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -135,13 +194,15 @@ export class AutomatedPlaybookTrigger {
     logger: Logger,
     playbookService: PlaybookService,
     config?: Partial<AutomatedTriggerConfig>,
-    cooldownStore?: TriggerCooldownStore
+    cooldownStore?: TriggerCooldownStore,
+    rateLimitStore?: TriggerRateLimitStore
   ) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'automated-playbook-trigger' });
     this.playbookService = playbookService;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.cooldownStore = cooldownStore ?? new InMemoryTriggerCooldownStore();
+    this.triggerCounts = rateLimitStore ?? new InMemoryTriggerRateLimitStore();
 
     if (this.config.enabled) {
       this.startCleanupInterval();
@@ -305,7 +366,7 @@ export class AutomatedPlaybookTrigger {
     matchReason: string
   ): Promise<void> {
     // Check rate limit before each trigger
-    if (!this.checkRateLimit(tenantId)) {
+    if (!(await this.checkRateLimit(tenantId))) {
       this.logger.warn(
         { tenantId, playbookId: playbook.id },
         'Rate limit exceeded for automated playbook triggers'
@@ -343,7 +404,7 @@ export class AutomatedPlaybookTrigger {
         this.config.systemUser
       );
 
-      this.incrementRateCount(tenantId);
+      await this.incrementRateCount(tenantId);
 
       this.logger.info(
         {
@@ -473,14 +534,14 @@ export class AutomatedPlaybookTrigger {
   /**
    * Check rate limit for tenant
    */
-  private checkRateLimit(tenantId: string): boolean {
+  private async checkRateLimit(tenantId: string): Promise<boolean> {
     const now = Date.now();
     const windowMs = 60_000; // 1 minute window
 
-    const record = this.triggerCounts.get(tenantId);
+    const record = await this.triggerCounts.get(tenantId);
     if (!record || now - record.windowStart > windowMs) {
       // New window
-      this.triggerCounts.set(tenantId, { count: 0, windowStart: now });
+      await this.triggerCounts.set(tenantId, { count: 0, windowStart: now });
       return true;
     }
 
@@ -490,10 +551,11 @@ export class AutomatedPlaybookTrigger {
   /**
    * Increment rate count for tenant
    */
-  private incrementRateCount(tenantId: string): void {
-    const record = this.triggerCounts.get(tenantId);
+  private async incrementRateCount(tenantId: string): Promise<void> {
+    const record = await this.triggerCounts.get(tenantId);
     if (record) {
       record.count++;
+      await this.triggerCounts.set(tenantId, record);
     }
   }
 
@@ -504,11 +566,13 @@ export class AutomatedPlaybookTrigger {
     this.cleanupInterval = setInterval(() => {
       // Clean up old rate limit windows
       const windowCutoff = Date.now() - 60_000;
-      for (const [tenantId, record] of this.triggerCounts) {
-        if (record.windowStart < windowCutoff) {
-          this.triggerCounts.delete(tenantId);
+      void this.triggerCounts.entries().then((entries) => {
+        for (const [tenantId, record] of entries) {
+          if (record.windowStart < windowCutoff) {
+            void this.triggerCounts.delete(tenantId);
+          }
         }
-      }
+      });
     }, 60_000);
   }
 
@@ -521,7 +585,7 @@ export class AutomatedPlaybookTrigger {
       this.cleanupInterval = null;
     }
     this.cooldownStore.stop();
-    this.triggerCounts.clear();
+    void this.triggerCounts.clear();
     this.logger.info('Automated playbook trigger service stopped');
   }
 }

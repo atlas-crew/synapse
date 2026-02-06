@@ -3,6 +3,7 @@ import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, type RedisKv } from
 
 export interface DeploymentStateStore {
   loadAll(): Promise<BlueGreenDeploymentState[]>;
+  getByDeploymentId(deploymentId: string): Promise<BlueGreenDeploymentState | null>;
   upsert(state: BlueGreenDeploymentState): Promise<void>;
   delete(tenantId: string, deploymentId: string): Promise<void>;
 }
@@ -10,6 +11,9 @@ export interface DeploymentStateStore {
 export class NoopDeploymentStateStore implements DeploymentStateStore {
   async loadAll(): Promise<BlueGreenDeploymentState[]> {
     return [];
+  }
+  async getByDeploymentId(_deploymentId: string): Promise<BlueGreenDeploymentState | null> {
+    return null;
   }
   async upsert(_state: BlueGreenDeploymentState): Promise<void> {
     // no-op
@@ -70,6 +74,7 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
   private namespace: string;
   private version: number;
   private stateDataType: string;
+  private byIdDataType: string;
   private indexTenantId: string;
   private indexDataType: string;
   private indexId: string;
@@ -91,6 +96,7 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
     this.namespace = options.namespace ?? 'horizon';
     this.version = options.version ?? 1;
     this.stateDataType = options.stateDataType ?? 'blue-green-deployment';
+    this.byIdDataType = 'blue-green-deployment-by-id';
     this.indexTenantId = options.indexTenantId ?? 'global';
     this.indexDataType = options.indexDataType ?? 'blue-green-deployment-index';
     this.indexId = options.indexId ?? 'all';
@@ -114,6 +120,17 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
       tenantId: this.indexTenantId,
       dataType: this.indexDataType,
       id: this.indexId,
+    });
+  }
+
+  private byIdKey(deploymentId: string): string {
+    // Map deploymentId -> tenantId to enable cross-instance updates when tenant context is missing.
+    return buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId: this.indexTenantId,
+      dataType: this.byIdDataType,
+      id: deploymentId,
     });
   }
 
@@ -167,14 +184,39 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
       const parsed = jsonDecode<StoredBlueGreenDeploymentState>(raw, { maxBytes: 1024 * 1024 });
       loaded.push(deserializeState(parsed));
       stillPresent.push(entry);
+
+      // Best-effort backfill: ensure deploymentId -> tenantId pointer exists.
+      await this.kv
+        .set(this.byIdKey(entry.deploymentId), entry.tenantId, { ttlSeconds: TTL_SECONDS.session })
+        .catch(() => {});
     }
 
-    // Best-effort cleanup of stale index entries (no lock needed here; okay if races).
+    // Best-effort cleanup of stale index entries. Keep this under lock to reduce
+    // risk of dropping concurrent upserts from other hub instances.
     if (stillPresent.length !== entries.length) {
-      await this.kv.set(this.indexKey(), jsonEncode(stillPresent), { ttlSeconds: TTL_SECONDS.session });
+      await this.withIndexLock(async () => {
+        const current = await this.readIndex();
+        const filtered: DeploymentIndexEntry[] = [];
+        for (const entry of current) {
+          const raw = await this.kv.get(this.stateKey(entry.tenantId, entry.deploymentId));
+          if (raw) filtered.push(entry);
+        }
+        await this.writeIndex(filtered);
+      });
     }
 
     return loaded;
+  }
+
+  async getByDeploymentId(deploymentId: string): Promise<BlueGreenDeploymentState | null> {
+    const tenantId = await this.kv.get(this.byIdKey(deploymentId));
+    if (!tenantId) return null;
+
+    const raw = await this.kv.get(this.stateKey(tenantId, deploymentId));
+    if (!raw) return null;
+
+    const parsed = jsonDecode<StoredBlueGreenDeploymentState>(raw, { maxBytes: 1024 * 1024 });
+    return deserializeState(parsed);
   }
 
   async upsert(state: BlueGreenDeploymentState): Promise<void> {
@@ -182,6 +224,7 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
     await this.kv.set(this.stateKey(state.tenantId, state.deploymentId), jsonEncode(serializeState(state)), {
       ttlSeconds,
     });
+    await this.kv.set(this.byIdKey(state.deploymentId), state.tenantId, { ttlSeconds });
 
     await this.withIndexLock(async () => {
       const entries = await this.readIndex();
@@ -193,6 +236,7 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
 
   async delete(tenantId: string, deploymentId: string): Promise<void> {
     await this.kv.del(this.stateKey(tenantId, deploymentId));
+    await this.kv.del(this.byIdKey(deploymentId));
 
     await this.withIndexLock(async () => {
       const entries = await this.readIndex();
@@ -201,4 +245,3 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
     });
   }
 }
-

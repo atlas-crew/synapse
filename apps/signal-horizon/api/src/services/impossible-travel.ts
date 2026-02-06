@@ -142,7 +142,7 @@ export class RedisUserHistoryStore implements UserHistoryStore {
   private async readHistory(key: string): Promise<LoginEvent[]> {
     const raw = await this.kv.get(key);
     if (!raw) return [];
-    const parsed = jsonDecode<StoredLoginEvent[]>(raw);
+    const parsed = jsonDecode<StoredLoginEvent[]>(raw, { maxBytes: 1024 * 1024 });
     return parsed.map(deserializeLoginEvent);
   }
 
@@ -181,6 +181,53 @@ export class RedisUserHistoryStore implements UserHistoryStore {
 
   async delete(tenantId: string, userId: string): Promise<void> {
     await this.kv.del(this.historyKey(tenantId, userId));
+  }
+}
+
+/**
+ * Best-effort wrapper: if the primary store errors (Redis outage), fall back to
+ * in-memory tracking to keep impossible-travel detection running in degraded mode.
+ */
+export class ResilientUserHistoryStore implements UserHistoryStore {
+  private logger: Logger;
+  private primary: UserHistoryStore;
+  private fallback: UserHistoryStore;
+  private lastWarnAtMs = 0;
+
+  constructor(logger: Logger, primary: UserHistoryStore, fallback: UserHistoryStore) {
+    this.logger = logger.child({ component: 'resilient-user-history-store' });
+    this.primary = primary;
+    this.fallback = fallback;
+  }
+
+  private warn(op: string, error: unknown): void {
+    const now = Date.now();
+    if (now - this.lastWarnAtMs < 30_000) return;
+    this.lastWarnAtMs = now;
+    this.logger.warn({ error, op }, 'UserHistoryStore primary failed; using fallback');
+  }
+
+  async appendAndGetPrevious(
+    event: LoginEvent,
+    options: { historyWindowMs: number; maxHistoryPerUser: number }
+  ): Promise<LoginEvent[]> {
+    // Keep fallback warm so we can continue locally if primary dies mid-flight.
+    const fallbackPrevious = await this.fallback.appendAndGetPrevious(event, options);
+    try {
+      return await this.primary.appendAndGetPrevious(event, options);
+    } catch (error) {
+      this.warn('appendAndGetPrevious', error);
+      return fallbackPrevious;
+    }
+  }
+
+  async delete(tenantId: string, userId: string): Promise<void> {
+    await this.fallback.delete(tenantId, userId);
+    try {
+      await this.primary.delete(tenantId, userId);
+    } catch (error) {
+      this.warn('delete', error);
+    }
   }
 }
 

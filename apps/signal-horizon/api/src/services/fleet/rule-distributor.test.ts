@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { RuleDistributor, TenantIsolationError } from './rule-distributor.js';
+import type { DeploymentStateStore } from './deployment-state-store.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { FleetCommander } from './fleet-commander.js';
@@ -2609,6 +2610,46 @@ describe('RuleDistributor', () => {
 
       const status = distributor.getDeploymentStatus(deploymentId);
       expect(status?.sensorStatus.get('sensor-1')?.activeStatus).toBe('green');
+    });
+
+    it('should hydrate + persist status update when deployment not in memory', async () => {
+      const deploymentId = 'dep-1';
+      const state = {
+        deploymentId,
+        tenantId: TEST_TENANT_ID,
+        status: 'staging',
+        rules: [],
+        sensorStatus: new Map([
+          [
+            'sensor-1',
+            {
+              sensorId: 'sensor-1',
+              stagingStatus: 'pending',
+              activeStatus: 'unknown',
+              lastUpdated: new Date(0),
+            },
+          ],
+        ]),
+      } as any;
+
+      const store: DeploymentStateStore = {
+        loadAll: vi.fn(async () => []),
+        getByDeploymentId: vi.fn(async (id: string) => (id === deploymentId ? state : null)),
+        upsert: vi.fn(async () => {}),
+        delete: vi.fn(async () => {}),
+      };
+
+      const dist = new RuleDistributor(createMockPrisma(['sensor-1']), createMockLogger(), store);
+
+      dist.updateSensorStagingStatus(deploymentId, 'sensor-1', true);
+
+      await vi.advanceTimersByTimeAsync(ASYNC_INIT_DELAY_MS);
+      await Promise.resolve();
+
+      expect(vi.mocked(store.getByDeploymentId)).toHaveBeenCalledWith(deploymentId);
+      expect(vi.mocked(store.upsert)).toHaveBeenCalled();
+      const persisted = vi.mocked(store.upsert).mock.calls[0]?.[0] as any;
+      expect(persisted.sensorStatus.get('sensor-1')?.stagingStatus).toBe('staged');
     });
 
     it('should handle status update for non-existent deployment', () => {
