@@ -1,7 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowUpCircle,
+  CheckCircle2,
+  Globe2,
+  Plug,
+  RefreshCw,
+  RotateCcw,
+  Settings,
+  Trash2,
+  WifiOff,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { SensorStatusBadge, MetricCard } from '../../components/fleet';
 import { SensorDetailSkeleton, ConfigPanelSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
@@ -217,51 +231,58 @@ export function SensorDetailPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <button
-            onClick={() => navigate('/fleet')}
-            className="mb-2 text-sm text-accent-primary hover:underline flex items-center gap-1"
-          >
-            ← Back to Fleet
-          </button>
-          <h1 className="text-2xl font-bold text-ink-primary">{sensor.name}</h1>
-          <div className="mt-2 flex items-center gap-4">
-            <SensorStatusBadge status={status} />
-            <span className="text-sm text-ink-secondary">ID: {sensor.id.slice(0, 8)}...</span>
-            <span className="text-sm text-ink-secondary">v{sensor.version}</span>
-            <span className="text-sm text-ink-secondary">{sensor.region}</span>
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
+        <div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">
+          <div>
+            <button
+              onClick={() => navigate('/fleet')}
+              className="mb-2 text-xs uppercase tracking-[0.25em] text-ac-blue hover:text-ac-blue/80 flex items-center gap-2"
+            >
+              <span className="text-ink-secondary">←</span>
+              Back to Fleet
+            </button>
+            <h1 className="text-2xl font-light text-ink-primary">{sensor.name}</h1>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.18em] text-ink-secondary">
+              <SensorStatusBadge status={status} />
+              <span>ID {sensor.id.slice(0, 8)}...</span>
+              <span>v{sensor.version}</span>
+              <span>{sensor.region}</span>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => diagnosticsMutation.mutate()}
-            disabled={diagnosticsMutation.isPending}
-            className="px-4 py-2 text-sm border border-border-subtle rounded-lg hover:bg-surface-subtle transition-colors"
-          >
-            {diagnosticsMutation.isPending ? 'Running...' : 'Run Diagnostics'}
-          </button>
-          <button
-            onClick={() => restartMutation.mutate()}
-            disabled={restartMutation.isPending}
-            className="px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 transition-colors"
-          >
-            {restartMutation.isPending ? 'Restarting...' : 'Restart Sensor'}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => diagnosticsMutation.mutate()}
+              disabled={diagnosticsMutation.isPending}
+              className="btn-outline h-10 px-4 text-xs uppercase tracking-[0.2em]"
+            >
+              {diagnosticsMutation.isPending ? 'Running...' : 'Run Diagnostics'}
+            </button>
+            <button
+              onClick={() => restartMutation.mutate()}
+              disabled={restartMutation.isPending}
+              className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
+            >
+              {restartMutation.isPending ? 'Restarting...' : 'Restart Sensor'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-border-subtle">
-        <nav className="-mb-px flex gap-8">
+      {/* Tabs — WCAG 1.3.1 ARIA tab pattern */}
+      <div className="card border border-border-subtle border-t-2 border-t-ac-navy">
+        <nav role="tablist" aria-label="Sensor details" className="flex flex-wrap gap-6 px-6 py-3 bg-surface-inset border-b border-border-subtle">
           {tabs.map((tab) => (
             <button
               key={tab.key}
+              role="tab"
+              id={`tab-${tab.key}`}
+              aria-selected={activeTab === tab.key}
+              aria-controls={`tabpanel-${tab.key}`}
               onClick={() => setActiveTab(tab.key)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`px-1 py-2 text-xs uppercase tracking-[0.2em] border-b-2 transition-colors ${
                 activeTab === tab.key
-                  ? 'border-accent-primary text-accent-primary'
-                  : 'border-transparent text-ink-muted hover:text-ink-primary hover:border-border-subtle'
+                  ? 'border-ac-blue text-ac-blue'
+                  : 'border-transparent text-ink-secondary hover:text-ink-primary hover:border-border-subtle'
               }`}
             >
               {tab.label}
@@ -271,28 +292,30 @@ export function SensorDetailPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'overview' && <OverviewTab sensor={sensor} systemInfo={systemInfo} diagnostics={diagnosticsMutation.data} />}
-      {activeTab === 'performance' && <PerformanceTab data={performance} />}
-      {activeTab === 'network' && <NetworkTab data={network} />}
-      {activeTab === 'processes' && <ProcessesTab data={processes} />}
-      {activeTab === 'logs' && (
-        <LogViewer
-          sensorId={sensor.id}
-          sensorName={sensor.name}
-          height="600px"
-        />
-      )}
-      {activeTab === 'configuration' && <ConfigurationTab sensor={sensor} />}
-      {activeTab === 'remote-shell' && (
-        <div className="h-[600px]">
-          <RemoteShell sensorId={id!} sensorName={sensor.name} />
-        </div>
-      )}
-      {activeTab === 'files' && (
-        <div className="h-[600px]">
-          <FileBrowser sensorId={id!} sensorName={sensor.name} height="100%" />
-        </div>
-      )}
+      <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+        {activeTab === 'overview' && <OverviewTab sensor={sensor} systemInfo={systemInfo} diagnostics={diagnosticsMutation.data} />}
+        {activeTab === 'performance' && <PerformanceTab data={performance} />}
+        {activeTab === 'network' && <NetworkTab data={network} />}
+        {activeTab === 'processes' && <ProcessesTab data={processes} />}
+        {activeTab === 'logs' && (
+          <LogViewer
+            sensorId={sensor.id}
+            sensorName={sensor.name}
+            height="600px"
+          />
+        )}
+        {activeTab === 'configuration' && <ConfigurationTab sensor={sensor} />}
+        {activeTab === 'remote-shell' && (
+          <div className="h-[600px]">
+            <RemoteShell sensorId={id!} sensorName={sensor.name} />
+          </div>
+        )}
+        {activeTab === 'files' && (
+          <div className="h-[600px]">
+            <FileBrowser sensorId={id!} sensorName={sensor.name} height="100%" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -306,17 +329,17 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
     <div className="space-y-6">
       {/* Resource Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <MetricCard label="CPU" value={`${(meta.cpu ?? 0).toFixed(1)}%`} />
-        <MetricCard label="Memory" value={`${(meta.memory ?? 0).toFixed(1)}%`} />
-        <MetricCard label="Disk" value={`${(meta.disk ?? 50).toFixed(0)}%`} />
-        <MetricCard label="REQ/SEC" value={(meta.rps ?? 0).toLocaleString()} />
-        <MetricCard label="Latency P99" value={`${(meta.latency ?? 0).toFixed(0)}ms`} />
-        <MetricCard label="Uptime" value={formatUptime(sensor.uptime || systemInfo?.uptime || 0)} />
+        <MetricCard label="CPU" value={`${(meta.cpu ?? 0).toFixed(1)}%`} className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
+        <MetricCard label="Memory" value={`${(meta.memory ?? 0).toFixed(1)}%`} className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
+        <MetricCard label="Disk" value={`${(meta.disk ?? 50).toFixed(0)}%`} className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
+        <MetricCard label="REQ/SEC" value={(meta.rps ?? 0).toLocaleString()} className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
+        <MetricCard label="Latency P99" value={`${(meta.latency ?? 0).toFixed(0)}ms`} className="border-l-2 border-l-ac-red" labelClassName="text-ac-red dark:text-ac-red" valueClassName="text-ac-red dark:text-ac-red" />
+        <MetricCard label="Uptime" value={formatUptime(sensor.uptime || systemInfo?.uptime || 0)} className="border-l-2 border-l-ac-purple" labelClassName="text-ac-purple dark:text-ac-purple" valueClassName="text-ac-purple dark:text-ac-purple" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* System Information */}
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">System Information</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Hostname" value={systemInfo?.hostname || sensor.name} />
@@ -335,7 +358,7 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
         </div>
 
         {/* Connection Status */}
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Connection Status</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Cloud Connection" value={sensor.connectionState} />
@@ -349,7 +372,10 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
             {['atlascrew-waf', 'atlascrew-agent', 'atlascrew-collector', 'synapse-pingora'].map((proc) => (
               <div key={proc} className="flex items-center justify-between">
                 <span className="text-ink-secondary">{proc}</span>
-                <span className="text-status-success text-xs">● Running</span>
+                <span className="inline-flex items-center gap-2 text-xs text-ink-primary">
+                  <span className="inline-block w-2 h-2 bg-status-success" />
+                  Running
+                </span>
               </div>
             ))}
           </div>
@@ -357,32 +383,38 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-magenta p-6">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <ActionButton icon="🔄" label="Restart Services" />
-          <ActionButton icon="🗑️" label="Clear Logs" />
-          <ActionButton icon="⬆️" label="Update Sensor" />
-          <ActionButton icon="🌐" label="Test Connectivity" />
-          <ActionButton icon="🔌" label="Restart Sensor" />
+          <ActionButton icon={RotateCcw} label="Restart Services" />
+          <ActionButton icon={Trash2} label="Clear Logs" />
+          <ActionButton icon={ArrowUpCircle} label="Update Sensor" />
+          <ActionButton icon={Globe2} label="Test Connectivity" />
+          <ActionButton icon={Plug} label="Restart Sensor" />
         </div>
       </div>
 
       {/* Diagnostic Results */}
       {diagnostics && (
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-info p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">
-            Diagnostic Results <span className="text-sm text-ink-muted font-normal">({new Date(diagnostics.runAt).toLocaleTimeString()})</span>
+            Diagnostic Results <span className="text-sm text-ink-secondary font-normal">({new Date(diagnostics.runAt).toLocaleTimeString()})</span>
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {diagnostics.checks.map((check: any) => (
               <div key={check.name} className="flex items-start gap-2">
                 <span className={check.status === 'passed' ? 'text-status-success' : check.status === 'warning' ? 'text-status-warning' : 'text-status-error'}>
-                  {check.status === 'passed' ? '✓' : check.status === 'warning' ? '⚠' : '✗'}
+                  {check.status === 'passed' ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : check.status === 'warning' ? (
+                    <AlertTriangle className="w-4 h-4" />
+                  ) : (
+                    <XCircle className="w-4 h-4" />
+                  )}
                 </span>
                 <div>
                   <div className="text-sm font-medium text-ink-primary">{check.name}</div>
-                  <div className="text-xs text-ink-muted">{check.message}</div>
+                  <div className="text-xs text-ink-secondary">{check.message}</div>
                 </div>
               </div>
             ))}
@@ -394,32 +426,32 @@ function OverviewTab({ sensor, systemInfo, diagnostics }: { sensor: any; systemI
 }
 
 function PerformanceTab({ data }: { data: any }) {
-  if (!data) return <div className="text-center py-12 text-ink-muted">Loading performance data...</div>;
+  if (!data) return <div className="text-center py-12 text-ink-secondary">Loading performance data...</div>;
 
   return (
     <div className="space-y-6">
       {/* Current Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="CPU Usage" value={`${data.current.cpu.toFixed(1)}%`} />
-        <MetricCard label="Memory Usage" value={`${data.current.memory.toFixed(1)}%`} />
-        <MetricCard label="Disk Usage" value={`${data.current.disk.toFixed(1)}%`} />
-        <MetricCard label="Load Average" value={data.current.loadAverage.map((l: number) => l.toFixed(2)).join(', ')} />
+        <MetricCard label="CPU Usage" value={`${data.current.cpu.toFixed(1)}%`} className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
+        <MetricCard label="Memory Usage" value={`${data.current.memory.toFixed(1)}%`} className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
+        <MetricCard label="Disk Usage" value={`${data.current.disk.toFixed(1)}%`} className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
+        <MetricCard label="Load Average" value={data.current.loadAverage.map((l: number) => l.toFixed(2)).join(', ')} className="border-l-2 border-l-ac-purple" labelClassName="text-ac-purple dark:text-ac-purple" valueClassName="text-ac-purple dark:text-ac-purple" />
       </div>
 
       {/* CPU Chart */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">CPU Utilization (Last Hour)</h3>
         <div className="h-48 flex items-end gap-1">
           {data.history.slice(-60).map((point: any, idx: number) => (
             <div
               key={idx}
-              className="flex-1 bg-accent-primary rounded-t"
+              className="flex-1 bg-ac-blue"
               style={{ height: `${point.cpu}%` }}
               title={`${point.cpu.toFixed(1)}% at ${new Date(point.timestamp).toLocaleTimeString()}`}
             />
           ))}
         </div>
-        <div className="flex justify-between text-xs text-ink-muted mt-2">
+        <div className="flex justify-between text-xs text-ink-secondary mt-2">
           <span>60 min ago</span>
           <span>Now</span>
         </div>
@@ -427,8 +459,8 @@ function PerformanceTab({ data }: { data: any }) {
 
       {/* Disk I/O */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-ink-primary mb-4">Disk I/O</h3>
+      <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6 dark:border-ac-sky-light/40">
+        <h3 className="text-lg font-semibold text-ink-primary mb-4">Disk I/O</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Read Throughput" value={formatBytes(data.diskIO.readBytesPerSec) + '/s'} />
             <InfoRow label="Write Throughput" value={formatBytes(data.diskIO.writeBytesPerSec) + '/s'} />
@@ -438,13 +470,14 @@ function PerformanceTab({ data }: { data: any }) {
         </div>
 
         {/* Benchmarks */}
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-ink-primary mb-4">Performance Benchmarks</h3>
+      <div className="card border border-border-subtle border-t-2 border-t-info p-6 dark:border-ac-sky-light/40">
+        <h3 className="text-lg font-semibold text-ink-primary mb-4">Performance Benchmarks</h3>
           <div className="space-y-3">
             {data.benchmarks.map((b: any) => (
               <div key={b.name} className="flex items-center justify-between">
                 <span className="text-sm text-ink-secondary">{b.name}</span>
-                <span className={`text-sm font-medium ${b.status === 'good' ? 'text-status-success' : b.status === 'warning' ? 'text-status-warning' : 'text-status-error'}`}>
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-ink-primary">
+                  <span className={`inline-block w-2 h-2 ${b.status === 'good' ? 'bg-status-success' : b.status === 'warning' ? 'bg-status-warning' : 'bg-status-error'}`} />
                   {b.value} {b.unit}
                 </span>
               </div>
@@ -457,42 +490,42 @@ function PerformanceTab({ data }: { data: any }) {
 }
 
 function NetworkTab({ data }: { data: any }) {
-  if (!data) return <div className="text-center py-12 text-ink-muted">Loading network data...</div>;
+  if (!data) return <div className="text-center py-12 text-ink-secondary">Loading network data...</div>;
 
   return (
     <div className="space-y-6">
       {/* Traffic Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Inbound Traffic" value={`${data.traffic.inboundMbps.toFixed(1)} Mbps`} />
-        <MetricCard label="Outbound Traffic" value={`${data.traffic.outboundMbps.toFixed(1)} Mbps`} />
-        <MetricCard label="Active Connections" value={data.traffic.activeConnections.toLocaleString()} />
-        <MetricCard label="Packets/Sec" value={data.traffic.packetsPerSec.toLocaleString()} />
+        <MetricCard label="Inbound Traffic" value={`${data.traffic.inboundMbps.toFixed(1)} Mbps`} className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
+        <MetricCard label="Outbound Traffic" value={`${data.traffic.outboundMbps.toFixed(1)} Mbps`} className="border-l-2 border-l-info" labelClassName="text-ac-sky-blue dark:text-ac-sky-light" valueClassName="text-ac-sky-blue dark:text-ac-sky-light" />
+        <MetricCard label="Active Connections" value={data.traffic.activeConnections.toLocaleString()} className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
+        <MetricCard label="Packets/Sec" value={data.traffic.packetsPerSec.toLocaleString()} className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
       </div>
 
       {/* Traffic Chart */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Network Traffic (Last Hour)</h3>
         <div className="h-48 flex items-end gap-1">
           {data.history.slice(-60).map((point: any, idx: number) => (
             <div key={idx} className="flex-1 flex flex-col gap-px">
               <div
-                className="bg-status-success rounded-t"
+                className="bg-ac-blue"
                 style={{ height: `${(point.inboundMbps / 150) * 100}%` }}
                 title={`In: ${point.inboundMbps.toFixed(1)} Mbps`}
               />
               <div
-                className="bg-accent-primary rounded-b"
+                className="bg-info"
                 style={{ height: `${(point.outboundMbps / 150) * 100}%` }}
                 title={`Out: ${point.outboundMbps.toFixed(1)} Mbps`}
               />
             </div>
           ))}
         </div>
-        <div className="flex justify-between text-xs text-ink-muted mt-2">
+        <div className="flex justify-between text-xs text-ink-secondary mt-2">
           <span>60 min ago</span>
           <div className="flex gap-4">
-            <span><span className="inline-block w-3 h-3 bg-status-success rounded mr-1" />Inbound</span>
-            <span><span className="inline-block w-3 h-3 bg-accent-primary rounded mr-1" />Outbound</span>
+            <span><span className="inline-block w-3 h-3 bg-ac-blue mr-1" />Inbound</span>
+            <span><span className="inline-block w-3 h-3 bg-info mr-1" />Outbound</span>
           </div>
           <span>Now</span>
         </div>
@@ -500,11 +533,11 @@ function NetworkTab({ data }: { data: any }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Network Interfaces */}
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6 dark:border-ac-blue/40">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Network Interfaces</h3>
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-ink-muted">
+            <thead className="bg-surface-inset text-ac-navy dark:text-ac-sky-light border-b border-ac-blue/20 dark:border-ac-sky-light/40">
+              <tr className="text-left">
                 <th className="pb-2">Interface</th>
                 <th className="pb-2">IP Address</th>
                 <th className="pb-2">RX</th>
@@ -514,13 +547,13 @@ function NetworkTab({ data }: { data: any }) {
             </thead>
             <tbody>
               {data.interfaces.map((iface: any) => (
-                <tr key={iface.name} className="border-t border-border-subtle">
+                <tr key={iface.name} className="border-t border-border-subtle hover:bg-ac-blue/5 dark:hover:bg-ac-blue/10">
                   <td className="py-2 font-mono">{iface.name}</td>
                   <td className="py-2 font-mono">{iface.ip}</td>
                   <td className="py-2">{iface.rxMbps.toFixed(1)} Mbps</td>
                   <td className="py-2">{iface.txMbps.toFixed(1)} Mbps</td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${iface.status === 'up' ? 'bg-status-success/10 text-status-success' : 'bg-status-error/10 text-status-error'}`}>
+                    <span className={`px-2 py-0.5 text-xs border ${iface.status === 'up' ? 'bg-status-success/10 border-status-success/30 text-ink-primary' : 'bg-status-error/10 border-status-error/30 text-ink-primary'}`}>
                       {iface.status}
                     </span>
                   </td>
@@ -531,7 +564,7 @@ function NetworkTab({ data }: { data: any }) {
         </div>
 
         {/* DNS Configuration */}
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-info p-6 dark:border-ac-sky-light/40">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">DNS Configuration</h3>
           <dl className="space-y-3 text-sm">
             <InfoRow label="Primary DNS" value={data.dns.primary} />
@@ -542,12 +575,12 @@ function NetworkTab({ data }: { data: any }) {
       </div>
 
       {/* Active Connections */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Active Connections</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-ink-muted">
+            <thead className="bg-surface-inset text-ac-navy dark:text-ac-sky-light border-b border-ac-blue/20 dark:border-ac-sky-light/40">
+              <tr className="text-left">
                 <th className="pb-2">Protocol</th>
                 <th className="pb-2">Local Address</th>
                 <th className="pb-2">Remote Address</th>
@@ -558,12 +591,12 @@ function NetworkTab({ data }: { data: any }) {
             </thead>
             <tbody>
               {data.connections.map((conn: any, idx: number) => (
-                <tr key={idx} className="border-t border-border-subtle">
+                <tr key={idx} className="border-t border-border-subtle hover:bg-ac-blue/5 dark:hover:bg-ac-blue/10">
                   <td className="py-2">{conn.protocol}</td>
                   <td className="py-2 font-mono text-xs">{conn.localAddress}</td>
                   <td className="py-2 font-mono text-xs">{conn.remoteAddress}</td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${conn.state === 'ESTABLISHED' ? 'bg-status-success/10 text-status-success' : 'bg-status-warning/10 text-status-warning'}`}>
+                    <span className={`px-2 py-0.5 text-xs border ${conn.state === 'ESTABLISHED' ? 'bg-status-success/10 border-status-success/30 text-ink-primary' : 'bg-status-warning/10 border-status-warning/30 text-ink-primary'}`}>
                       {conn.state}
                     </span>
                   </td>
@@ -580,29 +613,29 @@ function NetworkTab({ data }: { data: any }) {
 }
 
 function ProcessesTab({ data }: { data: any }) {
-  if (!data) return <div className="text-center py-12 text-ink-muted">Loading process data...</div>;
+  if (!data) return <div className="text-center py-12 text-ink-secondary">Loading process data...</div>;
 
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Total Processes" value={data.summary.totalProcesses.toString()} />
-        <MetricCard label="Total Threads" value={data.summary.totalThreads.toString()} />
-        <MetricCard label="Services Healthy" value={`${data.summary.systemServicesHealthy}/${data.services.length}`} />
-        <MetricCard label="Open Files" value={data.summary.openFiles.toLocaleString()} />
+        <MetricCard label="Total Processes" value={data.summary.totalProcesses.toString()} className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
+        <MetricCard label="Total Threads" value={data.summary.totalThreads.toString()} className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
+        <MetricCard label="Services Healthy" value={`${data.summary.systemServicesHealthy}/${data.services.length}`} className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
+        <MetricCard label="Open Files" value={data.summary.openFiles.toLocaleString()} className="border-l-2 border-l-ac-purple" labelClassName="text-ac-purple dark:text-ac-purple" valueClassName="text-ac-purple dark:text-ac-purple" />
       </div>
 
       {/* Services */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 dark:border-ac-sky-light/40">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">System Services</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {data.services.map((svc: any) => (
-            <div key={svc.name} className="flex items-center justify-between p-3 bg-surface-subtle rounded-lg">
+            <div key={svc.name} className="flex items-center justify-between p-3 bg-surface-subtle">
               <div>
                 <div className="font-medium text-ink-primary">{svc.name}</div>
-                <div className="text-xs text-ink-muted">PID: {svc.pid} • Uptime: {formatUptime(svc.uptime)}</div>
+                <div className="text-xs text-ink-secondary">PID: {svc.pid} • Uptime: {formatUptime(svc.uptime)}</div>
               </div>
-              <span className={`px-2 py-1 rounded text-xs ${svc.health === 'healthy' ? 'bg-status-success/10 text-status-success' : 'bg-status-error/10 text-status-error'}`}>
+              <span className={`px-2 py-1 text-xs border ${svc.health === 'healthy' ? 'bg-status-success/10 border-status-success/30 text-ink-primary' : 'bg-status-error/10 border-status-error/30 text-ink-primary'}`}>
                 {svc.status}
               </span>
             </div>
@@ -611,12 +644,12 @@ function ProcessesTab({ data }: { data: any }) {
       </div>
 
       {/* Process List */}
-      <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+      <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6 dark:border-ac-sky-light/40">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Running Processes</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-ink-muted">
+            <thead className="bg-surface-inset text-ac-navy dark:text-ac-sky-light border-b border-ac-blue/20 dark:border-ac-sky-light/40">
+              <tr className="text-left">
                 <th className="pb-2">PID</th>
                 <th className="pb-2">Name</th>
                 <th className="pb-2">User</th>
@@ -628,23 +661,23 @@ function ProcessesTab({ data }: { data: any }) {
             </thead>
             <tbody>
               {data.processes.map((proc: any) => (
-                <tr key={proc.pid} className="border-t border-border-subtle hover:bg-surface-subtle">
+                <tr key={proc.pid} className="border-t border-border-subtle hover:bg-ac-blue/5 dark:hover:bg-ac-blue/10">
                   <td className="py-2 font-mono">{proc.pid}</td>
                   <td className="py-2 font-medium">{proc.name}</td>
                   <td className="py-2 text-ink-secondary">{proc.user}</td>
                   <td className="py-2">
-                    <span className={proc.cpu > 50 ? 'text-status-error' : proc.cpu > 20 ? 'text-status-warning' : ''}>
+                    <span className={proc.cpu > 50 ? 'text-ink-primary bg-status-error/10 px-1' : proc.cpu > 20 ? 'text-ink-primary bg-status-warning/10 px-1' : 'text-ink-primary'}>
                       {proc.cpu.toFixed(1)}%
                     </span>
                   </td>
                   <td className="py-2">
-                    <span className={proc.memory > 50 ? 'text-status-error' : proc.memory > 20 ? 'text-status-warning' : ''}>
+                    <span className={proc.memory > 50 ? 'text-ink-primary bg-status-error/10 px-1' : proc.memory > 20 ? 'text-ink-primary bg-status-warning/10 px-1' : 'text-ink-primary'}>
                       {proc.memory.toFixed(1)}%
                     </span>
                   </td>
                   <td className="py-2">{proc.threads}</td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${proc.status === 'running' ? 'bg-status-success/10 text-status-success' : 'bg-surface-subtle text-ink-muted'}`}>
+                    <span className={`px-2 py-0.5 text-xs border ${proc.status === 'running' ? 'bg-status-success/10 border-status-success/30 text-ink-primary' : 'bg-surface-subtle border-border-subtle text-ink-primary'}`}>
                       {proc.status}
                     </span>
                   </td>
@@ -660,6 +693,7 @@ function ProcessesTab({ data }: { data: any }) {
 
 function ConfigurationTab({ sensor }: { sensor: any }) {
   const id = sensor.id;
+  const isTunnelActive = Boolean(sensor?.tunnelActive);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
@@ -673,13 +707,13 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'system'],
     queryFn: () => fetchSystemConfig(id),
-    enabled: !!id && configTab === 'general',
+    enabled: !!id && configTab === 'general' && isTunnelActive,
   });
 
   const { data: remoteKernelConfig, isLoading: isKernelLoading, error: kernelError, refetch: refetchKernel, isFetching: isKernelFetching } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'config', 'kernel'],
     queryFn: () => fetchKernelConfig(id),
-    enabled: !!id && configTab === 'kernel',
+    enabled: !!id && configTab === 'kernel' && isTunnelActive,
   });
 
   // Load real Pingora config
@@ -720,12 +754,19 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
   });
   const [kernelDraft, setKernelDraft] = useState<Record<string, string>>({});
   const [persistKernel, setPersistKernel] = useState(false);
+  const lastPingoraHashRef = useRef<string | null>(null);
+  const lastKernelHashRef = useRef<string | null>(null);
 
   const kernelParams = (remoteKernelConfig?.data?.parameters || {}) as Record<string, string>;
 
   // Sync local state when remote data loads
   useEffect(() => {
     if (remotePingoraConfig) {
+      const nextHash = JSON.stringify(remotePingoraConfig);
+      if (lastPingoraHashRef.current === nextHash) {
+        return;
+      }
+      lastPingoraHashRef.current = nextHash;
       setWafConfig(remotePingoraConfig.waf);
       setRateLimitConfig(remotePingoraConfig.rateLimit);
       setAccessConfig(remotePingoraConfig.accessControl);
@@ -734,6 +775,11 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
 
   useEffect(() => {
     if (kernelParams) {
+      const nextHash = JSON.stringify(kernelParams);
+      if (lastKernelHashRef.current === nextHash) {
+        return;
+      }
+      lastKernelHashRef.current = nextHash;
       setKernelDraft(kernelParams);
     }
   }, [kernelParams]);
@@ -808,30 +854,55 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
     }, null, 2)
   };
 
+  const renderTunnelInactive = (label: string) => (
+    <div className="card border border-border-subtle border-t-2 border-t-info p-6">
+      <div className="flex items-start gap-3">
+        <WifiOff className="w-5 h-5 text-status-warning" />
+        <div className="space-y-2">
+          <div className="text-sm font-semibold text-ink-primary">{label} unavailable</div>
+          <div className="text-xs text-ink-secondary">
+            Sensor tunnel is not connected. Connect the sensor to load live configuration data.
+          </div>
+          <button
+            onClick={() => navigate('/fleet/connectivity')}
+            className="btn-secondary h-9 px-3 text-xs uppercase tracking-[0.2em]"
+          >
+            View Connectivity
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Config Tabs */}
-      <div className="flex justify-between items-center">
-        <div className="flex gap-2">
+      {/* Config Tabs — ARIA tab pattern */}
+      <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
+        <div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">
+          <div role="tablist" aria-label="Configuration sections" className="flex gap-2">
           {(['general', 'kernel', 'pingora', 'drift', 'history'] as const).map((tab) => (
             <button
               key={tab}
+              role="tab"
+              id={`tab-config-${tab}`}
+              aria-selected={configTab === tab}
+              aria-controls={`tabpanel-config-${tab}`}
               onClick={() => setConfigTab(tab)}
-              className={`px-4 py-2 text-sm rounded-lg capitalize ${
+              className={`px-4 py-2 text-xs uppercase tracking-[0.2em] border transition-colors ${
                 configTab === tab
-                  ? 'bg-accent-primary text-white'
-                  : 'bg-surface-subtle text-ink-secondary hover:bg-surface-card'
+                  ? 'border-ac-blue text-ac-blue bg-ac-blue/10'
+                  : 'border-border-subtle text-ink-secondary hover:border-ac-blue/50 hover:text-ink-primary'
               }`}
             >
               {tab === 'pingora' ? 'Synapse-Pingora' : tab === 'drift' ? 'Drift Analysis' : tab}
             </button>
           ))}
-        </div>
+          </div>
         
-        <div className="flex gap-3">
+          <div className="flex gap-3">
           <button
             onClick={() => navigate(`/fleet/sensors/${id}/config`)}
-            className="px-4 py-2 text-sm border border-border-subtle rounded-lg hover:bg-surface-subtle flex items-center gap-2"
+            className="btn-secondary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
           >
             <Settings className="w-4 h-4" />
             Advanced JSON Editor
@@ -839,12 +910,17 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
           {configTab === 'pingora' && (
             <button 
               onClick={handleSaveAll}
-              disabled={updateMutation.isPending}
+              disabled={updateMutation.isPending || !isTunnelActive}
               className="btn-primary h-10 px-6 text-sm"
             >
-              {updateMutation.isPending ? 'Saving...' : 'Save & Push Changes'}
+              {!isTunnelActive
+                ? 'Tunnel Required'
+                : updateMutation.isPending
+                  ? 'Saving...'
+                  : 'Save & Push Changes'}
             </button>
           )}
+          </div>
         </div>
       </div>
 
@@ -863,14 +939,14 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
             <ConfigPanelSkeleton />
           ) : pingoraError ? (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
-              <div className="flex items-center gap-2 text-status-error">
-                <AlertCircle className="w-5 h-5" />
+              <div className="flex items-center gap-2 text-ink-primary">
+                <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(pingoraError as Error).message}</span>
               </div>
               <button
                 onClick={() => refetchPingora()}
                 disabled={isPingoraFetching}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
               >
                 <RefreshCw className={`w-4 h-4 ${isPingoraFetching ? 'animate-spin' : ''}`} />
                 {isPingoraFetching ? 'Retrying...' : 'Retry'}
@@ -878,18 +954,22 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
             </div>
           ) : (
             <>
-              <ServiceControls onAction={handlePingoraAction} />
+              {isTunnelActive ? (
+                <ServiceControls onAction={handlePingoraAction} />
+              ) : (
+                renderTunnelInactive('Pingora controls')
+              )}
               
-              <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+              <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
                 <WafConfig config={wafConfig} onChange={setWafConfig} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                <div className="card border border-border-subtle border-t-2 border-t-info p-6">
                   <RateLimitConfig config={rateLimitConfig} onChange={setRateLimitConfig} />
                 </div>
                 
-                <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+                <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
                   <AccessControlConfig config={aclConfig} onChange={setAccessConfig} />
                 </div>
               </div>
@@ -900,18 +980,20 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
 
       {configTab === 'general' && (
         <div className="space-y-4">
-          {isSystemConfigLoading ? (
+          {!isTunnelActive ? (
+            renderTunnelInactive('System configuration')
+          ) : isSystemConfigLoading ? (
             <ConfigPanelSkeleton />
           ) : systemConfigError ? (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
-              <div className="flex items-center gap-2 text-status-error">
-                <AlertCircle className="w-5 h-5" />
+              <div className="flex items-center gap-2 text-ink-primary">
+                <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(systemConfigError as Error).message}</span>
               </div>
               <button
                 onClick={() => refetchSystemConfig()}
                 disabled={isSystemConfigFetching}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
               >
                 <RefreshCw className={`w-4 h-4 ${isSystemConfigFetching ? 'animate-spin' : ''}`} />
                 {isSystemConfigFetching ? 'Retrying...' : 'Retry'}
@@ -919,44 +1001,56 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+              <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6">
                 <h3 className="text-lg font-semibold text-ink-primary mb-4">General Settings</h3>
                 <div className="space-y-4">
                   {Object.entries(generalSettings).map(([key, value]) => (
                     <div key={key} className="flex items-center justify-between">
                       <span className="text-sm text-ink-secondary capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
                       {typeof value === 'boolean' ? (
-                        <div className={`w-10 h-6 rounded-full ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}>
-                          <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
-                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={value}
+                          aria-label={key.replace(/([A-Z])/g, ' $1').trim()}
+                          className={`w-10 h-6 border border-border-subtle ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}
+                        >
+                          <span className={`block w-4 h-4 bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
+                        </button>
                       ) : (
                         <span className="text-sm font-mono text-ink-primary">{String(value)}</span>
                       )}
                     </div>
                   ))}
                   {Object.keys(generalSettings).length === 0 && (
-                    <div className="text-sm text-ink-muted">No general settings available.</div>
+                    <div className="text-sm text-ink-secondary">No general settings available.</div>
                   )}
                 </div>
               </div>
 
-              <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+              <div className="card border border-border-subtle border-t-2 border-t-info p-6">
                 <h3 className="text-lg font-semibold text-ink-primary mb-4">Runtime Settings</h3>
                 <div className="space-y-4">
                   {runtimeEntries.map(([key, value]) => (
                     <div key={key} className="flex items-center justify-between">
                       <span className="text-sm text-ink-secondary capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
                       {typeof value === 'boolean' ? (
-                        <div className={`w-10 h-6 rounded-full ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}>
-                          <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
-                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={value}
+                          aria-label={key.replace(/([A-Z])/g, ' $1').trim()}
+                          className={`w-10 h-6 border border-border-subtle ${value ? 'bg-status-success' : 'bg-surface-subtle'} relative cursor-pointer`}
+                        >
+                          <span className={`block w-4 h-4 bg-white absolute top-1 transition-all ${value ? 'right-1' : 'left-1'}`} />
+                        </button>
                       ) : (
                         <span className="text-sm font-mono text-ink-primary">{String(value)}</span>
                       )}
                     </div>
                   ))}
                   {runtimeEntries.length === 0 && (
-                    <div className="text-sm text-ink-muted">No runtime settings available.</div>
+                    <div className="text-sm text-ink-secondary">No runtime settings available.</div>
                   )}
                 </div>
               </div>
@@ -966,100 +1060,105 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
       )}
 
       {configTab === 'kernel' && (
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-xs text-ink-muted">
-                <input
-                  type="checkbox"
-                  checked={persistKernel}
-                  onChange={(event) => setPersistKernel(event.target.checked)}
-                />
-                Persist changes
-              </label>
-              <button
-                className="px-3 py-1.5 text-xs rounded-lg border border-border-subtle text-ink-secondary hover:bg-surface-subtle"
-                onClick={() => refetchKernel()}
-                disabled={isKernelFetching}
-              >
-                Refresh
-              </button>
-              <button
-                className="px-3 py-1.5 text-xs rounded-lg bg-accent-primary text-white disabled:opacity-60"
-                onClick={() => updateKernelMutation.mutate(kernelDraft)}
-                disabled={updateKernelMutation.isPending || isKernelLoading}
-              >
-                Save Changes
-              </button>
+        !isTunnelActive ? (
+          renderTunnelInactive('Kernel parameters')
+        ) : (
+          <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    checked={persistKernel}
+                    onChange={(event) => setPersistKernel(event.target.checked)}
+                  />
+                  Persist changes
+                </label>
+                <button
+                  className="px-3 py-1.5 text-xs border border-border-subtle text-ink-secondary hover:bg-surface-subtle"
+                  onClick={() => refetchKernel()}
+                  disabled={isKernelFetching}
+                >
+                  Refresh
+                </button>
+                <button
+                  className="px-3 py-1.5 text-xs bg-accent-primary text-white disabled:opacity-60"
+                  onClick={() => updateKernelMutation.mutate(kernelDraft)}
+                  disabled={updateKernelMutation.isPending || isKernelLoading}
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
+            {kernelError && (
+              <div className="text-sm text-ink-primary border-l-2 border-l-ac-red pl-2">Failed to load kernel config.</div>
+            )}
+            <table className="w-full text-sm">
+              <thead className="bg-surface-inset text-ink-secondary border-b border-ac-blue/20">
+                <tr className="text-left">
+                  <th className="pb-2">Parameter</th>
+                  <th className="pb-2">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(kernelDraft).map(([key, value]) => (
+                  <tr key={key} className="border-t border-border-subtle">
+                    <td className="py-3 font-mono text-ink-secondary">{key}</td>
+                    <td className="py-3">
+                      <input
+                        className="w-full border border-border-subtle bg-surface-subtle px-2 py-1 text-sm font-mono text-ink-primary"
+                        value={value ?? ''}
+                        aria-label={`Value for ${key}`}
+                        onChange={(event) =>
+                          setKernelDraft((current) => ({ ...current, [key]: event.target.value }))
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {Object.keys(kernelDraft).length === 0 && !isKernelLoading && (
+                  <tr>
+                    <td className="py-4 text-sm text-ink-secondary" colSpan={2}>
+                      No kernel parameters available.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          {kernelError && (
-            <div className="text-sm text-status-error">Failed to load kernel config.</div>
-          )}
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-ink-muted">
-                <th className="pb-2">Parameter</th>
-                <th className="pb-2">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(kernelDraft).map(([key, value]) => (
-                <tr key={key} className="border-t border-border-subtle">
-                  <td className="py-3 font-mono text-ink-secondary">{key}</td>
-                  <td className="py-3">
-                    <input
-                      className="w-full rounded-md border border-border-subtle bg-surface-subtle px-2 py-1 text-sm font-mono text-ink-primary"
-                      value={value ?? ''}
-                      onChange={(event) =>
-                        setKernelDraft((current) => ({ ...current, [key]: event.target.value }))
-                      }
-                    />
-                  </td>
-                </tr>
-              ))}
-              {Object.keys(kernelDraft).length === 0 && !isKernelLoading && (
-                <tr>
-                  <td className="py-4 text-sm text-ink-muted" colSpan={2}>
-                    No kernel parameters available.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        )
       )}
 
       {configTab === 'history' && (
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-6">
+        <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Recent Configuration Changes</h3>
           {isHistoryLoading ? (
             <ConfigPanelSkeleton />
           ) : historyError ? (
             <div className="flex flex-col items-center justify-center py-8 gap-3">
-              <div className="flex items-center gap-2 text-status-error">
-                <AlertCircle className="w-5 h-5" />
+              <div className="flex items-center gap-2 text-ink-primary">
+                <AlertCircle className="w-5 h-5 text-status-error" />
                 <span>Error: {(historyError as Error).message}</span>
               </div>
               <button
                 onClick={() => refetchHistory()}
                 disabled={isHistoryFetching}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white rounded-lg hover:bg-accent-primary/90 disabled:opacity-50"
+                className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em] flex items-center gap-2"
               >
                 <RefreshCw className={`w-4 h-4 ${isHistoryFetching ? 'animate-spin' : ''}`} />
                 {isHistoryFetching ? 'Retrying...' : 'Retry'}
               </button>
             </div>
           ) : configHistoryEntries.length === 0 ? (
-            <div className="text-sm text-ink-muted">No configuration changes recorded yet.</div>
+            <div className="text-sm text-ink-secondary">No configuration changes recorded yet.</div>
           ) : (
             <div className="space-y-4">
               {configHistoryEntries.map((entry: any) => (
-                <div key={entry.id} className="flex items-center justify-between p-3 bg-surface-subtle rounded-lg">
+                <div key={entry.id} className="flex items-center justify-between p-3 bg-surface-subtle">
                   <div>
                     <div className="text-sm font-medium text-ink-primary">{entry.change}</div>
-                    <div className="text-xs text-ink-muted">{entry.date} • {entry.status}</div>
+                    <div className="text-xs text-ink-secondary">{entry.date} • {entry.status}</div>
                   </div>
                 </div>
               ))}
@@ -1076,17 +1175,19 @@ function ConfigurationTab({ sensor }: { sensor: any }) {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
-      <dt className="text-ink-muted">{label}</dt>
+      <dt className="text-ink-secondary">{label}</dt>
       <dd className="text-ink-primary font-mono text-xs">{value}</dd>
     </div>
   );
 }
 
-function ActionButton({ icon, label }: { icon: string; label: string }) {
+function ActionButton({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
-    <button className="flex items-center gap-2 px-4 py-3 bg-surface-subtle border border-border-subtle rounded-lg hover:bg-surface-card transition-colors">
-      <span className="text-lg">{icon}</span>
-      <span className="text-sm text-ink-primary">{label}</span>
+    <button className="group flex items-center gap-2 px-4 py-3 bg-surface-subtle border border-border-subtle hover:border-ac-blue/60 hover:bg-surface-card transition-colors">
+      <Icon className="w-4 h-4 text-ac-blue group-hover:text-ac-magenta transition-colors" />
+      <span className="text-xs uppercase tracking-[0.2em] text-ink-secondary group-hover:text-ink-primary">
+        {label}
+      </span>
     </button>
   );
 }
