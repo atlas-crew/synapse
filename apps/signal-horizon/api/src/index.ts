@@ -5,6 +5,7 @@
 
 import 'dotenv/config';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import { createServer } from 'node:http';
@@ -87,6 +88,21 @@ import { PrismaNonceStore } from './middleware/replay-protection.js';
 import { AuthCoverageAggregator } from './services/auth-coverage-aggregator.js';
 import { createAuthCoverageRoutes } from './api/routes/auth-coverage.js';
 import { getSharedRedisKv, type SharedRedisKv } from './storage/redis/shared-kv.js';
+import {
+  InMemoryBlocklistStore,
+  RedisBlocklistStore,
+  ResilientBlocklistStore,
+} from './services/broadcaster/blocklist-store.js';
+import {
+  InMemorySavedQueryStore,
+  RedisSavedQueryStore,
+  ResilientSavedQueryStore,
+} from './services/hunt/saved-query-store.js';
+import {
+  InMemorySensorMetricsStore,
+  RedisSensorMetricsStore,
+  ResilientSensorMetricsStore,
+} from './services/fleet/sensor-metrics-store.js';
 
 // Initialize logger with sensitive header redaction (WS3-004, WS5-006)
 const logger = pino({
@@ -182,6 +198,8 @@ app.use(cors({
   origin: config.security.corsOrigins,
   credentials: true,
 }));
+// Parse cookies before auth middleware so req.cookies is available (labs-n6nf)
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 // JSON depth limiting to prevent stack overflow attacks (WS4-003)
 app.use(jsonDepthLimit(20));
@@ -220,10 +238,22 @@ app.get('/ready', async (_req, res) => {
       }
     }
 
+    // Check Redis connectivity
+    let redisStatus: 'connected' | 'disabled' | 'disconnected' = 'disabled';
+    if (sharedRedis) {
+      try {
+        await sharedRedis.client.ping();
+        redisStatus = 'connected';
+      } catch {
+        redisStatus = 'disconnected';
+      }
+    }
+
     res.json({
       status: 'ready',
       database: 'connected',
       clickhouse: clickhouseStatus,
+      redis: redisStatus,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -638,8 +668,6 @@ async function start() {
     );
   }
 
-  // Initialize Hunt service (always available, routes to ClickHouse when enabled)
-  huntService = new HuntService(prisma, logger, clickhouse ?? undefined);
   apiIntelligenceService = new APIIntelligenceService(prisma, logger);
 
   // Initialize protocol handlers for fleet management
@@ -655,17 +683,34 @@ async function start() {
     logger.warn({ error }, 'Shared Redis services unavailable; falling back to in-memory state stores');
   }
 
+  // Initialize Hunt service AFTER Redis (labs-2rf9.2: savedQueryStore needs sharedRedis)
+  const savedQueryStore = sharedRedis
+    ? new ResilientSavedQueryStore(
+        logger,
+        new RedisSavedQueryStore(sharedRedis.kv),
+        new InMemorySavedQueryStore()
+      )
+    : undefined;
+  huntService = new HuntService(prisma, logger, clickhouse ?? undefined, savedQueryStore);
+
   // Simple permission cache (10s TTL)
   const permissionCache = new Map<string, { allowed: boolean; expires: number }>();
 
-  // Initialize fleet management services
+  // Initialize fleet management services with resilient sensor metrics store
+  const sensorMetricsStore = sharedRedis
+    ? new ResilientSensorMetricsStore(
+        logger,
+        new RedisSensorMetricsStore(sharedRedis.kv),
+        new InMemorySensorMetricsStore()
+      )
+    : undefined;
   fleetAggregator = new FleetAggregator(logger, {
     metricsRetentionMs: 5 * 60 * 1000, // 5 minutes
     heartbeatTimeoutMs: 90000, // 90 seconds
     cpuAlertThreshold: 80,
     memoryAlertThreshold: 85,
     diskAlertThreshold: 90,
-  });
+  }, sensorMetricsStore);
   configManager = new ConfigManager(prisma, logger);
   fleetCommander = new FleetCommander(prisma, logger, {
     defaultTimeoutMs: 30000,
@@ -678,13 +723,13 @@ async function start() {
   });
 
   // Distributed stores (optional)
-  const deploymentStateStore = sharedRedis ? new RedisDeploymentStateStore(sharedRedis.kv) : undefined;
+  const deploymentStateStore = sharedRedis ? new RedisDeploymentStateStore(sharedRedis.kv, logger) : undefined;
   ruleDistributor = new RuleDistributor(prisma, logger, deploymentStateStore);
 
   const userHistoryStore = sharedRedis
     ? new ResilientUserHistoryStore(
         logger,
-        new RedisUserHistoryStore(sharedRedis.kv),
+        new RedisUserHistoryStore(sharedRedis.kv, logger),
         new InMemoryUserHistoryStore()
       )
     : undefined;
@@ -693,7 +738,7 @@ async function start() {
   const recentSignalsStore = sharedRedis
     ? new ResilientRecentSignalsStore(
         logger,
-        new RedisRecentSignalsStore(sharedRedis.kv),
+        new RedisRecentSignalsStore(sharedRedis.kv, logger),
         new InMemoryRecentSignalsStore()
       )
     : undefined;
@@ -857,7 +902,14 @@ async function start() {
   logger.info('Auth coverage routes mounted at /api/v1/auth-coverage');
 
   // Initialize core services (pass ClickHouse for dual-write)
-  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined);
+  const blocklistStore = sharedRedis
+    ? new ResilientBlocklistStore(
+        logger,
+        new RedisBlocklistStore(sharedRedis.kv),
+        new InMemoryBlocklistStore()
+      )
+    : undefined;
+  broadcaster = new Broadcaster(prisma, logger, config.broadcaster, clickhouse ?? undefined, blocklistStore);
   correlator = new Correlator(prisma, logger, broadcaster, clickhouse ?? undefined);
   aggregator = new Aggregator(
     prisma,
