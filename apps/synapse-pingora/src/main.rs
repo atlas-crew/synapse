@@ -2214,6 +2214,7 @@ impl ProxyHttp for SynapseProxy {
                 // Send telemetry alert
                 if trap_matcher.config().alert_telemetry && self.telemetry_client.is_enabled() {
                     let _ = self.telemetry_client.report(TelemetryEvent::WafBlock {
+                        request_id: Some(ctx.request_id.clone()),
                         rule_id: format!("TRAP_HIT:{}", trap_pattern),
                         severity: "CRITICAL".to_string(),
                         client_ip: client_ip.to_string(),
@@ -3632,6 +3633,7 @@ impl ProxyHttp for SynapseProxy {
             };
 
             let event = synapse_pingora::telemetry::TelemetryEvent::RequestProcessed {
+                request_id: Some(ctx.request_id.clone()),
                 latency_ms: total_time.as_millis() as u64,
                 status_code: status,
                 waf_action,
@@ -3683,6 +3685,7 @@ impl ProxyHttp for SynapseProxy {
                     else { "medium" }.to_string();
 
                 let event = synapse_pingora::telemetry::TelemetryEvent::WafBlock {
+                    request_id: Some(ctx.request_id.clone()),
                     rule_id,
                     severity,
                     client_ip,

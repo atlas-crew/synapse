@@ -540,6 +540,7 @@ impl LogTelemetryService {
             match rx.recv().await {
                 Ok(entry) => {
                     let event = TelemetryEvent::LogEntry {
+                        request_id: None,
                         id: entry.id.clone(),
                         source: entry.source.clone(),
                         level: entry.level.clone(),

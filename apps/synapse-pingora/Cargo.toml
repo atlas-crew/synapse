@@ -133,6 +133,10 @@ harness = false
 name = "goblins"
 harness = false
 
+[[bench]]
+name = "pipeline"
+harness = false
+
 [profile.release]
 lto = "thin"  # Changed from "fat" to reduce memory usage during linking
 codegen-units = 1

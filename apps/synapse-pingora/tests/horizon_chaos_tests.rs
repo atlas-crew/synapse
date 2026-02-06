@@ -81,6 +81,7 @@ async fn spawn_hub_server(
                                                                     sensor_id: "sensor-1".to_string(),
                                                                     tenant_id: "tenant-1".to_string(),
                                                                     capabilities: vec!["signals".to_string()],
+                                                                    protocol_version: Some("1.0".to_string()),
                                                                 };
                                                                 let _ = sink.send(Message::Text(serde_json::to_string(&auth_success).unwrap().into())).await;
                                                             }

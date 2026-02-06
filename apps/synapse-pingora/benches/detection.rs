@@ -4,13 +4,18 @@
 //!
 //! These benchmarks verify the sub-10μs detection target.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
 use once_cell::sync::Lazy;
 use std::time::Duration;
 use std::fs;
 use std::path::Path;
 use serde::Deserialize;
-use synapse::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction, Verdict as SynapseVerdict};
+// NOTE: The `synapse` (libsynapse) crate was consolidated into synapse_pingora in Phase 10.
+// These types are re-exported from the waf module.
+use synapse_pingora::waf::{
+    Synapse, Request as SynapseRequest, Header as SynapseHeader,
+    Action as SynapseAction, Verdict as SynapseVerdict,
+};
 
 // ============================================================================
 // Data Loading
@@ -176,6 +181,22 @@ impl DetectionEngine {
     pub fn ensure_init() {
         SYNAPSE.with(|s| { let _ = s.borrow(); });
     }
+
+    /// Validate engine correctness before benchmarking.
+    /// Panics if a known attack is not detected — prevents benchmarking a no-op engine.
+    pub fn validate_correctness() {
+        let result = Self::analyze(
+            "GET",
+            "/search?q=' OR '1'='1",
+            &[],
+            None,
+        );
+        assert!(
+            result.blocked || result.risk_score > 0,
+            "Correctness check failed: SQLi payload not detected. \
+             Ensure data/rules.json exists and contains valid rules."
+        );
+    }
 }
 
 // ============================================================================
@@ -183,33 +204,36 @@ impl DetectionEngine {
 // ============================================================================
 
 fn bench_clean_requests(c: &mut Criterion) {
-    // Ensure engine is initialized
+    // Ensure engine is initialized and rules are loaded correctly
     DetectionEngine::ensure_init();
-    
+    DetectionEngine::validate_correctness();
+
     // Force load payloads
     let _ = &*PAYLOADS;
 
     let mut group = c.benchmark_group("clean_requests");
     group.measurement_time(Duration::from_secs(5));
-    group.sample_size(100); 
+    group.sample_size(100);
+
+    // Pre-allocate headers outside the benchmark loop to avoid measuring heap allocation
+    let json_headers = vec![("content-type".to_string(), "application/json".to_string())];
 
     // Use generated normal payloads
     for (i, payload) in PAYLOADS.normal.iter().take(5).enumerate() {
         let body_json = serde_json::to_string(&payload.data).unwrap();
         let name = format!("normal_{}_{}", payload._type, i);
-        
+
         group.bench_with_input(
             BenchmarkId::new("detection", name),
             &body_json,
             |b, body| {
                 b.iter(|| {
-                    let result = DetectionEngine::analyze(
+                    black_box(DetectionEngine::analyze(
                         black_box("POST"),
                         black_box("/api/action"),
-                        black_box(&[("content-type".to_string(), "application/json".to_string())]),
+                        black_box(&json_headers),
                         black_box(Some(body.as_bytes())),
-                    );
-                    result
+                    ))
                 })
             },
         );
@@ -227,13 +251,12 @@ fn bench_clean_requests(c: &mut Criterion) {
             &uri,
             |b, uri| {
                 b.iter(|| {
-                    let result = DetectionEngine::analyze(
+                    black_box(DetectionEngine::analyze(
                         black_box("GET"),
                         black_box(uri),
                         black_box(&[]),
                         black_box(None),
-                    );
-                    result
+                    ))
                 })
             },
         );
@@ -262,13 +285,12 @@ fn bench_attack_detection(c: &mut Criterion) {
                 &uri,
                 |b, uri| {
                     b.iter(|| {
-                        let result = DetectionEngine::analyze(
+                        black_box(DetectionEngine::analyze(
                             black_box("GET"),
                             black_box(uri),
                             black_box(&[]),
                             black_box(None),
-                        );
-                        result
+                        ))
                     })
                 },
             );
@@ -331,33 +353,35 @@ fn bench_with_headers(c: &mut Criterion) {
 fn bench_throughput(c: &mut Criterion) {
     DetectionEngine::ensure_init();
 
-    // Mixed workload simulating real traffic
-    let requests: Vec<(&str, &str, bool)> = vec![
-        ("GET", "/api/users/123", false),
-        ("GET", "/api/search?q=hello", false),
-        ("POST", "/api/login", false),
-        ("GET", "/api/users?id=1' OR '1'='1", true),
-        ("GET", "/static/main.js", false),
-        ("GET", "/search?q=<script>alert(1)</script>", true),
-        ("GET", "/api/products", false),
-        ("GET", "/files/../../../etc/passwd", true),
-        ("PUT", "/api/users/123", false),
-        ("DELETE", "/api/users/123", false),
+    // Mixed workload simulating real traffic (70% clean, 30% attack)
+    let requests: Vec<(&str, &str)> = vec![
+        ("GET", "/api/users/123"),
+        ("GET", "/api/search?q=hello"),
+        ("POST", "/api/login"),
+        ("GET", "/api/users?id=1' OR '1'='1"),
+        ("GET", "/static/main.js"),
+        ("GET", "/search?q=<script>alert(1)</script>"),
+        ("GET", "/api/products"),
+        ("GET", "/files/../../../etc/passwd"),
+        ("PUT", "/api/users/123"),
+        ("DELETE", "/api/users/123"),
     ];
 
     let mut group = c.benchmark_group("throughput");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(1000);
+    // Tell criterion we process 10 requests per iteration for correct ops/sec reporting
+    group.throughput(Throughput::Elements(requests.len() as u64));
 
     group.bench_function("mixed_workload_10_requests", |b| {
         b.iter(|| {
-            for (method, uri, expected_block) in &requests {
-                let _ = DetectionEngine::analyze(
+            for (method, uri) in &requests {
+                black_box(DetectionEngine::analyze(
                     black_box(method),
                     black_box(uri),
                     black_box(&[]),
                     black_box(None),
-                );
+                ));
             }
         })
     });
@@ -368,22 +392,25 @@ fn bench_throughput(c: &mut Criterion) {
 fn bench_sub_10us_verification(c: &mut Criterion) {
     DetectionEngine::ensure_init();
 
+    // Pre-allocate headers outside the benchmark loop
+    let headers = vec![
+        ("user-agent".to_string(), "Mozilla/5.0".to_string()),
+        ("cookie".to_string(), "session=abc".to_string()),
+    ];
+
     let mut group = c.benchmark_group("sub_10us_target");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(10000);
 
-    // This is THE key benchmark
+    // This is THE key benchmark — must measure pure detection, not allocation
     group.bench_function("full_detection_cycle", |b| {
         b.iter(|| {
-            DetectionEngine::analyze(
+            black_box(DetectionEngine::analyze(
                 black_box("GET"),
                 black_box("/api/users?id=1' OR '1'='1&name=test&page=1"),
-                black_box(&[
-                    ("user-agent".to_string(), "Mozilla/5.0".to_string()),
-                    ("cookie".to_string(), "session=abc".to_string()),
-                ]),
+                black_box(&headers),
                 black_box(None),
-            )
+            ))
         })
     });
 
@@ -520,12 +547,15 @@ fn bench_dlp_body_inspection(c: &mut Criterion) {
         let payload_with_pii = generate_order_payload(size_kb);
         let name = format!("with_pii_{}kb", size_kb);
 
+        // Report bytes throughput so criterion shows MB/s
+        group.throughput(Throughput::Bytes(payload_with_pii.len() as u64));
+
         group.bench_with_input(
             BenchmarkId::new("scan", &name),
             &payload_with_pii,
             |b, payload| {
                 b.iter(|| {
-                    scanner.scan(black_box(payload))
+                    black_box(scanner.scan(black_box(payload)))
                 })
             },
         );
@@ -534,12 +564,14 @@ fn bench_dlp_body_inspection(c: &mut Criterion) {
         let payload_clean = generate_clean_payload(size_kb);
         let name = format!("clean_{}kb", size_kb);
 
+        group.throughput(Throughput::Bytes(payload_clean.len() as u64));
+
         group.bench_with_input(
             BenchmarkId::new("scan", &name),
             &payload_clean,
             |b, payload| {
                 b.iter(|| {
-                    scanner.scan(black_box(payload))
+                    black_box(scanner.scan(black_box(payload)))
                 })
             },
         );
@@ -565,15 +597,21 @@ fn bench_dlp_content_type_skip(c: &mut Criterion) {
         ("application/octet-stream", false),
     ];
 
-    for (ct, should_scan) in content_types {
+    // Validate correctness once before benchmarking (not inside the hot loop)
+    for (ct, should_scan) in &content_types {
+        assert_eq!(
+            scanner.is_scannable_content_type(ct), *should_scan,
+            "Content-type {} should_scan={}", ct, should_scan
+        );
+    }
+
+    for (ct, _should_scan) in content_types {
         group.bench_with_input(
             BenchmarkId::new("is_scannable", ct),
             &ct,
             |b, ct| {
                 b.iter(|| {
-                    let result = scanner.is_scannable_content_type(black_box(ct));
-                    assert_eq!(result, should_scan, "Content-type {} should_scan={}", ct, should_scan);
-                    result
+                    black_box(scanner.is_scannable_content_type(black_box(ct)))
                 })
             },
         );
@@ -600,12 +638,8 @@ fn bench_dlp_truncation_performance(c: &mut Criterion) {
 
     for (name, cap) in configs {
         let config = DlpConfig {
-            enabled: true,
-            max_scan_size: 5 * 1024 * 1024,
-            max_matches: 100,
-            scan_text_only: true,
             max_body_inspection_bytes: cap,
-            fast_mode: false,
+            ..Default::default()
         };
         let scanner = DlpScanner::new(config);
 

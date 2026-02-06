@@ -10,12 +10,12 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::sync::{broadcast, Mutex, Notify};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use async_trait::async_trait;
 
 use crate::signals::auth_coverage::AuthCoverageSummary;
 
-use crate::utils::circuit_breaker::{CircuitBreaker, CircuitState};
+use crate::utils::circuit_breaker::CircuitBreaker;
 
 pub mod auth_coverage_aggregator;
 
@@ -57,9 +57,11 @@ pub enum EventType {
 
 /// Telemetry event payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "event_type", content = "data")]
+#[serde(tag = "event_type", content = "data", rename_all = "snake_case")]
 pub enum TelemetryEvent {
     RequestProcessed {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
         latency_ms: u64,
         status_code: u16,
         waf_action: Option<String>,
@@ -68,6 +70,8 @@ pub enum TelemetryEvent {
         path: String,
     },
     LogEntry {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
         id: String,
         source: String,
         level: String,
@@ -82,6 +86,8 @@ pub enum TelemetryEvent {
         rule_id: Option<String>,
     },
     WafBlock {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
         rule_id: String,
         severity: String,
         client_ip: String,
@@ -659,7 +665,15 @@ pub fn request_processed(
     method: String,
     path: String,
 ) -> TelemetryEvent {
-    TelemetryEvent::RequestProcessed { latency_ms, status_code, waf_action, site, method, path }
+    TelemetryEvent::RequestProcessed {
+        request_id: None,
+        latency_ms,
+        status_code,
+        waf_action,
+        site,
+        method,
+        path,
+    }
 }
 
 pub fn waf_block(
@@ -669,7 +683,14 @@ pub fn waf_block(
     site: String,
     path: String,
 ) -> TelemetryEvent {
-    TelemetryEvent::WafBlock { rule_id, severity, client_ip, site, path }
+    TelemetryEvent::WafBlock {
+        request_id: None,
+        rule_id,
+        severity,
+        client_ip,
+        site,
+        path,
+    }
 }
 
 pub fn rate_limit_hit(client_ip: String, limit: u32, window_secs: u32, site: String) -> TelemetryEvent {
@@ -687,6 +708,7 @@ pub fn service_health(uptime_secs: u64, memory_mb: u64, active_connections: u64,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::circuit_breaker::CircuitState;
 
     fn test_config() -> TelemetryConfig {
         TelemetryConfig {
@@ -730,6 +752,7 @@ mod tests {
         assert_eq!(event.event_type(), EventType::WafBlock);
 
         let event = TelemetryEvent::LogEntry {
+            request_id: None,
             id: "log-1".into(),
             source: "access".into(),
             level: "info".into(),
@@ -759,8 +782,24 @@ mod tests {
     fn test_event_serialization() {
         let event = request_processed(100, 200, Some("pass".into()), "site".into(), "GET".into(), "/api".into());
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("RequestProcessed"));
+        assert!(json.contains("request_processed"));
         assert!(json.contains("100"));
+    }
+
+    #[test]
+    fn test_request_id_serialization() {
+        let event = TelemetryEvent::RequestProcessed {
+            request_id: Some("req_123".into()),
+            latency_ms: 100,
+            status_code: 200,
+            waf_action: None,
+            site: "site".into(),
+            method: "GET".into(),
+            path: "/".into(),
+        };
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["event_type"], "request_processed");
+        assert_eq!(value["data"]["request_id"], "req_123");
     }
 
     #[test]
