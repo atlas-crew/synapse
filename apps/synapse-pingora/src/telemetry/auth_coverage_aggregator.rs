@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
+use parking_lot::RwLock;
 use tokio::time::interval;
 use tracing::warn;
 
@@ -52,7 +53,7 @@ impl AuthCoverageAggregator {
         response_class: ResponseClass,
         has_auth_header: bool,
     ) {
-        let mut counts = self.counts.write().unwrap_or_else(|p| p.into_inner());
+        let mut counts = self.counts.write();
         
         // If at limit and endpoint is new, merge into "OTHER"
         // Account for "OTHER" entry by using saturating_sub(1)
@@ -105,7 +106,7 @@ impl AuthCoverageAggregator {
     async fn flush(&self) {
         // Swap out current counts atomically
         let counts = {
-            let mut guard = self.counts.write().unwrap_or_else(|p| p.into_inner());
+            let mut guard = self.counts.write();
             std::mem::take(&mut *guard)
         };
         
@@ -138,7 +139,7 @@ impl AuthCoverageAggregator {
     /// Get current endpoint count (for testing/debugging)
     #[cfg(test)]
     pub fn endpoint_count(&self) -> usize {
-        self.counts.read().unwrap_or_else(|p| p.into_inner()).len()
+        self.counts.read().len()
     }
     
     /// Force flush (for testing)
@@ -243,7 +244,7 @@ mod tests {
         
         assert_eq!(aggregator.endpoint_count(), 2);
         
-        let counts = aggregator.counts.read().unwrap_or_else(|p| p.into_inner());
+        let counts = aggregator.counts.read();
         assert!(counts.contains_key("EP1"));
         assert!(counts.contains_key("OTHER"));
         assert!(!counts.contains_key("EP3"));
