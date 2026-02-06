@@ -51,6 +51,52 @@ export interface SignalResult {
   metadata?: Record<string, unknown>;
 }
 
+export type RequestTimelineEvent =
+  | {
+      kind: 'http_transaction';
+      timestamp: Date;
+      tenantId: string;
+      sensorId: string;
+      requestId: string;
+      site: string;
+      method: string;
+      path: string;
+      statusCode: number;
+      latencyMs: number;
+      wafAction: string | null;
+    }
+  | {
+      kind: 'signal_event';
+      timestamp: Date;
+      tenantId: string;
+      sensorId: string;
+      requestId: string;
+      signalType: string;
+      sourceIp: string;
+      severity: string;
+      confidence: number;
+      eventCount: number;
+      metadata: Record<string, unknown> | null;
+    }
+  | {
+      kind: 'sensor_log';
+      timestamp: Date;
+      tenantId: string;
+      sensorId: string;
+      requestId: string;
+      logId: string;
+      source: string;
+      level: string;
+      message: string;
+      fields: Record<string, unknown> | string | null;
+      method: string | null;
+      path: string | null;
+      statusCode: number | null;
+      latencyMs: number | null;
+      clientIp: string | null;
+      ruleId: string | null;
+    };
+
 export interface CampaignTimelineEvent {
   timestamp: Date;
   campaignId: string;
@@ -276,6 +322,175 @@ export class HuntService {
       tenantsAffected: row.tenants_affected,
       confidence: row.confidence,
     }));
+  }
+
+  /**
+   * Get all ClickHouse events for a single request_id (WAF -> Hub correlation).
+   *
+   * NOTE: This is ClickHouse-only. PostgreSQL does not currently store request_id.
+   */
+  async getRequestTimeline(
+    tenantId: string,
+    requestId: string,
+    startTime?: Date,
+    endTime?: Date,
+    limit: number = 500
+  ): Promise<RequestTimelineEvent[]> {
+    if (!this.clickhouse?.isEnabled()) {
+      this.logger.warn('ClickHouse not enabled, request timeline unavailable');
+      return [];
+    }
+
+    this.validateIdentifier(tenantId, 'tenantId');
+    this.validateRequestId(requestId);
+
+    const boundedLimit = this.validatePositiveInt(limit, 1, 5000);
+
+    const now = new Date();
+    const defaultStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const start = (startTime ?? defaultStart).toISOString().replace('T', ' ').replace('Z', '');
+    const end = (endTime ?? now).toISOString().replace('T', ' ').replace('Z', '');
+
+    const params = { tenantId, requestId, startTime: start, endTime: end, limit: boundedLimit };
+
+    const [httpRows, signalRows, logRows] = await Promise.all([
+      this.clickhouse.queryWithParams<ClickHouseHttpTransactionRow>(
+        `
+          SELECT
+            timestamp,
+            tenant_id,
+            sensor_id,
+            request_id,
+            site,
+            method,
+            path,
+            status_code,
+            latency_ms,
+            waf_action
+          FROM http_transactions
+          WHERE tenant_id = {tenantId:String}
+            AND request_id = {requestId:String}
+            AND timestamp >= toDateTime64({startTime:String}, 3)
+            AND timestamp <= toDateTime64({endTime:String}, 3)
+          ORDER BY timestamp ASC
+          LIMIT {limit:UInt32}
+        `,
+        params
+      ),
+      this.clickhouse.queryWithParams<ClickHouseSignalEventRow>(
+        `
+          SELECT
+            timestamp,
+            tenant_id,
+            sensor_id,
+            request_id,
+            signal_type,
+            IPv4NumToString(source_ip) AS source_ip,
+            severity,
+            confidence,
+            event_count,
+            metadata
+          FROM signal_events
+          WHERE tenant_id = {tenantId:String}
+            AND request_id = {requestId:String}
+            AND timestamp >= toDateTime64({startTime:String}, 3)
+            AND timestamp <= toDateTime64({endTime:String}, 3)
+          ORDER BY timestamp ASC
+          LIMIT {limit:UInt32}
+        `,
+        params
+      ),
+      this.clickhouse.queryWithParams<ClickHouseLogEntryRow>(
+        `
+          SELECT
+            timestamp,
+            tenant_id,
+            sensor_id,
+            request_id,
+            log_id,
+            source,
+            level,
+            message,
+            fields,
+            method,
+            path,
+            status_code,
+            latency_ms,
+            client_ip,
+            rule_id
+          FROM sensor_logs
+          WHERE tenant_id = {tenantId:String}
+            AND request_id = {requestId:String}
+            AND timestamp >= toDateTime64({startTime:String}, 3)
+            AND timestamp <= toDateTime64({endTime:String}, 3)
+          ORDER BY timestamp ASC
+          LIMIT {limit:UInt32}
+        `,
+        params
+      ),
+    ]);
+
+    const events: RequestTimelineEvent[] = [];
+
+    for (const row of httpRows) {
+      // request_id is filtered, but keep it defensive.
+      if (!row.request_id) continue;
+      events.push({
+        kind: 'http_transaction',
+        timestamp: new Date(row.timestamp),
+        tenantId: row.tenant_id,
+        sensorId: row.sensor_id,
+        requestId: row.request_id,
+        site: row.site,
+        method: row.method,
+        path: row.path,
+        statusCode: row.status_code,
+        latencyMs: row.latency_ms,
+        wafAction: row.waf_action ?? null,
+      });
+    }
+
+    for (const row of signalRows) {
+      if (!row.request_id) continue;
+      events.push({
+        kind: 'signal_event',
+        timestamp: new Date(row.timestamp),
+        tenantId: row.tenant_id,
+        sensorId: row.sensor_id,
+        requestId: row.request_id,
+        signalType: row.signal_type,
+        sourceIp: row.source_ip,
+        severity: row.severity,
+        confidence: row.confidence,
+        eventCount: row.event_count,
+        metadata: this.tryParseJson(row.metadata),
+      });
+    }
+
+    for (const row of logRows) {
+      if (!row.request_id) continue;
+      events.push({
+        kind: 'sensor_log',
+        timestamp: new Date(row.timestamp),
+        tenantId: row.tenant_id,
+        sensorId: row.sensor_id,
+        requestId: row.request_id,
+        logId: row.log_id,
+        source: row.source,
+        level: row.level,
+        message: row.message,
+        fields: this.tryParseJsonRaw(row.fields),
+        method: row.method ?? null,
+        path: row.path ?? null,
+        statusCode: row.status_code ?? null,
+        latencyMs: row.latency_ms ?? null,
+        clientIp: row.client_ip ?? null,
+        ruleId: row.rule_id ?? null,
+      });
+    }
+
+    events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    return events;
   }
 
   /**
@@ -717,6 +932,44 @@ export class HuntService {
     }
   }
 
+  private validateRequestId(value: string): void {
+    // Keep aligned with Hub ingest validation (apps/signal-horizon/api/src/api/telemetry.ts).
+    const maxLen = 128;
+    const pattern = /^[A-Za-z0-9._-]+$/;
+    if (typeof value !== 'string' || value.length === 0 || value.length > maxLen) {
+      throw new Error('Invalid requestId');
+    }
+    if (value.includes('\r') || value.includes('\n') || !pattern.test(value)) {
+      throw new Error('Invalid requestId');
+    }
+  }
+
+  private tryParseJson(value: unknown): Record<string, unknown> | null {
+    if (!value) return null;
+    if (typeof value === 'object') return value as Record<string, unknown>;
+    if (typeof value !== 'string') return null;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private tryParseJsonRaw(value: unknown): Record<string, unknown> | string | null {
+    if (!value) return null;
+    if (typeof value === 'object') return value as Record<string, unknown>;
+    if (typeof value !== 'string') return null;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+      return value;
+    } catch {
+      return value;
+    }
+  }
+
 }
 
 // =============================================================================
@@ -758,4 +1011,48 @@ interface ClickHouseHourlyRow {
   total_events: number;
   unique_ips: number;
   unique_fingerprints: number;
+}
+
+interface ClickHouseHttpTransactionRow {
+  timestamp: string;
+  tenant_id: string;
+  sensor_id: string;
+  request_id: string | null;
+  site: string;
+  method: string;
+  path: string;
+  status_code: number;
+  latency_ms: number;
+  waf_action: string | null;
+}
+
+interface ClickHouseSignalEventRow {
+  timestamp: string;
+  tenant_id: string;
+  sensor_id: string;
+  request_id: string | null;
+  signal_type: string;
+  source_ip: string;
+  severity: string;
+  confidence: number;
+  event_count: number;
+  metadata?: string | Record<string, unknown> | null;
+}
+
+interface ClickHouseLogEntryRow {
+  timestamp: string;
+  tenant_id: string;
+  sensor_id: string;
+  request_id: string | null;
+  log_id: string;
+  source: string;
+  level: string;
+  message: string;
+  fields: string | Record<string, unknown> | null;
+  method: string | null;
+  path: string | null;
+  status_code: number | null;
+  latency_ms: number | null;
+  client_ip: string | null;
+  rule_id: string | null;
 }

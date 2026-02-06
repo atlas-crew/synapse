@@ -43,6 +43,7 @@ describe('Hunt Routes', () => {
       isHistoricalEnabled: vi.fn().mockReturnValue(true),
       queryTimeline: vi.fn(),
       getCampaignTimeline: vi.fn(),
+      getRequestTimeline: vi.fn(),
       getHourlyStats: vi.fn(),
       getIpActivity: vi.fn(),
       getSavedQueries: vi.fn(),
@@ -139,6 +140,44 @@ describe('Hunt Routes', () => {
       data: expect.any(Array),
       meta: { count: 1 },
     });
+  });
+
+  it('GET /api/v1/hunt/request/:requestId enforces tenant isolation', async () => {
+    vi.mocked(huntService.getRequestTimeline).mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/hunt/request/req_123')
+      .expect(200);
+
+    expect(vi.mocked(huntService.getRequestTimeline)).toHaveBeenCalledWith(
+      'tenant-1',
+      'req_123',
+      undefined,
+      undefined,
+      undefined
+    );
+    expect(response.body).toMatchObject({
+      success: true,
+      data: [],
+      meta: {
+        requestId: 'req_123',
+        tenantId: 'tenant-1',
+        count: 0,
+      },
+    });
+  });
+
+  it('GET /api/v1/hunt/request/:requestId returns 503 when ClickHouse disabled', async () => {
+    vi.mocked(huntService.isHistoricalEnabled).mockReturnValue(false);
+
+    const response = await request(app)
+      .get('/api/v1/hunt/request/req_123')
+      .expect(503);
+
+    expect(response.body).toMatchObject({
+      error: 'Historical queries not available',
+    });
+    expect(huntService.getRequestTimeline).not.toHaveBeenCalled();
   });
 
   it('POST /api/v1/hunt/saved-queries/:id/run overrides saved tenant', async () => {

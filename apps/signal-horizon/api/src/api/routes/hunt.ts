@@ -53,6 +53,18 @@ const HourlyStatsSchema = z.object({
   signalTypes: z.array(z.string()).optional(),
 });
 
+const RequestIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._-]+$/);
+
+const RequestTimelineQuerySchema = z.object({
+  startTime: z.string().datetime().transform((s) => new Date(s)).optional(),
+  endTime: z.string().datetime().transform((s) => new Date(s)).optional(),
+  limit: z.coerce.number().int().min(1).max(5000).optional(),
+});
+
 // =============================================================================
 // Route Factory
 // =============================================================================
@@ -180,6 +192,72 @@ export function createHuntRoutes(
       });
     } catch (error) {
       routeLogger.error({ error }, 'Campaign timeline query failed');
+      res.status(500).json({
+        error: 'Query failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/hunt/request/:requestId
+   * Get all ClickHouse rows correlated by request_id (WAF -> Hub pivot)
+   *
+   * Security: Tenant isolation enforced - users can only query their own tenant's data.
+   */
+  router.get('/request/:requestId', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.hunt, async (req: Request, res: Response) => {
+    try {
+      if (!req.auth?.tenantId) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const requestIdParsed = RequestIdSchema.safeParse(req.params.requestId);
+      if (!requestIdParsed.success) {
+        res.status(400).json({
+          error: 'Invalid requestId',
+          details: requestIdParsed.error.errors,
+        });
+        return;
+      }
+
+      const queryParsed = RequestTimelineQuerySchema.safeParse(req.query);
+      if (!queryParsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: queryParsed.error.errors,
+        });
+        return;
+      }
+
+      if (!huntService.isHistoricalEnabled()) {
+        res.status(503).json({
+          error: 'Historical queries not available',
+          message: 'ClickHouse is not enabled',
+        });
+        return;
+      }
+
+      const { startTime, endTime, limit } = queryParsed.data;
+      const events = await huntService.getRequestTimeline(
+        req.auth.tenantId,
+        requestIdParsed.data,
+        startTime,
+        endTime,
+        limit
+      );
+
+      res.json({
+        success: true,
+        data: events,
+        meta: {
+          requestId: requestIdParsed.data,
+          tenantId: req.auth.tenantId,
+          count: events.length,
+        },
+      });
+    } catch (error) {
+      routeLogger.error({ error }, 'Request timeline query failed');
       res.status(500).json({
         error: 'Query failed',
         message: error instanceof Error ? error.message : 'Unknown error',

@@ -841,6 +841,76 @@ describe('HuntService', () => {
   });
 
   // ===========================================================================
+  // getRequestTimeline
+  // ===========================================================================
+
+  describe('getRequestTimeline', () => {
+    it('should query ClickHouse across http/log/signal tables and merge sorted by timestamp', async () => {
+      vi.mocked(mockClickHouse.queryWithParams)
+        .mockResolvedValueOnce([
+          {
+            timestamp: '2024-06-15 11:59:00.000',
+            tenant_id: 'tenant-1',
+            sensor_id: 'sensor-1',
+            request_id: 'req_123',
+            site: 'example.com',
+            method: 'GET',
+            path: '/health',
+            status_code: 200,
+            latency_ms: 12,
+            waf_action: null,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            timestamp: '2024-06-15 11:59:01.000',
+            tenant_id: 'tenant-1',
+            sensor_id: 'sensor-1',
+            request_id: 'req_123',
+            signal_type: 'WAF_BLOCK',
+            source_ip: '203.0.113.10',
+            severity: 'HIGH',
+            confidence: 1.0,
+            event_count: 1,
+            metadata: '{"rule_id":"941100"}',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            timestamp: '2024-06-15 11:59:02.000',
+            tenant_id: 'tenant-1',
+            sensor_id: 'sensor-1',
+            request_id: 'req_123',
+            log_id: 'log-1',
+            source: 'access',
+            level: 'info',
+            message: 'GET /health',
+            fields: '{"k":"v"}',
+            method: 'GET',
+            path: '/health',
+            status_code: 200,
+            latency_ms: 12,
+            client_ip: '203.0.113.10',
+            rule_id: null,
+          },
+        ]);
+
+      const events = await huntServiceWithClickHouse.getRequestTimeline('tenant-1', 'req_123');
+
+      expect(mockClickHouse.queryWithParams).toHaveBeenCalledTimes(3);
+      const [sql0, params0] = vi.mocked(mockClickHouse.queryWithParams).mock.calls[0] ?? [];
+      expect(sql0 as string).toContain('FROM http_transactions');
+      expect((params0 as Record<string, unknown>).tenantId).toBe('tenant-1');
+      expect((params0 as Record<string, unknown>).requestId).toBe('req_123');
+
+      expect(events).toHaveLength(3);
+      expect(events[0]).toMatchObject({ kind: 'http_transaction', requestId: 'req_123' });
+      expect(events[1]).toMatchObject({ kind: 'signal_event', requestId: 'req_123' });
+      expect(events[2]).toMatchObject({ kind: 'sensor_log', requestId: 'req_123' });
+    });
+  });
+
+  // ===========================================================================
   // SQL Injection Prevention
   // ===========================================================================
 
