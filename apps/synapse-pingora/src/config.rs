@@ -9,6 +9,7 @@ use crate::vhost::SiteConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::fmt;
 use std::fs;
 use std::path::Path;
 use tracing::{debug, info, warn};
@@ -17,7 +18,7 @@ use tracing::{debug, info, warn};
 const MAX_CONFIG_SIZE: u64 = 10 * 1024 * 1024;
 
 /// Global server configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GlobalConfig {
     /// HTTP listen address (default: 0.0.0.0:80)
     #[serde(default = "default_http_addr")]
@@ -78,6 +79,23 @@ fn default_true() -> bool {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+impl fmt::Debug for GlobalConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GlobalConfig")
+            .field("http_addr", &self.http_addr)
+            .field("https_addr", &self.https_addr)
+            .field("workers", &self.workers)
+            .field("shutdown_timeout_secs", &self.shutdown_timeout_secs)
+            .field("waf_threshold", &self.waf_threshold)
+            .field("waf_enabled", &self.waf_enabled)
+            .field("log_level", &self.log_level)
+            .field("admin_api_key", &self.admin_api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("trap_config", &self.trap_config)
+            .field("waf_regex_timeout_ms", &self.waf_regex_timeout_ms)
+            .finish()
+    }
 }
 
 impl Default for GlobalConfig {
@@ -800,6 +818,31 @@ sites:
         assert_eq!(config.waf_threshold, 70);
         assert!(config.waf_enabled);
         assert_eq!(config.waf_regex_timeout_ms, 100); // Default 100ms
+    }
+
+    #[test]
+    fn test_debug_redacts_admin_api_key() {
+        let mut config = GlobalConfig::default();
+        config.admin_api_key = Some("super-secret-key-12345".to_string());
+
+        let debug_output = format!("{:?}", config);
+
+        // Must NOT contain the actual secret
+        assert!(!debug_output.contains("super-secret-key-12345"));
+        // Must contain the redaction marker
+        assert!(debug_output.contains("[REDACTED]"));
+        // Non-secret fields should still be visible
+        assert!(debug_output.contains("0.0.0.0:80"));
+    }
+
+    #[test]
+    fn test_debug_shows_none_when_no_key() {
+        let config = GlobalConfig::default();
+        let debug_output = format!("{:?}", config);
+
+        // When no key is set, should show None
+        assert!(debug_output.contains("None"));
+        assert!(!debug_output.contains("[REDACTED]"));
     }
 
     #[test]
