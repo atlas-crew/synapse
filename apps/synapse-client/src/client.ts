@@ -1,8 +1,8 @@
 /**
- * Re-export SynapseClient from @edge-lab/synapse-api
+ * Re-export SynapseClient from synapse-api
  * This file exists for backward compatibility
  *
- * @deprecated Import directly from '@edge-lab/synapse-api' instead
+ * @deprecated Import directly from 'synapse-api' instead
  */
 
-export { SynapseClient } from '@edge-lab/synapse-api';
+export { SynapseClient } from 'synapse-api';

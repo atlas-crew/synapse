@@ -1,8 +1,8 @@
 /**
- * Re-export types from @edge-lab/synapse-api
+ * Re-export types from synapse-api
  * This file exists for backward compatibility
  *
- * @deprecated Import directly from '@edge-lab/synapse-api' instead
+ * @deprecated Import directly from 'synapse-api' instead
  */
 
 export type {
@@ -35,6 +35,6 @@ export type {
   ActorsResponse,
   ActorStats,
   SetFingerprintResponse,
-} from '@edge-lab/synapse-api';
+} from 'synapse-api';
 
-export { SynapseError } from '@edge-lab/synapse-api';
+export { SynapseError } from 'synapse-api';

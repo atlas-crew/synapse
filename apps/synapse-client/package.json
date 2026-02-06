@@ -21,7 +21,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@edge-lab/synapse-api": "workspace:*"
+    "synapse-api": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.19.22",
