@@ -9,7 +9,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { HuntService, HuntQuery } from '../../services/hunt/index.js';
 import { rateLimiters } from '../../middleware/index.js';
-import { requireRole, requireScope } from '../middleware/auth.js';
+import { authorize } from '../middleware/auth.js';
 
 // =============================================================================
 // Validation Schemas
@@ -58,7 +58,7 @@ const HourlyStatsSchema = z.object({
 // =============================================================================
 
 export function createHuntRoutes(
-  _prisma: PrismaClient,
+  prisma: PrismaClient,
   logger: Logger,
   huntService: HuntService
 ): Router {
@@ -71,7 +71,7 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:read scope
    */
-  router.get('/status', requireScope('hunt:read'), (_req: Request, res: Response) => {
+  router.get('/status', authorize(prisma, { scopes: 'hunt:read' }), (_req: Request, res: Response) => {
     res.json({
       historical: huntService.isHistoricalEnabled(),
       routingThreshold: '24h',
@@ -146,7 +146,7 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:read scope
    */
-  router.get('/timeline/:campaignId', requireScope('hunt:read'), rateLimiters.hunt, async (req: Request, res: Response) => {
+  router.get('/timeline/:campaignId', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
       const { campaignId } = req.params;
       const parsed = TimeRangeSchema.safeParse(req.query);
@@ -251,7 +251,7 @@ export function createHuntRoutes(
    * Security: Requires admin role - this endpoint queries data across ALL tenants
    * and should only be accessible to SOC analysts/administrators.
    */
-  router.post('/ip-activity', rateLimiters.aggregations, requireRole('admin'), async (req: Request, res: Response) => {
+  router.post('/ip-activity', rateLimiters.aggregations, authorize(prisma, { role: 'admin' }), async (req: Request, res: Response) => {
     try {
       const parsed = IpActivitySchema.safeParse(req.body);
 
@@ -299,7 +299,7 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:read scope
    */
-  router.get('/saved-queries', requireScope('hunt:read'), rateLimiters.savedQueries, async (req: Request, res: Response) => {
+  router.get('/saved-queries', authorize(prisma, { scopes: 'hunt:read' }), rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const createdBy = req.query.createdBy as string | undefined;
       const queries = await huntService.getSavedQueries(createdBy);
@@ -326,7 +326,7 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:write scope (WRITE operation)
    */
-  router.post('/saved-queries', requireScope('hunt:write'), rateLimiters.savedQueries, async (req: Request, res: Response) => {
+  router.post('/saved-queries', authorize(prisma, { scopes: 'hunt:write' }), rateLimiters.savedQueries, async (req: Request, res: Response) => {
     try {
       const parsed = SavedQuerySchema.safeParse(req.body);
 
@@ -362,7 +362,7 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:read scope
    */
-  router.get('/saved-queries/:id', requireScope('hunt:read'), async (req: Request, res: Response) => {
+  router.get('/saved-queries/:id', authorize(prisma, { scopes: 'hunt:read' }), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const query = await huntService.getSavedQuery(id);
@@ -395,7 +395,7 @@ export function createHuntRoutes(
    * Tenant isolation enforced - saved queries are executed with
    * the authenticated tenant's context, not the original query's tenantId.
    */
-  router.post('/saved-queries/:id/run', requireScope('hunt:execute'), rateLimiters.hunt, async (req: Request, res: Response) => {
+  router.post('/saved-queries/:id/run', authorize(prisma, { scopes: 'hunt:execute' }), rateLimiters.hunt, async (req: Request, res: Response) => {
     try {
       // Authentication already verified by requireScope middleware
       const { id } = req.params;
@@ -444,7 +444,7 @@ export function createHuntRoutes(
    *
    * Security: Requires hunt:write scope AND operator role (DESTRUCTIVE operation)
    */
-  router.delete('/saved-queries/:id', requireScope('hunt:write'), requireRole('operator'), async (req: Request, res: Response) => {
+  router.delete('/saved-queries/:id', authorize(prisma, { scopes: 'hunt:write', role: 'operator' }), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const deleted = await huntService.deleteSavedQuery(id);

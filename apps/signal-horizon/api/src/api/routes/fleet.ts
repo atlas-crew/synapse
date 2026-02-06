@@ -7,7 +7,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { requireScope, requireRole } from '../middleware/auth.js';
+import { authorize, requireScope, requireRole, requireTenant } from '../middleware/auth.js';
 import {
   validateParams,
   validateQuery,
@@ -342,6 +342,27 @@ const PingoraActionBodySchema = z.object({
   action: z.enum(['test', 'reload', 'restart']),
 });
 
+async function validateSensorIdsForTenant(
+  prisma: PrismaClient,
+  tenantId: string,
+  sensorIds: string[]
+): Promise<boolean> {
+  const uniqueSensorIds = [...new Set(sensorIds)];
+  if (uniqueSensorIds.length === 0) {
+    return true;
+  }
+
+  const sensors = await prisma.sensor.findMany({
+    where: {
+      id: { in: uniqueSensorIds },
+      tenantId,
+    },
+    select: { id: true },
+  });
+
+  return sensors.length === uniqueSensorIds.length;
+}
+
 // ======================== Route Handler ========================
 
 export function createFleetRoutes(
@@ -624,11 +645,11 @@ export function createFleetRoutes(
   router.get(
     '/sensors/:sensorId',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
           where: { id: sensorId },
@@ -640,7 +661,7 @@ export function createFleetRoutes(
           },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -663,11 +684,11 @@ export function createFleetRoutes(
   router.get(
     '/sensors/:sensorId/system',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
           where: { id: sensorId },
@@ -692,7 +713,7 @@ export function createFleetRoutes(
           },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -740,11 +761,11 @@ export function createFleetRoutes(
   router.get(
     '/sensors/:sensorId/performance',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
           where: { id: sensorId },
@@ -755,7 +776,7 @@ export function createFleetRoutes(
           },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -814,11 +835,11 @@ export function createFleetRoutes(
   router.get(
     '/sensors/:sensorId/network',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
           where: { id: sensorId },
@@ -831,7 +852,7 @@ export function createFleetRoutes(
           },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -885,18 +906,18 @@ export function createFleetRoutes(
   router.get(
     '/sensors/:sensorId/processes',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
           where: { id: sensorId },
           select: { id: true, tenantId: true },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -955,6 +976,7 @@ const SensorLogsQuerySchema = z.object({
   router.get(
     '/sensors/:sensorId/logs',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     validateQuery(SensorLogsQuerySchema),
     async (req, res) => {
@@ -969,7 +991,7 @@ const SensorLogsQuerySchema = z.object({
           select: { id: true, tenantId: true },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -1070,8 +1092,11 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/actions/restart',
     rateLimiters.fleetCommand,
-    requireScope('fleet:write'),
-    requireRole('operator'),
+    authorize(prisma, {
+      scopes: 'fleet:write',
+      role: 'operator',
+      tenant: { resource: 'sensor', param: 'sensorId' },
+    }),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
@@ -1083,7 +1108,7 @@ const SensorLogsQuerySchema = z.object({
           select: { id: true, tenantId: true },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -1114,20 +1139,22 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/diagnostics/run',
     rateLimiters.fleetCommand,
-    requireScope('fleet:write'),
-    requireRole('operator'),
+    authorize(prisma, {
+      scopes: 'fleet:write',
+      role: 'operator',
+      tenant: { resource: 'sensor', param: 'sensorId' },
+    }),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       try {
         const { sensorId } = req.params;
-        const auth = req.auth!;
 
         const sensor = await prisma.sensor.findUnique({
           where: { id: sensorId },
           select: { id: true, tenantId: true },
         });
 
-        if (!sensor || sensor.tenantId !== auth.tenantId) {
+        if (!sensor) {
           res.status(404).json({ error: 'Sensor not found' });
           return;
         }
@@ -1164,6 +1191,7 @@ const SensorLogsQuerySchema = z.object({
   router.get(
     '/sensors/:sensorId/config/pingora',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'sensor', 'sensorId'),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       if (!sensorConfigController) {
@@ -1186,8 +1214,11 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/config/pingora',
     rateLimiters.configMutation,
-    requireScope('fleet:write'),
-    requireRole('operator'),
+    authorize(prisma, {
+      scopes: 'fleet:write',
+      role: 'operator',
+      tenant: { resource: 'sensor', param: 'sensorId' },
+    }),
     validateParams(SensorIdParamSchema),
     async (req, res) => {
       if (!sensorConfigController) {
@@ -1210,8 +1241,11 @@ const SensorLogsQuerySchema = z.object({
   router.post(
     '/sensors/:sensorId/actions/pingora',
     rateLimiters.fleetCommand,
-    requireScope('fleet:write'),
-    requireRole('operator'),
+    authorize(prisma, {
+      scopes: 'fleet:write',
+      role: 'operator',
+      tenant: { resource: 'sensor', param: 'sensorId' },
+    }),
     validateParams(SensorIdParamSchema),
     validateBody(PingoraActionBodySchema),
     async (req, res) => {
@@ -1310,7 +1344,7 @@ const SensorLogsQuerySchema = z.object({
   router.get(
     '/config/templates',
     requireScope('config:read'),
-    async (_req, res) => {
+    async (req, res) => {
       try {
         if (!configManager) {
           res
@@ -1319,7 +1353,8 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
-        const templates = await configManager.listTemplates();
+        const auth = req.auth!;
+        const templates = await configManager.listTemplates(auth.tenantId);
         res.json({ templates });
       } catch (error) {
         logger.error({ error }, 'Failed to list config templates');
@@ -1350,6 +1385,7 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
+        const auth = req.auth!;
         const { name, description, environment, config } = req.body as z.infer<
           typeof CreateConfigTemplateBodySchema
         >;
@@ -1357,7 +1393,7 @@ const SensorLogsQuerySchema = z.object({
         // Generate config hash
         const hash = await configManager.computeConfigHash(config);
 
-        const template = await configManager.createTemplate({
+        const template = await configManager.createTemplate(auth.tenantId, {
           name,
           description,
           environment,
@@ -1392,6 +1428,7 @@ const SensorLogsQuerySchema = z.object({
   router.get(
     '/config/templates/:id',
     requireScope('config:read'),
+    requireTenant(prisma, 'template', 'id'),
     validateParams(IdParamSchema),
     async (req, res) => {
       try {
@@ -1402,8 +1439,9 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
+        const auth = req.auth!;
         const { id } = req.params;
-        const template = await configManager.getTemplate(id);
+        const template = await configManager.getTemplate(id, auth.tenantId);
 
         if (!template) {
           res.status(404).json({ error: 'Template not found' });
@@ -1430,6 +1468,7 @@ const SensorLogsQuerySchema = z.object({
     rateLimiters.configMutation,
     requireScope('config:write'),
     requireRole('operator'),
+    requireTenant(prisma, 'template', 'id'),
     validateParams(IdParamSchema),
     validateBody(UpdateConfigTemplateBodySchema),
     async (req, res) => {
@@ -1441,18 +1480,19 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
+        const auth = req.auth!;
         const { id } = req.params;
         const updates = req.body as z.infer<
           typeof UpdateConfigTemplateBodySchema
         >;
 
-        const previous = await configManager.getTemplate(id);
+        const previous = await configManager.getTemplate(id, auth.tenantId);
         if (!previous) {
           res.status(404).json({ error: 'Template not found' });
           return;
         }
 
-        const template = await configManager.updateTemplate(id, updates);
+        const template = await configManager.updateTemplate(id, auth.tenantId, updates);
 
         await auditService.logConfigUpdated(
           req,
@@ -1482,6 +1522,7 @@ const SensorLogsQuerySchema = z.object({
     rateLimiters.configMutation,
     requireScope('config:write'),
     requireRole('admin'),
+    requireTenant(prisma, 'template', 'id'),
     validateParams(IdParamSchema),
     async (req, res) => {
       try {
@@ -1492,14 +1533,15 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
+        const auth = req.auth!;
         const { id } = req.params;
-        const previous = await configManager.getTemplate(id);
+        const previous = await configManager.getTemplate(id, auth.tenantId);
         if (!previous) {
           res.status(404).json({ error: 'Template not found' });
           return;
         }
 
-        await configManager.deleteTemplate(id);
+        await configManager.deleteTemplate(id, auth.tenantId);
         await auditService.logConfigDeleted(
           req,
           'config_template',
@@ -1596,7 +1638,21 @@ const SensorLogsQuerySchema = z.object({
         >;
         const auth = req.auth!;
 
-        const template = await configManager.getTemplate(templateId);
+        const sensorsAuthorized = await validateSensorIdsForTenant(
+          prisma,
+          auth.tenantId,
+          sensorIds
+        );
+        if (!sensorsAuthorized) {
+          sendProblem(res, 404, 'Resource not found', {
+            code: 'NOT_FOUND',
+            instance: req.originalUrl,
+            details: { resource: 'sensor' },
+          });
+          return;
+        }
+
+        const template = await configManager.getTemplate(templateId, auth.tenantId);
         if (!template) {
           res.status(404).json({ error: 'Template not found' });
           return;
@@ -1744,6 +1800,20 @@ const SensorLogsQuerySchema = z.object({
         >;
         const auth = req.auth!;
 
+        const sensorsAuthorized = await validateSensorIdsForTenant(
+          prisma,
+          auth.tenantId,
+          sensorIds
+        );
+        if (!sensorsAuthorized) {
+          sendProblem(res, 404, 'Resource not found', {
+            code: 'NOT_FOUND',
+            instance: req.originalUrl,
+            details: { resource: 'sensor' },
+          });
+          return;
+        }
+
         const commands = await Promise.all(
           sensorIds.map((sensorId) =>
             fleetCommander!.sendCommand(auth.tenantId, sensorId, {
@@ -1781,18 +1851,18 @@ const SensorLogsQuerySchema = z.object({
   router.get(
     '/commands/:commandId',
     requireScope('fleet:read'),
+    requireTenant(prisma, 'command', 'commandId'),
     validateParams(CommandIdParamSchema),
     async (req, res) => {
       try {
         const { commandId } = req.params;
-        const auth = req.auth!;
 
         const command = await prisma.fleetCommand.findUnique({
           where: { id: commandId },
           include: { sensor: true },
         });
 
-        if (!command || command.sensor.tenantId !== auth.tenantId) {
+        if (!command) {
           res.status(404).json({ error: 'Command not found' });
           return;
         }
@@ -1817,25 +1887,18 @@ const SensorLogsQuerySchema = z.object({
     rateLimiters.fleetCommand,
     requireScope('fleet:write'),
     requireRole('operator'),
+    requireTenant(prisma, 'command', 'commandId'),
     validateParams(CommandIdParamSchema),
     async (req, res) => {
       try {
-        if (!fleetCommander) {
-          res
-            .status(503)
-            .json({ error: 'Fleet commander service not available' });
-          return;
-        }
-
         const { commandId } = req.params;
-        const auth = req.auth!;
 
         const command = await prisma.fleetCommand.findUnique({
           where: { id: commandId },
           include: { sensor: true },
         });
 
-        if (!command || command.sensor.tenantId !== auth.tenantId) {
+        if (!command) {
           res.status(404).json({ error: 'Command not found' });
           return;
         }
@@ -1847,7 +1910,9 @@ const SensorLogsQuerySchema = z.object({
           return;
         }
 
-        await fleetCommander.cancelCommand(commandId);
+        if (fleetCommander) {
+          await fleetCommander.cancelCommand(commandId);
+        }
         res.json({ message: 'Command cancelled' });
       } catch (error) {
         logger.error({ error }, 'Failed to cancel command');
@@ -1875,26 +1940,7 @@ const SensorLogsQuerySchema = z.object({
       }
 
       const auth = req.auth!;
-
-      const sensors = await prisma.sensor.findMany({
-        where: { tenantId: auth.tenantId },
-        include: {
-          ruleSyncState: true,
-        },
-      });
-
-      const status = sensors.map((sensor) => {
-        const ruleSyncStates = sensor.ruleSyncState ?? [];
-        return {
-          sensorId: sensor.id,
-          sensorName: sensor.name,
-          syncedRules: ruleSyncStates.length,
-          syncStatus: ruleSyncStates.map((r) => ({
-            ruleId: r.ruleId,
-            status: r.status,
-          })),
-        };
-      });
+      const status = await ruleDistributor.getRuleSyncStatus(auth.tenantId);
 
       res.json({ status });
     } catch (error) {

@@ -75,6 +75,8 @@ const envSchema = z.object({
   API_KEY_HEADER: z.string().min(1).default('X-API-Key'),
   TELEMETRY_JWT_SECRET: z.string().min(16).optional(),
   JWT_SECRET: z.string().min(16).optional(),
+  JWT_EXPIRATION_SECONDS: positiveIntString(60, 86400).catch(3600), // 1m - 24h
+  REFRESH_TOKEN_EXPIRATION_SECONDS: positiveIntString(3600, 2592000).catch(604800), // 1h - 30d
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://localhost:4200,http://localhost:5180,http://127.0.0.1:5180'),
@@ -112,24 +114,34 @@ const envSchema = z.object({
   CLICKHOUSE_COMPRESSION: booleanString('true'),
   CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 100).catch(10),
 }).refine((data) => {
-  // Production-only security checks (labs-mmft.6)
+  // Production-only security checks (labs-mmft.6, labs-msll)
   if (data.NODE_ENV === 'production') {
     if (!data.JWT_SECRET) return false;
+    if (!data.TELEMETRY_JWT_SECRET) return false;
   }
   return true;
 }, {
-  message: 'JWT_SECRET is required in production mode',
+  message: 'JWT_SECRET and TELEMETRY_JWT_SECRET are required in production mode',
   path: ['JWT_SECRET'],
 }).refine((data) => {
   if (data.NODE_ENV === 'production' && data.CLICKHOUSE_ENABLED) {
-    // We allow 'clickhouse' default but it's strongly discouraged
-    // A better way is to not have a default in production
-    return data.CLICKHOUSE_PASSWORD !== 'clickhouse';
+    // Insecure defaults are strictly forbidden in production
+    return data.CLICKHOUSE_PASSWORD !== 'clickhouse' && data.CLICKHOUSE_PASSWORD.length >= 12;
   }
   return true;
 }, {
-  message: 'Insecure default CLICKHOUSE_PASSWORD is not allowed in production',
+  message: 'Insecure or weak CLICKHOUSE_PASSWORD is not allowed in production (min 12 chars)',
   path: ['CLICKHOUSE_PASSWORD'],
+}).refine((data) => {
+  if (data.NODE_ENV === 'production') {
+    // Ensure DATABASE_URL doesn't point to localhost in production
+    const dbUrl = data.DATABASE_URL.toLowerCase();
+    return !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1');
+  }
+  return true;
+}, {
+  message: 'DATABASE_URL should not point to localhost in production',
+  path: ['DATABASE_URL'],
 });
 
 function loadConfig() {
@@ -204,6 +216,8 @@ function loadConfig() {
 
     telemetry: {
       jwtSecret: env.TELEMETRY_JWT_SECRET ?? env.JWT_SECRET,
+      jwtExpirationSeconds: env.JWT_EXPIRATION_SECONDS,
+      refreshTokenExpirationSeconds: env.REFRESH_TOKEN_EXPIRATION_SECONDS,
     },
 
     logging: {

@@ -26,7 +26,9 @@ import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
 import { createTenantRoutes } from './tenant.js';
-import { createAuthManagementRoutes } from './auth-management.js';
+import { createAuthRoutes } from './auth.js';
+import { createUserRoutes } from './users.js';
+import { createOnboardingRoutes } from './onboarding.js';
 import { createSynapseRoutes } from './synapse.js';
 import { createAPIIntelligenceRoutes } from './api-intelligence.js';
 import { createFleetControlRoutes } from './fleet-control.js';
@@ -37,6 +39,7 @@ import { createFleetSessionsRoutes } from './fleet-sessions.js';
 import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
 import { createPlaybookRoutes } from './playbooks.js';
 import docsRouter from './docs.js';
+import { UserAuthService } from '../../services/user-auth.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
@@ -80,6 +83,7 @@ export function createApiRouter(
   const router = Router();
   const authMiddleware = createAuthMiddleware(prisma);
   const authRateLimiters = createAuthRateLimiters(logger);
+  const userAuthService = new UserAuthService(prisma, logger);
 
   // PEN-004: Content-type validation for all mutation endpoints
   // Applied before auth to reject malformed requests early
@@ -110,7 +114,10 @@ export function createApiRouter(
   router.use(authRateLimiters.ipFailures);
   router.use(authRateLimiters.keyFailures);
 
-  // All API routes require authentication
+  // Mount Auth routes (handled its own auth for public endpoints)
+  router.use('/auth', createAuthRoutes(prisma, logger, userAuthService, authMiddleware));
+
+  // All other API routes require authentication
   router.use(authMiddleware);
 
   // CSRF protection for mutation endpoints
@@ -121,6 +128,8 @@ export function createApiRouter(
       '/docs',                      // Documentation (read-only)
       '/csrf-token',                // CSRF token endpoint itself
       '/onboarding',                // Onboarding uses API keys, not cookies
+      /^\/auth\/login/,             // Public auth
+      /^\/auth\/refresh/,           // Public auth
       /^\/fleet\/.*\/files/,        // File uploads use multipart + auth
       /^\/releases\/.*\/upload/,    // Release uploads use multipart + auth
       /^\/tunnel/,                  // Tunnel routes use WebSocket auth
@@ -174,9 +183,9 @@ export function createApiRouter(
   router.use('/tenant', createTenantRoutes(prisma, logger, options.securityAuditService, options.preferenceService));
   logger.info('Tenant routes mounted at /api/v1/tenant');
 
-  // Mount Auth Management routes
-  router.use('/auth', createAuthManagementRoutes(prisma, logger));
-  logger.info('Auth Management routes mounted at /api/v1/auth');
+  // Mount Users routes
+  router.use('/users', createUserRoutes(prisma, logger));
+  logger.info('User Management routes mounted at /api/v1/users');
 
   // Mount Onboarding routes for sensor registration
   router.use('/onboarding', createOnboardingRoutes(prisma, logger));

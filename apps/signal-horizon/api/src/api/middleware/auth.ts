@@ -8,7 +8,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { config } from '../../config.js';
 import { sendProblem } from '../../lib/problem-details.js';
+import { isTokenRevoked, parseJwt, type JwtPayload } from '../../lib/jwt.js';
 import {
   checkAuthLockout,
   recordFailedAuth,
@@ -19,6 +21,9 @@ import { hasScope } from './scopes.js';
 
 export interface AuthContext {
   tenantId: string;
+  /** API Key ID or User Session JTI */
+  authId: string;
+  /** @deprecated use authId */
   apiKeyId: string;
   scopes: string[];
   isFleetAdmin: boolean;
@@ -80,6 +85,58 @@ export function createAuthMiddleware(prisma: PrismaClient) {
     }
 
     try {
+      const jwtSecret = config.telemetry.jwtSecret;
+      const jwtPayload: JwtPayload | null = jwtSecret ? parseJwt(token, jwtSecret) : null;
+
+      if (jwtPayload) {
+
+        if (!jwtPayload.jti) {
+          recordFailedAuth(clientIp);
+          sendProblem(res, 401, 'Invalid token payload', {
+            code: 'INVALID_TOKEN',
+            instance: req.originalUrl,
+          });
+          return;
+        }
+
+        const tenantId = jwtPayload.tenantId ?? jwtPayload.tenant_id;
+        if (!tenantId) {
+          recordFailedAuth(clientIp);
+          sendProblem(res, 401, 'Invalid token payload', {
+            code: 'INVALID_TOKEN',
+            instance: req.originalUrl,
+          });
+          return;
+        }
+
+        // NOTE: isTokenRevoked fails open on DB errors; monitor horizon_auth_blacklist_db_errors_total.
+        if (await isTokenRevoked(jwtPayload.jti, tenantId, prisma, { source: 'api' })) {
+          recordFailedAuth(clientIp);
+          sendProblem(res, 401, 'Token has been revoked', {
+            code: 'TOKEN_REVOKED',
+            instance: req.originalUrl,
+          });
+          return;
+        }
+
+        const scopes = Array.isArray(jwtPayload.scopes) ? jwtPayload.scopes : [];
+        const userId = jwtPayload.userId ?? jwtPayload.user_id;
+
+        clearFailedAuth(clientIp);
+
+        req.auth = {
+          tenantId,
+          authId: jwtPayload.jti,
+          apiKeyId: jwtPayload.jti, // Backward compatibility
+          scopes,
+          isFleetAdmin: scopes.includes('fleet:admin') || scopes.includes('*'),
+          userId,
+        };
+
+        next();
+        return;
+      }
+
       // Hash the API key for lookup
       const keyHash = createHash('sha256').update(token).digest('hex');
 
@@ -139,9 +196,10 @@ export function createAuthMiddleware(prisma: PrismaClient) {
       // Set auth context on request
       req.auth = {
         tenantId: apiKeyRecord.tenantId,
-        apiKeyId: apiKeyRecord.id,
+        authId: apiKeyRecord.id,
+        apiKeyId: apiKeyRecord.id, // Backward compatibility
         scopes: apiKeyRecord.scopes,
-        isFleetAdmin: apiKeyRecord.scopes.includes('fleet:admin'),
+        isFleetAdmin: apiKeyRecord.scopes.includes('fleet:admin') || apiKeyRecord.scopes.includes('*'),
       };
 
       next();
@@ -192,6 +250,261 @@ export function requireScope(...requiredScopes: string[]) {
         },
       });
       return;
+    }
+
+    next();
+  };
+}
+
+/**
+ * Validate that the requested resource belongs to the authenticated tenant. (labs-bp7t)
+ * 
+ * Returns 404 if the resource is not found or belongs to another tenant to prevent
+ * information disclosure via timing side-channels or existence enumeration.
+ * 
+ * @param prisma - Prisma client instance
+ * @param resource - The type of resource to check
+ * @param paramName - The name of the request parameter containing the resource ID
+ */
+export function requireTenant(
+  prisma: PrismaClient,
+  resource: 'sensor' | 'policy' | 'template' | 'command',
+  paramName: string
+) {
+  return async function tenantMiddleware(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    const tenantId = req.auth?.tenantId;
+    const isFleetAdmin = req.auth?.isFleetAdmin || false;
+    const resourceId = req.params[paramName];
+
+    if (!tenantId) {
+      sendProblem(res, 401, 'Authentication required', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+
+    // labs-cbyq: Fleet admins bypass isolation checks
+    if (isFleetAdmin) {
+      return next();
+    }
+
+    if (!resourceId) {
+      return next();
+    }
+
+    try {
+      let ownerId: string | null = null;
+
+      switch (resource) {
+        case 'sensor': {
+          const s = await prisma.sensor.findUnique({
+            where: { id: resourceId },
+            select: { tenantId: true },
+          });
+          ownerId = s?.tenantId || null;
+          break;
+        }
+        case 'policy': {
+          const p = await prisma.policyTemplate.findUnique({
+            where: { id: resourceId },
+            select: { tenantId: true },
+          });
+          ownerId = p?.tenantId || null;
+          break;
+        }
+        case 'template': {
+          const t = await prisma.configTemplate.findUnique({
+            where: { id: resourceId },
+            select: { tenantId: true },
+          });
+          ownerId = t?.tenantId || null;
+          break;
+        }
+        case 'command': {
+          const c = await prisma.fleetCommand.findUnique({
+            where: { id: resourceId },
+            include: { sensor: { select: { tenantId: true } } },
+          });
+          ownerId = c?.sensor?.tenantId || null;
+          break;
+        }
+      }
+
+      if (ownerId && ownerId !== tenantId) {
+        // labs-cbyq & labs-kcts: Return generic 403 for both not found and forbidden 
+        // to prevent tenant enumeration and information disclosure.
+        sendProblem(res, 403, 'Access denied', {
+          code: 'ACCESS_DENIED',
+          instance: req.originalUrl,
+        });
+        return;
+      }
+
+      if (!ownerId) {
+        // labs-cbyq: Return 403 even if resource doesn't exist to prevent enumeration
+        sendProblem(res, 403, 'Access denied', {
+          code: 'ACCESS_DENIED',
+          instance: req.originalUrl,
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      console.error(`Tenant validation error for ${resource}:`, error);
+      sendProblem(res, 500, 'Internal server error during tenant validation', {
+        code: 'TENANT_VALIDATION_ERROR',
+        instance: req.originalUrl,
+      });
+    }
+  };
+}
+
+/**
+ * Composite authorization middleware (labs-cwgv)
+ *
+ * Combines scope checks, role requirements, and tenant isolation into a single call.
+ * This is the canonical pattern for protecting routes.
+ *
+ * @example
+ * // Pattern A: Scope only
+ * authorize(prisma, { scopes: 'sensor:read' })
+ *
+ * // Pattern B: Role + Scope
+ * authorize(prisma, { scopes: 'config:write', role: 'operator' })
+ *
+ * // Pattern C: With Tenant Isolation
+ * authorize(prisma, {
+ *   scopes: 'sensor:read',
+ *   tenant: { resource: 'sensor', param: 'sensorId' }
+ * })
+ */
+export function authorize(
+  prisma: PrismaClient,
+  options: {
+    scopes?: string | string[];
+    role?: Role;
+    tenant?: {
+      resource: 'sensor' | 'policy' | 'template' | 'command';
+      param: string;
+    };
+  }
+) {
+  return async function combinedMiddleware(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    // 1. Basic Auth Check
+    if (!req.auth) {
+      sendProblem(res, 401, 'Not authenticated', {
+        code: 'AUTH_REQUIRED',
+        instance: req.originalUrl,
+      });
+      return;
+    }
+
+    // 2. Scope Check (at least one must match)
+    if (options.scopes) {
+      const required = Array.isArray(options.scopes) ? options.scopes : [options.scopes];
+      const hasScopeMatch = required.some((s) => hasScope(req.auth!.scopes, s));
+
+      if (!hasScopeMatch) {
+        sendProblem(res, 403, 'Insufficient permissions', {
+          code: 'INSUFFICIENT_SCOPE',
+          instance: req.originalUrl,
+          details: {
+            required,
+            granted: req.auth.scopes,
+          },
+        });
+        return;
+      }
+    }
+
+    // 3. Role Check
+    if (options.role) {
+      const userRole = deriveRole(req.auth.scopes);
+      const userLevel = ROLE_HIERARCHY[userRole];
+      const requiredLevel = ROLE_HIERARCHY[options.role];
+
+      if (userLevel < requiredLevel) {
+        sendProblem(res, 403, `Requires ${options.role} role`, {
+          code: 'INSUFFICIENT_ROLE',
+          instance: req.originalUrl,
+          details: {
+            currentRole: userRole,
+            requiredRole: options.role,
+          },
+        });
+        return;
+      }
+    }
+
+    // 4. Tenant Check (Isolation)
+    if (options.tenant) {
+      const tenantId = req.auth.tenantId;
+      const isFleetAdmin = req.auth.isFleetAdmin;
+      const resourceId = req.params[options.tenant.param];
+
+      // Fleet admins bypass isolation checks
+      if (!isFleetAdmin && resourceId) {
+        try {
+          let ownerId: string | null = null;
+
+          switch (options.tenant.resource) {
+            case 'sensor': {
+              const s = await prisma.sensor.findUnique({
+                where: { id: resourceId },
+                select: { tenantId: true },
+              });
+              ownerId = s?.tenantId || null;
+              break;
+            }
+            case 'policy': {
+              const p = await prisma.policyTemplate.findUnique({
+                where: { id: resourceId },
+                select: { tenantId: true },
+              });
+              ownerId = p?.tenantId || null;
+              break;
+            }
+            case 'template': {
+              const t = await prisma.configTemplate.findUnique({
+                where: { id: resourceId },
+                select: { tenantId: true },
+              });
+              ownerId = t?.tenantId || null;
+              break;
+            }
+            case 'command': {
+              const c = await prisma.fleetCommand.findUnique({
+                where: { id: resourceId },
+                include: { sensor: { select: { tenantId: true } } },
+              });
+              ownerId = c?.sensor?.tenantId || null;
+              break;
+            }
+          }
+
+          if (!ownerId || ownerId !== tenantId) {
+            sendProblem(res, 403, 'Access denied', {
+              code: 'ACCESS_DENIED',
+              instance: req.originalUrl,
+            });
+            return;
+          }
+        } catch (error) {
+          console.error(`Tenant validation error for ${options.tenant.resource}:`, error);
+          sendProblem(res, 500, 'Internal server error during tenant validation', {
+            code: 'TENANT_VALIDATION_ERROR',
+            instance: req.originalUrl,
+          });
+          return;
+        }
+      }
     }
 
     next();

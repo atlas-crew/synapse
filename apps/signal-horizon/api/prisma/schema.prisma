@@ -16,13 +16,19 @@ datasource db {
 
 model Tenant {
   id                String            @id @default(cuid())
+  shortId           Int               @unique @default(autoincrement()) // labs-8y5m: Compact numeric ID
   name              String
   tier              TenantTier        @default(STANDARD)
   sharingPreference SharingPreference @default(CONTRIBUTE_AND_RECEIVE)
+  anonymizationSalt String            @default(cuid()) // labs-6wkk: Tenant-specific salt for anonymization
+  preferenceVersion String            @default("1.0")
+  preferenceChangedBy String?
+  preferenceChangedAt DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
   // Relations
+  members           TenantMember[]
   apiKeys           ApiKey[]
   sensors           Sensor[]
   signals           Signal[]
@@ -32,6 +38,16 @@ model Tenant {
   warRooms          WarRoom[]
   warRoomActivities WarRoomActivity[]
   playbooks         Playbook[]
+  tunnelSessions    TunnelSession[]
+  auditLogs         AuditLog[]
+  securityAuditLogs SecurityAuditLog[]
+  configTemplates   ConfigTemplate[]
+  policyTemplates   PolicyTemplate[]
+  scheduledDeployments ScheduledDeployment[]
+  fleetAlerts       FleetAlert[]
+  registrationTokens RegistrationToken[]
+  consents          TenantConsent[]
+  idempotencyRequests IdempotencyRequest[]
 
   // Intel relations
   sensorIntelActors    SensorIntelActor[]
@@ -45,6 +61,7 @@ model Tenant {
   beamRules          CustomerRule[]  @relation("TenantRules")
   beamBlockDecisions BlockDecision[] @relation("TenantBlockDecisions")
 
+  @@index([id, sharingPreference]) // labs-lk08: Covering index for aggregator lookups
   @@map("tenants")
 }
 
@@ -60,6 +77,120 @@ enum SharingPreference {
   RECEIVE_ONLY // Consume fleet intel, don't share
   CONTRIBUTE_ONLY // Share but don't receive (rare)
   ISOLATED // No fleet participation
+}
+
+model TenantConsent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  consentType String   // e.g., 'BLOCKLIST_SHARING'
+  grantedAt   DateTime @default(now())
+  grantedBy   String   // userId who granted
+  version     String   // Policy version
+  acknowledged Boolean  @default(true)
+  ipAddress   String?
+  userAgent   String?
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_consents")
+}
+
+model IdempotencyRequest {
+  key       String
+  tenantId  String
+  response  Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([key, tenantId])
+  @@index([expiresAt])
+  @@map("idempotency_requests")
+}
+
+// =============================================================================
+// User Authentication & RBAC
+// =============================================================================
+
+enum UserRole {
+  VIEWER
+  OPERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  memberships   TenantMember[]
+  sessions      UserSession[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model TenantMember {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      UserRole @default(VIEWER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_members")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  jti       String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  tokenHash String   @unique
+  jti       String // JWT ID this refresh token is linked to
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
 }
 
 // =============================================================================
@@ -81,9 +212,23 @@ model ApiKey {
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([keyHash])
   @@map("api_keys")
+}
+
+model TokenBlacklist {
+  id        String   @id @default(cuid())
+  jti       String
+  tenantId  String
+  reason    String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([jti, tenantId])
+  @@index([expiresAt])
+  @@map("token_blacklist")
 }
 
 // =============================================================================
@@ -138,6 +283,8 @@ model Sensor {
   commands      FleetCommand[]
   ruleSyncState RuleSyncState[]
   pingoraConfig SensorPingoraConfig?
+  tunnelSessions TunnelSession[]
+  fleetAlerts   FleetAlert[]
 
   // Signal Array - Relations
   apiKeys           SensorApiKey[]
@@ -159,6 +306,8 @@ model Sensor {
   @@unique([tenantId, name])
   @@index([tenantId])
   @@index([connectionState])
+  @@index([tenantId, connectionState]) // P2-PERF-001: tenant status filters
+  @@index([tenantId, lastHeartbeat(sort: Desc)]) // P2-PERF-001: offline detection
   @@map("sensors")
 }
 
@@ -213,6 +362,8 @@ model Signal {
   @@index([tenantId])
   @@index([sensorId])
   @@index([signalType])
+  @@index([sourceIp]) // P1-SCHEMA-002: Fast IP lookups
+  @@index([fingerprint]) // P1-SCHEMA-002: Fast fingerprint lookups
   @@index([anonFingerprint])
   @@index([createdAt])
   @@index([severity]) // Filter by severity level
@@ -220,9 +371,12 @@ model Signal {
   @@index([createdAt, sensorId]) // Range queries by sensor
   @@index([signalType, createdAt]) // Correlation queries by type
   @@index([tenantId, createdAt]) // Tenant-scoped time ranges
+  @@index([tenantId, sourceIp]) // P1-SCHEMA-002: Fast IP lookups within tenant
   @@index([anonFingerprint, createdAt]) // Cross-tenant fingerprint analysis
   @@index([severity, createdAt]) // Dashboard: severity over time
   @@index([tenantId, severity, createdAt]) // Tenant dashboard severity filter
+  @@index([tenantId, signalType, createdAt]) // P2-PERF-001: Signal type over time per tenant
+  @@index([tenantId, sensorId, createdAt(sort: Desc)]) // P2-PERF-001: sensor timelines
   @@map("signals")
 }
 
@@ -323,6 +477,7 @@ model BlocklistEntry {
   reason            String?
   expiresAt         DateTime?
   propagatedAt      DateTime? // When pushed to sensors
+  withdrawnAt       DateTime? // When withdrawn by tenant (privacy control)
   propagationStatus PropagationStatus @default(PENDING)
   sensorsNotified   Int               @default(0)
   createdAt         DateTime          @default(now())
@@ -361,6 +516,7 @@ enum PropagationStatus {
   COMPLETED
   FAILED
   PARTIAL // Some sensors failed
+  WITHDRAWN // Withdrawn by tenant (privacy control)
 }
 
 // =============================================================================
@@ -391,6 +547,7 @@ model Campaign {
   threatLinks  CampaignThreat[]
   warRoomLinks WarRoomCampaign[]
 
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([status])
   @@index([isCrossTenant])
@@ -446,6 +603,7 @@ model WarRoom {
   campaignLinks WarRoomCampaign[]
   playbookRuns  PlaybookRun[]
 
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([status])
   @@map("war_rooms")
@@ -539,6 +697,7 @@ model Playbook {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   runs   PlaybookRun[]
 
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([triggerType])
   // Composite index for list queries filtered by tenant with active status
@@ -586,9 +745,12 @@ model AuditLog {
   userAgent  String?
   createdAt  DateTime @default(now())
 
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
   @@index([tenantId])
   @@index([action])
   @@index([createdAt])
+  @@index([tenantId, createdAt(sort: Desc)]) // P1-SCHEMA-002: Recent logs per tenant
   @@map("audit_logs")
 }
 
@@ -609,6 +771,8 @@ model SecurityAuditLog {
   details      String?  // JSON stringified additional context
   timestamp    DateTime @default(now())
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   // Optimized indexes for security audit queries
   @@index([tenantId, timestamp(sort: Desc)])
   @@index([userId, timestamp(sort: Desc)])
@@ -625,6 +789,7 @@ model SecurityAuditLog {
 
 model ConfigTemplate {
   id          String   @id @default(cuid())
+  tenantId    String?  // Null for global system templates
   name        String
   description String?
   environment String   @default("production") // production, staging, dev
@@ -635,6 +800,10 @@ model ConfigTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
   @@index([environment])
   @@index([isActive])
   @@index([environment, isActive]) // Filter active templates by environment (10x speedup)
@@ -654,6 +823,8 @@ model PolicyTemplate {
   version     String   @default("1.0.0")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -715,6 +886,7 @@ model FleetCommand {
   @@index([queuedAt])
   @@index([sensorId, status]) // Get pending commands per sensor (10-50x speedup)
   @@index([status, queuedAt]) // FIFO command processing query
+  @@index([sensorId, queuedAt]) // P2-PERF-001: per-sensor command history
   @@map("fleet_commands")
 }
 
@@ -912,6 +1084,8 @@ model ScheduledDeployment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([status])
   @@index([scheduledAt])
   @@index([tenantId])
@@ -945,6 +1119,7 @@ model SensorApiKey {
   permissions String[]
   createdBy   String?
 
+  @@unique([sensorId, name])
   @@index([sensorId])
   @@index([keyHash])
   @@map("sensor_api_keys")
@@ -998,6 +1173,9 @@ model FleetAlert {
   createdAt      DateTime  @default(now())
   resolvedAt     DateTime?
 
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor Sensor? @relation(fields: [sensorId], references: [id], onDelete: SetNull)
+
   @@index([tenantId])
   @@index([sensorId])
   @@index([alertType])
@@ -1022,10 +1200,31 @@ model RegistrationToken {
 
   // Sensors registered with this token
   registeredSensors Sensor[] @relation("TokenSensors")
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([tokenHash])
   @@map("registration_tokens")
+}
+
+model TunnelSession {
+  id           String    @id @default(uuid()) // sessionId
+  sensorId     String
+  tenantId     String
+  userId       String
+  type         String    // shell, dashboard, logs
+  status       String    // pending, connected, disconnected, error
+  createdAt    DateTime  @default(now())
+  lastActivity DateTime?
+  expiresAt    DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([sensorId])
+  @@map("tunnel_sessions")
 }
 
 // ============================================
@@ -1134,6 +1333,7 @@ model CustomerRule {
   deployments      RuleDeployment[]
   endpointBindings RuleEndpointBinding[]
 
+  @@unique([tenantId, name])
   @@index([tenantId, status])
   @@index([tenantId, enabled])
   @@map("beam_rules")

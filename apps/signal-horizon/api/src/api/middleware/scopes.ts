@@ -89,9 +89,100 @@ export const SCOPES = {
 
   // Command
   'command:execute': 'Execute fleet commands',
+
+  // Users
+  'users:manage': 'Manage tenant members and roles',
 } as const;
 
 export type Scope = keyof typeof SCOPES;
+
+/**
+ * Role-to-scope mapping for User RBAC (labs-eyuk)
+ */
+export const ROLE_SCOPES: Record<string, string[]> = {
+  VIEWER: [
+    'analytics:read',
+    'analytics:health',
+    'threats:read',
+    'warroom:read',
+    'hunt:read',
+    'playbook:read',
+    'campaigns:read',
+    'audit:read',
+    'sensor:read',
+    'fleet:read',
+    'config:read',
+    'rules:read',
+    'signal:read',
+  ],
+  OPERATOR: [
+    'analytics:read',
+    'analytics:health',
+    'threats:read',
+    'warroom:read',
+    'hunt:read',
+    'playbook:read',
+    'campaigns:read',
+    'audit:read',
+    'sensor:read',
+    'fleet:read',
+    'config:read',
+    'rules:read',
+    'signal:read',
+    'warroom:create',
+    'warroom:update',
+    'warroom:execute',
+    'playbook:create',
+    'playbook:update',
+    'playbook:execute',
+    'threats:feedback',
+    'hunt:write',
+    'hunt:execute',
+    'sensor:control',
+    'fleet:write',
+    'config:write',
+    'rules:write',
+    'command:execute',
+    'signal:write',
+  ],
+  ADMIN: [
+    'analytics:read',
+    'analytics:health',
+    'threats:read',
+    'warroom:read',
+    'hunt:read',
+    'playbook:read',
+    'campaigns:read',
+    'audit:read',
+    'sensor:read',
+    'fleet:read',
+    'config:read',
+    'rules:read',
+    'signal:read',
+    'warroom:create',
+    'warroom:update',
+    'warroom:execute',
+    'playbook:create',
+    'playbook:update',
+    'playbook:execute',
+    'threats:feedback',
+    'hunt:write',
+    'hunt:execute',
+    'sensor:control',
+    'fleet:write',
+    'config:write',
+    'rules:write',
+    'command:execute',
+    'signal:write',
+    'warroom:manage',
+    'playbook:delete',
+    'hunt:export',
+    'credentials:manage',
+    'fleet:admin',
+    'users:manage',
+  ],
+  SUPER_ADMIN: ['*'], // Special case for global access
+};
 
 /**
  * Scope aliases for backward compatibility.
@@ -208,6 +299,11 @@ export function expandScopes(scopes: string[]): Set<string> {
  * @returns true if user has access (directly or through aliases)
  */
 export function hasScope(userScopes: string[], requiredScope: string): boolean {
+  // Check for wildcard access (SUPER_ADMIN)
+  if (userScopes.includes('*')) {
+    return true;
+  }
+
   // Direct match
   if (userScopes.includes(requiredScope)) {
     return true;
