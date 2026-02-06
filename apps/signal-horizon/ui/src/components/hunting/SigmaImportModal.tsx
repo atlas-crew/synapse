@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { X, ArrowRight, FileText } from 'lucide-react';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import { convertSigmaToSql } from '../../utils/sigmaToSql';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface SigmaImportModalProps {
   onImport: (sql: string) => void;
@@ -20,6 +21,9 @@ detection:
 export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
   const [sigmaYaml, setSigmaYaml] = useState(EXAMPLE_RULE);
   const [previewSql, setPreviewSql] = useState(convertSigmaToSql(EXAMPLE_RULE));
+  const modalRef = useRef<HTMLDivElement>(null);
+  const stableOnClose = useCallback(() => onClose(), [onClose]);
+  useFocusTrap(modalRef, true, stableOnClose);
 
   const handleYamlChange = (value: string) => {
     setSigmaYaml(value);
@@ -33,7 +37,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
 
   return (
     <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
-      <div className="bg-surface-base border border-border-subtle w-full max-w-5xl h-[80vh] flex flex-col shadow-2xl">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="sigma-import-title" className="bg-surface-base border border-border-subtle w-full max-w-5xl h-[80vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -41,7 +45,7 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
               <FileText className="w-5 h-5 text-ac-blue" />
             </div>
             <div>
-              <h2 className="text-lg font-medium text-ink-primary">Import Sigma Rule</h2>
+              <h2 id="sigma-import-title" className="text-lg font-medium text-ink-primary">Import Sigma Rule</h2>
               <p className="text-xs text-ink-secondary">
                 Convert standard Sigma threat detection rules to ClickHouse SQL
               </p>

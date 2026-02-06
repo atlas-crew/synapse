@@ -3,10 +3,11 @@
  * Query builder, filters, results table, saved queries
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Database, AlertCircle } from 'lucide-react';
 import { HuntQueryBuilder, HuntResultsTable, SavedQueries } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 export default function HuntingPage() {
   const {
@@ -220,6 +221,9 @@ interface SaveQueryModalProps {
 function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const modalRef = useRef<HTMLDivElement>(null);
+  const stableOnCancel = useCallback(() => onCancel(), [onCancel]);
+  useFocusTrap(modalRef, true, stableOnCancel);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,14 +233,15 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
 
   return (
     <div className="fixed inset-0 bg-ac-black/50 flex items-center justify-center z-50">
-      <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-md">
-        <h2 className="text-lg font-medium text-ink-primary mb-4">Save Query</h2>
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-labelledby="save-query-title" className="bg-surface-base border border-border-subtle p-6 w-full max-w-md">
+        <h2 id="save-query-title" className="text-lg font-medium text-ink-primary mb-4">Save Query</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">
+            <label htmlFor="save-query-name" className="block text-sm font-medium text-ink-secondary mb-1">
               Name *
             </label>
             <input
+              id="save-query-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -246,10 +251,11 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">
+            <label htmlFor="save-query-description" className="block text-sm font-medium text-ink-secondary mb-1">
               Description
             </label>
             <textarea
+              id="save-query-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description..."
