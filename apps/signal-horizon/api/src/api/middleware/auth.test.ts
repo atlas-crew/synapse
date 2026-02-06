@@ -30,6 +30,7 @@ const createJwt = (overrides: Record<string, unknown> = {}): string => {
     userId: 'user-1',
     scopes: ['fleet:read'],
     jti: 'jti-1',
+    aud: 'signal-horizon',
     iat: now - 1,
     exp: now + 3600,
     ...overrides,
@@ -125,6 +126,30 @@ describe('Auth middleware JWT', () => {
       .expect(401);
 
     expect(res.body).toMatchObject({ code: 'INVALID_TOKEN' });
+  });
+
+  it('rejects jwt tokens with wrong audience (labs-l03r)', async () => {
+    // Token issued for a different service should be rejected
+    const token = createJwt({ aud: 'other-service' });
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`);
+
+    // parseJwt returns null for aud mismatch, so auth falls through to API key
+    // lookup which also fails => 401
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects jwt tokens missing audience claim (labs-l03r)', async () => {
+    // Legacy tokens without aud should be rejected once audience check is active
+    const token = createJwt({ aud: undefined });
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(401);
   });
 
   it('fails open on blacklist DB errors and records metric', async () => {
@@ -277,7 +302,7 @@ describe('Auth middleware epoch validation (labs-wqy1)', () => {
       .expect(200);
   });
 
-  it('fails open when Redis errors during epoch check', async () => {
+  it('returns 503 when Redis errors during epoch check (fail-closed)', async () => {
     const kv = createMockKv();
     vi.mocked(kv.get).mockRejectedValue(new Error('connection refused'));
     const app = express();
@@ -287,11 +312,12 @@ describe('Auth middleware epoch validation (labs-wqy1)', () => {
 
     const token = createJwt({ epoch: 1 });
 
-    // Should pass because getEpochForTenant returns 0 on error (fail-open)
-    // and 1 >= 0
-    await request(app)
+    // Should deny with 503 because epoch lookup failed (fail-closed)
+    const response = await request(app)
       .get('/secure')
       .set('Authorization', `Bearer ${token}`)
-      .expect(200);
+      .expect(503);
+
+    expect(response.body.code).toBe('EPOCH_SERVICE_UNAVAILABLE');
   });
 });

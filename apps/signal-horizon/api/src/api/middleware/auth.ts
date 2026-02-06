@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { config } from '../../config.js';
 import { sendProblem } from '../../lib/problem-details.js';
 import { isTokenRevoked, parseJwt, type JwtPayload } from '../../lib/jwt.js';
-import { getEpochForTenant } from '../../lib/epoch.js';
+import { getEpochForTenant, EpochLookupError } from '../../lib/epoch.js';
 import type { RedisKv } from '../../storage/redis/kv.js';
 import {
   checkAuthLockout,
@@ -88,7 +88,7 @@ export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) 
 
     try {
       const jwtSecret = config.telemetry.jwtSecret;
-      const jwtPayload: JwtPayload | null = jwtSecret ? parseJwt(token, jwtSecret) : null;
+      const jwtPayload: JwtPayload | null = jwtSecret ? parseJwt(token, jwtSecret, { audience: 'signal-horizon' }) : null;
 
       if (jwtPayload) {
 
@@ -125,15 +125,35 @@ export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) 
 
         // Epoch-based bulk revocation check (labs-wqy1)
         // If Redis is available and the JWT carries an epoch claim, verify it
-        // against the current tenant epoch. Fail-open when Redis is unavailable.
+        // against the current tenant epoch. Fail-closed (503) when Redis is
+        // unavailable to prevent bypassing revocation.
         if (kv && typeof jwtPayload.epoch === 'number') {
-          const currentEpoch = await getEpochForTenant(tenantId, kv);
-          if (jwtPayload.epoch < currentEpoch) {
-            recordFailedAuth(clientIp);
-            sendProblem(res, 401, 'Token epoch has expired — all sessions were revoked', {
-              code: 'TOKEN_EPOCH_EXPIRED',
-              instance: req.originalUrl,
-            });
+          try {
+            const currentEpoch = await getEpochForTenant(tenantId, kv);
+            if (jwtPayload.epoch < currentEpoch) {
+              recordFailedAuth(clientIp);
+              sendProblem(res, 401, 'Token epoch has expired — all sessions were revoked', {
+                code: 'TOKEN_EPOCH_EXPIRED',
+                instance: req.originalUrl,
+              });
+              return;
+            }
+          } catch (error) {
+            // labs-2rf9.11: Handle all errors within the epoch check to prevent 
+            // unexpected bubbles and ensure consistent failure responses.
+            if (error instanceof EpochLookupError) {
+              console.error('Epoch lookup failed, denying request:', error);
+              sendProblem(res, 503, 'Authentication service temporarily unavailable', {
+                code: 'EPOCH_SERVICE_UNAVAILABLE',
+                instance: req.originalUrl,
+              });
+            } else {
+              console.error('Unexpected error during epoch check:', error);
+              sendProblem(res, 500, 'Authentication check failed', {
+                code: 'AUTH_CHECK_ERROR',
+                instance: req.originalUrl,
+              });
+            }
             return;
           }
         }

@@ -76,7 +76,7 @@ export async function requireTelemetryJwt(
   }
 
   const token = authHeader.slice(7).trim();
-  const payload = parseJwt(token, secret);
+  const payload = parseJwt(token, secret, { audience: 'signal-horizon' });
   
   if (!payload || !payload.jti) {
     res.status(401).json({ error: 'unauthorized' });

@@ -207,6 +207,7 @@ export class UserAuthService {
       userId,
       tenantId,
       scopes,
+      aud: 'signal-horizon',
       epoch,
     };
 

@@ -35,6 +35,8 @@ export type JwtPayload = {
   userId?: string;
   sensorId?: string;
   scopes?: string[];
+  /** Audience claim — identifies the intended recipient service (labs-l03r) */
+  aud?: string;
   /** Epoch for bulk token revocation (labs-wqy1) */
   epoch?: number;
   // Legacy aliases
@@ -110,10 +112,15 @@ function verifySignature(header: string, payload: string, signature: string, sec
   }
 }
 
+export interface ParseJwtOptions {
+  /** When set, reject tokens whose `aud` claim does not match this value (labs-l03r). */
+  audience?: string;
+}
+
 /**
  * Parses and validates an HS256 JWT.
  */
-export function parseJwt(token: string, secret: string): JwtPayload | null {
+export function parseJwt(token: string, secret: string, options?: ParseJwtOptions): JwtPayload | null {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
 
@@ -132,6 +139,13 @@ export function parseJwt(token: string, secret: string): JwtPayload | null {
     if (payload.exp <= now) return null;
     // Allow for small clock skew
     if (payload.iat > now + 300) return null;
+
+    // Audience validation (labs-l03r): when an expected audience is configured,
+    // the token MUST carry a matching `aud` claim. Tokens without `aud` are
+    // treated as legacy/invalid and rejected.
+    if (options?.audience) {
+      if (payload.aud !== options.audience) return null;
+    }
 
     return payload;
   } catch {
