@@ -11,6 +11,7 @@ import type { Logger } from 'pino';
 import { config } from '../../config.js';
 import { parseJwt } from '../../lib/jwt.js';
 import { authorize, requireScope } from '../middleware/auth.js';
+import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { validateBody } from '../middleware/validation.js';
 import { UserAuthService } from '../../services/user-auth.js';
 import { getErrorMessage } from '../../utils/errors.js';
@@ -64,7 +65,7 @@ export function createAuthRoutes(
    * POST /api/v1/auth/login
    * Authenticate user and return tokens.
    */
-  router.post('/login', validateBody(LoginSchema), async (req: Request, res: Response) => {
+  router.post('/login', rateLimiters.userAuth, validateBody(LoginSchema), async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
       const result = await userAuthService.login(email, password, {
@@ -83,7 +84,7 @@ export function createAuthRoutes(
    * POST /api/v1/auth/refresh
    * Refresh access token using refresh token.
    */
-  router.post('/refresh', validateBody(RefreshSchema), async (req: Request, res: Response) => {
+  router.post('/refresh', rateLimiters.userAuth, validateBody(RefreshSchema), async (req: Request, res: Response) => {
     try {
       const { refreshToken } = req.body;
       const result = await userAuthService.refreshSession(refreshToken, {

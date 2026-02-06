@@ -12,7 +12,7 @@ const mockPrisma = {
   },
   refreshToken: {
     findUnique: vi.fn(),
-    create: vi.fn(),
+    create: vi.fn().mockResolvedValue({ id: 'refresh-token-123' }),
     update: vi.fn(),
     updateMany: vi.fn(),
   },
@@ -91,6 +91,11 @@ describe('UserAuthService', () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
 
       await expect(service.login('test@example.com', 'wrong-password')).rejects.toThrow('Invalid email or password');
+    });
+
+    it('should reject unknown user', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.login('unknown@example.com', 'some-password')).rejects.toThrow('Invalid email or password');
     });
   });
 

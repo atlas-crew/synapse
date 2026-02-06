@@ -8,18 +8,31 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { metrics } from '../services/metrics.js';
 
-export type JwtPayload = {
+export interface BaseJwtPayload {
   iat: number;
   exp: number;
   jti?: string;
-  tenantId?: string;
+  // Legacy aliases (deprecated)
   tenant_id?: string;
-  sensorId?: string;
-  sensor_id?: string;
-  userId?: string;
   user_id?: string;
-  scopes?: string[];
-};
+  sensor_id?: string;
+}
+
+export interface UserSessionPayload extends BaseJwtPayload {
+  userId: string;
+  tenantId: string;
+  scopes: string[];
+  sensorId?: never;
+}
+
+export interface TelemetryPayload extends BaseJwtPayload {
+  sensorId: string;
+  tenantId: string;
+  userId?: never;
+  scopes?: never;
+}
+
+export type JwtPayload = UserSessionPayload | TelemetryPayload | BaseJwtPayload;
 
 /**
  * Check if token is revoked in database.

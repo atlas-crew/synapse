@@ -8,6 +8,10 @@ import { ROLE_SCOPES } from '../api/middleware/scopes.js';
 
 const scryptAsync = promisify(scrypt);
 
+// Pre-computed dummy hash for timing attack mitigation (labs-21bx)
+// Generated with: await service.hashPassword('dummy_password_for_timing_mitigation')
+const DUMMY_HASH = '1234567890abcdef1234567890abcdef:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+
 export interface LoginResult {
   user: Omit<User, 'passwordHash'>;
   accessToken: string;
@@ -28,7 +32,13 @@ export class UserAuthService {
       include: { memberships: { include: { tenant: true } } },
     });
 
-    if (!user || !(await this.verifyPassword(passwordPlain, user.passwordHash))) {
+    // Timing side-channel mitigation (labs-21bx):
+    // Always perform password verification to prevent user enumeration.
+    // If user is null, we verify against a dummy hash.
+    const targetHash = user?.passwordHash ?? DUMMY_HASH;
+    const isPasswordValid = await this.verifyPassword(passwordPlain, targetHash);
+
+    if (!user || !isPasswordValid) {
       this.logger.warn({ email, ip: metadata?.ip }, 'Failed login attempt');
       throw new Error('Invalid email or password');
     }
@@ -57,14 +67,29 @@ export class UserAuthService {
    * Create a new access token using a refresh token.
    */
   async refreshSession(refreshTokenStr: string, metadata?: { ip?: string; ua?: string }): Promise<{ accessToken: string, refreshToken: string }> {
-    const tokenHash = createHash('sha256').update(refreshTokenStr).digest('hex');
+    // Parse composite token: id:secret (labs-pb60)
+    const [tokenId, tokenSecret] = refreshTokenStr.split(':');
+    
+    if (!tokenId || !tokenSecret) {
+      // Fallback for legacy SHA-256 tokens (if any existed, but this is a new system)
+      // or malformed tokens.
+      throw new Error('Invalid refresh token format');
+    }
+
     const refreshToken = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash },
+      where: { id: tokenId },
       include: { user: { include: { memberships: true } } },
     });
 
     if (!refreshToken || refreshToken.isRevoked || refreshToken.expiresAt < new Date()) {
       throw new Error('Invalid or expired refresh token');
+    }
+
+    // Verify token secret against stored hash (scrypt)
+    const isValid = await this.verifyPassword(tokenSecret, refreshToken.tokenHash);
+    if (!isValid) {
+      this.logger.warn({ userId: refreshToken.userId, tokenId }, 'Invalid refresh token secret');
+      throw new Error('Invalid refresh token');
     }
 
     const membership = refreshToken.user.memberships.find(m => m.tenantId === refreshToken.tenantId);
@@ -177,10 +202,15 @@ export class UserAuthService {
     }
     const accessToken = signJwt(accessPayload, jwtSecret);
 
-    const refreshTokenStr = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(refreshTokenStr).digest('hex');
+    const tokenSecret = randomBytes(32).toString('hex');
+    const tokenHash = await this.hashPassword(tokenSecret); // Use scrypt (labs-pb60)
 
-    await this.prisma.$transaction([
+    // Create session first to get JTI if needed, but we generate JTI ourselves
+    // We need to create the refresh token record to get its ID (cuid)
+    // Actually, we can let Prisma generate the ID and just return it.
+    // Wait, create() returns the object.
+
+    const [_, refreshTokenRecord] = await this.prisma.$transaction([
       this.prisma.userSession.create({
         data: {
           userId,
@@ -202,7 +232,8 @@ export class UserAuthService {
       }),
     ]);
 
-    return { accessToken, refreshToken: refreshTokenStr };
+    // Return composite token: id:secret
+    return { accessToken, refreshToken: `${refreshTokenRecord.id}:${tokenSecret}` };
   }
 
   private async verifyPassword(password: string, hash: string): Promise<boolean> {

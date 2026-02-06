@@ -110,7 +110,8 @@ export function createAuthMiddleware(prisma: PrismaClient) {
         }
 
         // NOTE: isTokenRevoked fails open on DB errors; monitor horizon_auth_blacklist_db_errors_total.
-        if (await isTokenRevoked(jwtPayload.jti, tenantId, prisma, { source: 'api' })) {
+        // Force non-null assertion for jti because parseJwt validates it, but type allows undefined
+        if (await isTokenRevoked(jwtPayload.jti!, tenantId, prisma, { source: 'api' })) {
           recordFailedAuth(clientIp);
           sendProblem(res, 401, 'Token has been revoked', {
             code: 'TOKEN_REVOKED',
@@ -126,8 +127,8 @@ export function createAuthMiddleware(prisma: PrismaClient) {
 
         req.auth = {
           tenantId,
-          authId: jwtPayload.jti,
-          apiKeyId: jwtPayload.jti, // Backward compatibility
+          authId: jwtPayload.jti!,
+          apiKeyId: jwtPayload.jti!, // Backward compatibility
           scopes,
           isFleetAdmin: scopes.includes('fleet:admin') || scopes.includes('*'),
           userId,

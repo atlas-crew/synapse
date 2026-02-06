@@ -462,6 +462,18 @@ export const rateLimiters: Record<string, RequestHandler> = {
   }),
 
   /**
+   * User authentication limiter: 5 requests per minute (labs-k3vx)
+   * Stricter limits for login endpoints to prevent credential stuffing.
+   * Applied to: /auth/login, /auth/refresh, etc.
+   */
+  userAuth: createRateLimiter({
+    maxRequests: 5,
+    windowMs: 60 * 1000,
+    message: 'Too many login attempts. Please wait 1 minute before trying again.',
+    trustProxy: getTrustedProxies(),
+  }),
+
+  /**
    * Global API rate limit: 1000 requests per minute (labs-mmft.7)
    * Provides baseline protection against DoS and resource exhaustion.
    */
