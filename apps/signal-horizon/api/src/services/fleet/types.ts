@@ -259,6 +259,7 @@ export interface SensorHeartbeat {
  */
 export interface BlueGreenDeploymentState {
   deploymentId: string;
+  tenantId: string;
   status: 'staging' | 'staged' | 'switching' | 'active' | 'retired' | 'failed';
   rules: Rule[];
   stagedAt?: Date;

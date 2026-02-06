@@ -17,6 +17,8 @@ import type {
   BlueGreenSensorStatus,
 } from './types.js';
 import type { FleetCommander } from './fleet-commander.js';
+import type { DeploymentStateStore } from './deployment-state-store.js';
+import { NoopDeploymentStateStore } from './deployment-state-store.js';
 
 /**
  * Error thrown when a tenant attempts to access sensors they don't own
@@ -41,10 +43,45 @@ export class RuleDistributor {
   private activeDeployments: Map<string, BlueGreenDeploymentState> = new Map();
   /** Track scheduled deployment timers for cancellation (deploymentId -> timer) */
   private scheduledTimers: Map<string, NodeJS.Timeout> = new Map();
+  private deploymentStateStore: DeploymentStateStore;
 
-  constructor(prisma: PrismaClient, logger: Logger) {
+  constructor(prisma: PrismaClient, logger: Logger, deploymentStateStore?: DeploymentStateStore) {
     this.prisma = prisma;
     this.logger = logger.child({ service: 'rule-distributor' });
+    this.deploymentStateStore = deploymentStateStore ?? new NoopDeploymentStateStore();
+
+    // Best-effort: hydrate deployments so status endpoints survive restart.
+    void this.hydrateActiveDeployments();
+  }
+
+  private async hydrateActiveDeployments(): Promise<void> {
+    try {
+      const deployments = await this.deploymentStateStore.loadAll();
+      for (const deployment of deployments) {
+        this.activeDeployments.set(deployment.deploymentId, deployment);
+      }
+      if (deployments.length > 0) {
+        this.logger.info({ count: deployments.length }, 'Hydrated blue/green deployments from state store');
+      }
+    } catch (error) {
+      this.logger.error({ error }, 'Failed to hydrate blue/green deployments from state store');
+    }
+  }
+
+  private async safeUpsertDeploymentState(state: BlueGreenDeploymentState): Promise<void> {
+    try {
+      await this.deploymentStateStore.upsert(state);
+    } catch (error) {
+      this.logger.error({ error, deploymentId: state.deploymentId, tenantId: state.tenantId }, 'Failed to persist deployment state');
+    }
+  }
+
+  private async safeDeleteDeploymentState(tenantId: string, deploymentId: string): Promise<void> {
+    try {
+      await this.deploymentStateStore.delete(tenantId, deploymentId);
+    } catch (error) {
+      this.logger.error({ error, deploymentId, tenantId }, 'Failed to delete deployment state');
+    }
   }
 
   // =============================================================================
@@ -974,11 +1011,13 @@ export class RuleDistributor {
     // Initialize deployment state
     const deploymentState: BlueGreenDeploymentState = {
       deploymentId,
+      tenantId,
       status: 'staging',
       rules,
       sensorStatus: new Map(),
     };
     this.activeDeployments.set(deploymentId, deploymentState);
+    await this.safeUpsertDeploymentState(deploymentState);
 
     try {
       // Phase 1: Stage green deployment to all sensors
@@ -1008,6 +1047,7 @@ export class RuleDistributor {
 
       deploymentState.status = 'staged';
       deploymentState.stagedAt = new Date();
+      await this.safeUpsertDeploymentState(deploymentState);
 
       this.logger.info(
         {
@@ -1020,10 +1060,12 @@ export class RuleDistributor {
 
       // Phase 3: Execute atomic switch
       deploymentState.status = 'switching';
+      await this.safeUpsertDeploymentState(deploymentState);
       await this.executeBlueGreenSwitch(tenantId, sensorIds, deploymentId, switchTimeout);
 
       deploymentState.status = 'active';
       deploymentState.activatedAt = new Date();
+      await this.safeUpsertDeploymentState(deploymentState);
 
       this.logger.info(
         {
@@ -1052,6 +1094,7 @@ export class RuleDistributor {
       };
     } catch (error) {
       deploymentState.status = 'failed';
+      await this.safeUpsertDeploymentState(deploymentState);
 
       this.logger.error(
         {
@@ -1137,6 +1180,9 @@ export class RuleDistributor {
     });
 
     await Promise.all(stagingPromises);
+
+    // Persist staged/pending states so other instances (or restart) can observe progress.
+    await this.safeUpsertDeploymentState(deployment);
   }
 
   /**
@@ -1280,6 +1326,7 @@ export class RuleDistributor {
 
     // Clean up deployment state
     this.activeDeployments.delete(deploymentId);
+    void this.safeDeleteDeploymentState(tenantId, deploymentId);
   }
 
   /**
@@ -1298,10 +1345,13 @@ export class RuleDistributor {
       if (deployment) {
         deployment.status = 'retired';
         deployment.retiredAt = new Date();
+        void this.safeUpsertDeploymentState(deployment);
       }
 
       // Remove from active tracking after some time
       setTimeout(() => {
+        const state = this.activeDeployments.get(deploymentId);
+        if (state) void this.safeDeleteDeploymentState(state.tenantId, deploymentId);
         this.activeDeployments.delete(deploymentId);
       }, 60000);
     }, delayMs);
@@ -1340,6 +1390,8 @@ export class RuleDistributor {
       status.error = error;
       status.lastUpdated = new Date();
     }
+
+    void this.safeUpsertDeploymentState(deployment);
   }
 
   /**
@@ -1359,6 +1411,8 @@ export class RuleDistributor {
       status.activeStatus = activated ? 'green' : 'blue';
       status.lastUpdated = new Date();
     }
+
+    void this.safeUpsertDeploymentState(deployment);
   }
 
   /**
