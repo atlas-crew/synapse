@@ -420,8 +420,6 @@ function App() {
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
                 <Route path="/auth-coverage" element={<SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper>} />
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
-                <Route path="/warroom" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
-                <Route path="/warroom/:id" element={<SignalHorizonPageWrapper><WarRoomPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support" element={<SupportPage />} />
                 
                 {fleetRoutes.map((route) => (
