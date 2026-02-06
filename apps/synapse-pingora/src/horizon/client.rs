@@ -20,6 +20,7 @@ use super::config::HorizonConfig;
 use super::error::HorizonError;
 use super::types::{
     AuthPayload, ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, ThreatSignal,
+    PROTOCOL_VERSION,
 };
 use crate::config_manager::ConfigManager;
 use crate::utils::circuit_breaker::CircuitBreaker;
@@ -601,6 +602,7 @@ async fn connect_and_run(
             sensor_id: config.sensor_id.clone(),
             sensor_name: config.sensor_name.clone(),
             version: config.version.clone(),
+            protocol_version: Some(PROTOCOL_VERSION.to_string()),
         },
     };
 
@@ -622,8 +624,13 @@ async fn connect_and_run(
                     sensor_id: _,
                     tenant_id: tid,
                     capabilities: caps,
+                    protocol_version: negotiated_version,
                 }) => {
-                    info!("Authenticated with Hub (tenant: {})", tid);
+                    if let Some(ref pv) = negotiated_version {
+                        info!("Authenticated with Hub (tenant: {}, protocol: {})", tid, pv);
+                    } else {
+                        info!("Authenticated with Hub (tenant: {})", tid);
+                    }
                     circuit_breaker.record_success().await;
                     *tenant_id.write() = Some(tid);
                     *capabilities.write() = caps;
@@ -1272,13 +1279,30 @@ async fn handle_hub_message<S>(
             )
             .await;
         }
-        HubMessage::AuthSuccess { tenant_id, sensor_id, capabilities } => {
-            info!("Auth success: tenant={} sensor={} capabilities={:?}", tenant_id, sensor_id, capabilities);
+        HubMessage::AuthSuccess { tenant_id, sensor_id, capabilities, protocol_version } => {
+            info!("Auth success: tenant={} sensor={} capabilities={:?} protocol={:?}", tenant_id, sensor_id, capabilities, protocol_version);
             // Auth is handled in connect_once, this is a redundant message
         }
         HubMessage::AuthFailed { error } => {
             error!("Auth failed (redundant): {}", error);
             // Auth failure is handled in connect_once, this shouldn't happen
+        }
+        HubMessage::TunnelOpen { tunnel_id, target_host, target_port } => {
+            warn!("Tunnel open requested (id: {}, target: {}:{}) but tunnels are not supported", tunnel_id, target_host, target_port);
+            let error_msg = SensorMessage::TunnelError {
+                tunnel_id,
+                code: "TUNNEL_UNSUPPORTED".to_string(),
+                message: "This sensor does not support tunnel connections".to_string(),
+            };
+            if let Ok(json) = error_msg.to_json() {
+                let _ = ws_tx.send(Message::Text(json.into())).await;
+            }
+        }
+        HubMessage::TunnelClose { tunnel_id } => {
+            warn!("Tunnel close requested (id: {}) but tunnels are not supported", tunnel_id);
+        }
+        HubMessage::TunnelData { tunnel_id, .. } => {
+            warn!("Tunnel data received (id: {}) but tunnels are not supported", tunnel_id);
         }
     }
 }

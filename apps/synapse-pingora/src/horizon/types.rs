@@ -145,7 +145,17 @@ pub enum SensorMessage {
     CommandAck {
         payload: CommandAckPayload,
     },
+    /// Tunnel error response (sent when hub requests unsupported tunnel)
+    TunnelError {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        code: String,
+        message: String,
+    },
 }
+
+/// Current protocol version for sensor ↔ hub communication.
+pub const PROTOCOL_VERSION: &str = "1.0";
 
 /// Authentication payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,6 +166,9 @@ pub struct AuthPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sensor_name: Option<String>,
     pub version: String,
+    /// Protocol version for wire-format negotiation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol_version: Option<String>,
 }
 
 /// Command Acknowledgment payload.
@@ -205,6 +218,9 @@ pub enum HubMessage {
         #[serde(rename = "tenantId")]
         tenant_id: String,
         capabilities: Vec<String>,
+        /// Protocol version negotiated by the hub.
+        #[serde(rename = "protocolVersion", skip_serializing_if = "Option::is_none")]
+        protocol_version: Option<String>,
     },
     /// Authentication failed
     AuthFailed {
@@ -295,6 +311,29 @@ pub enum HubMessage {
         command_id: String,
         payload: serde_json::Value,
     },
+    /// Tunnel open request from hub
+    #[serde(rename = "tunnel-open")]
+    TunnelOpen {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        #[serde(rename = "targetHost")]
+        target_host: String,
+        #[serde(rename = "targetPort")]
+        target_port: u16,
+    },
+    /// Tunnel close request from hub
+    #[serde(rename = "tunnel-close")]
+    TunnelClose {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+    },
+    /// Tunnel data from hub
+    #[serde(rename = "tunnel-data")]
+    TunnelData {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        data: String,
+    },
 }
 
 impl HubMessage {
@@ -381,13 +420,66 @@ mod tests {
                 sensor_id,
                 tenant_id,
                 capabilities,
+                protocol_version,
             } => {
                 assert_eq!(sensor_id, "s1");
                 assert_eq!(tenant_id, "t1");
                 assert_eq!(capabilities, vec!["signals"]);
+                assert_eq!(protocol_version, None);
             }
             _ => panic!("Expected AuthSuccess"),
         }
+    }
+
+    #[test]
+    fn test_hub_message_deserialization_with_protocol_version() {
+        let json = r#"{"type":"auth-success","sensorId":"s1","tenantId":"t1","capabilities":["signals"],"protocolVersion":"1.0"}"#;
+        let msg = HubMessage::from_json(json).unwrap();
+
+        match msg {
+            HubMessage::AuthSuccess {
+                sensor_id,
+                tenant_id,
+                capabilities,
+                protocol_version,
+            } => {
+                assert_eq!(sensor_id, "s1");
+                assert_eq!(tenant_id, "t1");
+                assert_eq!(capabilities, vec!["signals"]);
+                assert_eq!(protocol_version, Some("1.0".to_string()));
+            }
+            _ => panic!("Expected AuthSuccess"),
+        }
+    }
+
+    #[test]
+    fn test_auth_payload_serialization_with_protocol_version() {
+        let auth = SensorMessage::Auth {
+            payload: AuthPayload {
+                api_key: "key".to_string(),
+                sensor_id: "s1".to_string(),
+                sensor_name: None,
+                version: "1.0.0".to_string(),
+                protocol_version: Some(PROTOCOL_VERSION.to_string()),
+            },
+        };
+        let json = auth.to_json().unwrap();
+        assert!(json.contains("\"protocolVersion\":\"1.0\""));
+    }
+
+    #[test]
+    fn test_auth_payload_serialization_without_protocol_version() {
+        let auth = SensorMessage::Auth {
+            payload: AuthPayload {
+                api_key: "key".to_string(),
+                sensor_id: "s1".to_string(),
+                sensor_name: None,
+                version: "1.0.0".to_string(),
+                protocol_version: None,
+            },
+        };
+        let json = auth.to_json().unwrap();
+        assert!(!json.contains("protocolVersion"));
     }
 
     #[test]
@@ -401,6 +493,76 @@ mod tests {
                 assert!(payload.get("rules").is_some());
             }
             _ => panic!("Expected PushRules"),
+        }
+    }
+
+    #[test]
+    fn test_tunnel_open_deserialization() {
+        let json = r#"{"type":"tunnel-open","tunnelId":"t1","targetHost":"127.0.0.1","targetPort":8080}"#;
+        let msg = HubMessage::from_json(json).unwrap();
+        match msg {
+            HubMessage::TunnelOpen { tunnel_id, target_host, target_port } => {
+                assert_eq!(tunnel_id, "t1");
+                assert_eq!(target_host, "127.0.0.1");
+                assert_eq!(target_port, 8080);
+            }
+            _ => panic!("Expected TunnelOpen"),
+        }
+    }
+
+    #[test]
+    fn test_tunnel_close_deserialization() {
+        let json = r#"{"type":"tunnel-close","tunnelId":"t1"}"#;
+        let msg = HubMessage::from_json(json).unwrap();
+        match msg {
+            HubMessage::TunnelClose { tunnel_id } => {
+                assert_eq!(tunnel_id, "t1");
+            }
+            _ => panic!("Expected TunnelClose"),
+        }
+    }
+
+    #[test]
+    fn test_tunnel_data_deserialization() {
+        let json = r#"{"type":"tunnel-data","tunnelId":"t1","data":"aGVsbG8="}"#;
+        let msg = HubMessage::from_json(json).unwrap();
+        match msg {
+            HubMessage::TunnelData { tunnel_id, data } => {
+                assert_eq!(tunnel_id, "t1");
+                assert_eq!(data, "aGVsbG8=");
+            }
+            _ => panic!("Expected TunnelData"),
+        }
+    }
+
+    #[test]
+    fn test_tunnel_error_serialization() {
+        let msg = SensorMessage::TunnelError {
+            tunnel_id: "t1".to_string(),
+            code: "TUNNEL_UNSUPPORTED".to_string(),
+            message: "Not supported".to_string(),
+        };
+        let json = msg.to_json().unwrap();
+        assert!(json.contains("\"tunnelId\":\"t1\""));
+        assert!(json.contains("TUNNEL_UNSUPPORTED"));
+    }
+
+    #[test]
+    fn test_tunnel_error_roundtrip() {
+        let msg = SensorMessage::TunnelError {
+            tunnel_id: "t1".to_string(),
+            code: "TUNNEL_UNSUPPORTED".to_string(),
+            message: "Not supported".to_string(),
+        };
+        let json = msg.to_json().unwrap();
+        let parsed: SensorMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            SensorMessage::TunnelError { tunnel_id, code, message } => {
+                assert_eq!(tunnel_id, "t1");
+                assert_eq!(code, "TUNNEL_UNSUPPORTED");
+                assert_eq!(message, "Not supported");
+            }
+            _ => panic!("Expected TunnelError"),
         }
     }
 
