@@ -10,6 +10,8 @@ import type { Socket } from 'node:net';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
+import { config as globalConfig } from '../config.js';
+import { parseJwt, isTokenRevoked } from '../lib/jwt.js';
 import type {
   CampaignAlert,
   ThreatAlert,
@@ -34,6 +36,88 @@ interface DashboardConnection {
   subscriptions: Set<string>; // e.g., 'campaigns', 'threats', 'blocklist'
   /** API key ID for periodic revalidation (WS2-002) */
   apiKeyId: string | null;
+}
+
+/**
+ * Manages WebSocket subscription rooms for efficient broadcasting. (labs-s2gc)
+ */
+class SubscriptionManager {
+  // topic -> Set of connection IDs
+  private topicRooms: Map<string, Set<string>> = new Map();
+  // tenantId -> Set of connection IDs
+  private tenantRooms: Map<string, Set<string>> = new Map();
+  // Set of connection IDs for fleet admins
+  private fleetAdminRoom: Set<string> = new Set();
+
+  subscribe(connectionId: string, topic: string, tenantId: string | null, isFleetAdmin: boolean) {
+    // Add to topic room
+    if (!this.topicRooms.has(topic)) {
+      this.topicRooms.set(topic, new Set());
+    }
+    this.topicRooms.get(topic)!.add(connectionId);
+
+    // Add to tenant room or fleet admin room
+    if (isFleetAdmin) {
+      this.fleetAdminRoom.add(connectionId);
+    } else if (tenantId) {
+      if (!this.tenantRooms.has(tenantId)) {
+        this.tenantRooms.set(tenantId, new Set());
+      }
+      this.tenantRooms.get(tenantId)!.add(connectionId);
+    }
+  }
+
+  unsubscribe(connectionId: string, topic: string) {
+    this.topicRooms.get(topic)?.delete(connectionId);
+  }
+
+  removeConnection(connectionId: string) {
+    for (const room of this.topicRooms.values()) {
+      room.delete(connectionId);
+    }
+    for (const room of this.tenantRooms.values()) {
+      room.delete(connectionId);
+    }
+    this.fleetAdminRoom.delete(connectionId);
+  }
+
+  /**
+   * Get subscribers for a specific topic and tenant.
+   */
+  getSubscribers(topic: string, tenantId?: string, isFleetEvent?: boolean): string[] {
+    const topicSubscribers = this.topicRooms.get(topic);
+    if (!topicSubscribers || topicSubscribers.size === 0) return [];
+
+    const result = new Set<string>();
+
+    // 1. Fleet admins subscribed to this topic get everything
+    for (const connId of this.fleetAdminRoom) {
+      if (topicSubscribers.has(connId)) {
+        result.add(connId);
+      }
+    }
+
+    // 2. If it's a fleet event, all topic subscribers who can receive fleet data get it
+    // Note: Filtering by SharingPreference still needs to happen in broadcast() 
+    // unless we track that in rooms too. For now, we'll return all candidates.
+    if (isFleetEvent) {
+      for (const connId of topicSubscribers) {
+        result.add(connId);
+      }
+    } else if (tenantId) {
+      // 3. Tenant-specific event: only subscribers in that tenant's room
+      const tenantSubscribers = this.tenantRooms.get(tenantId);
+      if (tenantSubscribers) {
+        for (const connId of tenantSubscribers) {
+          if (topicSubscribers.has(connId)) {
+            result.add(connId);
+          }
+        }
+      }
+    }
+
+    return Array.from(result);
+  }
 }
 
 interface DashboardGatewayConfig {
@@ -62,6 +146,8 @@ export class DashboardGateway {
   private sequenceId = 0;
   /** Rate limiter for message flooding protection (WS-SEC-001) */
   private rateLimiter: WebSocketRateLimiter;
+  /** Subscription manager for efficient broadcasting (labs-s2gc) */
+  private subscriptionManager: SubscriptionManager;
 
   constructor(
     prisma: PrismaClient,
@@ -71,6 +157,7 @@ export class DashboardGateway {
     this.prisma = prisma;
     this.logger = logger.child({ gateway: 'dashboard' });
     this.config = config;
+    this.subscriptionManager = new SubscriptionManager();
 
     // Initialize rate limiter: 50 msg/s with burst of 75 (dashboard sends less than sensors)
     this.rateLimiter = new WebSocketRateLimiter({
@@ -100,15 +187,58 @@ export class DashboardGateway {
     this.logger.info({ path: this.config.path }, 'Dashboard gateway started');
   }
 
-  handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): void {
+  async handleUpgrade(req: IncomingMessage, socket: Socket, head: Buffer): Promise<void> {
     if (!this.wss) {
       socket.destroy();
       return;
     }
 
-    this.wss.handleUpgrade(req, socket, head, (ws) => {
-      this.wss?.emit('connection', ws, req);
-    });
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host}`);
+      const apiKey = url.searchParams.get('apiKey');
+      const token = url.searchParams.get('token');
+
+      // labs-8awg: Allow unauthenticated upgrade to support first-message auth protocol
+      // If no credentials provided, proceed to connection handler which enforces auth via timeout
+      if (!apiKey && !token) {
+        this.wss.handleUpgrade(req, socket, head, (ws) => {
+          this.wss?.emit('connection', ws, req);
+        });
+        return;
+      }
+
+      if (token) {
+        const secret = globalConfig.telemetry.jwtSecret;
+        if (!secret) throw new Error('Server configuration error');
+        
+        const jwtPayload = parseJwt(token, secret);
+        const tenantId = jwtPayload?.tenantId ?? jwtPayload?.tenant_id;
+        if (!jwtPayload || !jwtPayload.jti || !tenantId) {
+          throw new Error('Invalid token');
+        }
+        if (await isTokenRevoked(jwtPayload.jti, tenantId, this.prisma, { source: 'ws-dashboard', logger: this.logger })) {
+          throw new Error('Invalid token');
+        }
+      } else if (apiKey) {
+        const keyHash = await this.hashApiKey(apiKey);
+        const apiKeyRecord = await this.prisma.apiKey.findUnique({
+          where: { keyHash },
+          select: { isRevoked: true, scopes: true }
+        });
+
+        if (!apiKeyRecord || apiKeyRecord.isRevoked || !apiKeyRecord.scopes.includes('dashboard:read')) {
+          throw new Error('Invalid API key');
+        }
+      }
+
+      this.wss.handleUpgrade(req, socket, head, (ws) => {
+        this.wss?.emit('connection', ws, req);
+      });
+    } catch (error) {
+      this.logger.warn({ ip: socket.remoteAddress, error }, 'WebSocket upgrade authentication failed');
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+    }
   }
 
   stop(): void {
@@ -224,6 +354,7 @@ export class DashboardGateway {
     ws.on('close', () => {
       clearTimeout(authTimeout);
       this.connections.delete(connectionId);
+      this.subscriptionManager.removeConnection(connectionId); // labs-s2gc: Clean up subscriptions
       this.rateLimiter.removeConnection(connectionId); // Clean up rate limiter state
       this.logger.info({ connectionId }, 'Dashboard disconnected');
     });
@@ -232,6 +363,7 @@ export class DashboardGateway {
       this.logger.error({ error, connectionId }, 'Dashboard connection error');
       clearTimeout(authTimeout);
       this.connections.delete(connectionId);
+      this.subscriptionManager.removeConnection(connectionId); // labs-s2gc
     });
   }
 
@@ -242,7 +374,7 @@ export class DashboardGateway {
   ): Promise<void> {
     // Auth message is always allowed
     if (message.type === 'auth') {
-      await this.handleAuth(conn, message.payload?.apiKey, authTimeout);
+      await this.handleAuth(conn, message.payload, authTimeout);
       return;
     }
 
@@ -264,6 +396,13 @@ export class DashboardGateway {
       case 'subscribe':
         if (message.payload?.topic) {
           conn.subscriptions.add(message.payload.topic);
+          // labs-s2gc: Use room-based subscriptions
+          this.subscriptionManager.subscribe(
+            conn.id, 
+            message.payload.topic, 
+            conn.tenantId, 
+            conn.isFleetAdmin
+          );
           this.send(conn, {
             type: 'subscribed',
             topic: message.payload.topic,
@@ -275,6 +414,8 @@ export class DashboardGateway {
       case 'unsubscribe':
         if (message.payload?.topic) {
           conn.subscriptions.delete(message.payload.topic);
+          // labs-s2gc
+          this.subscriptionManager.unsubscribe(conn.id, message.payload.topic);
           this.send(conn, {
             type: 'unsubscribed',
             topic: message.payload.topic,
@@ -291,52 +432,107 @@ export class DashboardGateway {
 
   private async handleAuth(
     conn: DashboardConnection,
-    apiKey: string | undefined,
+    payload: { apiKey?: string; token?: string } | undefined,
     authTimeout: NodeJS.Timeout
   ): Promise<void> {
-    if (!apiKey) {
-      this.send(conn, { type: 'auth-failed', error: 'API key required' });
+    if (!payload || (!payload.apiKey && !payload.token)) {
+      this.send(conn, { type: 'auth-failed', error: 'API key or token required' });
       return;
     }
 
     try {
-      // Validate API key
-      const keyHash = await this.hashApiKey(apiKey);
-      const apiKeyRecord = await this.prisma.apiKey.findUnique({
-        where: { keyHash },
-        include: { tenant: true },
-      });
+      let tenantId: string;
+      let apiKeyId: string | null = null;
+      let sharingPreference: SharingPreference;
+      let isFleetAdmin = false;
 
-      if (!apiKeyRecord || apiKeyRecord.isRevoked) {
-        this.send(conn, { type: 'auth-failed', error: 'Invalid API key' });
-        conn.ws.close(4003, 'Invalid API key');
-        return;
-      }
+      if (payload.token) {
+        // JWT Authentication (P1-SEC-003)
+        const secret = globalConfig.telemetry.jwtSecret; // Reuse telemetry secret for now
+        if (!secret) {
+          this.send(conn, { type: 'auth-failed', error: 'Server configuration error' });
+          return;
+        }
 
-      // Check for dashboard:read scope
-      if (!apiKeyRecord.scopes.includes('dashboard:read')) {
-        this.send(conn, { type: 'auth-failed', error: 'Insufficient permissions' });
-        conn.ws.close(4003, 'Insufficient permissions');
-        return;
+        const jwtPayload = parseJwt(payload.token, secret);
+        const payloadTenantId = jwtPayload?.tenantId ?? jwtPayload?.tenant_id;
+        if (!jwtPayload || !jwtPayload.jti || !payloadTenantId) {
+          this.send(conn, { type: 'auth-failed', error: 'Invalid or expired token' });
+          return;
+        }
+
+        if (await isTokenRevoked(jwtPayload.jti, payloadTenantId, this.prisma, { source: 'ws-dashboard', logger: this.logger })) {
+          this.send(conn, { type: 'auth-failed', error: 'Token revoked' });
+          return;
+        }
+
+        tenantId = payloadTenantId;
+        isFleetAdmin = jwtPayload.scopes?.includes('fleet:admin') ?? false;
+
+        // Fetch tenant details
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { sharingPreference: true },
+        });
+
+        if (!tenant) {
+          this.send(conn, { type: 'auth-failed', error: 'Tenant not found' });
+          return;
+        }
+
+        sharingPreference = tenant.sharingPreference as SharingPreference;
+      } else if (payload.apiKey) {
+        // Legacy API Key Authentication
+        const keyHash = await this.hashApiKey(payload.apiKey);
+        const apiKeyRecord = await this.prisma.apiKey.findUnique({
+          where: { keyHash },
+          include: { tenant: true },
+        });
+
+        if (!apiKeyRecord || apiKeyRecord.isRevoked) {
+          this.send(conn, { type: 'auth-failed', error: 'Invalid API key' });
+          conn.ws.close(4003, 'Invalid API key');
+          return;
+        }
+
+        // Check for dashboard:read scope
+        if (!apiKeyRecord.scopes.includes('dashboard:read')) {
+          this.send(conn, { type: 'auth-failed', error: 'Insufficient permissions' });
+          conn.ws.close(4003, 'Insufficient permissions');
+          return;
+        }
+
+        tenantId = apiKeyRecord.tenantId;
+        apiKeyId = apiKeyRecord.id;
+        sharingPreference = apiKeyRecord.tenant.sharingPreference as SharingPreference;
+        isFleetAdmin = apiKeyRecord.scopes.includes('fleet:admin');
+      } else {
+        return; // Should not happen due to guard above
       }
 
       clearTimeout(authTimeout);
 
       // Update connection with auth info
       conn.isAuthenticated = true;
-      conn.tenantId = apiKeyRecord.tenantId;
-      conn.sharingPreference = apiKeyRecord.tenant.sharingPreference as SharingPreference;
-      conn.isFleetAdmin = apiKeyRecord.scopes.includes('fleet:admin');
-      conn.apiKeyId = apiKeyRecord.id; // Store for revalidation (WS2-002)
+      conn.tenantId = tenantId;
+      conn.sharingPreference = sharingPreference;
+      conn.isFleetAdmin = isFleetAdmin;
+      conn.apiKeyId = apiKeyId; // Store for revalidation (WS2-002)
 
-      // Set default subscriptions after auth
-      conn.subscriptions = new Set(['campaigns', 'threats', 'blocklist']);
+      // labs-s2gc: Initialize room-based subscriptions with defaults
+      const defaultTopics = ['campaigns', 'threats', 'blocklist'];
+      conn.subscriptions = new Set(defaultTopics);
+      for (const topic of defaultTopics) {
+        this.subscriptionManager.subscribe(conn.id, topic, conn.tenantId, conn.isFleetAdmin);
+      }
 
-      // Update API key last used
-      await this.prisma.apiKey.update({
-        where: { id: apiKeyRecord.id },
-        data: { lastUsedAt: new Date() },
-      });
+      // Update API key last used if applicable
+      if (apiKeyId) {
+        await this.prisma.apiKey.update({
+          where: { id: apiKeyId },
+          data: { lastUsedAt: new Date() },
+        });
+      }
 
       this.send(conn, {
         type: 'auth-success',
@@ -348,7 +544,12 @@ export class DashboardGateway {
       });
 
       this.logger.info(
-        { connectionId: conn.id, tenantId: conn.tenantId, isFleetAdmin: conn.isFleetAdmin },
+        { 
+          connectionId: conn.id, 
+          tenantId: conn.tenantId, 
+          isFleetAdmin: conn.isFleetAdmin,
+          authType: payload.token ? 'JWT' : 'API_KEY'
+        },
         'Dashboard authenticated'
       );
 
@@ -631,8 +832,12 @@ export class DashboardGateway {
   ): void {
     const payload = JSON.stringify(message);
 
-    for (const conn of this.connections.values()) {
-      if (!conn.isAuthenticated || !conn.subscriptions.has(topic)) {
+    // labs-s2gc: Use SubscriptionManager to get only relevant connections
+    const candidateIds = this.subscriptionManager.getSubscribers(topic, options.tenantId, options.isFleetEvent);
+
+    for (const connId of candidateIds) {
+      const conn = this.connections.get(connId);
+      if (!conn || !conn.isAuthenticated || !conn.subscriptions.has(topic)) {
         continue;
       }
 
