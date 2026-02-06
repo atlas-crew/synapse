@@ -11,13 +11,15 @@ use std::time::Duration;
 use synapse_pingora::{EntityManager, EntityConfig};
 use synapse_pingora::dlp::{DlpScanner, DlpConfig};
 use synapse_pingora::fingerprint::{extract_client_fingerprint, HttpHeaders};
+use synapse_pingora::horizon::{ThreatSignal, SignalType, Severity};
+use serde_json;
 
 // ============================================================================ 
 // 1. DLP Response Scanning
 // ============================================================================ 
 
 fn bench_dlp_scanning(c: &mut Criterion) {
-    let mut group = c.benchmark_group("goblins_dlp");
+    let mut group = c.benchmark_group("goblins/dlp_scanning");
     group.measurement_time(Duration::from_secs(10));
 
     let config = DlpConfig {
@@ -67,7 +69,7 @@ fn bench_dlp_scanning(c: &mut Criterion) {
 fn bench_ja4_generation(c: &mut Criterion) {
     use http::{HeaderName, HeaderValue};
 
-    let mut group = c.benchmark_group("goblins_ja4");
+    let mut group = c.benchmark_group("goblins/ja4_fingerprint");
 
     let headers: Vec<(HeaderName, HeaderValue)> = vec![
         (HeaderName::from_static("host"), HeaderValue::from_static("api.example.com")),
@@ -100,7 +102,7 @@ fn bench_ja4_generation(c: &mut Criterion) {
 // ============================================================================ 
 
 fn bench_entity_store_lru(c: &mut Criterion) {
-    let mut group = c.benchmark_group("goblins_store");
+    let mut group = c.benchmark_group("goblins/entity_lru");
 
     // Setup a full store
     let max_entities = 50_000;
@@ -146,11 +148,84 @@ fn bench_entity_store_lru(c: &mut Criterion) {
     group.finish();
 }
 
+// ============================================================================
+// 4. Horizon Signal Serialization
+// ============================================================================
+
+fn bench_horizon_serialization(c: &mut Criterion) {
+    let mut group = c.benchmark_group("goblins/horizon_serde");
+    group.measurement_time(Duration::from_secs(5));
+    group.sample_size(1000);
+
+    // Minimal signal (only required fields)
+    let minimal_signal = ThreatSignal::new(SignalType::IpThreat, Severity::High)
+        .with_confidence(0.85);
+
+    // Full signal (all optional fields populated)
+    let full_signal = ThreatSignal::new(SignalType::CampaignIndicator, Severity::Critical)
+        .with_source_ip("203.0.113.42")
+        .with_fingerprint("t13d1516h2_8daaf6152771_e5627efa2ab1")
+        .with_confidence(0.95)
+        .with_event_count(42)
+        .with_metadata(serde_json::json!({
+            "campaign_id": "CAMP-2024-001",
+            "technique": "credential_stuffing",
+            "targets": ["api.example.com", "login.example.com"],
+            "iocs": {
+                "ips": ["203.0.113.42", "198.51.100.23"],
+                "user_agents": ["python-requests/2.28", "Go-http-client/1.1"]
+            }
+        }));
+
+    // Serialization benchmarks
+    group.bench_function("minimal_to_string", |b| {
+        b.iter(|| black_box(serde_json::to_string(black_box(&minimal_signal)).unwrap()))
+    });
+
+    group.bench_function("minimal_to_vec", |b| {
+        b.iter(|| black_box(serde_json::to_vec(black_box(&minimal_signal)).unwrap()))
+    });
+
+    group.bench_function("full_to_string", |b| {
+        b.iter(|| black_box(serde_json::to_string(black_box(&full_signal)).unwrap()))
+    });
+
+    group.bench_function("full_to_vec", |b| {
+        b.iter(|| black_box(serde_json::to_vec(black_box(&full_signal)).unwrap()))
+    });
+
+    // Batch serialization (10 signals, simulating a telemetry flush)
+    let batch: Vec<ThreatSignal> = (0..10)
+        .map(|i| {
+            ThreatSignal::new(SignalType::RateAnomaly, Severity::Medium)
+                .with_source_ip(&format!("10.0.0.{}", i))
+                .with_confidence(0.5 + (i as f64) * 0.05)
+                .with_event_count(i as u32 + 1)
+        })
+        .collect();
+
+    group.bench_function("batch_10_to_vec", |b| {
+        b.iter(|| black_box(serde_json::to_vec(black_box(&batch)).unwrap()))
+    });
+
+    // Deserialization round-trip
+    let full_json = serde_json::to_string(&full_signal).unwrap();
+
+    group.bench_function("full_deserialize", |b| {
+        b.iter(|| {
+            black_box(serde_json::from_str::<ThreatSignal>(black_box(&full_json)).unwrap())
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     goblins,
     bench_dlp_scanning,
     bench_ja4_generation,
-    bench_entity_store_lru
+    bench_entity_store_lru,
+    bench_horizon_serialization,
 );
 
 criterion_main!(goblins);

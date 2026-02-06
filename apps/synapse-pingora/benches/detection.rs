@@ -268,6 +268,59 @@ fn bench_clean_requests(c: &mut Criterion) {
         );
     }
 
+    // Complex GET with many query parameters
+    let complex_get_uri = "/api/search?q=wireless+headphones&category=electronics&brand=sony&min_price=50&max_price=200&sort=relevance&page=1&limit=20&in_stock=true&rating=4";
+    group.bench_with_input(
+        BenchmarkId::new("detection", "complex_get_many_params"),
+        &complex_get_uri,
+        |b, uri| {
+            b.iter(|| {
+                black_box(DetectionEngine::analyze(
+                    black_box("GET"),
+                    black_box(uri),
+                    black_box(&[]),
+                    black_box(None),
+                ))
+            })
+        },
+    );
+
+    // POST with JSON body
+    let json_body = r#"{"username":"john_doe","email":"john@example.com","preferences":{"theme":"dark","notifications":true,"language":"en-US"}}"#;
+    let json_post_headers = vec![("content-type".to_string(), "application/json".to_string())];
+    group.bench_with_input(
+        BenchmarkId::new("detection", "post_json_body"),
+        &json_body,
+        |b, body| {
+            b.iter(|| {
+                black_box(DetectionEngine::analyze(
+                    black_box("POST"),
+                    black_box("/api/users/settings"),
+                    black_box(&json_post_headers),
+                    black_box(Some(body.as_bytes())),
+                ))
+            })
+        },
+    );
+
+    // POST with form data
+    let form_body = "username=john_doe&password=s3cur3P%40ss&remember=true&redirect=%2Fdashboard";
+    let form_headers = vec![("content-type".to_string(), "application/x-www-form-urlencoded".to_string())];
+    group.bench_with_input(
+        BenchmarkId::new("detection", "post_form_data"),
+        &form_body,
+        |b, body| {
+            b.iter(|| {
+                black_box(DetectionEngine::analyze(
+                    black_box("POST"),
+                    black_box("/api/login"),
+                    black_box(&form_headers),
+                    black_box(Some(body.as_bytes())),
+                ))
+            })
+        },
+    );
+
     group.finish();
 }
 
@@ -373,7 +426,7 @@ fn bench_throughput(c: &mut Criterion) {
         ("DELETE", "/api/users/123"),
     ];
 
-    let mut group = c.benchmark_group("throughput");
+    let mut group = c.benchmark_group("waf/throughput");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(1000);
     // Tell criterion we process 10 requests per iteration for correct ops/sec reporting
@@ -404,7 +457,7 @@ fn bench_sub_10us_verification(c: &mut Criterion) {
         ("cookie".to_string(), "session=abc".to_string()),
     ];
 
-    let mut group = c.benchmark_group("sub_10us_target");
+    let mut group = c.benchmark_group("waf/sub_10us_target");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(10000);
 
@@ -538,7 +591,7 @@ fn generate_clean_payload(size_kb: usize) -> String {
 }
 
 fn bench_dlp_body_inspection(c: &mut Criterion) {
-    let mut group = c.benchmark_group("dlp_body_inspection");
+    let mut group = c.benchmark_group("dlp/body_inspection");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(1000);
 
@@ -587,7 +640,7 @@ fn bench_dlp_body_inspection(c: &mut Criterion) {
 }
 
 fn bench_dlp_content_type_skip(c: &mut Criterion) {
-    let mut group = c.benchmark_group("dlp_content_type");
+    let mut group = c.benchmark_group("dlp/content_type_skip");
     group.measurement_time(Duration::from_secs(5));
     group.sample_size(10000);
 
@@ -627,7 +680,7 @@ fn bench_dlp_content_type_skip(c: &mut Criterion) {
 }
 
 fn bench_dlp_truncation_performance(c: &mut Criterion) {
-    let mut group = c.benchmark_group("dlp_truncation");
+    let mut group = c.benchmark_group("dlp/truncation");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(500);
 
@@ -664,7 +717,7 @@ fn bench_dlp_truncation_performance(c: &mut Criterion) {
 }
 
 fn bench_dlp_fast_mode(c: &mut Criterion) {
-    let mut group = c.benchmark_group("dlp_fast_mode");
+    let mut group = c.benchmark_group("dlp/fast_mode");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(1000);
 
@@ -716,7 +769,7 @@ fn bench_combined_waf_dlp(c: &mut Criterion) {
     // Ensure libsynapse engine is initialized with 237 rules
     DetectionEngine::ensure_init();
 
-    let mut group = c.benchmark_group("combined_waf_dlp");
+    let mut group = c.benchmark_group("pipeline/waf_plus_dlp");
     group.measurement_time(Duration::from_secs(10));
     group.sample_size(1000);
 
@@ -815,6 +868,205 @@ fn bench_combined_waf_dlp(c: &mut Criterion) {
     group.finish();
 }
 
+// ============================================================================
+// Rule Scaling & Large Body Benchmarks
+// ============================================================================
+
+fn bench_rule_scaling(c: &mut Criterion) {
+    let rules_path = "data/rules.json";
+    let rules_json = match fs::read(rules_path) {
+        Ok(data) => data,
+        Err(_) => {
+            eprintln!("WARNING: data/rules.json not found, skipping rule scaling benchmark");
+            return;
+        }
+    };
+
+    let mut group = c.benchmark_group("waf/rule_scaling");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(100);
+    group.noise_threshold(0.02);
+
+    // Parse rules to get total count, then test with subsets
+    // We create separate engines with different rule counts
+    let all_rules: Vec<serde_json::Value> = serde_json::from_slice(&rules_json)
+        .expect("Failed to parse rules.json as array");
+    let total = all_rules.len();
+
+    let test_request = SynapseRequest {
+        method: "GET",
+        path: "/api/search?q=test' OR '1'='1&page=1",
+        query: None,
+        headers: vec![
+            SynapseHeader::new("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+            SynapseHeader::new("cookie", "session=abc123"),
+        ],
+        body: None,
+        client_ip: "192.168.1.100",
+        is_static: false,
+    };
+
+    for count in [10, 50, 100, total] {
+        let subset: Vec<serde_json::Value> = all_rules.iter().take(count).cloned().collect();
+        let subset_json = serde_json::to_vec(&subset).unwrap();
+
+        let mut synapse = Synapse::new();
+        if let Err(e) = synapse.load_rules(&subset_json) {
+            eprintln!("Failed to load {} rules: {}", count, e);
+            continue;
+        }
+
+        let label = if count == total {
+            format!("all_{}", total)
+        } else {
+            format!("{}", count)
+        };
+
+        group.bench_with_input(
+            BenchmarkId::new("analyze", &label),
+            &synapse,
+            |b, engine| {
+                b.iter(|| black_box(engine.analyze(black_box(&test_request))))
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_dlp_large_bodies(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dlp/large_body");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(50);
+
+    let scanner = DlpScanner::new(DlpConfig {
+        max_body_inspection_bytes: 512 * 1024, // Raise cap to test large scans
+        ..Default::default()
+    });
+
+    for size_kb in [128, 512] {
+        let clean = generate_clean_payload(size_kb);
+        group.throughput(Throughput::Bytes(clean.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::new("scan", format!("clean_{}kb", size_kb)),
+            &clean,
+            |b, payload| b.iter(|| black_box(scanner.scan(black_box(payload)))),
+        );
+
+        let pii = generate_order_payload(size_kb);
+        group.throughput(Throughput::Bytes(pii.len() as u64));
+        group.bench_with_input(
+            BenchmarkId::new("scan", format!("pii_{}kb", size_kb)),
+            &pii,
+            |b, payload| b.iter(|| black_box(scanner.scan(black_box(payload)))),
+        );
+    }
+
+    group.finish();
+}
+
+// ============================================================================
+// Evasive Attacks & Mixed Traffic Benchmarks
+// ============================================================================
+
+fn bench_evasive_attacks(c: &mut Criterion) {
+    DetectionEngine::ensure_init();
+
+    let mut group = c.benchmark_group("evasive_attacks");
+    group.measurement_time(Duration::from_secs(5));
+    group.sample_size(200);
+
+    let evasion_payloads: Vec<(&str, &str)> = vec![
+        // Encoded XSS variants
+        ("xss_hex_encoded", "/search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E"),
+        ("xss_double_encoded", "/search?q=%253Cscript%253Ealert(1)%253C%252Fscript%253E"),
+        ("xss_unicode", "/search?q=\u{FF1C}script\u{FF1E}alert(1)\u{FF1C}/script\u{FF1E}"),
+        // Obfuscated SQLi
+        ("sqli_comment_bypass", "/search?q=1'/**/OR/**/1=1--"),
+        ("sqli_case_mixing", "/search?q=1'+uNiOn+SeLeCt+NuLl--"),
+        ("sqli_concat", "/search?q=1'+OR+'a'||'b'='ab'--"),
+        // Path traversal evasion
+        ("path_traversal_encoded", "/files/..%2F..%2F..%2Fetc%2Fpasswd"),
+        ("path_traversal_double_dot", "/files/....//....//....//etc/passwd"),
+        ("path_traversal_null_byte", "/files/../../../etc/passwd%00.png"),
+        // Command injection evasion
+        ("cmd_inj_newline", "/api/ping?host=127.0.0.1%0als+-la"),
+        ("cmd_inj_backtick", "/api/ping?host=`cat /etc/passwd`"),
+        // Polyglot
+        ("polyglot_xss_sqli", "/search?q='-alert(1)-'/**/OR/**/1=1--"),
+    ];
+
+    for (name, uri) in &evasion_payloads {
+        group.bench_with_input(
+            BenchmarkId::new("detection", *name),
+            uri,
+            |b, uri| {
+                b.iter(|| {
+                    black_box(DetectionEngine::analyze(
+                        black_box("GET"),
+                        black_box(uri),
+                        black_box(&[]),
+                        black_box(None),
+                    ))
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_mixed_traffic(c: &mut Criterion) {
+    DetectionEngine::ensure_init();
+
+    let mut group = c.benchmark_group("mixed_traffic");
+    group.measurement_time(Duration::from_secs(10));
+    group.sample_size(200);
+
+    // 95% benign / 5% attack ratio (more realistic than the existing 70/30 throughput bench)
+    let requests: Vec<(&str, &str)> = vec![
+        // 19 benign requests
+        ("GET", "/"),
+        ("GET", "/api/users/123"),
+        ("GET", "/api/products?page=1&limit=20"),
+        ("GET", "/static/main.css"),
+        ("GET", "/static/app.js"),
+        ("GET", "/api/health"),
+        ("GET", "/api/search?q=wireless+headphones"),
+        ("POST", "/api/login"),
+        ("GET", "/api/users/456/orders"),
+        ("PUT", "/api/users/123/settings"),
+        ("GET", "/api/categories"),
+        ("GET", "/images/logo.png"),
+        ("GET", "/api/notifications"),
+        ("DELETE", "/api/cart/items/789"),
+        ("GET", "/api/recommendations"),
+        ("POST", "/api/checkout"),
+        ("GET", "/api/users/123/profile"),
+        ("GET", "/api/inventory?sku=PROD-001"),
+        ("GET", "/favicon.ico"),
+        // 1 attack (5%)
+        ("GET", "/api/search?q=1'+UNION+SELECT+username,password+FROM+users--"),
+    ];
+
+    group.throughput(Throughput::Elements(requests.len() as u64));
+
+    group.bench_function("95_benign_5_attack", |b| {
+        b.iter(|| {
+            for (method, uri) in &requests {
+                black_box(DetectionEngine::analyze(
+                    black_box(method),
+                    black_box(uri),
+                    black_box(&[]),
+                    black_box(None),
+                ));
+            }
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_clean_requests,
@@ -829,6 +1081,10 @@ criterion_group!(
     bench_dlp_truncation_performance,
     bench_dlp_fast_mode,
     bench_combined_waf_dlp,
+    bench_rule_scaling,
+    bench_dlp_large_bodies,
+    bench_evasive_attacks,
+    bench_mixed_traffic,
 );
 
 criterion_main!(benches);

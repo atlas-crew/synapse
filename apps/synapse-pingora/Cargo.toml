@@ -137,6 +137,10 @@ harness = false
 name = "pipeline"
 harness = false
 
+[[bench]]
+name = "contention"
+harness = false
+
 [profile.release]
 lto = "thin"  # Changed from "fat" to reduce memory usage during linking
 codegen-units = 1
