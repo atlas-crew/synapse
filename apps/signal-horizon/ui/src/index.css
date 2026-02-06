@@ -1543,3 +1543,47 @@
     padding-right: 1.5rem;
   }
 }
+
+/* =========================================
+   PREFERS-REDUCED-MOTION — WCAG 2.3.3
+   Collapse all animations and transitions
+   for users who request reduced motion.
+   ========================================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .radar-sweep::before,
+  .data-stream::after,
+  .border-glow::after {
+    animation: none !important;
+    display: none !important;
+  }
+
+  .tactical-grid {
+    background-image: none !important;
+  }
+
+  .threat-pulse,
+  .status-blink,
+  .cursor-blink::after,
+  .grid-pulse {
+    animation: none !important;
+  }
+
+  .stagger-fade > * {
+    opacity: 1 !important;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .hover-lift:hover {
+    transform: none !important;
+  }
+}
