@@ -1,4 +1,4 @@
-# @edge-lab/synapse-api
+# synapse-api
 
 TypeScript client for the Synapse (risk-server) API - WAF sensor management, entity tracking, rule evaluation, and actor fingerprinting.
 
@@ -15,19 +15,19 @@ TypeScript client for the Synapse (risk-server) API - WAF sensor management, ent
 
 ```bash
 # npm
-npm install @edge-lab/synapse-api
+npm install synapse-api
 
 # pnpm
-pnpm add @edge-lab/synapse-api
+pnpm add synapse-api
 
 # yarn
-yarn add @edge-lab/synapse-api
+yarn add synapse-api
 ```
 
 ## Quick Start
 
 ```typescript
-import { SynapseClient } from '@edge-lab/synapse-api';
+import { SynapseClient } from 'synapse-api';
 
 const client = new SynapseClient({
   baseUrl: 'http://localhost:3000'
@@ -287,7 +287,7 @@ await client.setActorFingerprint('192.168.1.100', 'fp-abc123');
 ## Error Handling
 
 ```typescript
-import { SynapseClient, SynapseError } from '@edge-lab/synapse-api';
+import { SynapseClient, SynapseError } from 'synapse-api';
 
 try {
   await client.getStatus();
@@ -406,7 +406,7 @@ import type {
   ActorsResponse,
   ActorStats,
   SetFingerprintResponse,
-} from '@edge-lab/synapse-api';
+} from 'synapse-api';
 ```
 
 ---

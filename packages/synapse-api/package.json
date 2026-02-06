@@ -1,5 +1,5 @@
 {
-  "name": "@edge-lab/synapse-api",
+  "name": "synapse-api",
   "version": "0.1.0",
   "description": "TypeScript API client for Synapse (risk-server) - WAF sensor, entity management, and rule evaluation",
   "type": "module",
@@ -37,7 +37,6 @@
   "author": "Atlas Crew",
   "repository": {
     "type": "git",
-    "url": "https://github.com/atlascrew/atlascrew-monorepo.git",
     "directory": "packages/synapse-api"
   },
   "publishConfig": {

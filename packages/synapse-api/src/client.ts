@@ -50,7 +50,7 @@ interface ResolvedOptions {
  *
  * @example
  * ```typescript
- * import { SynapseClient } from '@edge-lab/synapse-api';
+ * import { SynapseClient } from 'synapse-api';
  *
  * const client = new SynapseClient({ baseUrl: 'http://localhost:3000' });
  *

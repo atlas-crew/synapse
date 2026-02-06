@@ -1,12 +1,12 @@
 /**
- * @edge-lab/synapse-api
+ * synapse-api
  *
  * TypeScript API client for Synapse (risk-server)
  * Provides typed access to WAF sensor, entity management, and rule evaluation APIs
  *
  * @example
  * ```typescript
- * import { SynapseClient } from '@edge-lab/synapse-api';
+ * import { SynapseClient } from 'synapse-api';
  *
  * const client = new SynapseClient({ baseUrl: 'http://localhost:3000' });
  * const status = await client.getStatus();
