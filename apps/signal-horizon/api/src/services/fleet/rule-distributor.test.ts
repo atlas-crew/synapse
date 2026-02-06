@@ -760,7 +760,7 @@ describe('RuleDistributor', () => {
       );
 
       // Simulate staging complete and let deployment finish to avoid hanging promise
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       if (deployments.length > 0) {
         const deploymentId = deployments[0].deploymentId;
         for (const sensorId of sensorIds) {
@@ -802,7 +802,7 @@ describe('RuleDistributor', () => {
       );
 
       // Simulate staging complete by marking sensors as staged
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(deployments.length).toBe(1);
       const deploymentId = deployments[0].deploymentId;
       for (const sensorId of sensorIds) {
@@ -896,7 +896,7 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      const activeDeployments = distributor.listActiveDeployments();
+      const activeDeployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(activeDeployments.length).toBe(1);
       const deploymentId = activeDeployments[0].deploymentId;
 
@@ -958,7 +958,7 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(deployments.length).toBe(1);
       const deploymentId = deployments[0].deploymentId;
 
@@ -985,12 +985,12 @@ describe('RuleDistributor', () => {
       await resultPromise;
 
       // Check listActiveDeployments
-      const activeDeployments = distributor.listActiveDeployments();
+      const activeDeployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(activeDeployments.length).toBe(1);
       expect(activeDeployments[0].status).toBe('active');
 
       // Check getDeploymentStatus
-      const deploymentStatus = distributor.getDeploymentStatus(activeDeployments[0].deploymentId);
+      const deploymentStatus = distributor.getDeploymentStatus(TEST_TENANT_ID, activeDeployments[0].deploymentId);
       expect(deploymentStatus).toBeDefined();
       expect(deploymentStatus?.status).toBe('active');
       expect(deploymentStatus?.activatedAt).toBeDefined();
@@ -1018,7 +1018,7 @@ describe('RuleDistributor', () => {
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(100);
       
-      const activeDeployments = distributor.listActiveDeployments();
+      const activeDeployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(activeDeployments.length).toBe(2);
 
       // Both should have sent staging commands
@@ -1091,13 +1091,13 @@ describe('RuleDistributor', () => {
       await vi.advanceTimersByTimeAsync(10);
       await Promise.resolve();
 
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(deployments.length).toBe(1);
       const deploymentId = deployments[0].deploymentId;
 
       // Wait for sensor status to initialize before marking staging complete
       await advanceUntil(
-        () => distributor.getDeploymentStatus(deploymentId)?.sensorStatus.get(sensorIds[0]),
+        () => distributor.getDeploymentStatus(TEST_TENANT_ID, deploymentId)?.sensorStatus.get(sensorIds[0]),
         { stepMs: 10, maxSteps: 50, description: 'sensor status initialization' }
       );
 
@@ -2533,14 +2533,14 @@ describe('RuleDistributor', () => {
         { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
       );
 
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       expect(deployments.length).toBe(1);
       const deploymentId = deployments[0].deploymentId;
 
       // Update staging status
       distributor.updateSensorStagingStatus(deploymentId, 'sensor-1', true);
 
-      const status = distributor.getDeploymentStatus(deploymentId);
+      const status = distributor.getDeploymentStatus(TEST_TENANT_ID, deploymentId);
       expect(status?.sensorStatus.get('sensor-1')?.stagingStatus).toBe('staged');
     });
 
@@ -2566,13 +2566,13 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       const deploymentId = deployments[0].deploymentId;
 
       // Update staging status with failure
       distributor.updateSensorStagingStatus(deploymentId, 'sensor-1', false, 'Disk full');
 
-      const status = distributor.getDeploymentStatus(deploymentId);
+      const status = distributor.getDeploymentStatus(TEST_TENANT_ID, deploymentId);
       expect(status?.sensorStatus.get('sensor-1')?.stagingStatus).toBe('failed');
       expect(status?.sensorStatus.get('sensor-1')?.error).toBe('Disk full');
     });
@@ -2599,7 +2599,7 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      const deployments = distributor.listActiveDeployments();
+      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
       const deploymentId = deployments[0].deploymentId;
 
       // Mark as staged first
@@ -2608,7 +2608,7 @@ describe('RuleDistributor', () => {
       // Then activate
       distributor.updateSensorActivationStatus(deploymentId, 'sensor-1', true);
 
-      const status = distributor.getDeploymentStatus(deploymentId);
+      const status = distributor.getDeploymentStatus(TEST_TENANT_ID, deploymentId);
       expect(status?.sensorStatus.get('sensor-1')?.activeStatus).toBe('green');
     });
 

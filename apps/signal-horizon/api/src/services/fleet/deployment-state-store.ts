@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { Logger } from 'pino';
 import type { BlueGreenDeploymentState, BlueGreenSensorStatus } from './types.js';
 import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, type RedisKv } from '../../storage/redis/index.js';
 
@@ -6,6 +8,7 @@ export interface DeploymentStateStore {
   getByDeploymentId(deploymentId: string): Promise<BlueGreenDeploymentState | null>;
   upsert(state: BlueGreenDeploymentState): Promise<void>;
   delete(tenantId: string, deploymentId: string): Promise<void>;
+  withDeploymentLock<T>(deploymentId: string, fn: (state: BlueGreenDeploymentState | null) => Promise<T>): Promise<T>;
 }
 
 export class NoopDeploymentStateStore implements DeploymentStateStore {
@@ -20,6 +23,9 @@ export class NoopDeploymentStateStore implements DeploymentStateStore {
   }
   async delete(_tenantId: string, _deploymentId: string): Promise<void> {
     // no-op
+  }
+  async withDeploymentLock<T>(_deploymentId: string, fn: (state: BlueGreenDeploymentState | null) => Promise<T>): Promise<T> {
+    return fn(null);
   }
 }
 
@@ -71,6 +77,7 @@ function sleep(ms: number): Promise<void> {
 
 export class RedisDeploymentStateStore implements DeploymentStateStore {
   private kv: RedisKv;
+  private logger: Logger;
   private namespace: string;
   private version: number;
   private stateDataType: string;
@@ -82,6 +89,7 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
 
   constructor(
     kv: RedisKv,
+    logger: Logger,
     options: {
       namespace?: string;
       version?: number;
@@ -93,6 +101,7 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
     } = {}
   ) {
     this.kv = kv;
+    this.logger = logger.child({ component: 'redis-deployment-state-store' });
     this.namespace = options.namespace ?? 'horizon';
     this.version = options.version ?? 1;
     this.stateDataType = options.stateDataType ?? 'blue-green-deployment';
@@ -145,20 +154,53 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
   }
 
   private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
-    const lockKey = this.indexLockKey();
+    return this.withLock(this.indexLockKey(), fn);
+  }
+
+  /**
+   * Execute a function protected by a distributed lock.
+   */
+  private async withLock<T>(lockKey: string, fn: () => Promise<T>, options: { ttl?: number } = {}): Promise<T> {
+    const lockValue = randomUUID();
+    const ttlSeconds = options.ttl ?? this.lockTtlSeconds;
 
     let lockAcquired = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      lockAcquired = await this.kv.set(lockKey, '1', { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
+    for (let attempt = 0; attempt < 5; attempt++) {
+      lockAcquired = await this.kv.set(lockKey, lockValue, { ttlSeconds, ifNotExists: true });
       if (lockAcquired) break;
-      await sleep(25 * (attempt + 1));
+      await sleep(50 * (attempt + 1));
+    }
+
+    if (!lockAcquired) {
+      this.logger.warn({ lockKey }, 'Failed to acquire lock, proceeding unprotected');
     }
 
     try {
       return await fn();
     } finally {
-      if (lockAcquired) await this.kv.del(lockKey);
+      if (lockAcquired) {
+        const current = await this.kv.get(lockKey);
+        if (current === lockValue) await this.kv.del(lockKey);
+      }
     }
+  }
+
+  /**
+   * Execute an atomic update on a deployment state.
+   */
+  async withDeploymentLock<T>(deploymentId: string, fn: (state: BlueGreenDeploymentState | null) => Promise<T>): Promise<T> {
+    const lockKey = buildRedisKey({
+      namespace: this.namespace,
+      version: this.version,
+      tenantId: this.indexTenantId,
+      dataType: 'lock',
+      id: ['deployment-update', deploymentId],
+    });
+
+    return this.withLock(lockKey, async () => {
+      const state = await this.getByDeploymentId(deploymentId);
+      return fn(state);
+    }, { ttl: 10 }); // 10s update lock
   }
 
   private async readIndex(): Promise<DeploymentIndexEntry[]> {
@@ -174,33 +216,35 @@ export class RedisDeploymentStateStore implements DeploymentStateStore {
 
   async loadAll(): Promise<BlueGreenDeploymentState[]> {
     const entries = await this.readIndex();
+    if (entries.length === 0) return [];
+
+    const keys = entries.map((e) => this.stateKey(e.tenantId, e.deploymentId));
+    const rawValues = this.kv.mget ? await this.kv.mget(keys) : await Promise.all(keys.map((k) => this.kv.get(k)));
+
     const loaded: BlueGreenDeploymentState[] = [];
     const stillPresent: DeploymentIndexEntry[] = [];
 
-    for (const entry of entries) {
-      const raw = await this.kv.get(this.stateKey(entry.tenantId, entry.deploymentId));
+    for (let i = 0; i < entries.length; i++) {
+      const raw = rawValues[i];
       if (!raw) continue;
 
       const parsed = jsonDecode<StoredBlueGreenDeploymentState>(raw, { maxBytes: 1024 * 1024 });
       loaded.push(deserializeState(parsed));
-      stillPresent.push(entry);
+      stillPresent.push(entries[i]);
 
       // Best-effort backfill: ensure deploymentId -> tenantId pointer exists.
       await this.kv
-        .set(this.byIdKey(entry.deploymentId), entry.tenantId, { ttlSeconds: TTL_SECONDS.session })
+        .set(this.byIdKey(entries[i].deploymentId), entries[i].tenantId, { ttlSeconds: TTL_SECONDS.session })
         .catch(() => {});
     }
 
-    // Best-effort cleanup of stale index entries. Keep this under lock to reduce
-    // risk of dropping concurrent upserts from other hub instances.
+    // Best-effort cleanup of stale index entries.
     if (stillPresent.length !== entries.length) {
       await this.withIndexLock(async () => {
         const current = await this.readIndex();
-        const filtered: DeploymentIndexEntry[] = [];
-        for (const entry of current) {
-          const raw = await this.kv.get(this.stateKey(entry.tenantId, entry.deploymentId));
-          if (raw) filtered.push(entry);
-        }
+        const currentKeys = current.map((e) => this.stateKey(e.tenantId, e.deploymentId));
+        const currentRaw = this.kv.mget ? await this.kv.mget(currentKeys) : await Promise.all(currentKeys.map((k) => this.kv.get(k)));
+        const filtered = current.filter((_, i) => currentRaw[i] !== null);
         await this.writeIndex(filtered);
       });
     }

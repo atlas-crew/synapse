@@ -1364,17 +1364,20 @@ export class RuleDistributor {
   }
 
   /**
-   * Get deployment status for a specific deployment
+   * Get deployment status for a specific deployment.
+   * Returns undefined when the deployment belongs to a different tenant.
    */
-  public getDeploymentStatus(deploymentId: string): BlueGreenDeploymentState | undefined {
-    return this.activeDeployments.get(deploymentId);
+  public getDeploymentStatus(tenantId: string, deploymentId: string): BlueGreenDeploymentState | undefined {
+    const deployment = this.activeDeployments.get(deploymentId);
+    if (deployment && deployment.tenantId !== tenantId) return undefined;
+    return deployment;
   }
 
   /**
-   * List all active deployments
+   * List all active deployments for the given tenant.
    */
-  public listActiveDeployments(): BlueGreenDeploymentState[] {
-    return Array.from(this.activeDeployments.values());
+  public listActiveDeployments(tenantId: string): BlueGreenDeploymentState[] {
+    return Array.from(this.activeDeployments.values()).filter((d) => d.tenantId === tenantId);
   }
 
   /**

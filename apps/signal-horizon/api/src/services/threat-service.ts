@@ -4,6 +4,7 @@
  * Replaces basic severity ranking with multi-factor threat scoring.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { Severity } from '../types/protocol.js';
 import { buildRedisKey, jsonDecode, jsonEncode, TTL_SECONDS, type RedisKv } from '../storage/redis/index.js';
@@ -111,6 +112,8 @@ export interface RecentSignalsStore {
   set(key: string, value: { count: number; lastSeen: number }): Promise<void>;
   delete(key: string): Promise<void>;
   entries(): Promise<[string, { count: number; lastSeen: number }][]>;
+  /** When true, the store handles its own expiry (e.g., Redis TTLs) and periodic cleanup can be skipped. */
+  readonly skipCleanup?: boolean;
 }
 
 /**
@@ -149,6 +152,10 @@ export class ResilientRecentSignalsStore implements RecentSignalsStore {
   private primary: RecentSignalsStore;
   private fallback: RecentSignalsStore;
   private lastWarnAtMs = 0;
+
+  get skipCleanup(): boolean {
+    return this.primary.skipCleanup === true;
+  }
 
   constructor(logger: Logger, primary: RecentSignalsStore, fallback: RecentSignalsStore) {
     this.logger = logger.child({ component: 'resilient-recent-signals-store' });
@@ -210,7 +217,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 export class RedisRecentSignalsStore implements RecentSignalsStore {
+  readonly skipCleanup = true;
+
   private kv: RedisKv;
+  private logger: Logger;
   private namespace: string;
   private version: number;
   private dataType: string;
@@ -222,6 +232,7 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
 
   constructor(
     kv: RedisKv,
+    logger: Logger,
     options: {
       namespace?: string;
       version?: number;
@@ -234,6 +245,7 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
     } = {}
   ) {
     this.kv = kv;
+    this.logger = logger.child({ component: 'redis-recent-signals-store' });
     this.namespace = options.namespace ?? 'horizon';
     this.version = options.version ?? 1;
     this.dataType = options.dataType ?? 'recent-signal-volume';
@@ -287,17 +299,25 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
 
   private async withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
     const lockKey = this.indexLockKey();
+    const lockValue = randomUUID();
     let lockAcquired = false;
     for (let attempt = 0; attempt < 3; attempt++) {
-      lockAcquired = await this.kv.set(lockKey, '1', { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
+      lockAcquired = await this.kv.set(lockKey, lockValue, { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
       if (lockAcquired) break;
       await sleep(25 * (attempt + 1));
+    }
+
+    if (!lockAcquired) {
+      this.logger.warn({ lockKey }, 'Failed to acquire index lock after 3 attempts, proceeding unprotected');
     }
 
     try {
       return await fn();
     } finally {
-      if (lockAcquired) await this.kv.del(lockKey);
+      if (lockAcquired) {
+        const current = await this.kv.get(lockKey);
+        if (current === lockValue) await this.kv.del(lockKey);
+      }
     }
   }
 
@@ -346,14 +366,19 @@ export class RedisRecentSignalsStore implements RecentSignalsStore {
 
   async entries(): Promise<[string, StoredRecentSignalEntry][]> {
     const entries = await this.readIndex();
+    if (entries.length === 0) return [];
+
+    const keys = entries.map((e) => this.entryKey(e.tenantId, e.id));
+    const rawValues = this.kv.mget ? await this.kv.mget(keys) : await Promise.all(keys.map((k) => this.kv.get(k)));
+
     const loaded: Array<[string, StoredRecentSignalEntry]> = [];
     const stillPresent: RecentSignalsIndexEntry[] = [];
 
-    for (const entry of entries) {
-      const raw = await this.kv.get(this.entryKey(entry.tenantId, entry.id));
+    for (let i = 0; i < entries.length; i++) {
+      const raw = rawValues[i];
       if (!raw) continue;
-      loaded.push([`t:${entry.tenantId}:${entry.id}`, jsonDecode<StoredRecentSignalEntry>(raw)]);
-      stillPresent.push(entry);
+      loaded.push([`t:${entries[i].tenantId}:${entries[i].id}`, jsonDecode<StoredRecentSignalEntry>(raw)]);
+      stillPresent.push(entries[i]);
     }
 
     // Best-effort index compaction.
@@ -502,6 +527,7 @@ export class ThreatService {
   }
 
   private async cleanupOnce(): Promise<void> {
+    if (this.recentSignals.skipCleanup) return;
     try {
       const cutoff = Date.now() - this.WINDOW_MS;
       const entries = await this.recentSignals.entries();

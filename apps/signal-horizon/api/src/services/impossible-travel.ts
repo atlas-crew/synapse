@@ -3,6 +3,7 @@
  * Identifies geographically impossible travel between login events.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { PrismaClient, Severity } from '@prisma/client';
 
@@ -98,6 +99,7 @@ function deserializeLoginEvent(event: StoredLoginEvent): LoginEvent {
 
 export class RedisUserHistoryStore implements UserHistoryStore {
   private kv: RedisKv;
+  private logger: Logger;
   private namespace: string;
   private version: number;
   private dataType: string;
@@ -105,6 +107,7 @@ export class RedisUserHistoryStore implements UserHistoryStore {
 
   constructor(
     kv: RedisKv,
+    logger: Logger,
     options: {
       namespace?: string;
       version?: number;
@@ -113,6 +116,7 @@ export class RedisUserHistoryStore implements UserHistoryStore {
     } = {}
   ) {
     this.kv = kv;
+    this.logger = logger.child({ component: 'redis-user-history-store' });
     this.namespace = options.namespace ?? 'horizon';
     this.version = options.version ?? 1;
     this.dataType = options.dataType ?? 'impossible-travel-user-history';
@@ -156,12 +160,17 @@ export class RedisUserHistoryStore implements UserHistoryStore {
     const ttlSeconds = applyTtlJitter(Math.ceil(options.historyWindowMs / 1000));
     const cutoff = Date.now() - options.historyWindowMs;
 
+    const lockValue = randomUUID();
     let lockAcquired = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      lockAcquired = await this.kv.set(lockKey, '1', { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
+    for (let attempt = 0; attempt < 5; attempt++) {
+      lockAcquired = await this.kv.set(lockKey, lockValue, { ttlSeconds: this.lockTtlSeconds, ifNotExists: true });
       if (lockAcquired) break;
       // Keep latency bounded; prefer making progress over waiting indefinitely.
-      await sleep(25 * (attempt + 1));
+      await sleep(50 * (attempt + 1));
+    }
+
+    if (!lockAcquired) {
+      this.logger.warn({ lockKey }, 'Failed to acquire history lock after 5 attempts, proceeding unprotected');
     }
 
     try {
@@ -175,7 +184,10 @@ export class RedisUserHistoryStore implements UserHistoryStore {
 
       return previous;
     } finally {
-      if (lockAcquired) await this.kv.del(lockKey);
+      if (lockAcquired) {
+        const current = await this.kv.get(lockKey);
+        if (current === lockValue) await this.kv.del(lockKey);
+      }
     }
   }
 

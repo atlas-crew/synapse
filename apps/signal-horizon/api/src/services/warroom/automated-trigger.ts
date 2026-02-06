@@ -364,8 +364,10 @@ export class AutomatedPlaybookTrigger {
     matchedSignals: EnrichedSignal[],
     matchReason: string
   ): Promise<void> {
-    // Check rate limit before each trigger
-    if (!(await this.checkRateLimit(tenantId))) {
+    // Atomically check and increment rate limit in a single operation.
+    // This prevents races where concurrent triggers both read a count below the
+    // limit, then both proceed past the check.
+    if (!(await this.checkAndIncrementRateLimit(tenantId))) {
       this.logger.warn(
         { tenantId, playbookId: playbook.id },
         'Rate limit exceeded for automated playbook triggers'
@@ -402,8 +404,6 @@ export class AutomatedPlaybookTrigger {
         tenantId,
         this.config.systemUser
       );
-
-      await this.incrementRateCount(tenantId);
 
       this.logger.info(
         {
@@ -531,40 +531,20 @@ export class AutomatedPlaybookTrigger {
   }
 
   /**
-   * Check rate limit for tenant
+   * Atomically check and increment the rate limit for a tenant.
+   * Uses a single atomic increment-and-get to eliminate the race between
+   * reading the count and incrementing it as separate operations.
+   * Returns true if the trigger is allowed, false if the rate limit is exceeded.
    */
-  private async checkRateLimit(tenantId: string): Promise<boolean> {
+  private async checkAndIncrementRateLimit(tenantId: string): Promise<boolean> {
     try {
-      const now = Date.now();
       const windowMs = 60_000; // 1 minute window
-
-      const record = await this.triggerCounts.get(tenantId);
-      if (!record || now - record.windowStart > windowMs) {
-        // New window
-        await this.triggerCounts.set(tenantId, { count: 0, windowStart: now });
-        return true;
-      }
-
-      return record.count < this.config.maxAutoTriggersPerMinute;
+      const newCount = await this.triggerCounts.incrementAndGet(tenantId, windowMs);
+      return newCount <= this.config.maxAutoTriggersPerMinute;
     } catch (error) {
       // Fail open: rate limiting is a safety rail, not correctness-critical.
       this.logger.warn({ error, tenantId }, 'Rate limit check failed');
       return true;
-    }
-  }
-
-  /**
-   * Increment rate count for tenant
-   */
-  private async incrementRateCount(tenantId: string): Promise<void> {
-    try {
-      const record = await this.triggerCounts.get(tenantId);
-      if (record) {
-        record.count++;
-        await this.triggerCounts.set(tenantId, record);
-      }
-    } catch (error) {
-      this.logger.warn({ error, tenantId }, 'Rate limit increment failed');
     }
   }
 
@@ -578,6 +558,7 @@ export class AutomatedPlaybookTrigger {
   }
 
   private async cleanupOnce(): Promise<void> {
+    if (this.triggerCounts.skipCleanup) return;
     try {
       const windowCutoff = Date.now() - 60_000;
       const entries = await this.triggerCounts.entries();
@@ -600,7 +581,6 @@ export class AutomatedPlaybookTrigger {
       this.cleanupInterval = null;
     }
     this.cooldownStore.stop();
-    void this.triggerCounts.clear();
     this.logger.info('Automated playbook trigger service stopped');
   }
 }

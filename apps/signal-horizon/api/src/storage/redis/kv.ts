@@ -17,6 +17,17 @@ export interface RedisKv {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, options?: RedisKvSetOptions): Promise<boolean>;
   del(key: string): Promise<number>;
+  /**
+   * Atomically increment a key by 1, returning the new value.
+   * If the key does not exist it is initialised to 0 before incrementing.
+   * Optionally sets a TTL (only applied when the key is first created, i.e. result === 1).
+   */
+  incr(key: string, options?: { ttlSeconds?: number }): Promise<number>;
+  /**
+   * Fetch multiple keys in a single round-trip (Redis MGET).
+   * Returns an array whose order matches `keys`; missing keys are `null`.
+   */
+  mget(keys: string[]): Promise<(string | null)[]>;
 }
 
 export interface IoredisLikeClient {
@@ -29,12 +40,16 @@ export interface IoredisLikeClient {
     flag?: 'NX'
   ): Promise<'OK' | null>;
   del(key: string): Promise<number>;
+  incr(key: string): Promise<number>;
+  expire(key: string, seconds: number): Promise<number>;
+  mget(...keys: string[]): Promise<(string | null)[]>;
 }
 
 export function createIoredisKv(client: IoredisLikeClient): RedisKv {
   return {
     get: (key) => client.get(key),
     del: (key) => client.del(key),
+    mget: (keys) => client.mget(...keys),
     async set(key, value, options) {
       const ttlSeconds = options?.ttlSeconds;
       const ifNotExists = options?.ifNotExists ?? false;
@@ -43,6 +58,14 @@ export function createIoredisKv(client: IoredisLikeClient): RedisKv {
       if (ttlSeconds) return (await client.set(key, value, 'EX', ttlSeconds)) === 'OK';
       if (ifNotExists) return (await client.set(key, value, undefined, undefined, 'NX')) === 'OK';
       return (await client.set(key, value)) === 'OK';
+    },
+    async incr(key, options) {
+      const result = await client.incr(key);
+      // Set TTL only when the key is newly created (value becomes 1).
+      if (options?.ttlSeconds && result === 1) {
+        await client.expire(key, options.ttlSeconds);
+      }
+      return result;
     },
   };
 }
@@ -55,12 +78,16 @@ export interface NodeRedisLikeClient {
     options?: { EX?: number; PX?: number; NX?: boolean; XX?: boolean }
   ): Promise<'OK' | null>;
   del(key: string): Promise<number>;
+  incr(key: string): Promise<number>;
+  expire(key: string, seconds: number): Promise<boolean>;
+  mget(keys: string[]): Promise<(string | null)[]>;
 }
 
 export function createNodeRedisKv(client: NodeRedisLikeClient): RedisKv {
   return {
     get: (key) => client.get(key),
     del: (key) => client.del(key),
+    mget: (keys) => client.mget(keys),
     async set(key, value, options) {
       const redisOptions: { EX?: number; NX?: boolean } = {};
       if (options?.ttlSeconds) redisOptions.EX = options.ttlSeconds;
@@ -69,6 +96,13 @@ export function createNodeRedisKv(client: NodeRedisLikeClient): RedisKv {
       // If no options, node-redis accepts undefined.
       const result = await client.set(key, value, Object.keys(redisOptions).length ? redisOptions : undefined);
       return result === 'OK';
+    },
+    async incr(key, options) {
+      const result = await client.incr(key);
+      if (options?.ttlSeconds && result === 1) {
+        await client.expire(key, options.ttlSeconds);
+      }
+      return result;
     },
   };
 }
