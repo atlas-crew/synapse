@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs;
 use std::path::PathBuf;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,6 +27,7 @@ use super::types::{
 use crate::config_manager::ConfigManager;
 use crate::utils::circuit_breaker::CircuitBreaker;
 use async_trait::async_trait;
+use crate::access::{check_ssrf, SsrfCheckResult};
 
 /// SignalSink - trait for targets that can receive threat signals.
 #[async_trait]
@@ -195,6 +197,11 @@ impl HorizonClient {
         }
 
         self.config.validate()?;
+
+        // SP-07: SSRF protection for hub URL (fail-closed in production/release builds).
+        if should_enforce_hub_url_ssrf() {
+            validate_hub_url_ssrf(&self.config.hub_url).await?;
+        }
 
         // Create channels
         let (signal_tx, signal_rx) = mpsc::channel::<ThreatSignal>(self.config.max_queued_signals);
@@ -532,6 +539,75 @@ enum ConnectionResult {
     AuthFailed,
     Disconnected { had_connection: bool },
     Stopped,
+}
+
+fn should_enforce_hub_url_ssrf() -> bool {
+    // Allow explicit override for local development and test rigs.
+    if std::env::var("SYNAPSE_ALLOW_INTERNAL_HORIZON_URL")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    // Enforce in release builds (production default); keep dev/test ergonomics in debug builds.
+    !cfg!(debug_assertions)
+}
+
+async fn validate_hub_url_ssrf(hub_url: &str) -> Result<(), HorizonError> {
+    let url = reqwest::Url::parse(hub_url)
+        .map_err(|e| HorizonError::ConfigError(format!("Invalid hub_url '{}': {}", hub_url, e)))?;
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| HorizonError::ConfigError("hub_url must include a hostname".to_string()))?;
+
+    if host.eq_ignore_ascii_case("localhost") {
+        return Err(HorizonError::ConfigError(
+            "hub_url resolves to localhost which is not allowed in production".to_string(),
+        ));
+    }
+
+    let port = url.port_or_known_default().unwrap_or(443);
+
+    // Literal IP address (no DNS) — validate directly.
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        let result = check_ssrf(&ip);
+        if result.is_blocked() {
+            return Err(HorizonError::ConfigError(format!(
+                "hub_url targets blocked address {} ({:?})",
+                ip, result
+            )));
+        }
+        return Ok(());
+    }
+
+    // Hostname — resolve to IPs and validate all results.
+    let mut any = false;
+    let addrs = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|e| HorizonError::ConfigError(format!("Failed to resolve hub_url host '{}': {}", host, e)))?;
+
+    for addr in addrs {
+        any = true;
+        let ip = addr.ip();
+        let result: SsrfCheckResult = check_ssrf(&ip);
+        if result.is_blocked() {
+            return Err(HorizonError::ConfigError(format!(
+                "hub_url resolves to blocked address {} ({:?})",
+                ip, result
+            )));
+        }
+    }
+
+    if !any {
+        return Err(HorizonError::ConfigError(format!(
+            "hub_url host '{}' did not resolve to any addresses",
+            host
+        )));
+    }
+
+    Ok(())
 }
 
 fn stash_pending(pending: &mut VecDeque<ThreatSignal>, batch: &mut Vec<ThreatSignal>) {
@@ -1363,6 +1439,29 @@ mod tests {
 
         assert!(client.is_ip_blocked("192.168.1.100"));
         assert!(!client.is_ip_blocked("192.168.1.101"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_hub_url_ssrf_blocks_cloud_metadata() {
+        let err = validate_hub_url_ssrf("wss://169.254.169.254/ws")
+            .await
+            .expect_err("expected metadata IP to be blocked");
+        assert!(matches!(err, HorizonError::ConfigError(_)));
+    }
+
+    #[tokio::test]
+    async fn test_validate_hub_url_ssrf_blocks_loopback() {
+        let err = validate_hub_url_ssrf("ws://127.0.0.1:1234/ws")
+            .await
+            .expect_err("expected loopback IP to be blocked");
+        assert!(matches!(err, HorizonError::ConfigError(_)));
+    }
+
+    #[tokio::test]
+    async fn test_validate_hub_url_ssrf_allows_public_ip() {
+        validate_hub_url_ssrf("wss://8.8.8.8/ws")
+            .await
+            .expect("expected public IP to be allowed");
     }
 
     // Note: send_batch tests removed - TestSink cannot be passed to send_batch
