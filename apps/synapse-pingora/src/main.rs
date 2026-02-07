@@ -51,7 +51,11 @@ use sysinfo::{Disks, System};
 use uuid::Uuid;
 
 // Admin API imports
-use synapse_pingora::admin_server::{start_admin_server, register_profiles_getter, register_schemas_getter, register_evaluate_callback, EvaluationResult};
+use synapse_pingora::admin_server::{
+    start_admin_server, register_profiles_getter, register_schemas_getter, 
+    register_evaluate_callback, register_integrations_callbacks,
+    EvaluationResult, IntegrationsConfig
+};
 use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
 use synapse_pingora::metrics::{ActiveRequestGuard, MetricsRegistry};
@@ -210,6 +214,9 @@ pub struct Config {
     pub horizon: HorizonConfig,
     #[serde(default)]
     pub tunnel: TunnelConfig,
+    /// URL for Apparatus integration
+    #[serde(default)]
+    pub apparatus_url: String,
     #[serde(default)]
     pub payload: PayloadConfig,
     #[serde(default)]
@@ -231,6 +238,7 @@ impl Default for Config {
             crawler: CrawlerConfig::default(),
             horizon: HorizonConfig::default(),
             tunnel: TunnelConfig::default(),
+            apparatus_url: String::new(),
             payload: PayloadConfig::default(),
             trends: TrendsConfig::default(),
         }
@@ -4951,6 +4959,28 @@ fn main() {
     // These callbacks allow the admin_server handlers to access real profile/schema data
     register_profiles_getter(|| DetectionEngine::get_profiles());
     register_schemas_getter(|| SCHEMA_LEARNER.get_all_schemas());
+
+    // Register integration configuration callbacks
+    let integration_config = Arc::new(parking_lot::RwLock::new(IntegrationsConfig {
+        horizon_hub_url: config.horizon.hub_url.clone(),
+        horizon_api_key: config.horizon.api_key.clone(),
+        tunnel_url: config.tunnel.url.clone(),
+        tunnel_api_key: config.tunnel.api_key.clone(),
+        apparatus_url: config.apparatus_url.clone(),
+    }));
+
+    let ic_getter = Arc::clone(&integration_config);
+    let ic_setter = Arc::clone(&integration_config);
+    register_integrations_callbacks(
+        move || ic_getter.read().clone(),
+        move |new_config| {
+            info!("Updating integrations configuration from admin dashboard");
+            let mut ic = ic_setter.write();
+            *ic = new_config;
+            // In a real implementation, we would also update the active managers
+            // or trigger a reload.
+        }
+    );
 
     // Register WAF evaluation callback for dry-run testing (Phase 2: Lab View)
     register_evaluate_callback(|method, uri, headers, body, client_ip| {

@@ -2,7 +2,7 @@
 
 server:
   listen: "127.0.0.1:6190"
-  admin_listen: "127.0.0.1:6192"
+  admin_listen: "127.0.0.1:6191"
   workers: 0
   waf_threshold: 75
   waf_enabled: true

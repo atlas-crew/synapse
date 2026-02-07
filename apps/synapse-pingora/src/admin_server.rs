@@ -32,6 +32,20 @@ type ProfilesGetter = Box<dyn Fn() -> Vec<crate::profiler::EndpointProfile> + Se
 // Note: Using profiler module's JsonEndpointSchema (schema_types::EndpointSchema) to avoid serde_json version conflicts
 type SchemasGetter = Box<dyn Fn() -> Vec<crate::profiler::JsonEndpointSchema> + Send + Sync>;
 
+/// Integration configuration for external services (Horizon, Tunnel, Apparatus)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IntegrationsConfig {
+    pub horizon_hub_url: String,
+    pub horizon_api_key: String,
+    pub tunnel_url: String,
+    pub tunnel_api_key: String,
+    pub apparatus_url: String,
+}
+
+// Type aliases for integration data accessors
+type IntegrationsGetter = Box<dyn Fn() -> IntegrationsConfig + Send + Sync>;
+type IntegrationsSetter = Box<dyn Fn(IntegrationsConfig) + Send + Sync>;
+
 /// Detection result from WAF evaluation (for admin API)
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EvaluationResult {
@@ -50,6 +64,10 @@ static PROFILES_GETTER: Lazy<RwLock<Option<ProfilesGetter>>> = Lazy::new(|| RwLo
 
 /// Global accessor for endpoint schemas (set by binary at startup)
 static SCHEMAS_GETTER: Lazy<RwLock<Option<SchemasGetter>>> = Lazy::new(|| RwLock::new(None));
+
+/// Global accessors for integrations (set by binary at startup)
+static INTEGRATIONS_GETTER: Lazy<RwLock<Option<IntegrationsGetter>>> = Lazy::new(|| RwLock::new(None));
+static INTEGRATIONS_SETTER: Lazy<RwLock<Option<IntegrationsSetter>>> = Lazy::new(|| RwLock::new(None));
 
 /// Global accessor for WAF evaluation (set by binary at startup)
 static EVALUATE_CALLBACK: Lazy<RwLock<Option<EvaluateCallback>>> = Lazy::new(|| RwLock::new(None));
@@ -70,6 +88,17 @@ where
     F: Fn() -> Vec<crate::profiler::JsonEndpointSchema> + Send + Sync + 'static,
 {
     *SCHEMAS_GETTER.write() = Some(Box::new(getter));
+}
+
+/// Register integration configuration callbacks.
+/// Called by the binary (main.rs) during startup.
+pub fn register_integrations_callbacks<G, S>(getter: G, setter: S)
+where
+    G: Fn() -> IntegrationsConfig + Send + Sync + 'static,
+    S: Fn(IntegrationsConfig) + Send + Sync + 'static,
+{
+    *INTEGRATIONS_GETTER.write() = Some(Box::new(getter));
+    *INTEGRATIONS_SETTER.write() = Some(Box::new(setter));
 }
 
 /// Register a callback for WAF evaluation (dry-run detection).
@@ -383,7 +412,7 @@ use futures_util::{SinkExt, StreamExt};
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
 use subtle::ConstantTimeEq;
 
@@ -1193,9 +1222,14 @@ pub async fn start_admin_server(
 
     // CORS configuration for dashboard access
     let cors = CorsLayer::new()
-        .allow_origin(["http://localhost:8081".parse().unwrap()])
+        .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
-        .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
+        .allow_headers([
+            header::CONTENT_TYPE, 
+            header::ACCEPT, 
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("x-admin-key")
+        ]);
 
     // Routes requiring admin:write scope (reload, test)
     let admin_write_routes = Router::new()
@@ -1293,7 +1327,10 @@ pub async fn start_admin_server(
 
     // Routes that are safe to expose without authentication (health check only).
     let public_routes = Router::new()
-        .route("/health", get(health_handler));
+        .route("/health", get(health_handler))
+        // Demo mode control (public for easier demoability)
+        .route("/_sensor/demo", get(sensor_demo_get_handler))
+        .route("/_sensor/demo/toggle", post(sensor_demo_toggle_handler).get(sensor_demo_toggle_handler));
 
     // WebSocket debugger routes with query/header auth support.
     let debugger_routes = Router::new()
@@ -1356,6 +1393,7 @@ pub async fn start_admin_server(
         .route("/_sensor/config/tarpit", get(config_tarpit_get_handler).put(config_tarpit_put_handler))
         .route("/_sensor/config/travel", get(config_travel_get_handler).put(config_travel_put_handler))
         .route("/_sensor/config/entity", get(config_entity_get_handler).put(config_entity_put_handler))
+        .route("/_sensor/config/integrations", get(config_integrations_get_handler).put(config_integrations_put_handler))
         // Log viewer endpoints moved to admin_read_routes (require admin:read)
         // Diagnostic bundle export
         .route("/_sensor/diagnostic-bundle", get(diagnostic_bundle_handler))
@@ -1751,6 +1789,25 @@ async fn waf_stats_handler(State(state): State<AdminState>) -> impl IntoResponse
 // =============================================================================
 // Dashboard Compatibility Routes (/_sensor/ prefix)
 // =============================================================================
+
+/// GET /_sensor/demo - Get demo mode status
+async fn sensor_demo_get_handler() -> impl IntoResponse {
+    let is_demo = is_demo_mode();
+    (StatusCode::OK, Json(serde_json::json!({ "success": true, "demo_mode": is_demo })))
+}
+
+/// POST /_sensor/demo/toggle - Toggle demo mode at runtime
+async fn sensor_demo_toggle_handler() -> impl IntoResponse {
+    let current = is_demo_mode();
+    if current {
+        DEMO_MODE.store(false, std::sync::atomic::Ordering::SeqCst);
+    } else {
+        enable_demo_mode();
+    }
+    let new_mode = is_demo_mode();
+    info!("Demo mode toggled to: {}", new_mode);
+    (StatusCode::OK, Json(serde_json::json!({ "success": true, "demo_mode": new_mode })))
+}
 
 /// GET /_sensor/status - Dashboard status endpoint
 /// Returns a format compatible with the dashboard's expected response.
@@ -5523,6 +5580,45 @@ async fn config_entity_put_handler(
         "success": true,
         "message": "Entity store configuration updated"
     })))
+}
+
+/// GET /_sensor/config/integrations - Get external integrations configuration
+async fn config_integrations_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
+    let config = INTEGRATIONS_GETTER
+        .read()
+        .as_ref()
+        .map(|getter| getter())
+        .unwrap_or_else(|| IntegrationsConfig {
+            horizon_hub_url: String::new(),
+            horizon_api_key: String::new(),
+            tunnel_url: String::new(),
+            tunnel_api_key: String::new(),
+            apparatus_url: String::new(),
+        });
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "data": config
+    })))
+}
+
+/// PUT /_sensor/config/integrations - Update external integrations configuration
+async fn config_integrations_put_handler(
+    State(_state): State<AdminState>,
+    Json(config): Json<IntegrationsConfig>,
+) -> impl IntoResponse {
+    if let Some(setter) = INTEGRATIONS_SETTER.read().as_ref() {
+        setter(config);
+        (StatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "message": "Integrations configuration updated"
+        })))
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
+            "success": false,
+            "message": "Configuration updates not supported by this sensor instance"
+        })))
+    }
 }
 
 // =============================================================================
