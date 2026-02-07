@@ -53,7 +53,7 @@ function ThreatEntry({ threat, ts }: { threat: Threat; ts: number }) {
   const { display, iso } = formatTimestamp(ts);
   return (
     <div className="py-2 space-y-0.5">
-      <time dateTime={iso} className="text-[10px] text-[#529EEC]/60">
+      <time dateTime={iso} className="text-xs text-[#529EEC]">
         {display}
       </time>
       <div className="text-sm text-white/90">{threat.indicator}</div>
@@ -61,7 +61,7 @@ function ThreatEntry({ threat, ts }: { threat: Threat; ts: number }) {
         <span className={getRiskBadgeClass(threat.riskScore)}>
           Risk: {Math.round(threat.riskScore)}
         </span>
-        <span className="text-white/40">{threat.hitCount.toLocaleString()} hits</span>
+        <span className="text-white/70">{threat.hitCount.toLocaleString()} hits</span>
         {threat.isFleetThreat && <span className="text-ac-magenta">FLEET</span>}
       </div>
     </div>
@@ -72,11 +72,11 @@ function AlertEntry({ alert, ts }: { alert: ThreatAlert; ts: number }) {
   const { display, iso } = formatTimestamp(ts);
   return (
     <div className="py-2 space-y-0.5">
-      <time dateTime={iso} className="text-[10px] text-[#529EEC]/60">
+      <time dateTime={iso} className="text-xs text-[#529EEC]">
         {display}
       </time>
       <div className="text-sm text-white/90">{alert.title}</div>
-      <div className="text-xs text-white/50">{alert.description}</div>
+      <div className="text-xs text-white/70">{alert.description}</div>
     </div>
   );
 }
@@ -114,9 +114,9 @@ export function ThreatTrajectoryFeed({ threats, alerts }: ThreatTrajectoryFeedPr
       </div>
 
       {/* Feed body */}
-      <div className="max-h-96 overflow-y-auto px-4 py-3 font-mono">
+      <div className="max-h-96 overflow-y-auto px-4 py-3 font-mono" tabIndex={0}>
         {timeline.length === 0 ? (
-          <div className="text-center text-[#529EEC]/40 py-8 font-mono text-sm">
+          <div className="text-center text-[#529EEC] py-8 font-mono text-sm">
             No threat activity detected
           </div>
         ) : (
