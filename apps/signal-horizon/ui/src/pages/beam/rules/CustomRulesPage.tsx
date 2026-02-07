@@ -379,7 +379,7 @@ export default function CustomRulesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Custom Rules</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Custom Rules</h1>
           <p className="text-ink-secondary mt-1">Loading rules...</p>
         </div>
         <StatsGridSkeleton />
@@ -393,7 +393,7 @@ export default function CustomRulesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Custom Rules</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Custom Rules</h1>
           <p className="text-ink-secondary mt-1">Custom rule creation and management</p>
         </div>
         <button className="px-4 py-2 bg-horizon-600 hover:bg-horizon-500 text-white font-medium transition-colors flex items-center gap-2">

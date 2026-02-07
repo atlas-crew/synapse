@@ -121,6 +121,7 @@ export function FleetHealthPage() {
         <MetricCard
           label="Critical Alerts"
           value={health?.criticalAlerts ?? criticalSensors.length}
+          description="Sensors offline or with CPU/memory above 90% requiring immediate attention"
           className="border-l-2 border-l-ac-red"
           labelClassName="text-ac-red"
           valueClassName="text-ac-red"
@@ -128,6 +129,7 @@ export function FleetHealthPage() {
         <MetricCard
           label="Warnings"
           value={health?.warningAlerts ?? warningSensors.length}
+          description="Sensors with degraded status or resource usage between 75-90%"
           className="border-l-2 border-l-ac-orange"
           labelClassName="text-ac-orange"
           valueClassName="text-ac-orange"

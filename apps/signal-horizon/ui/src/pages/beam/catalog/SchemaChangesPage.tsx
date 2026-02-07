@@ -319,7 +319,7 @@ export default function SchemaChangesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Schema Changes</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Schema Changes</h1>
           <p className="text-ink-secondary mt-1">Loading schema change data...</p>
         </div>
         <StatsGridSkeleton />
@@ -332,7 +332,7 @@ export default function SchemaChangesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-ink-primary">Schema Changes</h1>
+        <h1 className="text-2xl font-light text-ink-primary">Schema Changes</h1>
         <p className="text-ink-secondary mt-1">API schema drift detection and versioning</p>
       </div>
 

@@ -231,6 +231,7 @@ function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
+          <caption className="sr-only">Top endpoints ranked by bandwidth consumption</caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
@@ -463,7 +464,7 @@ export default function BandwidthDashboardPage() {
       <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading bandwidth dashboard">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-ink-primary">Bandwidth Dashboard</h1>
+            <h1 className="text-2xl font-light text-ink-primary">Bandwidth Dashboard</h1>
             <p className="text-ink-secondary mt-1">Loading bandwidth metrics...</p>
           </div>
         </div>
@@ -519,7 +520,7 @@ export default function BandwidthDashboardPage() {
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Bandwidth Dashboard</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Bandwidth Dashboard</h1>
           <p className="text-ink-secondary mt-1">Fleet-wide bandwidth metrics and billing analysis</p>
         </div>
         <div className="flex items-center gap-4">

@@ -330,6 +330,7 @@ function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
+          <caption className="sr-only">Top endpoints by traffic volume and block rate</caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
@@ -420,7 +421,7 @@ export default function TrafficAnalyticsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Traffic Analytics</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Traffic Analytics</h1>
           <p className="text-ink-secondary mt-1">Loading traffic data...</p>
         </div>
         <StatsGridSkeleton />
@@ -434,7 +435,7 @@ export default function TrafficAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Traffic Analytics</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Traffic Analytics</h1>
           <p className="text-ink-secondary mt-1">API traffic patterns and trends</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />

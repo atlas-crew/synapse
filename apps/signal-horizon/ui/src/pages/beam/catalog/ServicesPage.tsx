@@ -242,6 +242,7 @@ function ServiceCard({
       {isExpanded && endpoints && (
         <div className="border-t border-border-subtle">
           <table className="w-full">
+            <caption className="sr-only">Service endpoints with request and error metrics</caption>
             <thead>
               <tr className="text-left text-sm text-ink-secondary bg-surface-subtle">
                 <th className="px-5 py-2 font-medium">Endpoint</th>
@@ -332,7 +333,7 @@ export default function ServicesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Services</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Services</h1>
           <p className="text-ink-secondary mt-1">Loading service data...</p>
         </div>
         <StatsGridSkeleton />
@@ -345,7 +346,7 @@ export default function ServicesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-ink-primary">Services</h1>
+        <h1 className="text-2xl font-light text-ink-primary">Services</h1>
         <p className="text-ink-secondary mt-1">Endpoints grouped by service</p>
       </div>
 

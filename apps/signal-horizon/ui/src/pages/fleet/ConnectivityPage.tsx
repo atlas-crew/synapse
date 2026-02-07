@@ -258,7 +258,7 @@ export function ConnectivityPage(): React.ReactElement {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-ink-primary">Connectivity Monitor</h1>
+        <h1 className="text-2xl font-light text-ink-primary">Connectivity Monitor</h1>
         <p className="text-ink-secondary mt-1">
           Real-time network connectivity status and diagnostics
         </p>
@@ -269,24 +269,28 @@ export function ConnectivityPage(): React.ReactElement {
         <MetricCard
           label="Connected Sensors"
           value={stats.online}
+          description="Sensors with an active WebSocket connection to Signal Horizon"
           icon={<Wifi className="w-6 h-6" />}
           trend={{ value: 0, label: 'Online now' }}
         />
         <MetricCard
           label="Disconnected"
           value={stats.offline}
+          description="Sensors that have lost their connection and are not reporting"
           icon={<WifiOff className="w-6 h-6" />}
           trend={{ value: 0, label: 'Offline sensors' }}
         />
         <MetricCard
           label="Avg Latency"
           value={`${stats.avgLatency}ms`}
+          description="Average round-trip time for heartbeat pings across the fleet"
           icon={<Clock className="w-6 h-6" />}
           trend={{ value: 0, label: 'Response time' }}
         />
         <MetricCard
           label="Uptime (30D)"
           value={`${stats.uptime}%`}
+          description="Fleet-wide connection uptime percentage over the last 30 days"
           icon={<TrendingUp className="w-6 h-6" />}
           trend={{ value: 0, label: 'Last 30 days' }}
         />
@@ -437,6 +441,7 @@ export function ConnectivityPage(): React.ReactElement {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
+            <caption className="sr-only">Sensor connectivity status with latency and packet loss</caption>
             <thead className="bg-surface-subtle">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Sensor</th>

@@ -154,7 +154,7 @@ export function FleetOverviewPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Signal Array</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Signal Array</h1>
           <p className="text-ink-secondary">
             Sensor Fleet Command & Health Monitoring
             {lastUpdatedText && (
@@ -182,6 +182,7 @@ export function FleetOverviewPage() {
           iconColor="text-status-success"
           value={summary.onlineCount}
           label="Sensors Online"
+          description="Number of sensors currently connected and reporting telemetry"
           borderClassName="border-l-ac-green"
           valueClassName="text-ac-green"
         />
@@ -191,6 +192,7 @@ export function FleetOverviewPage() {
           iconColor="text-status-warning"
           value={summary.warningCount}
           label="Needs Attention"
+          description="Sensors with degraded performance, high resource usage, or reconnecting"
           borderClassName="border-l-ac-orange"
           valueClassName="text-ac-orange"
         />
@@ -200,6 +202,7 @@ export function FleetOverviewPage() {
           iconColor="text-status-error"
           value={summary.offlineCount}
           label="Offline"
+          description="Sensors that have stopped reporting and may need investigation"
           borderClassName="border-l-ac-red"
           valueClassName="text-ac-red"
         />
@@ -209,6 +212,7 @@ export function FleetOverviewPage() {
           iconColor="text-ac-purple"
           value={formatNumber(fleetMetrics.totalRps)}
           label="Requests/Min"
+          description="Total requests per minute across all online sensors"
           borderClassName="border-l-ac-purple"
           valueClassName="text-ac-purple"
         />
@@ -293,14 +297,14 @@ export function FleetOverviewPage() {
   );
 }
 
-function StatsCard({ icon: Icon, iconBg, iconColor, value, label, borderClassName, valueClassName }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string; borderClassName: string; valueClassName: string }) {
+function StatsCard({ icon: Icon, iconBg, iconColor, value, label, description, borderClassName, valueClassName }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string; description?: string; borderClassName: string; valueClassName: string }) {
   return (
     <div className={`card border border-border-subtle border-l-2 p-6 ${borderClassName}`}>
       <div className={`w-10 h-10 border border-border-subtle ${iconBg} flex items-center justify-center mb-3`}>
         <Icon className={`w-5 h-5 ${iconColor}`} />
       </div>
       <div className={`text-3xl font-light ${valueClassName}`}>{value}</div>
-      <div className="text-xs font-semibold text-ink-secondary uppercase tracking-wide mt-1">{label}</div>
+      <div className="text-xs font-semibold text-ink-secondary uppercase tracking-wide mt-1" title={description}>{label}</div>
     </div>
   );
 }

@@ -248,6 +248,7 @@ export function FleetUpdatesPage() {
         </div>
 
         <table className="min-w-full divide-y divide-border-subtle">
+          <caption className="sr-only">Fleet sensor versions and update status</caption>
           <thead className="bg-surface-subtle">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">

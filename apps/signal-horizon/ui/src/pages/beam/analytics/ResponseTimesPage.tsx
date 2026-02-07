@@ -305,6 +305,7 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
+          <caption className="sr-only">Slowest endpoints by response time percentiles</caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
@@ -382,7 +383,7 @@ export default function ResponseTimesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Response Times</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Response Times</h1>
           <p className="text-ink-secondary mt-1">Loading performance data...</p>
         </div>
         <StatsGridSkeleton />
@@ -396,7 +397,7 @@ export default function ResponseTimesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Response Times</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Response Times</h1>
           <p className="text-ink-secondary mt-1">Performance metrics and latency analysis</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />

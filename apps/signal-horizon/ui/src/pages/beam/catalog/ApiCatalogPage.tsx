@@ -498,7 +498,7 @@ export default function ApiCatalogPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">API Catalog</h1>
+          <h1 className="text-2xl font-light text-ink-primary">API Catalog</h1>
           <p className="text-ink-secondary mt-1">Loading endpoint data...</p>
         </div>
         <StatsGridSkeleton />
@@ -512,7 +512,7 @@ export default function ApiCatalogPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">API Catalog</h1>
+          <h1 className="text-2xl font-light text-ink-primary">API Catalog</h1>
           <p className="text-ink-secondary mt-1">Discovered endpoints and API inventory</p>
         </div>
         <div className="flex items-center gap-4">
@@ -568,6 +568,7 @@ export default function ApiCatalogPage() {
       <div className="bg-surface-card border border-border-subtle overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
+            <caption className="sr-only">API catalog endpoints with traffic and error metrics</caption>
             <thead>
               <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle bg-surface-subtle">
                 <SortableHeader

@@ -394,7 +394,7 @@ export default function AttackPatternsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Attack Patterns</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Attack Patterns</h1>
           <p className="text-ink-secondary mt-1">Loading pattern data...</p>
         </div>
         <StatsGridSkeleton />
@@ -407,7 +407,7 @@ export default function AttackPatternsPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-ink-primary">Attack Patterns</h1>
+        <h1 className="text-2xl font-light text-ink-primary">Attack Patterns</h1>
         <p className="text-ink-secondary mt-1">Pattern detection and threat intelligence</p>
       </div>
 

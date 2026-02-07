@@ -433,7 +433,7 @@ export default function BlockedRequestsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Blocked Requests</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Blocked Requests</h1>
           <p className="text-ink-secondary mt-1">Loading blocked requests...</p>
         </div>
         <StatsGridSkeleton />
@@ -447,7 +447,7 @@ export default function BlockedRequestsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Blocked Requests</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Blocked Requests</h1>
           <p className="text-ink-secondary mt-1">Review and analyze blocked API requests</p>
         </div>
         <button className="px-4 py-2 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors flex items-center gap-2">
@@ -501,6 +501,7 @@ export default function BlockedRequestsPage() {
         className="bg-surface-card border border-border-subtle overflow-hidden"
       >
         <table className="w-full">
+          <caption className="sr-only">Blocked requests with threat details and rule matches</caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary bg-surface-subtle">
               <th className="px-5 py-3 font-medium">Time</th>

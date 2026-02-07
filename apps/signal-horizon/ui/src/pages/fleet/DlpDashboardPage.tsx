@@ -87,14 +87,15 @@ export function DlpDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard label="Total Scans" value={stats?.totalScans?.toLocaleString() || '0'} />
-        <MetricCard 
-          label="Detected Leaks" 
-          value={stats?.totalMatches?.toLocaleString() || '0'} 
+        <MetricCard label="Total Scans" value={stats?.totalScans?.toLocaleString() || '0'} description="Cumulative response bodies scanned for sensitive data patterns" />
+        <MetricCard
+          label="Detected Leaks"
+          value={stats?.totalMatches?.toLocaleString() || '0'}
+          description="Responses matching DLP patterns (e.g., SSN, credit card, API keys)"
           className={stats && stats.totalMatches > 0 ? 'border-ac-red/40 shadow-[0_0_10px_rgba(239,68,68,0.1)]' : ''}
         />
-        <MetricCard label="Active Patterns" value={stats?.patternCount?.toString() || '0'} />
-        <MetricCard label="Avg Scan Time" value="42μs" className="text-ac-blue" />
+        <MetricCard label="Active Patterns" value={stats?.patternCount?.toString() || '0'} description="Number of DLP detection patterns currently enabled" />
+        <MetricCard label="Avg Scan Time" value="42μs" description="Average time to scan a single response body for sensitive data" className="text-ac-blue" />
       </div>
 
       <div className="card shadow-lg">
@@ -113,6 +114,7 @@ export function DlpDashboardPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
+            <caption className="sr-only">Data loss prevention violations with severity and source details</caption>
             <thead>
               <tr className="bg-surface-subtle/50 text-[10px] uppercase tracking-wider text-ink-muted font-bold border-b border-border-subtle">
                 <th className="px-6 py-3">Timestamp</th>

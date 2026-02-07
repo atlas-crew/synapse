@@ -430,7 +430,7 @@ export default function ActiveRulesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Active Rules</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Active Rules</h1>
           <p className="text-ink-secondary mt-1">Loading rules...</p>
         </div>
         <StatsGridSkeleton />
@@ -444,7 +444,7 @@ export default function ActiveRulesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Active Rules</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Active Rules</h1>
           <p className="text-ink-secondary mt-1">Protection rules and policies</p>
         </div>
         <div className="flex items-center gap-4">

@@ -363,6 +363,7 @@ function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
+          <caption className="sr-only">Endpoints with the highest error rates</caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Endpoint</th>
@@ -435,7 +436,7 @@ export default function ErrorAnalysisPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Error Analysis</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Error Analysis</h1>
           <p className="text-ink-secondary mt-1">Loading error data...</p>
         </div>
         <StatsGridSkeleton />
@@ -449,7 +450,7 @@ export default function ErrorAnalysisPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Error Analysis</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Error Analysis</h1>
           <p className="text-ink-secondary mt-1">Error rates and patterns</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />

@@ -224,7 +224,7 @@ export default function RuleTemplatesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Rule Templates</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Rule Templates</h1>
           <p className="text-ink-secondary mt-1">Loading templates...</p>
         </div>
         <CardSkeleton />
@@ -237,7 +237,7 @@ export default function RuleTemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Rule Templates</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Rule Templates</h1>
           <p className="text-ink-secondary mt-1">Pre-built protection templates</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-ink-secondary">

@@ -223,7 +223,7 @@ export function SensorKeysPage(): React.ReactElement {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-white">API Key Management</h1>
+          <h1 className="text-2xl font-light text-white">API Key Management</h1>
           <p className="text-gray-400 mt-1">Manage sensor authentication keys and permissions</p>
         </div>
         <button
@@ -267,6 +267,7 @@ export function SensorKeysPage(): React.ReactElement {
       <div className="bg-gray-800/50 border border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
+            <caption className="sr-only">Sensor API keys with expiration and usage status</caption>
             <thead className="bg-gray-700/50">
               <tr>
                 <th

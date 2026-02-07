@@ -219,7 +219,7 @@ export function SensorConfigPage() {
             { label: sensor?.name || 'Sensor', to: `/fleet/sensors/${id}` },
             { label: 'Advanced Configuration' },
           ]} />
-          <h1 className="text-xl font-semibold text-ink-primary">Advanced Configuration</h1>
+          <h1 className="text-xl font-light text-ink-primary">Advanced Configuration</h1>
         </div>
         <div className="flex items-center gap-3">
           {/* View Mode Tabs */}

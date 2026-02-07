@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
+import { PersistentTooltip } from '../../components/ui/PersistentTooltip';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import {
   Shield,
@@ -79,9 +79,10 @@ interface StatCardProps {
   trend?: { value: number; period: string };
   color: string;
   bgColor: string;
+  description?: string;
 }
 
-function StatCard({ icon: Icon, label, value, trend, color, bgColor }: StatCardProps) {
+function StatCard({ icon: Icon, label, value, trend, color, bgColor, description }: StatCardProps) {
   const trendColor = trend && trend.value >= 0 ? 'text-ac-green' : 'text-ac-red';
   const TrendIcon = trend && trend.value >= 0 ? TrendingUp : TrendingDown;
 
@@ -93,7 +94,7 @@ function StatCard({ icon: Icon, label, value, trend, color, bgColor }: StatCardP
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-ink-secondary">{label}</p>
+          <p className="text-sm font-medium text-ink-secondary" title={description}>{label}</p>
           <p className="mt-2 text-3xl font-light text-ink-primary">{value.toLocaleString()}</p>
           {trend && (
             <div className={clsx('mt-2 flex items-center gap-1 text-sm', trendColor)}>
@@ -164,11 +165,7 @@ function TrafficChart({ data }: TrafficChartProps) {
               tickLine={false}
               tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
             />
-            <Tooltip
-              contentStyle={TOOLTIP_CONTENT_STYLE}
-              labelStyle={TOOLTIP_LABEL_STYLE}
-              itemStyle={TOOLTIP_ITEM_STYLE}
-            />
+            <Tooltip content={<PersistentTooltip />} />
             <Area
               type="monotone"
               dataKey="requests"
@@ -326,6 +323,7 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
+          <caption className="sr-only">Recently blocked requests with threat classification</caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Time</th>
@@ -537,7 +535,7 @@ export default function BeamDashboardPage() {
       <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading Beam dashboard">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-ink-primary">Beam Protection Dashboard</h1>
+            <h1 className="text-2xl font-light text-ink-primary">Beam Protection Dashboard</h1>
             <p className="text-ink-secondary mt-1">Loading protection status...</p>
           </div>
         </div>
@@ -567,7 +565,7 @@ export default function BeamDashboardPage() {
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Beam Protection Dashboard</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Beam Protection Dashboard</h1>
           <p className="text-ink-secondary mt-1">Real-time API security overview</p>
         </div>
         <div className="flex items-center gap-4">
@@ -587,6 +585,7 @@ export default function BeamDashboardPage() {
           trend={{ value: 12, period: 'vs yesterday' }}
           color="text-ac-blue"
           bgColor="bg-ac-blue/10"
+          description="Total API requests processed across all monitored endpoints in the last 24 hours"
         />
         <StatCard
           icon={Shield}
@@ -595,6 +594,7 @@ export default function BeamDashboardPage() {
           trend={{ value: -8, period: 'vs yesterday' }}
           color="text-ac-red"
           bgColor="bg-ac-red/10"
+          description="Requests blocked by WAF rules including SQL injection, XSS, and bot traffic"
         />
         <StatCard
           icon={Target}
@@ -603,6 +603,7 @@ export default function BeamDashboardPage() {
           trend={{ value: 3, period: 'new this week' }}
           color="text-ac-purple"
           bgColor="bg-ac-purple/10"
+          description="Distinct API endpoints discovered and monitored by the profiler"
         />
         <StatCard
           icon={Shield}
@@ -610,6 +611,7 @@ export default function BeamDashboardPage() {
           value={`${coveragePercent}%`}
           color="text-ac-green"
           bgColor="bg-ac-green/10"
+          description="Percentage of discovered endpoints protected by at least one WAF rule"
         />
       </section>
 

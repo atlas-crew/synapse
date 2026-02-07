@@ -458,7 +458,7 @@ export default function ThreatActivityPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Threat Activity</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Threat Activity</h1>
           <p className="text-ink-secondary mt-1">Loading threat data...</p>
         </div>
         <StatsGridSkeleton />
@@ -472,7 +472,7 @@ export default function ThreatActivityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Threat Activity</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Threat Activity</h1>
           <p className="text-ink-secondary mt-1">Real-time threat monitoring and incident response</p>
         </div>
         <div className="flex items-center gap-4">

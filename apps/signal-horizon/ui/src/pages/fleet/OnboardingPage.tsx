@@ -211,7 +211,7 @@ export function OnboardingPage(): React.ReactElement {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-ink-primary">Sensor Onboarding</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Sensor Onboarding</h1>
           <p className="text-sm text-ink-secondary mt-1">
             Manage registration tokens and approve pending sensors
           </p>
