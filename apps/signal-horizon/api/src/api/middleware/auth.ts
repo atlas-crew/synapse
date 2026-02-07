@@ -10,7 +10,7 @@ import type { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { config } from '../../config.js';
 import { sendProblem } from '../../lib/problem-details.js';
-import { isTokenRevoked, parseJwt, type JwtPayload } from '../../lib/jwt.js';
+import { verifyAndDecodeToken, type JwtPayload } from '../../lib/jwt.js';
 import { getEpochForTenant, EpochLookupError } from '../../lib/epoch.js';
 import type { RedisKv } from '../../storage/redis/kv.js';
 import {
@@ -92,40 +92,13 @@ export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) 
 
     try {
       const jwtSecret = config.telemetry.jwtSecret;
-      const jwtPayload: JwtPayload | null = jwtSecret ? parseJwt(token, jwtSecret, { audience: 'signal-horizon' }) : null;
+      const jwtResult = jwtSecret
+        ? await verifyAndDecodeToken(token, jwtSecret, prisma, { audience: 'signal-horizon', source: 'api' })
+        : null;
 
-      if (jwtPayload) {
-
-        if (!jwtPayload.jti) {
-          recordFailedAuth(clientIp);
-          sendProblem(res, 401, 'Invalid token payload', {
-            code: 'INVALID_TOKEN',
-            instance: req.originalUrl,
-          });
-          return;
-        }
-
-        // Type narrowing: Check if it's a UserSessionPayload
-        const tenantId = 'tenantId' in jwtPayload ? jwtPayload.tenantId : jwtPayload.tenant_id;
-        if (!tenantId) {
-          recordFailedAuth(clientIp);
-          sendProblem(res, 401, 'Invalid token payload', {
-            code: 'INVALID_TOKEN',
-            instance: req.originalUrl,
-          });
-          return;
-        }
-
-        // NOTE: isTokenRevoked fails open on DB errors; monitor horizon_auth_blacklist_db_errors_total.
-        // Force non-null assertion for jti because parseJwt validates it, but type allows undefined
-        if (await isTokenRevoked(jwtPayload.jti!, tenantId, prisma, { source: 'api' })) {
-          recordFailedAuth(clientIp);
-          sendProblem(res, 401, 'Token has been revoked', {
-            code: 'TOKEN_REVOKED',
-            instance: req.originalUrl,
-          });
-          return;
-        }
+      if (jwtResult?.ok) {
+        const jwtPayload: JwtPayload = jwtResult.payload;
+        const tenantId = jwtResult.tenantId;
 
         // Epoch-based bulk revocation check (labs-wqy1)
         // If Redis is available and the JWT carries an epoch claim, verify it
@@ -169,14 +142,32 @@ export function createAuthMiddleware(prisma: PrismaClient, kv?: RedisKv | null) 
 
         req.auth = {
           tenantId,
-          authId: jwtPayload.jti!,
-          apiKeyId: jwtPayload.jti!, // Backward compatibility
+          authId: jwtResult.jti,
+          apiKeyId: jwtResult.jti, // Backward compatibility
           scopes,
           isFleetAdmin: scopes.includes('fleet:admin') || scopes.includes('*'),
           userId,
         };
 
         next();
+        return;
+      }
+
+      if (jwtResult && !jwtResult.ok && jwtResult.error === 'invalid_payload') {
+        recordFailedAuth(clientIp);
+        sendProblem(res, 401, 'Invalid token payload', {
+          code: 'INVALID_TOKEN',
+          instance: req.originalUrl,
+        });
+        return;
+      }
+
+      if (jwtResult && !jwtResult.ok && jwtResult.error === 'revoked') {
+        recordFailedAuth(clientIp);
+        sendProblem(res, 401, 'Token has been revoked', {
+          code: 'TOKEN_REVOKED',
+          instance: req.originalUrl,
+        });
         return;
       }
 

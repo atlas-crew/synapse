@@ -117,6 +117,10 @@ export interface ParseJwtOptions {
   audience?: string;
 }
 
+export type VerifyAndDecodeTokenResult =
+  | { ok: true; payload: JwtPayload; tenantId: string; jti: string }
+  | { ok: false; error: 'invalid' | 'invalid_payload' | 'revoked' };
+
 /**
  * Parses and validates an HS256 JWT.
  */
@@ -151,6 +155,30 @@ export function parseJwt(token: string, secret: string, options?: ParseJwtOption
   } catch {
     return null;
   }
+}
+
+/**
+ * Verify JWT signature/claims and apply server-side revocation checks.
+ * Shared between HTTP middleware and WebSocket gateways (labs-w011).
+ */
+export async function verifyAndDecodeToken(
+  token: string,
+  secret: string,
+  prisma: PrismaClient,
+  options?: ParseJwtOptions & { source?: string; logger?: Logger }
+): Promise<VerifyAndDecodeTokenResult> {
+  const payload = parseJwt(token, secret, options);
+  if (!payload) return { ok: false, error: 'invalid' };
+  if (!payload.jti) return { ok: false, error: 'invalid_payload' };
+
+  const tenantId = payload.tenantId ?? payload.tenant_id;
+  if (!tenantId) return { ok: false, error: 'invalid_payload' };
+
+  if (await isTokenRevoked(payload.jti, tenantId, prisma, { source: options?.source, logger: options?.logger })) {
+    return { ok: false, error: 'revoked' };
+  }
+
+  return { ok: true, payload, tenantId, jti: payload.jti };
 }
 
 /**

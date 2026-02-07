@@ -11,7 +11,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import { config as globalConfig } from '../config.js';
-import { parseJwt, isTokenRevoked } from '../lib/jwt.js';
+import { verifyAndDecodeToken } from '../lib/jwt.js';
 import type {
   CampaignAlert,
   ThreatAlert,
@@ -244,15 +244,13 @@ export class DashboardGateway {
       if (token) {
         const secret = globalConfig.telemetry.jwtSecret;
         if (!secret) throw new Error('Server configuration error');
-        
-        const jwtPayload = parseJwt(token, secret);
-        const tenantId = jwtPayload?.tenantId ?? jwtPayload?.tenant_id;
-        if (!jwtPayload || !jwtPayload.jti || !tenantId) {
-          throw new Error('Invalid token');
-        }
-        if (await isTokenRevoked(jwtPayload.jti, tenantId, this.prisma, { source: 'ws-dashboard', logger: this.logger })) {
-          throw new Error('Invalid token');
-        }
+
+        const jwtResult = await verifyAndDecodeToken(token, secret, this.prisma, {
+          audience: 'signal-horizon',
+          source: 'ws-dashboard',
+          logger: this.logger,
+        });
+        if (!jwtResult.ok) throw new Error(jwtResult.error === 'revoked' ? 'Token revoked' : 'Invalid token');
       } else if (apiKey) {
         const keyHash = await this.hashApiKey(apiKey);
         const apiKeyRecord = await this.prisma.apiKey.findUnique({
@@ -488,20 +486,18 @@ export class DashboardGateway {
           return;
         }
 
-        const jwtPayload = parseJwt(payload.token, secret);
-        const payloadTenantId = jwtPayload?.tenantId ?? jwtPayload?.tenant_id;
-        if (!jwtPayload || !jwtPayload.jti || !payloadTenantId) {
-          this.send(conn, { type: 'auth-failed', error: 'Invalid or expired token' });
+        const jwtResult = await verifyAndDecodeToken(payload.token, secret, this.prisma, {
+          audience: 'signal-horizon',
+          source: 'ws-dashboard',
+          logger: this.logger,
+        });
+        if (!jwtResult.ok) {
+          this.send(conn, { type: 'auth-failed', error: jwtResult.error === 'revoked' ? 'Token revoked' : 'Invalid or expired token' });
           return;
         }
 
-        if (await isTokenRevoked(jwtPayload.jti, payloadTenantId, this.prisma, { source: 'ws-dashboard', logger: this.logger })) {
-          this.send(conn, { type: 'auth-failed', error: 'Token revoked' });
-          return;
-        }
-
-        tenantId = payloadTenantId;
-        isFleetAdmin = jwtPayload.scopes?.includes('fleet:admin') ?? false;
+        tenantId = jwtResult.tenantId;
+        isFleetAdmin = jwtResult.payload.scopes?.includes('fleet:admin') ?? false;
 
         // Fetch tenant details
         const tenant = await this.prisma.tenant.findUnique({

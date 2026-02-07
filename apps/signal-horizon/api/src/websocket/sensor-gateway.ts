@@ -18,7 +18,7 @@ import type { PrismaClient, Prisma } from '@prisma/client';
 import type { Logger } from 'pino';
 import { randomUUID } from 'node:crypto';
 import { config as globalConfig } from '../config.js';
-import { parseJwt, isTokenRevoked } from '../lib/jwt.js';
+import { verifyAndDecodeToken } from '../lib/jwt.js';
 import type { Aggregator } from '../services/aggregator/index.js';
 import type { FleetAggregator } from '../services/fleet/fleet-aggregator.js';
 import type { AuthCoverageAggregator } from '../services/auth-coverage-aggregator.js';
@@ -261,14 +261,12 @@ export class SensorGateway {
       // 1. Try JWT
       const secret = globalConfig.telemetry.jwtSecret;
       if (secret) {
-        const jwtPayload = parseJwt(token, secret);
-        const tenantId = jwtPayload?.tenantId ?? jwtPayload?.tenant_id;
-        if (
-          jwtPayload
-          && jwtPayload.jti
-          && tenantId
-          && !(await isTokenRevoked(jwtPayload.jti, tenantId, this.prisma, { source: 'ws-sensor', logger: this.logger }))
-        ) {
+        const jwtResult = await verifyAndDecodeToken(token, secret, this.prisma, {
+          audience: 'signal-horizon',
+          source: 'ws-sensor',
+          logger: this.logger,
+        });
+        if (jwtResult.ok) {
            this.wss.handleUpgrade(req, socket, head, (ws) => {
              this.wss?.emit('connection', ws, req);
            });
@@ -541,16 +539,20 @@ export class SensorGateway {
           return;
         }
 
-        const jwtPayload = parseJwt(token, secret);
-        const payloadTenantId = jwtPayload?.tenantId ?? jwtPayload?.tenant_id;
-        const payloadSensorId = jwtPayload?.sensorId ?? jwtPayload?.sensor_id;
-        if (!jwtPayload || !jwtPayload.jti || !payloadTenantId || !payloadSensorId) {
-          this.send(conn, { type: 'auth-failed', error: 'Invalid or expired token' });
+        const jwtResult = await verifyAndDecodeToken(token, secret, this.prisma, {
+          audience: 'signal-horizon',
+          source: 'ws-sensor',
+          logger: this.logger,
+        });
+
+        if (!jwtResult.ok) {
+          this.send(conn, { type: 'auth-failed', error: jwtResult.error === 'revoked' ? 'Token revoked' : 'Invalid or expired token' });
           return;
         }
 
-        if (await isTokenRevoked(jwtPayload.jti, payloadTenantId, this.prisma, { source: 'ws-sensor', logger: this.logger })) {
-          this.send(conn, { type: 'auth-failed', error: 'Token revoked' });
+        const payloadSensorId = jwtResult.payload.sensorId ?? jwtResult.payload.sensor_id;
+        if (!payloadSensorId) {
+          this.send(conn, { type: 'auth-failed', error: 'Invalid or expired token' });
           return;
         }
 
@@ -560,7 +562,7 @@ export class SensorGateway {
           return;
         }
 
-        tenantId = payloadTenantId;
+        tenantId = jwtResult.tenantId;
 
         // Fetch tenant details for sharing preference
         const tenant = await this.prisma.tenant.findUnique({
