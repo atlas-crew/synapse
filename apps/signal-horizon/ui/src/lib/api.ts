@@ -11,10 +11,8 @@ function normalizeApiBaseUrl(raw: string): string {
 }
 
 export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || 'http://localhost:3100');
-export const API_KEY =
-  import.meta.env.VITE_HORIZON_API_KEY ||
-  import.meta.env.VITE_API_KEY ||
-  'dev-dashboard-key';
+const ENV_API_KEY = import.meta.env.VITE_HORIZON_API_KEY || import.meta.env.VITE_API_KEY || '';
+export const API_KEY = ENV_API_KEY || 'dev-dashboard-key';
 
 interface FetchOptions {
   signal?: AbortSignal;
@@ -97,11 +95,8 @@ export async function apiFetch<T>(endpoint: string, options: FetchOptions = {}):
     'Content-Type': 'application/json',
   };
 
-  // Programmatic API key takes precedence (dev / CI / external consumers).
-  // Browser sessions rely on the httpOnly cookie instead.
-  if (API_KEY && API_KEY !== 'dev-dashboard-key') {
-    headers['Authorization'] = `Bearer ${API_KEY}`;
-  }
+  // Programmatic API key is opt-in via env. Browser sessions rely on cookies.
+  if (ENV_API_KEY) headers.Authorization = `Bearer ${ENV_API_KEY}`;
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method,

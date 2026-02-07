@@ -14,10 +14,7 @@ function normalizeApiBaseUrl(raw: string): string {
 }
 
 const API_BASE = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || 'http://localhost:3100');
-const API_KEY =
-  import.meta.env.VITE_HORIZON_API_KEY ||
-  import.meta.env.VITE_API_KEY ||
-  'dev-dashboard-key';
+const ENV_API_KEY = import.meta.env.VITE_HORIZON_API_KEY || import.meta.env.VITE_API_KEY || '';
 
 // =============================================================================
 // Types
@@ -301,20 +298,28 @@ export function useHunt() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<HuntStatus | null>(null);
+  const clearError = useCallback(() => setError(null), []);
 
   // Helper for API calls
-  const fetchApi = useCallback(async <T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY,
-        ...options.headers,
-      },
-    });
+	  const fetchApi = useCallback(async <T>(
+	    endpoint: string,
+	    options: RequestInit = {}
+	  ): Promise<T> => {
+	    const headers: Record<string, string> = {
+	      'Content-Type': 'application/json',
+	    };
+	    if (ENV_API_KEY) {
+	      headers.Authorization = `Bearer ${ENV_API_KEY}`;
+	    }
+
+	    const response = await fetch(`${API_BASE}${endpoint}`, {
+	      ...options,
+	      credentials: 'include',
+	      headers: {
+	        ...headers,
+	        ...options.headers,
+	      },
+	    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -575,6 +580,6 @@ export function useHunt() {
     getRequestTimeline,
 
     // Helpers
-    clearError: () => setError(null),
+    clearError,
   };
 }

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useHunt } from './useHunt';
 
 const mockFetch = vi.fn();
 
@@ -42,6 +41,7 @@ describe('useHunt.getRequestTimeline', () => {
       }),
     });
 
+    const { useHunt } = await import('./useHunt');
     const { result } = renderHook(() => useHunt());
 
     let res: Awaited<ReturnType<typeof result.current.getRequestTimeline>> | undefined;
@@ -49,14 +49,11 @@ describe('useHunt.getRequestTimeline', () => {
       res = await result.current.getRequestTimeline('req_123', { limit: 25 });
     });
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/hunt/request/req_123?limit=25'),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'X-API-Key': expect.any(String),
-        }),
-      })
-    );
+    expect(mockFetch).toHaveBeenCalled();
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit | undefined];
+    expect(url).toContain('/api/v1/hunt/request/req_123?limit=25');
+    expect(options?.credentials).toBe('include');
+    expect((options?.headers as Record<string, string> | undefined)?.['X-API-Key']).toBeUndefined();
 
     expect(res?.meta).toMatchObject({ requestId: 'req_123', count: 1 });
     expect(res?.events[0]).toMatchObject({ kind: 'http_transaction', requestId: 'req_123' });
