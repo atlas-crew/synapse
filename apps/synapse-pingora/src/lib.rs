@@ -233,7 +233,7 @@ pub use trends::{
     AnomalyDetector, AnomalyDetectorConfig,
     SignalExtractor, TimeStore, TimeStoreStats, SignalBucket,
     CorrelationEngine, Correlation, CorrelationMetadata, CorrelationType,
-    Signal, SignalCategory, SignalMetadata, SignalTrend,
+    Signal, SignalCategory, SignalMetadata, SignalTrend, SignalType as TrendsSignalType,
     Anomaly, AnomalyType, AnomalySeverity, AnomalyMetadata, AnomalyQueryOptions,
     TrendQueryOptions, TrendsSummary, TrendHistogramBucket, BucketSummary, CategorySummary,
 };

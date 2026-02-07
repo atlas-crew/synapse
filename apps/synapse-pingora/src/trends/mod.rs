@@ -52,6 +52,6 @@ pub use time_store::{SignalBucket, TimeStore, TimeStoreStats};
 pub use types::{
     Anomaly, AnomalyMetadata, AnomalyQueryOptions, AnomalySeverity, AnomalyType, AuthTokenMetadata,
     BehavioralMetadata, BucketSummary, CategorySummary, DeviceMetadata, NetworkMetadata, Signal,
-    SignalCategory, SignalMetadata, SignalTrend, TimeRange, TopSignalType, TrendHistogramBucket,
-    TrendQueryOptions, TrendsSummary,
+    SignalCategory, SignalMetadata, SignalTrend, SignalType, TimeRange, TopSignalType,
+    TrendHistogramBucket, TrendQueryOptions, TrendsSummary,
 };

@@ -141,6 +141,22 @@ harness = false
 name = "contention"
 harness = false
 
+[[bench]]
+name = "risk_scoring"
+harness = false
+
+[[bench]]
+name = "profiler_bench"
+harness = false
+
+[[bench]]
+name = "correlation"
+harness = false
+
+[[bench]]
+name = "subsystems"
+harness = false
+
 [profile.release]
 lto = "thin"  # Changed from "fat" to reduce memory usage during linking
 codegen-units = 1
