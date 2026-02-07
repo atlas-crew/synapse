@@ -137,10 +137,8 @@ const AdminSettingsPage: React.FC = () => {
     isDefault: false,
   });
 
-  // Feature flags for Apparatus toggles
-  const [featureFlags, setFeatureFlags] = useState({
-    chaosEngine: false,
-    movingTargetDefense: false,
+  // Local-only Apparatus UI toggles (backend wiring TBD)
+  const [apparatusFlags, setApparatusFlags] = useState({
     deceptiveEndpoints: true,
   });
 
@@ -1288,8 +1286,10 @@ const AdminSettingsPage: React.FC = () => {
                         <p className="text-xs text-ink-muted">Randomized delay and error injection.</p>
                       </div>
                       <ToggleSwitch
-                        checked={featureFlags.chaosEngine}
-                        onChange={(checked) => setFeatureFlags((prev) => ({ ...prev, chaosEngine: checked }))}
+                        checked={!!hubConfig?.fleetCommands?.enableToggleChaos}
+                        onChange={(checked) => handleConfigUpdate({
+                          fleetCommands: { enableToggleChaos: checked },
+                        } as Partial<HubConfig>)}
                         label="Toggle Chaos Engine"
                         size="sm"
                       />
@@ -1300,8 +1300,10 @@ const AdminSettingsPage: React.FC = () => {
                         <p className="text-xs text-ink-muted">Dynamic upstream address rotation.</p>
                       </div>
                       <ToggleSwitch
-                        checked={featureFlags.movingTargetDefense}
-                        onChange={(checked) => setFeatureFlags((prev) => ({ ...prev, movingTargetDefense: checked }))}
+                        checked={!!hubConfig?.fleetCommands?.enableToggleMtd}
+                        onChange={(checked) => handleConfigUpdate({
+                          fleetCommands: { enableToggleMtd: checked },
+                        } as Partial<HubConfig>)}
                         label="Toggle Moving Target Defense"
                         size="sm"
                       />
@@ -1312,8 +1314,8 @@ const AdminSettingsPage: React.FC = () => {
                         <p className="text-xs text-ink-muted">Deploy honeypot URLs across the fleet.</p>
                       </div>
                       <ToggleSwitch
-                        checked={featureFlags.deceptiveEndpoints}
-                        onChange={(checked) => setFeatureFlags((prev) => ({ ...prev, deceptiveEndpoints: checked }))}
+                        checked={apparatusFlags.deceptiveEndpoints}
+                        onChange={(checked) => setApparatusFlags((prev) => ({ ...prev, deceptiveEndpoints: checked }))}
                         label="Toggle Deceptive Endpoints"
                         size="sm"
                       />
