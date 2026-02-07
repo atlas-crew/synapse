@@ -179,6 +179,7 @@ export default function SocSearchPage() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="data-table">
+                  <caption className="sr-only">Actor search results with risk and activity details</caption>
                   <thead>
                     <tr>
                       <th>Actor</th>

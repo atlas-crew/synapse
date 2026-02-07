@@ -182,6 +182,7 @@ export default function CampaignsPage() {
           {filteredCampaigns.length > 0 && (
             <div className="overflow-x-auto">
               <table className="data-table">
+                <caption className="sr-only">Threat campaigns with severity and confidence levels</caption>
                 <thead>
                   <tr>
                     <th>Campaign</th>

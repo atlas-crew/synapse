@@ -290,6 +290,7 @@ export default function IntelPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="data-table">
+            <caption className="sr-only">Indicators of compromise with hit counts and status</caption>
             <thead>
               <tr>
                 <th>Type</th>

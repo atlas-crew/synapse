@@ -278,6 +278,7 @@ export default function CampaignDetailPage() {
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
+              <caption className="sr-only">Actors associated with this campaign</caption>
               <thead>
                 <tr>
                   <th>Actor</th>
@@ -321,6 +322,7 @@ export default function CampaignDetailPage() {
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
+              <caption className="sr-only">IP addresses participating in this campaign</caption>
               <thead>
                 <tr>
                   <th>IP</th>
@@ -359,6 +361,7 @@ export default function CampaignDetailPage() {
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
+              <caption className="sr-only">Customers affected by this campaign</caption>
               <thead>
                 <tr>
                   <th>Customer</th>

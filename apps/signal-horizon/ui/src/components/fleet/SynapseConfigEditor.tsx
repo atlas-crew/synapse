@@ -442,6 +442,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
               />
               <Select
                 label="Log Level"
+                description="Minimum severity for log output (trace is most verbose)"
                 value={config.server.log_level}
                 onChange={(v) => updateServer({ log_level: v })}
                 options={[
@@ -473,7 +474,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
             <div className="grid grid-cols-2 gap-4 mt-3">
               <Input
                 label="WAF Threshold"
-                description="Risk score threshold (1-100)"
+                description="Requests scoring above this risk threshold are blocked (lower = stricter)"
                 value={config.server.waf_threshold}
                 onChange={(v) => updateServer({ waf_threshold: Math.min(100, Math.max(1, parseInt(v) || 70)) })}
                 type="number"
@@ -483,7 +484,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
               />
               <Input
                 label="Regex Timeout (ms)"
-                description="WAF regex timeout (max 500ms)"
+                description="Maximum time for a single WAF regex match before aborting (prevents ReDoS)"
                 value={config.server.waf_regex_timeout_ms || 100}
                 onChange={(v) => updateServer({ waf_regex_timeout_ms: Math.min(500, parseInt(v) || 100) })}
                 type="number"
@@ -497,6 +498,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
           <Section title="Global Rate Limiting" description="Default rate limits">
             <Toggle
               label="Enable Rate Limiting"
+              description="Enforce per-client request rate limits globally across all sites"
               checked={config.rate_limit.enabled}
               onChange={(v) => updateConfigAndYaml({ ...config, rate_limit: { ...config.rate_limit, enabled: v } })}
             />
@@ -504,6 +506,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
               <div className="grid grid-cols-2 gap-4 mt-3">
                 <Input
                   label="Requests Per Second"
+                  description="Maximum sustained requests per second per client IP"
                   value={config.rate_limit.rps}
                   onChange={(v) => updateConfigAndYaml({ ...config, rate_limit: { ...config.rate_limit, rps: parseInt(v) || 10000 } })}
                   type="number"
@@ -692,6 +695,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                     <div className="grid grid-cols-2 gap-4 mt-3">
                       <Input
                         label="RPS Limit"
+                        description="Max sustained requests per second for this site"
                         value={activeSite.rate_limit.rps}
                         onChange={(v) => updateSite(activeSiteIndex, {
                           rate_limit: { ...activeSite.rate_limit!, rps: parseInt(v) || 10000 }
@@ -700,6 +704,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                       />
                       <Input
                         label="Burst"
+                        description="Short-term burst allowance above the RPS limit"
                         value={activeSite.rate_limit.burst || ''}
                         onChange={(v) => updateSite(activeSiteIndex, {
                           rate_limit: { ...activeSite.rate_limit!, burst: v ? parseInt(v) : undefined }
@@ -715,6 +720,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 <div className="pt-3 border-t border-border-subtle">
                   <Toggle
                     label="Enable TLS for this site"
+                    description="Terminate HTTPS at the sensor for this virtual host"
                     checked={!!activeSite.tls}
                     onChange={(v) => updateSite(activeSiteIndex, {
                       tls: v ? { cert_path: '', key_path: '', min_version: '1.2' } : undefined
@@ -724,6 +730,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                     <div className="grid grid-cols-2 gap-4 mt-3">
                       <Input
                         label="Certificate Path"
+                        description="Absolute path to the PEM-encoded TLS certificate on the sensor"
                         value={activeSite.tls.cert_path}
                         onChange={(v) => updateSite(activeSiteIndex, {
                           tls: { ...activeSite.tls!, cert_path: v }
@@ -732,6 +739,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                       />
                       <Input
                         label="Key Path"
+                        description="Absolute path to the PEM-encoded private key on the sensor"
                         value={activeSite.tls.key_path}
                         onChange={(v) => updateSite(activeSiteIndex, {
                           tls: { ...activeSite.tls!, key_path: v }
@@ -740,6 +748,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                       />
                       <Select
                         label="Minimum TLS Version"
+                        description="Reject connections using TLS versions below this minimum"
                         value={activeSite.tls.min_version || '1.2'}
                         onChange={(v) => updateSite(activeSiteIndex, {
                           tls: { ...activeSite.tls!, min_version: v }
@@ -796,7 +805,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
           <Section title="Profiler" description="Endpoint behavior learning and anomaly detection" defaultOpen={false}>
             <Toggle
               label="Enable Profiling"
-              description="Learn endpoint behavior patterns"
+              description="Automatically learn normal request/response patterns for anomaly detection"
               checked={config.profiler.enabled}
               onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, enabled: v } })}
             />
@@ -804,7 +813,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
               <div className="grid grid-cols-2 gap-4 mt-3">
                 <Input
                   label="Max Profiles"
-                  description="Maximum endpoint profiles"
+                  description="Maximum number of endpoint behavior profiles to store in memory"
                   value={config.profiler.max_profiles || 1000}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, max_profiles: parseInt(v) || 1000 } })}
                   type="number"
@@ -813,7 +822,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 />
                 <Input
                   label="Max Schemas"
-                  description="Maximum learned schemas"
+                  description="Maximum number of request/response schema definitions to retain"
                   value={config.profiler.max_schemas || 500}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, max_schemas: parseInt(v) || 500 } })}
                   type="number"
@@ -822,7 +831,7 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 />
                 <Input
                   label="Min Samples"
-                  description="Samples before validation"
+                  description="Minimum requests observed before the profiler begins anomaly validation"
                   value={config.profiler.min_samples_for_validation || 100}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, min_samples_for_validation: parseInt(v) || 100 } })}
                   type="number"
@@ -831,20 +840,20 @@ export function SynapseConfigEditor({ value, onChange }: Props) {
                 />
                 <Input
                   label="Payload Z-Score Threshold"
-                  description="Anomaly detection threshold"
+                  description="Standard deviations from baseline before a payload is flagged as anomalous"
                   value={config.profiler.payload_z_threshold || 3.0}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, payload_z_threshold: parseFloat(v) || 3.0 } })}
                   type="number"
                 />
                 <Toggle
                   label="Redact PII"
-                  description="Redact sensitive values in logs"
+                  description="Mask personally identifiable information in profiler logs and stored schemas"
                   checked={config.profiler.redact_pii ?? true}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, redact_pii: v } })}
                 />
                 <Input
                   label="Freeze After Samples"
-                  description="Lock baseline (0 = continuous)"
+                  description="Stop updating the baseline after this many samples (0 = keep learning)"
                   value={config.profiler.freeze_after_samples || 0}
                   onChange={(v) => updateConfigAndYaml({ ...config, profiler: { ...config.profiler, freeze_after_samples: parseInt(v) || 0 } })}
                   type="number"

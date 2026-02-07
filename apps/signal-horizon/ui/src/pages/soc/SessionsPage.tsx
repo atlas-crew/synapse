@@ -181,6 +181,7 @@ export default function SessionsPage() {
           {sessions.length > 0 && (
             <div className="overflow-x-auto">
               <table className="data-table">
+                <caption className="sr-only">Active sessions with actor and alert information</caption>
                 <thead>
                   <tr>
                     <th>Session</th>

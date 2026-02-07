@@ -174,6 +174,7 @@ export default function ActorsPage() {
           {actors.length > 0 && (
             <div className="overflow-x-auto">
               <table className="data-table">
+                <caption className="sr-only">Tracked actors with risk scores and activity status</caption>
                 <thead>
                   <tr>
                     <th>Actor</th>

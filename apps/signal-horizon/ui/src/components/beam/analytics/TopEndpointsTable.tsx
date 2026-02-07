@@ -30,6 +30,7 @@ export const TopEndpointsTable = memo(function TopEndpointsTable({
   return (
     <div className={`overflow-x-auto ${className}`}>
       <table className="ctrlx-table">
+        <caption className="sr-only">Top endpoints by request volume with latency and error rates</caption>
         <thead>
           <tr>
             <th className="w-24">Method</th>

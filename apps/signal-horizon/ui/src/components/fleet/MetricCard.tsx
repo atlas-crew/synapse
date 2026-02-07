@@ -23,6 +23,8 @@ interface CtrlxTrend {
 export interface MetricCardProps {
   label: string;
   value: string | number;
+  /** Tooltip text explaining what this metric means */
+  description?: string;
   /** Fleet-style trend (value + label) OR ctrlx-style trend (value + direction). */
   trend?: FleetTrend | CtrlxTrend;
   icon?: ReactNode;
@@ -75,6 +77,7 @@ function isCtrlxTrend(trend: FleetTrend | CtrlxTrend): trend is CtrlxTrend {
 export const MetricCard = memo(function MetricCard({
   label,
   value,
+  description,
   trend,
   icon,
   className = '',
@@ -101,7 +104,7 @@ export const MetricCard = memo(function MetricCard({
             </p>
 
             {/* Eyebrow label - caps, small, tracked per design system */}
-            <p className="mt-1 text-xs font-bold text-ink-muted uppercase tracking-[0.1em]">
+            <p className="mt-1 text-xs font-bold text-ink-muted uppercase tracking-[0.1em]" title={description}>
               {label}
             </p>
 
@@ -141,7 +144,7 @@ export const MetricCard = memo(function MetricCard({
     <div className={`card p-6 ${className}`}>
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className={`text-sm font-medium text-ink-secondary ${labelClassName}`}>{label}</p>
+          <p className={`text-sm font-medium text-ink-secondary ${labelClassName}`} title={description}>{label}</p>
           <p className={`mt-2 text-3xl font-light text-ink-primary ${valueClassName}`} aria-live="polite">{value}</p>
           {trend && (
             <p className={`mt-2 text-sm font-medium ${trendColor}`}>
