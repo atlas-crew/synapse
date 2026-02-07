@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useTenantSettings, SharingPreference } from '../hooks/useTenantSettings';
-import { usePolicies } from '../hooks/fleet/usePolicies';
+import { usePolicies, type PolicyTemplate } from '../hooks/fleet/usePolicies';
 import { useHubConfig, type HubConfig } from '../hooks/useHubConfig';
 import { useFleetControl, useSensors, usePlaybooks, useBlocklist, useOnboarding, useConnectivity } from '../hooks/fleet';
 import { MetricCard } from '../components/fleet';
@@ -53,7 +53,15 @@ const AdminSettingsPage: React.FC = () => {
   const {
     policies,
     defaults,
-    isLoading: policiesLoading
+    isLoading: policiesLoading,
+    createTemplate,
+    isCreating: isCreatingPolicy,
+    updateTemplate,
+    isUpdating: isUpdatingPolicy,
+    deleteTemplate,
+    isDeleting: isDeletingPolicy,
+    cloneTemplate,
+    isCloning: isCloningPolicy,
   } = usePolicies();
 
   const {
@@ -108,6 +116,26 @@ const AdminSettingsPage: React.FC = () => {
   const [tokenNameInput, setTokenNameInput] = useState('');
   const [showTokenForm, setShowTokenForm] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+
+  // Policy template editor state
+  const [policyEditorOpen, setPolicyEditorOpen] = useState(false);
+  const [policyEditorSourceId, setPolicyEditorSourceId] = useState<string | null>(null);
+  const [policyEditorMode, setPolicyEditorMode] = useState<'create' | 'edit' | 'clone'>('create');
+  const [policyDraft, setPolicyDraft] = useState<{
+    id: string | null;
+    name: string;
+    description: string;
+    severity: PolicyTemplate['severity'];
+    configText: string;
+    isDefault: boolean;
+  }>({
+    id: null,
+    name: '',
+    description: '',
+    severity: 'standard',
+    configText: '{\n  \n}\n',
+    isDefault: false,
+  });
 
   // Feature flags for Apparatus toggles
   const [featureFlags, setFeatureFlags] = useState({
@@ -223,6 +251,131 @@ const AdminSettingsPage: React.FC = () => {
     } catch (err) {
       toast.error('Failed to create token: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
+  };
+
+  const seedConfigFromDefault = (severity: PolicyTemplate['severity']) => {
+    const seed = defaults.find((d) => d.severity === severity) ?? defaults[0] ?? null;
+    return seed?.config ?? null;
+  };
+
+  const openPolicyEditor = (mode: 'create' | 'edit' | 'clone', template?: PolicyTemplate) => {
+    if (mode === 'create') {
+      const seedConfig = seedConfigFromDefault('standard');
+      setPolicyDraft({
+        id: null,
+        name: '',
+        description: '',
+        severity: 'standard',
+        configText: JSON.stringify(seedConfig ?? {}, null, 2),
+        isDefault: false,
+      });
+      setPolicyEditorSourceId(null);
+    } else if (template) {
+      setPolicyDraft({
+        id: template.id,
+        name: mode === 'clone' ? `${template.name} Copy` : template.name,
+        description: template.description ?? '',
+        severity: template.severity,
+        configText: JSON.stringify(template.config ?? {}, null, 2),
+        isDefault: template.isDefault,
+      });
+      setPolicyEditorSourceId(mode === 'clone' ? template.id : null);
+    }
+
+    setPolicyEditorMode(mode);
+    setPolicyEditorOpen(true);
+  };
+
+  const closePolicyEditor = () => {
+    setPolicyEditorOpen(false);
+    setPolicyEditorSourceId(null);
+    setPolicyEditorMode('create');
+  };
+
+  const formatPolicyConfig = () => {
+    try {
+      const obj = JSON.parse(policyDraft.configText);
+      setPolicyDraft((prev) => ({ ...prev, configText: JSON.stringify(obj, null, 2) }));
+    } catch {
+      toast.error('Config is not valid JSON.');
+    }
+  };
+
+  const savePolicyTemplate = async () => {
+    let config: any;
+    try {
+      config = JSON.parse(policyDraft.configText);
+    } catch {
+      toast.error('Config is not valid JSON.');
+      return;
+    }
+
+    try {
+      if (policyEditorMode === 'create') {
+        await createTemplate({
+          name: policyDraft.name.trim(),
+          description: policyDraft.description.trim() || undefined,
+          severity: policyDraft.severity,
+          config,
+        });
+        toast.success('Policy template created.');
+        closePolicyEditor();
+        return;
+      }
+
+      if (policyEditorMode === 'edit') {
+        if (!policyDraft.id) return;
+        await updateTemplate({
+          id: policyDraft.id,
+          input: {
+            name: policyDraft.name.trim(),
+            description: policyDraft.description.trim() || undefined,
+            severity: policyDraft.severity,
+            config,
+          },
+        });
+        toast.success('Policy template updated.');
+        closePolicyEditor();
+        return;
+      }
+
+      if (policyEditorMode === 'clone') {
+        if (!policyEditorSourceId) return;
+        const cloned = await cloneTemplate({ id: policyEditorSourceId, name: policyDraft.name.trim() });
+        await updateTemplate({
+          id: cloned.id,
+          input: {
+            description: policyDraft.description.trim() || undefined,
+            severity: policyDraft.severity,
+            config,
+          },
+        });
+        toast.success('Policy template cloned.');
+        closePolicyEditor();
+        return;
+      }
+    } catch (err) {
+      toast.error('Failed to save policy: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const removePolicyTemplate = async () => {
+    const id = policyDraft.id;
+    if (!id) return;
+    showConfirm({
+      title: 'Delete Policy Template',
+      description: `Delete "${policyDraft.name}"? This cannot be undone.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteTemplate(id);
+          toast.success('Policy template deleted.');
+          closePolicyEditor();
+        } catch (err) {
+          toast.error('Failed to delete policy: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        }
+      },
+    });
   };
 
   const copyToClipboard = async (text: string) => {
@@ -461,7 +614,11 @@ const AdminSettingsPage: React.FC = () => {
               <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
                 <div className="flex justify-between items-center mb-8">
                   <h2 className="text-xl font-light text-ink-primary uppercase tracking-tight">Security Policy Templates</h2>
-                  <button className="px-4 py-2 bg-ac-blue text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-dark transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1">
+                  <button
+                    onClick={() => openPolicyEditor('create')}
+                    disabled={isCreatingPolicy || isUpdatingPolicy || isDeletingPolicy || isCloningPolicy}
+                    className="px-4 py-2 bg-ac-blue text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                  >
                     New Template
                   </button>
                 </div>
@@ -491,13 +648,123 @@ const AdminSettingsPage: React.FC = () => {
                         </div>
                         <div className="text-right flex items-center gap-4">
                           <div className="text-xs opacity-60">VER {policy.version}.0</div>
-                          <button className="text-xs font-bold text-ac-blue group-hover:text-ac-sky-blue uppercase tracking-widest focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1">Edit</button>
+                          <button
+                            onClick={() => openPolicyEditor(policy.isDefault ? 'clone' : 'edit', policy)}
+                            className="text-xs font-bold text-ac-blue group-hover:text-ac-sky-blue uppercase tracking-widest focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                          >
+                            {policy.isDefault ? 'Clone' : 'Edit'}
+                          </button>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
               </section>
+
+              {policyEditorOpen && (
+                <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-ink-primary uppercase tracking-widest">Policy Template Editor</h3>
+                      <p className="text-xs text-ink-muted">
+                        {policyEditorMode === 'create'
+                          ? 'Create a new custom policy template.'
+                          : policyEditorMode === 'clone'
+                            ? 'Defaults are read-only. Clone creates a custom copy.'
+                            : 'Edit an existing custom policy template.'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={closePolicyEditor}
+                      className="text-ink-muted hover:text-ink-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      aria-label="Close policy editor"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Name</label>
+                      <input
+                        type="text"
+                        value={policyDraft.name}
+                        onChange={(e) => setPolicyDraft((prev) => ({ ...prev, name: e.target.value }))}
+                        className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Severity</label>
+                      <select
+                        value={policyDraft.severity}
+                        onChange={(e) => setPolicyDraft((prev) => ({ ...prev, severity: e.target.value as PolicyTemplate['severity'] }))}
+                        className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      >
+                        <option value="strict">strict</option>
+                        <option value="standard">standard</option>
+                        <option value="dev">dev</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Description</label>
+                    <input
+                      type="text"
+                      value={policyDraft.description}
+                      onChange={(e) => setPolicyDraft((prev) => ({ ...prev, description: e.target.value }))}
+                      className="w-full bg-surface-subtle border border-border-subtle p-3 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-ink-primary uppercase tracking-widest block">Config (JSON)</label>
+                      <button
+                        onClick={formatPolicyConfig}
+                        className="text-[10px] font-bold uppercase tracking-widest text-ac-blue hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      >
+                        Format
+                      </button>
+                    </div>
+                    <textarea
+                      value={policyDraft.configText}
+                      onChange={(e) => setPolicyDraft((prev) => ({ ...prev, configText: e.target.value }))}
+                      rows={14}
+                      className="w-full bg-surface-subtle border border-border-subtle p-3 text-xs font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 justify-end">
+                    {policyEditorMode === 'edit' && !policyDraft.isDefault && policyDraft.id && (
+                      <button
+                        onClick={removePolicyTemplate}
+                        disabled={isDeletingPolicy}
+                        className="h-11 px-4 border-2 border-status-error text-status-error text-xs font-bold uppercase tracking-widest hover:bg-status-error/5 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      >
+                        {isDeletingPolicy ? 'Deleting...' : 'Delete'}
+                      </button>
+                    )}
+                    <button
+                      onClick={closePolicyEditor}
+                      className="h-11 px-4 border-2 border-border-subtle text-ink-secondary text-xs font-bold uppercase tracking-widest hover:bg-surface-subtle transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={savePolicyTemplate}
+                      disabled={!policyDraft.name.trim() || isCreatingPolicy || isUpdatingPolicy || isCloningPolicy}
+                      className="h-11 px-5 bg-ac-navy text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-blue-darker disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                    >
+                      {policyEditorMode === 'create'
+                        ? (isCreatingPolicy ? 'Creating...' : 'Create')
+                        : policyEditorMode === 'clone'
+                          ? (isCloningPolicy || isUpdatingPolicy ? 'Cloning...' : 'Clone')
+                          : (isUpdatingPolicy ? 'Saving...' : 'Save')}
+                    </button>
+                  </div>
+                </section>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <MetricCard label="Active Templates" value={policies.length} />
