@@ -6,6 +6,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 import { metrics } from '../services/metrics.js';
 
 export interface BaseJwtPayload {
@@ -44,6 +45,24 @@ export type JwtPayload = {
   user_id?: string;
   sensor_id?: string;
 };
+
+const JwtPayloadSchema = z
+  .object({
+    iat: z.number().int().nonnegative().finite(),
+    exp: z.number().int().nonnegative().finite(),
+    jti: z.string().min(1).optional(),
+    tenantId: z.string().min(1).optional(),
+    userId: z.string().min(1).optional(),
+    sensorId: z.string().min(1).optional(),
+    scopes: z.array(z.string().min(1)).optional(),
+    aud: z.string().min(1).optional(),
+    epoch: z.number().int().nonnegative().finite().optional(),
+    // Legacy aliases
+    tenant_id: z.string().min(1).optional(),
+    user_id: z.string().min(1).optional(),
+    sensor_id: z.string().min(1).optional(),
+  })
+  .passthrough();
 
 /**
  * Check if token is revoked in database.
@@ -136,8 +155,11 @@ export function parseJwt(token: string, secret: string, options?: ParseJwtOption
     if (header.alg !== 'HS256') return null;
     if (header.typ && header.typ !== 'JWT') return null;
 
-    const payload: JwtPayload = JSON.parse(base64UrlDecode(payloadB64));
-    if (!payload.iat || !payload.exp) return null;
+    const payloadJson = JSON.parse(base64UrlDecode(payloadB64));
+    const parsed = JwtPayloadSchema.safeParse(payloadJson);
+    if (!parsed.success) return null;
+
+    const payload: JwtPayload = parsed.data;
 
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp <= now) return null;

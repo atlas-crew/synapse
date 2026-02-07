@@ -101,5 +101,36 @@ describe('verifyAndDecodeToken', () => {
     const res = await verifyAndDecodeToken(token, secret, prisma, { audience: 'signal-horizon' });
     expect(res).toEqual({ ok: false, error: 'revoked' });
   });
-});
 
+  it('returns invalid when decoded payload types are wrong (tenantId)', async () => {
+    const token = signJwt(
+      {
+        iat: now,
+        exp: now + 3600,
+        jti: 'jti-1',
+        tenantId: 123,
+        aud: 'signal-horizon',
+      } as any,
+      secret
+    );
+
+    const res = await verifyAndDecodeToken(token, secret, prisma, { audience: 'signal-horizon' });
+    expect(res).toEqual({ ok: false, error: 'invalid' });
+  });
+
+  it('returns invalid when decoded payload types are wrong (iat)', async () => {
+    const token = signJwt(
+      {
+        iat: 'nope',
+        exp: now + 3600,
+        jti: 'jti-1',
+        tenantId: 'tenant-1',
+        aud: 'signal-horizon',
+      } as any,
+      secret
+    );
+
+    const res = await verifyAndDecodeToken(token, secret, prisma, { audience: 'signal-horizon' });
+    expect(res).toEqual({ ok: false, error: 'invalid' });
+  });
+});
