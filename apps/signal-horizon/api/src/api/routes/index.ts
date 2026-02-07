@@ -14,6 +14,7 @@ import { rateLimiters } from '../../middleware/rate-limiter.js';
 import { contentTypeValidation } from '../../middleware/content-type.js';
 import { apiVersioning } from '../../middleware/versioning.js';
 import { csrfProtection, csrfTokenHandler, ensureCsrfToken } from '../../middleware/csrf.js';
+import { createReplayProtection, PrismaNonceStore } from '../../middleware/replay-protection.js';
 import { createCampaignRoutes } from './campaigns.js';
 import { createThreatRoutes } from './threats.js';
 import { createBlocklistRoutes } from './blocklist.js';
@@ -131,6 +132,27 @@ export function createApiRouter(
 
   // All other API routes require authentication
   router.use(authMiddleware);
+
+  // M-3: Replay protection for all non-idempotent requests (headers required by default).
+  // Use Prisma-backed store so nonce reuse is detected across instances.
+  const allowMissingHeadersUntilMs = process.env.REPLAY_ALLOW_MISSING_UNTIL
+    ? Date.parse(process.env.REPLAY_ALLOW_MISSING_UNTIL)
+    : undefined;
+
+  const replayProtection = createReplayProtection({
+    store: new PrismaNonceStore(prisma, { windowMs: 5 * 60 * 1000 }),
+    allowMissingHeadersUntilMs:
+      typeof allowMissingHeadersUntilMs === 'number' && Number.isFinite(allowMissingHeadersUntilMs)
+        ? allowMissingHeadersUntilMs
+        : undefined,
+    onViolation: ({ code, method, path, clientIp, tenantId }) => {
+      logger.warn(
+        { code, method, path, clientIp, tenantId },
+        'Replay protection violation'
+      );
+    },
+  });
+  router.use(replayProtection.middleware);
 
   // CSRF protection for mutation endpoints
   // Note: Bearer token auth is inherently CSRF-resistant, but this provides defense-in-depth

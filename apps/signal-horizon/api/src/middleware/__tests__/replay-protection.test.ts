@@ -395,6 +395,25 @@ describe('replay-protection', () => {
         expect(getJsonBody().code).toBe('missing_nonce');
       });
 
+      test('allows missing nonce during compat window (logs violation)', () => {
+        const onViolation = vi.fn();
+        const compat = createReplayProtection({
+          allowMissingHeadersUntilMs: Date.now() + 60_000,
+          onViolation,
+        });
+
+        const req = createMockRequest({
+          'x-request-timestamp': String(Date.now()),
+        }, { method: 'POST' });
+        const { res } = createMockResponse();
+        const next = vi.fn();
+
+        compat.middleware(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalled();
+        expect(onViolation).toHaveBeenCalledWith(expect.objectContaining({ code: 'missing_nonce' }));
+        compat.destroy();
+      });
+
       test('rejects POST without timestamp header', () => {
         const req = createMockRequest({
           'x-request-nonce': generateNonce(),
@@ -406,6 +425,25 @@ describe('replay-protection', () => {
         expect(next).not.toHaveBeenCalled();
         expect(getStatusCode()).toBe(400);
         expect(getJsonBody().code).toBe('missing_timestamp');
+      });
+
+      test('allows missing timestamp during compat window (logs violation)', () => {
+        const onViolation = vi.fn();
+        const compat = createReplayProtection({
+          allowMissingHeadersUntilMs: Date.now() + 60_000,
+          onViolation,
+        });
+
+        const req = createMockRequest({
+          'x-request-nonce': generateNonce(),
+        }, { method: 'POST' });
+        const { res } = createMockResponse();
+        const next = vi.fn();
+
+        compat.middleware(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalled();
+        expect(onViolation).toHaveBeenCalledWith(expect.objectContaining({ code: 'missing_timestamp' }));
+        compat.destroy();
       });
 
       test('rejects invalid nonce format', () => {
@@ -474,6 +512,36 @@ describe('replay-protection', () => {
 
         protection.middleware(req as Request, res as Response, next);
         expect(next).toHaveBeenCalled();
+      });
+
+      test('passes tenantId metadata to nonce store when available', () => {
+        const calls: Array<{ tenantId?: string }> = [];
+        const store = {
+          size: 0,
+          checkAndAdd: (_nonce: string, _timestamp: number, metadata?: { tenantId?: string }) => {
+            calls.push({ tenantId: metadata?.tenantId });
+            return true;
+          },
+          exists: () => false,
+          cleanup: () => 0,
+          destroy: () => {},
+        };
+
+        const custom = createReplayProtection({ store: store as any });
+
+        const req = createMockRequest({
+          'x-request-nonce': generateNonce(),
+          'x-request-timestamp': String(Date.now()),
+        }, { method: 'POST' }) as any;
+        req.auth = { tenantId: 'tenant-1' };
+
+        const { res } = createMockResponse();
+        const next = vi.fn();
+
+        custom.middleware(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalled();
+        expect(calls[0]?.tenantId).toBe('tenant-1');
+        custom.destroy();
       });
 
       test('rejects replayed request', () => {

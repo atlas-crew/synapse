@@ -624,6 +624,27 @@ export interface ReplayProtectionFactoryConfig extends Partial<ReplayProtectionC
    * Only applies when no external store is provided.
    */
   maxNonces?: number;
+
+  /**
+   * Backward-compat window: if set to a future epoch-ms timestamp, requests missing
+   * replay headers are allowed through (but can be logged via onViolation).
+   *
+   * Once Date.now() >= allowMissingHeadersUntilMs, missing headers are rejected.
+   */
+  allowMissingHeadersUntilMs?: number;
+
+  /**
+   * Optional hook for monitoring adoption + violations.
+   * Called before sending a replay-protection error response or when missing
+   * headers are allowed through during the compat window.
+   */
+  onViolation?: (info: {
+    code: ReplayProtectionError | 'store_error';
+    method: string;
+    path: string;
+    clientIp: string;
+    tenantId?: string;
+  }) => void;
 }
 
 /**
@@ -670,6 +691,8 @@ export function createReplayProtection(
     undefined,
     config.maxNonces,
   );
+  const allowMissingHeadersUntilMs = config.allowMissingHeadersUntilMs;
+  const onViolation = config.onViolation;
 
   const middleware: RequestHandler = (
     req: Request,
@@ -699,6 +722,15 @@ export function createReplayProtection(
     // Get nonce header
     const nonce = req.headers[fullConfig.nonceHeader.toLowerCase()] as string;
     if (!nonce) {
+      const clientIp = getClientIp(req);
+      const tenantId = req.auth?.tenantId;
+      onViolation?.({ code: 'missing_nonce', method: req.method, path: req.path, clientIp, tenantId });
+
+      if (allowMissingHeadersUntilMs && Date.now() < allowMissingHeadersUntilMs) {
+        next();
+        return;
+      }
+
       res.status(400).json({
         error: 'Bad Request',
         code: 'missing_nonce',
@@ -709,6 +741,15 @@ export function createReplayProtection(
 
     // Validate nonce format
     if (!validateNonceFormat(nonce)) {
+      const clientIp = getClientIp(req);
+      const tenantId = req.auth?.tenantId;
+      onViolation?.({
+        code: 'invalid_nonce_format',
+        method: req.method,
+        path: req.path,
+        clientIp,
+        tenantId,
+      });
       res.status(400).json({
         error: 'Bad Request',
         code: 'invalid_nonce_format',
@@ -722,6 +763,21 @@ export function createReplayProtection(
       fullConfig.timestampHeader.toLowerCase()
     ] as string;
     if (!timestampStr) {
+      const clientIp = getClientIp(req);
+      const tenantId = req.auth?.tenantId;
+      onViolation?.({
+        code: 'missing_timestamp',
+        method: req.method,
+        path: req.path,
+        clientIp,
+        tenantId,
+      });
+
+      if (allowMissingHeadersUntilMs && Date.now() < allowMissingHeadersUntilMs) {
+        next();
+        return;
+      }
+
       res.status(400).json({
         error: 'Bad Request',
         code: 'missing_timestamp',
@@ -733,6 +789,15 @@ export function createReplayProtection(
     // Parse timestamp
     const timestamp = parseInt(timestampStr, 10);
     if (isNaN(timestamp)) {
+      const clientIp = getClientIp(req);
+      const tenantId = req.auth?.tenantId;
+      onViolation?.({
+        code: 'invalid_timestamp_format',
+        method: req.method,
+        path: req.path,
+        clientIp,
+        tenantId,
+      });
       res.status(400).json({
         error: 'Bad Request',
         code: 'invalid_timestamp_format',
@@ -748,6 +813,9 @@ export function createReplayProtection(
       fullConfig.windowMs
     );
     if (timestampError) {
+      const clientIp = getClientIp(req);
+      const tenantId = req.auth?.tenantId;
+      onViolation?.({ code: timestampError, method: req.method, path: req.path, clientIp, tenantId });
       const message =
         timestampError === 'timestamp_future'
           ? 'Timestamp is too far in the future'
@@ -762,14 +830,29 @@ export function createReplayProtection(
 
     // Check and add nonce (supports both sync and async stores)
     const clientIp = getClientIp(req);
-    const checkResult = store.checkAndAdd(nonce, timestamp, {
-      clientIp,
-      path: req.path,
-    });
+    const tenantId = req.auth?.tenantId;
+    let checkResult: boolean | Promise<boolean>;
+    try {
+      checkResult = store.checkAndAdd(nonce, timestamp, {
+        clientIp,
+        path: req.path,
+        tenantId,
+      });
+    } catch (error) {
+      onViolation?.({ code: 'store_error', method: req.method, path: req.path, clientIp, tenantId });
+      console.error('Replay protection store error:', error);
+      res.status(503).json({
+        error: 'Service Unavailable',
+        code: 'REPLAY_STORE_UNAVAILABLE',
+        message: 'Replay protection service is temporarily unavailable',
+      });
+      return;
+    }
 
     // Handle both sync (in-memory) and async (Redis) stores
     const handleResult = (isNew: boolean) => {
       if (!isNew) {
+        onViolation?.({ code: 'nonce_reused', method: req.method, path: req.path, clientIp, tenantId });
         res.status(409).json({
           error: 'Conflict',
           code: 'nonce_reused',
@@ -784,6 +867,7 @@ export function createReplayProtection(
       checkResult
         .then(handleResult)
         .catch((error) => {
+          onViolation?.({ code: 'store_error', method: req.method, path: req.path, clientIp, tenantId });
           // Fail-closed: deny the request when the nonce store is unavailable.
           // Allowing requests through would disable replay protection entirely.
           console.error('Replay protection store error:', error);
