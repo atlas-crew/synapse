@@ -89,6 +89,18 @@ export interface IpActivity {
   signalTypes: string[];
 }
 
+export interface CampaignTimelineEvent {
+  timestamp: string;
+  campaignId: string;
+  eventType: 'created' | 'updated' | 'escalated' | 'resolved';
+  name: string;
+  status: string;
+  severity: string;
+  isCrossTenant: boolean;
+  tenantsAffected: number;
+  confidence: number;
+}
+
 export type RequestTimelineEvent =
   | {
       kind: 'http_transaction';
@@ -240,6 +252,32 @@ const IpActivityResponseSchema = z.object({
     sourceIp: z.string(),
     lookbackDays: z.number(),
   }),
+});
+
+const CampaignTimelineEventSchema = z.object({
+  timestamp: z.string(),
+  campaignId: z.string(),
+  eventType: z.enum(['created', 'updated', 'escalated', 'resolved']),
+  name: z.string(),
+  status: z.string(),
+  severity: z.string(),
+  isCrossTenant: z.boolean(),
+  tenantsAffected: z.number(),
+  confidence: z.number(),
+});
+
+const CampaignTimelineResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(CampaignTimelineEventSchema),
+  meta: z.object({
+    campaignId: z.string(),
+    count: z.number(),
+  }),
+});
+
+const SingleSavedQueryResponseSchema = z.object({
+  success: z.boolean(),
+  data: SavedQuerySchema,
 });
 
 const RequestTimelineEventSchema = z.discriminatedUnion('kind', [
@@ -571,6 +609,56 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  // Get a single saved query by ID
+  const getSavedQuery = useCallback(async (id: string): Promise<SavedQuery> => {
+    try {
+      const data = await fetchApi<unknown>(`/hunt/saved-queries/${encodeURIComponent(id)}`);
+      const result = SingleSavedQueryResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid saved query response');
+      }
+      return result.data.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get saved query';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  // Get campaign event timeline
+  const getCampaignTimeline = useCallback(async (
+    campaignId: string,
+    params: { startTime?: string; endTime?: string } = {}
+  ): Promise<{ events: CampaignTimelineEvent[]; meta: { campaignId: string; count: number } }> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.startTime) queryParams.set('startTime', params.startTime);
+      if (params.endTime) queryParams.set('endTime', params.endTime);
+
+      const url = `/hunt/timeline/${encodeURIComponent(campaignId)}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const data = await fetchApi<unknown>(url);
+
+      const result = CampaignTimelineResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid campaign timeline response');
+      }
+
+      return {
+        events: result.data.data,
+        meta: result.data.meta,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get campaign timeline';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchApi]);
+
   const getRequestTimeline = useCallback(async (
     requestId: string,
     params: { startTime?: string; endTime?: string; limit?: number } = {}
@@ -637,9 +725,11 @@ export function useHunt() {
     getHourlyStats,
     getIpActivity,
     getSavedQueries,
+    getSavedQuery,
     saveQuery,
     runSavedQuery,
     deleteSavedQuery,
+    getCampaignTimeline,
     getRequestTimeline,
     getRecentRequests,
 
