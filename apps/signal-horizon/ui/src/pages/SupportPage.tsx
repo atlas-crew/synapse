@@ -151,7 +151,7 @@ export function SupportPage() {
 
       <div className="flex-shrink-0 bg-ac-navy border-b border-ac-navy-light">
 
-        <div className="flex items-center justify-between px-8 h-16">
+        <div className="flex items-center justify-between px-12 h-20">
 
           <div className="flex items-center gap-10">
 

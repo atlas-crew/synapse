@@ -171,7 +171,7 @@ export default function OverviewPage() {
       </header>
 
       {/* Stats Grid */}
-      <section aria-label="Key metrics" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+      <section aria-label="Key metrics" className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <StatCard
           icon={Shield}
           label="Active Campaigns"
@@ -214,10 +214,11 @@ export default function OverviewPage() {
         />
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Live Attack Map - tactical display */}
-        <section className="xl:col-span-2 card scanlines" aria-labelledby="attack-map-heading">
-          <div className="card-header flex items-center justify-between">
+        <section className="md:col-span-2 card scanlines tactical-bg relative overflow-hidden" aria-labelledby="attack-map-heading">
+          <div className="absolute top-0 right-0 w-1/2 h-full bg-white/5 diagonal-split pointer-events-none" />
+          <div className="card-header flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
               <h2 id="attack-map-heading" className="font-medium text-ink-primary tracking-wide">
                 LIVE ATTACK MAP
@@ -237,7 +238,7 @@ export default function OverviewPage() {
                   className={clsx(
                     'px-3 py-1 text-xs border transition-colors',
                     activeFilter === filter
-                      ? 'border-link text-link bg-surface-subtle'
+                      ? 'border-link text-link bg-surface-subtle shadow-inner'
                       : 'border-border-subtle text-ink-muted hover:text-ink-primary hover:bg-surface-subtle'
                   )}
                 >
@@ -246,68 +247,118 @@ export default function OverviewPage() {
               ))}
             </div>
           </div>
-          <div className="card-body">
+          <div className="card-body relative z-10">
             <AttackMap points={filteredMapPoints} routes={filteredMapRoutes} />
           </div>
         </section>
 
-        {/* Threat Trajectory Feed */}
-        <ErrorBoundary fallback={<AlertFeedSkeleton />}>
-          <Suspense fallback={<AlertFeedSkeleton />}>
-            <ThreatTrajectoryFeed threats={threats} alerts={alerts} />
-          </Suspense>
-        </ErrorBoundary>
+        {/* Threat Trajectory Feed - Moved next to Attack Map */}
+        <div className="flex flex-col h-fit">
+          <ErrorBoundary fallback={<AlertFeedSkeleton />}>
+            <Suspense fallback={<AlertFeedSkeleton />}>
+              <ThreatTrajectoryFeed threats={threats} alerts={alerts} />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Active Campaigns */}
-        <section className="xl:col-span-2 card" aria-labelledby="campaigns-heading">
-          <div className="card-header flex items-center justify-between">
-            <h2 id="campaigns-heading" className="font-medium text-ink-primary">Active Campaigns</h2>
-            <span className="text-xs text-ink-muted" aria-label={`${campaigns.length} active campaigns`}>
-              {campaigns.length} active
+      {/* Full-width Active Campaigns Row */}
+      <section className="card border-t-4 border-ac-blue flex flex-col min-h-[300px]" aria-labelledby="campaigns-heading">
+        <div className="card-header flex items-center justify-between bg-surface-subtle/50 shrink-0">
+          <h2 id="campaigns-heading" className="text-sm font-bold text-ink-primary uppercase tracking-tight">Active Campaigns</h2>
+          <div className="flex items-center gap-4">
+            <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest" aria-label={`${campaigns.length} active campaigns`}>
+              {campaigns.filter(c => c.status === 'ACTIVE').length} ACTIVE
             </span>
+            <button className="text-[10px] font-bold text-ac-blue hover:text-ac-blue-dark transition-colors uppercase tracking-widest">
+              View All Campaigns &gt;
+            </button>
           </div>
-          <div className="card-body">
-            <ErrorBoundary fallback={<CampaignListSkeleton />}>
-              <Suspense fallback={<CampaignListSkeleton />}>
-                <ActiveCampaignList campaigns={campaigns} />
-              </Suspense>
-            </ErrorBoundary>
+        </div>
+        <div className="card-body p-0">
+          <ErrorBoundary fallback={<CampaignListSkeleton />}>
+            <Suspense fallback={<CampaignListSkeleton />}>
+              <ActiveCampaignList campaigns={campaigns} />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      </section>
+
+      {/* 3-Column Grid for Strategic Insights and Top Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Strategic Insight / Summary Card - Moved to 3-column grid */}
+        <div className="bg-ac-navy p-6 text-white relative overflow-hidden group flex flex-col justify-center min-h-[450px]">
+          <div className="absolute top-0 right-0 w-32 h-full bg-white/5 diagonal-split transition-transform group-hover:scale-110 duration-500" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-ac-sky-blue mb-3">
+              <Shield className="w-4 h-4" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Strategic Insight</span>
+            </div>
+            <h3 className="text-xl font-light mb-4 uppercase tracking-tight">Fleet Vulnerability Analysis</h3>
+            <p className="text-sm text-white/70 leading-relaxed mb-6">
+              Current telemetry indicates a 14% increase in credential stuffing attempts targeting the catalog-api. 
+              Edge sensors have automatically shifted to aggressive rate-limiting.
+            </p>
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-white/50">
+                <span>Threat Level</span>
+                <span className="text-ac-orange">Elevated</span>
+              </div>
+              <div className="h-1 bg-white/10 w-full overflow-hidden">
+                <div className="h-full bg-ac-orange w-[65%]" />
+              </div>
+            </div>
+            <button className="text-[10px] font-bold text-ac-magenta hover:text-ac-magenta-light transition-colors uppercase tracking-widest flex items-center gap-2">
+              Review Recommended Policies <Activity className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+
+        {/* Top Attackers */}
+        <section className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]" aria-labelledby="attackers-heading">
+          <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
+            <h2 id="attackers-heading" className="text-xs font-bold text-ink-muted uppercase tracking-widest">Top Attackers (24h)</h2>
+          </div>
+          <div className="card-body space-y-5 overflow-auto flex-grow">
+            {topAttackers.map((attacker) => (
+              <div key={attacker.label} className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-ink-secondary truncate pr-2">{attacker.label}</span>
+                  <span className="text-ink-muted font-bold">{attacker.value.toLocaleString()}</span>
+                </div>
+                <div className="h-1 bg-surface-subtle w-full">
+                  <div 
+                    className="h-full bg-ac-blue/40" 
+                    style={{ width: `${Math.min(100, (attacker.value / (topAttackers[0]?.value || 1)) * 100)}%` }} 
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
-        <div className="space-y-6">
-          {/* Top Attackers */}
-          <section className="card" aria-labelledby="attackers-heading">
-            <div className="card-header">
-              <h2 id="attackers-heading" className="font-medium text-ink-primary">Top Attackers (24h)</h2>
-            </div>
-            <div className="card-body space-y-3">
-              {topAttackers.map((attacker) => (
-                <div key={attacker.label} className="flex items-center justify-between text-sm">
-                  <span className="text-ink-secondary">{attacker.label}</span>
-                  <span className="text-ink-muted">{attacker.value.toLocaleString()}</span>
+        {/* Top Fingerprints */}
+        <section className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]" aria-labelledby="fingerprints-heading">
+          <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
+            <h2 id="fingerprints-heading" className="text-xs font-bold text-ink-muted uppercase tracking-widest">Top Fingerprints (24h)</h2>
+          </div>
+          <div className="card-body space-y-5 overflow-auto flex-grow">
+            {topFingerprints.map((fingerprint) => (
+              <div key={fingerprint.label} className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-ink-secondary truncate pr-2">{fingerprint.label}</span>
+                  <span className="text-ink-muted font-bold">{fingerprint.value.toLocaleString()}</span>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Top Fingerprints */}
-          <section className="card" aria-labelledby="fingerprints-heading">
-            <div className="card-header">
-              <h2 id="fingerprints-heading" className="font-medium text-ink-primary">Top Fingerprints (24h)</h2>
-            </div>
-            <div className="card-body space-y-3">
-              {topFingerprints.map((fingerprint) => (
-                <div key={fingerprint.label} className="flex items-center justify-between text-sm">
-                  <span className="text-ink-secondary">{fingerprint.label}</span>
-                  <span className="text-ink-muted">{fingerprint.value.toLocaleString()}</span>
+                <div className="h-1 bg-surface-subtle w-full">
+                  <div 
+                    className="h-full bg-ac-magenta/40" 
+                    style={{ width: `${Math.min(100, (fingerprint.value / (topFingerprints[0]?.value || 1)) * 100)}%` }} 
+                  />
                 </div>
-              ))}
-            </div>
-          </section>
-        </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );
