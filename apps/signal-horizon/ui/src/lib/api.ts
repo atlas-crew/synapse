@@ -3,8 +3,18 @@
  * Provides centralized API configuration and authenticated fetch
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3100/api/v1';
-export const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
+function normalizeApiBaseUrl(raw: string): string {
+  const trimmed = raw.replace(/\/+$/, '');
+  if (trimmed.endsWith('/api/v1')) return trimmed;
+  if (trimmed.endsWith('/api')) return `${trimmed}/v1`;
+  return `${trimmed}/api/v1`;
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL || 'http://localhost:3100');
+export const API_KEY =
+  import.meta.env.VITE_HORIZON_API_KEY ||
+  import.meta.env.VITE_API_KEY ||
+  'dev-dashboard-key';
 
 interface FetchOptions {
   signal?: AbortSignal;

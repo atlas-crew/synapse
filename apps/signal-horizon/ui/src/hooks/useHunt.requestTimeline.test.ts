@@ -50,7 +50,7 @@ describe('useHunt.getRequestTimeline', () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/hunt/request/req_123?limit=25'),
+      expect.stringContaining('/api/v1/hunt/request/req_123?limit=25'),
       expect.objectContaining({
         headers: expect.objectContaining({
           'X-API-Key': expect.any(String),
