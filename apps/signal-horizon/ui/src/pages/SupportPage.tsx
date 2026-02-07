@@ -274,6 +274,8 @@ export function SupportPage() {
 
 }
 
+let mermaidIdCounter = 0;
+
 function DocumentationViewer({ docs, selectedDocId, onSelectDoc }: { docs: DocItem[], selectedDocId: string, onSelectDoc: (id: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -576,7 +578,7 @@ Track these metrics:
   
   // Parse markdown to HTML and sanitize with DOMPurify (labs-v20)
   // DOMPurify prevents XSS attacks from malicious markdown content
-  const htmlContent = useMemo(() => {
+  const sanitizedHtml = useMemo(() => {
     const rawHtml = marked.parse(content) as string;
     return DOMPurify.sanitize(rawHtml, {
       // Allow mermaid diagram divs
@@ -602,30 +604,57 @@ Track these metrics:
     });
   }, [content]);
 
-  // Run mermaid rendering when content changes
+  // Render mermaid diagrams off-DOM and store final HTML in state.
+  // This prevents React re-renders from wiping mermaid's DOM mutations,
+  // since the rendered SVGs become part of React-managed state.
+  const [htmlContent, setHtmlContent] = useState(sanitizedHtml);
+
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (containerRef.current) {
+    let cancelled = false;
+
+    async function renderMermaid() {
+      const temp = document.createElement('div');
+      temp.innerHTML = sanitizedHtml;
+      const mermaidNodes = temp.querySelectorAll('.mermaid');
+
+      if (mermaidNodes.length === 0) {
+        if (!cancelled) setHtmlContent(sanitizedHtml);
+        return;
+      }
+
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+        securityLevel: 'loose',
+        themeVariables: {
+          primaryColor: '#0057B7',
+          edgeLabelBackground: '#ffffff',
+          tertiaryColor: '#f0f4f8',
+        },
+      });
+
+      for (const node of mermaidNodes) {
         try {
-          mermaid.initialize({
-            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-            themeVariables: {
-              primaryColor: '#0057B7',
-              edgeLabelBackground: '#ffffff',
-              tertiaryColor: '#f0f4f8',
-            }
-          });
-          await mermaid.run({
-            nodes: containerRef.current.querySelectorAll('.mermaid'),
-          });
+          const id = `mmd-${++mermaidIdCounter}`;
+          const { svg } = await mermaid.render(id, node.textContent || '');
+          node.innerHTML = svg;
+          node.classList.add('mermaid-rendered');
         } catch (err) {
           console.error('Mermaid rendering failed:', err);
         }
       }
-    }, 100);
 
-    return () => clearTimeout(timer);
-  }, [htmlContent]);
+      if (!cancelled) {
+        setHtmlContent(temp.innerHTML);
+      }
+    }
+
+    // Show sanitized HTML immediately, then replace with mermaid-rendered version
+    setHtmlContent(sanitizedHtml);
+    renderMermaid();
+
+    return () => { cancelled = true; };
+  }, [sanitizedHtml]);
 
   // Handle copy button clicks
   useEffect(() => {
