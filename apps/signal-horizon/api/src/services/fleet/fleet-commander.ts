@@ -94,10 +94,11 @@ export class FleetCommander extends EventEmitter {
       timeoutCheckIntervalMs: config.timeoutCheckIntervalMs ?? 5000, // 5 seconds
       commandFeatures: config.commandFeatures ?? {},
     };
-    this.commandFeatures = {
-      toggleChaos: config.commandFeatures?.toggleChaos ?? false,
-      toggleMtd: config.commandFeatures?.toggleMtd ?? false,
-    };
+    // Keep a reference to the passed object so runtime flag updates are visible.
+    const features = (config.commandFeatures ?? {}) as Partial<{ toggleChaos: boolean; toggleMtd: boolean }>;
+    if (typeof features.toggleChaos !== 'boolean') features.toggleChaos = false;
+    if (typeof features.toggleMtd !== 'boolean') features.toggleMtd = false;
+    this.commandFeatures = features as { toggleChaos: boolean; toggleMtd: boolean };
 
     // Start timeout checker
     this.startTimeoutChecker();

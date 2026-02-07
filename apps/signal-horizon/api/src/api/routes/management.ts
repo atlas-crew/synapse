@@ -15,6 +15,10 @@ import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../middleware/auth.js';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
+import {
+  getFleetCommandFeaturesForConfig,
+  updateFleetCommandFeatures,
+} from '../../services/fleet/command-features.js';
 
 // =============================================================================
 // Configuration
@@ -1314,6 +1318,120 @@ export function createManagementRoutes(
       res.status(500).json({
         error: 'Failed to fetch connectivity history',
       });
+    }
+  });
+
+  // =============================================================================
+  // Hub Configuration Management
+  // =============================================================================
+
+  /**
+   * GET /config - Get hub runtime configuration
+   */
+  router.get('/config', requireScope('fleet:admin'), async (_req: Request, res: Response) => {
+    try {
+      const { config } = await import('../../config.js');
+      
+      // Sanitize sensitive values
+      const sanitizedConfig = {
+        ...config,
+        // Overlay runtime feature flags so the UI reflects live state.
+        fleetCommands: getFleetCommandFeaturesForConfig(),
+        database: {
+          url: config.database.url.replace(/\/\/.*:.*@/, '//****:****@'),
+        },
+        telemetry: {
+          ...config.telemetry,
+          jwtSecret: '••••••••••••••••',
+        },
+        sensorBridge: {
+          ...config.sensorBridge,
+          apiKey: config.sensorBridge.apiKey ? '••••••••••••••••' : undefined,
+        },
+        clickhouse: {
+          ...config.clickhouse,
+          password: '••••••••••••••••',
+        },
+      };
+
+      res.json(sanitizedConfig);
+    } catch (error) {
+      logger.error({ error }, 'Error fetching hub config');
+      res.status(500).json({ error: 'Failed to fetch hub configuration' });
+    }
+  });
+
+  /**
+   * PATCH /config - Update hub runtime configuration
+   * Note: Some changes (like PORT) may require a restart to take effect.
+   */
+  router.patch('/config', requireScope('fleet:admin'), async (req: Request, res: Response) => {
+    try {
+      const updateSchema = z.object({
+        server: z.object({
+          port: z.number().int().min(1).max(65535).optional(),
+          host: z.string().optional(),
+        }).optional(),
+        aggregator: z.object({
+          batchSize: z.number().int().positive().optional(),
+          batchTimeoutMs: z.number().int().positive().optional(),
+        }).optional(),
+        broadcaster: z.object({
+          pushDelayMs: z.number().int().nonnegative().optional(),
+          cacheSize: z.number().int().positive().optional(),
+        }).optional(),
+        fleetCommands: z.object({
+          enableToggleChaos: z.boolean().optional(),
+          enableToggleMtd: z.boolean().optional(),
+        }).optional(),
+      });
+
+      const validation = updateSchema.safeParse(req.body);
+      if (!validation.success) {
+        res.status(400).json({ error: 'Invalid configuration update', details: validation.error.errors });
+        return;
+      }
+
+      // Runtime-only updates: apply feature flags immediately in memory.
+      if (validation.data.fleetCommands) {
+        updateFleetCommandFeatures({
+          toggleChaos: validation.data.fleetCommands.enableToggleChaos,
+          toggleMtd: validation.data.fleetCommands.enableToggleMtd,
+        });
+      }
+
+      // In a real implementation, we would persist updates and possibly trigger restart hooks.
+      // For now: acknowledge all changes, and apply runtime feature flags.
+      logger.info({ updates: validation.data }, 'Hub configuration update requested');
+
+      const { config } = await import('../../config.js');
+
+      res.json({
+        message: 'Configuration update acknowledged (feature flags applied in-memory).',
+        updates: validation.data,
+        config: {
+          ...config,
+          fleetCommands: getFleetCommandFeaturesForConfig(),
+          database: {
+            url: config.database.url.replace(/\/\/.*:.*@/, '//****:****@'),
+          },
+          telemetry: {
+            ...config.telemetry,
+            jwtSecret: '••••••••••••••••',
+          },
+          sensorBridge: {
+            ...config.sensorBridge,
+            apiKey: config.sensorBridge.apiKey ? '••••••••••••••••' : undefined,
+          },
+          clickhouse: {
+            ...config.clickhouse,
+            password: '••••••••••••••••',
+          },
+        },
+      });
+    } catch (error) {
+      logger.error({ error }, 'Error updating hub config');
+      res.status(500).json({ error: 'Failed to update hub configuration' });
     }
   });
 

@@ -37,6 +37,7 @@ import {
 import { PlaybookService } from './services/warroom/playbook-service.js';
 import { FleetAggregator } from './services/fleet/fleet-aggregator.js';
 import { PreferenceService } from './services/fleet/preference-service.js';
+import { fleetCommandFeatures } from './services/fleet/command-features.js';
 import { ConfigManager } from './services/fleet/config-manager.js';
 import { FleetCommander } from './services/fleet/fleet-commander.js';
 import { RuleDistributor } from './services/fleet/rule-distributor.js';
@@ -716,10 +717,8 @@ async function start() {
     defaultTimeoutMs: 30000,
     maxRetries: 3,
     timeoutCheckIntervalMs: 5000,
-    commandFeatures: {
-      toggleChaos: config.fleetCommands.enableToggleChaos,
-      toggleMtd: config.fleetCommands.enableToggleMtd,
-    },
+    // Runtime (in-memory) feature flags; can be toggled via management config endpoint.
+    commandFeatures: fleetCommandFeatures,
   });
 
   // Distributed stores (optional)
