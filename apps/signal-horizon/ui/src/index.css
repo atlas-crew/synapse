@@ -1603,3 +1603,42 @@
     transform: none !important;
   }
 }
+
+/* ── Brand Polish: Threat Overview (Variant F) ──────────────── */
+
+/* Diagonal split overlay for hero/CTA sections */
+.diagonal-split {
+  clip-path: polygon(20% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+/* Tactical background: Navy gradient + dot grid pattern */
+.tactical-bg {
+  background-image:
+    linear-gradient(180deg, rgba(0, 30, 98, 0.06), rgba(0, 30, 98, 0)),
+    radial-gradient(circle at 1px 1px, rgba(0, 87, 183, 0.15) 1px, transparent 0);
+  background-size: 100% 100%, 20px 20px;
+}
+
+/* Timeline connector for ThreatTrajectoryFeed */
+.timeline-connector {
+  position: relative;
+  padding-left: 1rem;
+  border-left: 2px solid rgba(0, 87, 183, 0.3);
+}
+
+.timeline-connector::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 0.5rem;
+  width: 8px;
+  height: 8px;
+  background: var(--ac-blue, #0057B7);
+}
+
+/* Timeline dot color variants */
+.timeline-dot-red::before { background: var(--ac-red, #E35205); }
+.timeline-dot-orange::before { background: var(--ac-orange, #E35205); }
+.timeline-dot-blue::before { background: var(--ac-blue, #0057B7); }
+.timeline-dot-green::before { background: var(--ac-green, #00B140); }
+.timeline-dot-magenta::before { background: var(--ac-magenta, #D62598); }

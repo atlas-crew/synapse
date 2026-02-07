@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
@@ -14,8 +14,6 @@ import {
   AlertTriangle,
   Activity,
   Server,
-  TrendingUp,
-  Globe,
   RefreshCw,
   Download,
   Settings,
@@ -24,7 +22,6 @@ import {
 import { clsx } from 'clsx';
 import { useHorizonStore } from '../stores/horizonStore';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { apiFetch } from '../lib/api';
 import {
   StatsGridSkeleton,
   CampaignListSkeleton,
@@ -34,12 +31,8 @@ import {
 import { useAttackMap, type AttackPoint, type AttackRoute, type AttackSeverity } from '../hooks/useAttackMap';
 import { useRelativeTime } from '../hooks/useRelativeTime';
 
-const severityColors = {
-  LOW: 'text-ac-blue bg-ac-blue/10 border-ac-blue/30',
-  MEDIUM: 'text-ac-orange bg-ac-orange/10 border-ac-orange/30',
-  HIGH: 'text-ac-orange bg-ac-orange/20 border-ac-orange/40',
-  CRITICAL: 'text-ac-red bg-ac-red/15 border-ac-red/40',
-};
+const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
+const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
 
 const fallbackAttackers = [
   { label: '185.228.101.0/24', value: 12421 },
@@ -59,29 +52,12 @@ const fallbackFingerprints = [
 
 const mapFilters = ['All Attacks', 'Top Bots (1h)', 'Cross-Tenant'];
 
-type ThreatFeedbackResponse = {
-  success: boolean;
-  threat: {
-    id: string;
-    riskScore: number;
-    fleetRiskScore?: number | null;
-  };
-};
-
-function getRiskBadge(score: number): string {
-  if (score >= 80) return 'text-ac-red bg-ac-red/15 border-ac-red/40';
-  if (score >= 60) return 'text-ac-orange bg-ac-orange/20 border-ac-orange/40';
-  if (score >= 40) return 'text-ac-orange bg-ac-orange/10 border-ac-orange/30';
-  return 'text-ac-blue bg-ac-blue/10 border-ac-blue/30';
-}
-
 export default function OverviewPage() {
   useDocumentTitle('Overview');
-  const { campaigns, threats, alerts, stats, isLoading: isStoreLoading, updateThreat } = useHorizonStore();
+  const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
   const { points: mapPoints, routes: mapRoutes, isLoading: isMapLoading, error, refetch } = useAttackMap();
   const isLoading = isStoreLoading || isMapLoading;
   const [activeFilter, setActiveFilter] = useState(mapFilters[0]);
-  const [feedbackState, setFeedbackState] = useState<Record<string, 'idle' | 'pending' | 'success' | 'error'>>({});
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const lastUpdatedText = useRelativeTime(lastUpdated);
 
@@ -139,53 +115,6 @@ export default function OverviewPage() {
       .slice(0, 5)
       .map((threat) => ({ label: threat.indicator, value: threat.hitCount }));
   }, [threats]);
-
-  const recentThreats = useMemo(() => {
-    if (threats.length === 0) return [];
-    return [...threats]
-      .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime())
-      .slice(0, 5);
-  }, [threats]);
-
-  const submitFalsePositive = async (threatId: string) => {
-    setFeedbackState((prev) => ({ ...prev, [threatId]: 'pending' }));
-
-    try {
-      const response = await apiFetch<ThreatFeedbackResponse>(`/threats/${threatId}/feedback`, {
-        method: 'POST',
-        body: {
-          action: 'false_positive',
-          impact: 'moderate',
-        },
-      });
-
-      updateThreat(threatId, {
-        riskScore: response.threat.riskScore,
-        fleetRiskScore: response.threat.fleetRiskScore ?? undefined,
-      });
-
-      setFeedbackState((prev) => ({ ...prev, [threatId]: 'success' }));
-      window.setTimeout(() => {
-        setFeedbackState((prev) => {
-          if (prev[threatId] !== 'success') return prev;
-          const next = { ...prev };
-          delete next[threatId];
-          return next;
-        });
-      }, 2500);
-    } catch (error) {
-      console.error('Failed to submit false-positive feedback', error);
-      setFeedbackState((prev) => ({ ...prev, [threatId]: 'error' }));
-      window.setTimeout(() => {
-        setFeedbackState((prev) => {
-          if (prev[threatId] !== 'error') return prev;
-          const next = { ...prev };
-          delete next[threatId];
-          return next;
-        });
-      }, 3500);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -248,6 +177,7 @@ export default function OverviewPage() {
           value={stats.activeCampaigns}
           sublabel="+2 from yesterday"
           tone="text-ac-red"
+          description="Coordinated attack campaigns currently being tracked across the fleet"
         />
         <StatCard
           icon={AlertTriangle}
@@ -255,6 +185,7 @@ export default function OverviewPage() {
           value={campaigns.length}
           sublabel="+4 from yesterday"
           tone="text-ac-orange"
+          description="Total number of distinct attack campaigns observed in the last 24 hours"
         />
         <StatCard
           icon={Activity}
@@ -262,6 +193,7 @@ export default function OverviewPage() {
           value={stats.blockedIndicators}
           sublabel="+12% from yesterday"
           tone="text-ac-green"
+          description="Threat indicators actively blocked across all sensors"
         />
         <StatCard
           icon={Server}
@@ -269,6 +201,7 @@ export default function OverviewPage() {
           value={`${stats.sensorsOnline}`}
           sublabel="1 sensor offline"
           tone="text-ac-blue"
+          description="Number of sensors currently connected and sending telemetry"
         />
         <StatCard
           icon={Database}
@@ -276,6 +209,7 @@ export default function OverviewPage() {
           value={stats.apiStats?.discoveryEvents ?? 0}
           sublabel={`${stats.apiStats?.schemaViolations ?? 0} schema changes`}
           tone="text-ac-purple"
+          description="New API endpoints automatically discovered by the profiler"
         />
       </section>
 
@@ -316,47 +250,10 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Threat Feed - with data stream effect */}
-        <section className="card data-stream" aria-labelledby="threat-feed-heading" aria-live="polite">
-          <div className="card-header flex items-center justify-between">
-            <h2 id="threat-feed-heading" className="font-medium text-ink-primary tracking-wide">
-              THREAT FEED
-            </h2>
-            <span className="status-blink">
-              <TrendingUp className="w-4 h-4 text-ac-magenta" aria-hidden="true" />
-            </span>
-          </div>
-          <div className="card-body max-h-80 overflow-y-auto stagger-fade" role="log" aria-label="Recent threat alerts">
-            {alerts.length === 0 ? (
-              <div className="text-center text-ink-muted py-8" role="status">
-                No recent alerts
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {alerts.slice(0, 8).map((alert) => (
-                  <motion.div
-                    key={alert.id}
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={clsx(
-                      'p-3 border-l-2 bg-surface-inset',
-                      alert.severity === 'CRITICAL' && 'border-ac-red',
-                      alert.severity === 'HIGH' && 'border-ac-orange',
-                      alert.severity === 'MEDIUM' && 'border-ac-orange',
-                      alert.severity === 'LOW' && 'border-ac-blue'
-                    )}
-                  >
-                    <div className="font-medium text-ink-primary">{alert.title}</div>
-                    <div className="text-ink-secondary mt-0.5">{alert.description}</div>
-                    <div className="text-ink-muted mt-1 text-xs">
-                      {new Date(alert.timestamp).toLocaleTimeString()}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
+        {/* Threat Trajectory Feed */}
+        <Suspense fallback={<AlertFeedSkeleton />}>
+          <ThreatTrajectoryFeed threats={threats} alerts={alerts} />
+        </Suspense>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -368,110 +265,14 @@ export default function OverviewPage() {
               {campaigns.length} active
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="data-table" role="table" aria-label="Active campaigns">
-              <thead>
-                <tr>
-                  <th scope="col">Campaign</th>
-                  <th scope="col">Severity</th>
-                  <th scope="col">Tenants</th>
-                  <th scope="col">Confidence</th>
-                  <th scope="col">Last Activity</th>
-                  <th scope="col">Scope</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campaigns.slice(0, 6).map((campaign) => (
-                  <tr key={campaign.id}>
-                    <td className="font-medium text-ink-primary">{campaign.name}</td>
-                    <td>
-                      <span className={clsx('px-2 py-0.5 text-xs border', severityColors[campaign.severity])}>
-                        {campaign.severity}
-                      </span>
-                    </td>
-                    <td>{campaign.tenantsAffected}</td>
-                    <td>{Math.round(campaign.confidence * 100)}%</td>
-                    <td className="text-ink-muted text-sm">
-                      {new Date(campaign.lastActivityAt).toLocaleTimeString()}
-                    </td>
-                    <td>
-                      {campaign.isCrossTenant ? (
-                        <span className="flex items-center gap-1 text-ac-purple">
-                          <Globe className="w-3 h-3" />
-                          Fleet
-                        </span>
-                      ) : (
-                        <span className="text-ink-muted">Local</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {campaigns.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center text-ink-muted py-6">
-                      No active campaigns detected
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="card-body">
+            <Suspense fallback={<CampaignListSkeleton />}>
+              <ActiveCampaignList campaigns={campaigns} />
+            </Suspense>
           </div>
         </section>
 
         <div className="space-y-6">
-          {/* Recent Threats */}
-          <section className="card" aria-labelledby="recent-threats-heading">
-            <div className="card-header flex items-center justify-between">
-              <h2 id="recent-threats-heading" className="font-medium text-ink-primary">Recent Threats</h2>
-              <span className="text-xs text-ink-muted">{threats.length} total</span>
-            </div>
-            <div className="card-body space-y-3">
-              {recentThreats.length === 0 ? (
-                <div className="text-sm text-ink-muted">No recent threats</div>
-              ) : (
-                recentThreats.map((threat) => {
-                  const status = feedbackState[threat.id] ?? 'idle';
-                  const isPending = status === 'pending';
-                  const isSuccess = status === 'success';
-                  const isError = status === 'error';
-
-                  return (
-                    <div key={threat.id} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-ink-primary font-medium">{threat.indicator}</span>
-                          <span className={clsx('px-2 py-0.5 text-xs border', getRiskBadge(threat.riskScore))}>
-                            {Math.round(threat.riskScore)}
-                          </span>
-                          {threat.isFleetThreat && (
-                            <span className="px-2 py-0.5 text-xs border border-ac-purple/30 text-ac-purple">
-                              Fleet
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-ink-muted">{threat.threatType}</div>
-                      </div>
-                      <button
-                        className={clsx(
-                          'btn-ghost text-xs py-1',
-                          isSuccess && 'text-ac-green',
-                          isError && 'text-ac-orange'
-                        )}
-                        onClick={() => submitFalsePositive(threat.id)}
-                        disabled={isPending}
-                      >
-                        {isPending && 'Sending...'}
-                        {isSuccess && 'De-scored'}
-                        {isError && 'Retry'}
-                        {status === 'idle' && 'Mark False Positive'}
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
           {/* Top Attackers */}
           <section className="card" aria-labelledby="attackers-heading">
             <div className="card-header">
@@ -729,12 +530,14 @@ function StatCard({
   value,
   sublabel,
   tone,
+  description,
 }: {
   icon: React.ElementType;
   label: string;
   value: number | string;
   sublabel?: string;
   tone: string;
+  description?: string;
 }) {
   return (
     <article
@@ -743,7 +546,7 @@ function StatCard({
       tabIndex={0}
     >
       <div>
-        <div className="text-xs tracking-[0.18em] uppercase text-ink-muted">{label}</div>
+        <div className="text-xs tracking-[0.18em] uppercase text-ink-muted" title={description}>{label}</div>
         <div className="text-2xl font-light text-ink-primary">{value}</div>
         {sublabel && <div className="text-xs text-ink-muted mt-1">{sublabel}</div>}
       </div>
