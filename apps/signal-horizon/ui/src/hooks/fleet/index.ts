@@ -51,6 +51,10 @@ export type {
   UseReleasesResult,
 } from './useReleases';
 export { useSessionSearch } from './useSessionSearch';
+export { useFleetControl } from './useFleetControl';
+export { usePlaybooks } from './usePlaybooks';
+export { useBlocklist } from './useBlocklist';
+export { useOnboarding } from './useOnboarding';
 export type {
   TimeRange,
   SessionSearchQuery,
