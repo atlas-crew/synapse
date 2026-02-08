@@ -24,9 +24,9 @@
        ACCENT COLORS
        ========================================= */
     --ac-purple: #440099;
-    --ac-orange: #E35205;
+    --ac-orange: #C24900;
     --ac-cloud-blue: #5E8AB4;
-    --ac-green: #00B140;
+    --ac-green: #008731;
     --ac-red: #EF3340;
 
     /* =========================================
@@ -106,7 +106,7 @@
     --link: #0057B7;
     --link-hover: #003EC8;
 
-    --border-subtle: #D6E1EB;
+    --border-subtle: #8596A7;
     --border-medium: #B8C9DA;
     --border-strong: #001E62;
     --border-inset: #E2EAF2;
@@ -187,7 +187,7 @@
     --link: #529EEC;           /* Sky Blue */
     --link-hover: #7CBAFF;
 
-    --border-subtle: #27272a;  /* Zinc 800 */
+    --border-subtle: #62626B;  /* Darkened for WCAG 1.4.11 non-text contrast */
     --border-strong: #3f3f46;  /* Zinc 700 */
     --border-inset: #09090b;
 
@@ -486,17 +486,20 @@
     @apply bg-transparent text-ac-blue border border-ac-navy;
   }
 
-  /* Status indicators */
+  /* Status indicators (color + shape for WCAG 1.4.1) */
   .status-connected {
     @apply bg-ac-green;
+    border-radius: 50%; /* Circle = connected */
   }
 
   .status-disconnected {
     @apply bg-ac-gray-mid;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); /* Diamond = disconnected */
   }
 
   .status-reconnecting {
     @apply bg-ac-orange animate-pulse;
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%); /* Triangle = reconnecting */
   }
 
   /* Stat cards (Signal Horizon Design System)
@@ -1675,9 +1678,24 @@
   background: var(--ac-blue, #0057B7);
 }
 
-/* Timeline dot color variants */
-.timeline-dot-red::before { background: var(--ac-red, #EF3340); }
-.timeline-dot-orange::before { background: var(--ac-orange, #E35205); }
-.timeline-dot-blue::before { background: var(--ac-blue, #0057B7); }
-.timeline-dot-green::before { background: var(--ac-green, #00B140); }
-.timeline-dot-magenta::before { background: var(--ac-magenta, #D62598); }
+/* Timeline dot color + shape variants (WCAG 1.4.1 - not color alone) */
+.timeline-dot-red::before {
+  background: var(--ac-red, #BF3A30);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); /* Diamond = alert */
+}
+.timeline-dot-orange::before {
+  background: var(--ac-orange, #C24900);
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%); /* Triangle = warning */
+}
+.timeline-dot-blue::before {
+  background: var(--ac-blue, #0057B7);
+  /* Square (default shape) = informational */
+}
+.timeline-dot-green::before {
+  background: var(--ac-green, #008731);
+  border-radius: 50%; /* Circle = success */
+}
+.timeline-dot-magenta::before {
+  background: var(--ac-magenta, #D62598);
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); /* Pentagon = notable */
+}

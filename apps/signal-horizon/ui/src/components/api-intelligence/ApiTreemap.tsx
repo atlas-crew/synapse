@@ -37,12 +37,14 @@ const DEMO_TREEMAP_DATA = [
   },
 ];
 
-// Atlas Crew Brand colors
+// Atlas Crew Brand colors (brand hierarchy order)
 const COLORS = [
+  '#001E62', // Navy
   '#0057B7', // Atlas Crew Blue
-  '#D62598', // Atlas Crew Magenta
-  '#440099', // Atlas Crew Purple
-  '#E35205', // Atlas Crew Orange
+  '#D62598', // Magenta
+  '#529EEC', // Sky Blue
+  '#008731', // Green (contrast-safe)
+  '#C24900', // Orange (contrast-safe)
 ];
 
 // Simple rect-only content

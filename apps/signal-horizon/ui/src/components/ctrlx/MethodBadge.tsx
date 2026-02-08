@@ -13,8 +13,8 @@ const methodStyles: Record<HttpMethod, string> = {
   PUT: 'bg-method-put/10 text-method-put border-method-put/30',
   PATCH: 'bg-method-patch/10 text-method-patch border-method-patch/30',
   DELETE: 'bg-method-delete/10 text-method-delete border-method-delete/30',
-  HEAD: 'bg-gray-100 text-gray-600 border-gray-300',
-  OPTIONS: 'bg-gray-100 text-gray-600 border-gray-300',
+  HEAD: 'bg-surface-subtle text-ink-muted border-border-subtle',
+  OPTIONS: 'bg-surface-subtle text-ink-muted border-border-subtle',
 };
 
 /**

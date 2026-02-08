@@ -37,20 +37,20 @@ interface NodeDetails {
   details?: Record<string, string | number>;
 }
 
-// Professional color palette
+// Atlas Crew Brand color palette
 const colors = {
-  campaign: { bg: '#dc2626', border: '#fca5a5' },
-  actor: { bg: '#ea580c', border: '#fdba74' },
-  ip: { bg: '#0ea5e9', border: '#7dd3fc' },
-  sensor: { bg: '#22c55e', border: '#86efac' },
-  token: { bg: '#8b5cf6', border: '#c084fc' },
-  asn: { bg: '#6366f1', border: '#a5b4fc' },
+  campaign: { bg: '#BF3A30', border: '#E8847D' },   // Atlas Crew Red
+  actor: { bg: '#C24900', border: '#E8974D' },       // Atlas Crew Orange (contrast-safe)
+  ip: { bg: '#0057B7', border: '#70BAF7' },           // Atlas Crew Blue
+  sensor: { bg: '#008731', border: '#5CB87A' },       // Atlas Crew Green (contrast-safe)
+  token: { bg: '#440099', border: '#9B6BD6' },        // Atlas Crew Purple
+  asn: { bg: '#529EEC', border: '#BEDDFF' },          // Atlas Crew Sky Blue
   edge: {
-    attributed: '#ef4444',
-    linked: '#f97316',
-    uses: '#8b5cf6',
-    attacked: '#ef4444',
-    default: '#475569',
+    attributed: '#BF3A30',  // Atlas Crew Red
+    linked: '#C24900',      // Atlas Crew Orange
+    uses: '#440099',        // Atlas Crew Purple
+    attacked: '#BF3A30',    // Atlas Crew Red
+    default: '#2A4A8E',     // Navy-lighter
   },
 };
 
@@ -98,18 +98,18 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
                 'shape': 'ellipse',
                 'width': 30,
                 'height': 30,
-                'background-color': '#64748b',
+                'background-color': '#627D98',
                 'background-opacity': 1,
                 'border-width': 2,
-                'border-color': '#94a3b8',
+                'border-color': '#829AB1',
                 'label': 'data(label)',
                 'text-valign': 'bottom',
                 'text-halign': 'center',
                 'text-margin-y': 6,
                 'font-size': '10px',
                 'font-family': '"JetBrains Mono", monospace',
-                'color': '#cbd5e1',
-                'text-background-color': '#0f172a',
+                'color': '#B0C4DE',
+                'text-background-color': '#001544',
                 'text-background-opacity': 0.85,
                 'text-background-padding': '3px',
                 'text-background-shape': 'roundrectangle',
@@ -330,7 +330,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
         className="w-full cursor-grab active:cursor-grabbing"
         style={{
           height: '480px',
-          background: 'linear-gradient(180deg, #0a0a0e 0%, #0d0d14 100%)',
+          background: 'linear-gradient(180deg, #00102E 0%, #001544 100%)',
         }}
       />
 

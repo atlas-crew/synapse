@@ -4,24 +4,24 @@
  * Supports both light and dark modes
  */
 
-// Atlas Crew Brand color palette for charts
+// Atlas Crew Brand color palette for charts (ordered by brand hierarchy)
 export const CHART_COLORS = {
-  primary: '#529EEC',    // Sky Blue - high contrast for lines
-  secondary: '#D62598',  // Magenta
-  tertiary: '#0057B7',   // Atlas Crew Blue
-  quaternary: '#E35205', // Orange
-  quinary: '#00B140',    // Green
-  senary: '#440099',     // Purple
+  primary: '#001E62',    // Navy - dominant
+  secondary: '#0057B7',  // Atlas Crew Blue - interactive
+  tertiary: '#529EEC',   // Sky Blue
+  quaternary: '#D62598', // Magenta - accent
+  quinary: '#008731',    // Green (contrast-safe)
+  senary: '#C24900',     // Orange (contrast-safe)
 };
 
-// Categorical palette for multi-series charts
+// Categorical palette for multi-series charts (brand hierarchy order)
 export const CATEGORICAL_COLORS = [
+  '#001E62', // Navy
+  '#0057B7', // Atlas Crew Blue
   '#529EEC', // Sky Blue
   '#D62598', // Magenta
-  '#E35205', // Orange
-  '#00B140', // Green
-  '#440099', // Purple
-  '#0057B7', // Atlas Crew Blue
+  '#008731', // Green
+  '#C24900', // Orange
 ];
 
 // Gradient definitions for area/bar charts
@@ -44,15 +44,15 @@ export const GRADIENTS = {
   success: {
     id: 'gradientSuccess',
     stops: [
-      { offset: '0%', color: '#00B140', opacity: 0.5 },
-      { offset: '100%', color: '#00B140', opacity: 0.1 },
+      { offset: '0%', color: '#008731', opacity: 0.5 },
+      { offset: '100%', color: '#008731', opacity: 0.1 },
     ],
   },
   warning: {
     id: 'gradientWarning',
     stops: [
-      { offset: '0%', color: '#E35205', opacity: 0.5 },
-      { offset: '100%', color: '#E35205', opacity: 0.1 },
+      { offset: '0%', color: '#C24900', opacity: 0.5 },
+      { offset: '100%', color: '#C24900', opacity: 0.1 },
     ],
   },
 };

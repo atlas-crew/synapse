@@ -43,18 +43,18 @@ import type { BlockedRequest, ProtectionAlert, TrafficDataPoint } from '../../ty
 // Color palette for dark theme - Atlas Crew Brand compliant
 const COLORS = {
   requests: '#0057B7', // Atlas Crew Blue
-  blocked: '#EF3340', // Atlas Crew Red (accent)
-  protected: '#00B140', // Atlas Crew Green (accent)
+  blocked: '#BF3A30', // Atlas Crew Red (design system)
+  protected: '#008731', // Atlas Crew Green (contrast-safe)
   warning: '#529EEC', // Atlas Crew Sky Blue (secondary) - no yellow per brand
   chart: {
     area: 'rgba(0, 87, 183, 0.2)',
     line: '#0057B7',
-    blocked: 'rgba(239, 51, 64, 0.4)',
-    blockedLine: '#EF3340',
+    blocked: 'rgba(191, 58, 48, 0.4)',
+    blockedLine: '#BF3A30',
   },
 };
 
-const ATTACK_COLORS = ['#0057B7', '#D62598', '#E35205', '#EF3340', '#00B140']; // Atlas Crew brand palette
+const ATTACK_COLORS = ['#0057B7', '#D62598', '#C24900', '#BF3A30', '#008731']; // Atlas Crew brand palette (contrast-safe)
 
 // Demo data for initial development
 const DEMO_TRAFFIC: TrafficDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
@@ -135,7 +135,7 @@ function TrafficChart({ data }: TrafficChartProps) {
             <span className="text-ink-secondary">Requests</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-[#EF3340]" />
+            <div className="w-3 h-3 bg-[#BF3A30]" />
             <span className="text-ink-secondary">Blocked</span>
           </div>
         </div>

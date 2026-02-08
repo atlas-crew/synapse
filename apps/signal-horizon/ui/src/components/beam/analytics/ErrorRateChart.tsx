@@ -63,8 +63,8 @@ export function ErrorRateChart() {
             />
             <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px', color: legendColor }} />
 
-            <Bar dataKey="serverError" name="5xx Error" stackId="a" fill="#EF3340" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="clientError" name="4xx Error" stackId="a" fill="#E35205" />
+            <Bar dataKey="serverError" name="5xx Error" stackId="a" fill="#BF3A30" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="clientError" name="4xx Error" stackId="a" fill="#C24900" />
             <Bar dataKey="success" name="2xx Success" stackId="a" fill="#0057B7" radius={[0, 0, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

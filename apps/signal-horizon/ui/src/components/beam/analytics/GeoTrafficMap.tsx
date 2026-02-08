@@ -50,12 +50,12 @@ const COUNTRY_TRAFFIC: Record<string, number> = {
 const COLOR_SCALE = scaleThreshold<number, number[]>()
   .domain([1000, 5000, 10000, 50000, 100000])
   .range([
-    [65, 182, 242],  // Low (Light Blue)
-    [59, 130, 246],
-    [37, 99, 235],
-    [29, 78, 216],
-    [30, 78, 216],
-    [239, 68, 68]    // High/Alert (Red) - Conceptually distinguishing massive traffic
+    [82, 158, 236],  // Sky Blue (#529EEC)
+    [0, 87, 183],    // Atlas Crew Blue (#0057B7)
+    [0, 65, 137],    // Atlas Crew Blue-Dark (#004189)
+    [0, 30, 98],     // Navy (#001E62)
+    [0, 16, 68],     // Navy-Darker
+    [191, 58, 48]    // Atlas Crew Red (#BF3A30) - extreme traffic alert
   ]);
 
 const INITIAL_VIEW_STATE = {

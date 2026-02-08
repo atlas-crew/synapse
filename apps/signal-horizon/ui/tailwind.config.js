@@ -19,8 +19,8 @@ export default {
           white: '#FFFFFF',
           black: '#000000',
           // Accent colors (data visualization)
-          orange: '#E35205',         // Warnings
-          green: '#00B140',          // Success
+          orange: '#C24900',         // Warnings (darkened for WCAG AA contrast)
+          green: '#008731',          // Success (darkened for WCAG AA contrast)
           red: '#BF3A30',            // Critical, blocked (design system spec)
           purple: '#A400FF',         // Anomalies (design system spec)
           sky: '#3298BC',            // Informational (design system spec)
@@ -63,23 +63,23 @@ export default {
         },
         ctrlx: {
           primary: '#001E62',        // Navy - design system primary
-          success: '#00B140',        // Atlas Crew Green
-          warning: '#E35205',        // Atlas Crew Orange
+          success: '#008731',        // Atlas Crew Green (contrast-safe)
+          warning: '#C24900',        // Atlas Crew Orange (contrast-safe)
           danger: '#BF3A30',         // Atlas Crew Red (design system)
           info: '#3298BC',           // Sky Blue (design system)
         },
         risk: {
-          low: '#00B140',            // Atlas Crew Green
-          medium: '#E35205',         // Atlas Crew Orange
-          high: '#E35205',           // Atlas Crew Orange (higher intensity)
+          low: '#008731',            // Atlas Crew Green (contrast-safe)
+          medium: '#C24900',         // Atlas Crew Orange (contrast-safe)
+          high: '#C24900',           // Atlas Crew Orange (contrast-safe)
           critical: '#D62598',       // Magenta for critical (design system)
         },
         method: {
-          get: '#22c55e',
-          post: '#3b82f6',
-          put: '#f59e0b',
-          patch: '#8b5cf6',
-          delete: '#ef4444',
+          get: '#008731',            // Atlas Crew Green (contrast-safe)
+          post: '#0057B7',           // Atlas Crew Blue
+          put: '#C24900',            // Atlas Crew Orange (contrast-safe)
+          patch: '#440099',          // Atlas Crew Purple
+          delete: '#BF3A30',         // Atlas Crew Red
         },
         surface: {
           base: 'var(--surface-base)',

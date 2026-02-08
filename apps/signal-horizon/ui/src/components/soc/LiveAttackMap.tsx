@@ -126,7 +126,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
       id: 'sensors',
       data: sensors,
       getPosition: d => [d.lon, d.lat],
-      getFillColor: d => d.status === 'warning' ? [255, 165, 0] : [0, 255, 0],
+      getFillColor: d => d.status === 'warning' ? [194, 73, 0] : [0, 135, 49],
       getRadius: 500000,
       radiusMinPixels: 5,
       radiusMaxPixels: 15,
@@ -180,7 +180,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
 
   // Fallback visualization when WebGL fails
   const FallbackMap = () => (
-    <div className="w-full h-full bg-gradient-to-br from-[#0a1628] to-[#1a2840] flex flex-col items-center justify-center p-8">
+    <div className="w-full h-full bg-gradient-to-br from-[#00102E] to-[#001544] flex flex-col items-center justify-center p-8">
       <div className="text-center mb-8">
         <Globe2 className="h-12 w-12 text-ac-blue mb-4" />
         <h3 className="text-lg font-medium text-ink-primary mb-2">WebGL Map Unavailable</h3>
@@ -217,7 +217,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
   );
 
   return (
-    <div className="relative w-full h-[600px] bg-[#111] overflow-hidden border border-border-subtle" role="img" aria-label="Live attack map showing global threat activity with attack arcs and sensor locations">
+    <div className="relative w-full h-[600px] bg-surface-base overflow-hidden border border-border-subtle" role="img" aria-label="Live attack map showing global threat activity with attack arcs and sensor locations">
       {isLoading ? (
         <div className="w-full h-full flex items-center justify-center">
           <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue" />
