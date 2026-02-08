@@ -292,14 +292,18 @@ export function CommandPalette({
       return;
     }
 
+    const controller = new AbortController();
+    const { signal } = controller;
+
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
         const results: CommandItem[] = [];
-        
+
         if (!isDemoMode) {
           // 1. Search Actors
           const actorsResp = await fetchActors(sensorId, { ip: query, limit: 3 });
+          if (signal.aborted) return;
           actorsResp.actors.forEach((actor: SocActor) => {
             results.push({
               id: `actor-${actor.actorId}`,
@@ -316,6 +320,7 @@ export function CommandPalette({
 
           // 2. Search Sessions
           const sessionsResp = await fetchSessions(sensorId, { limit: 10 });
+          if (signal.aborted) return;
           const matchedSessions = sessionsResp.sessions.filter(s => s.sessionId.includes(query)).slice(0, 2);
           matchedSessions.forEach((session: SocSession) => {
             results.push({
@@ -334,6 +339,7 @@ export function CommandPalette({
           // 3. Search Sensors
           try {
             const sensorsResp = await apiFetch<any>('/fleet/sensors');
+            if (signal.aborted) return;
             const sensors = Array.isArray(sensorsResp) ? sensorsResp : sensorsResp.sensors || [];
             const matchedSensors = sensors.filter((s: any) => s.name.toLowerCase().includes(query.toLowerCase())).slice(0, 2);
             matchedSensors.forEach((sensor: any) => {
@@ -354,6 +360,7 @@ export function CommandPalette({
           // 4. Search API Endpoints
           try {
             const apiResp = await apiFetch<any>('/api-intelligence/endpoints?limit=50');
+            if (signal.aborted) return;
             const endpoints = apiResp.endpoints || [];
             const matchedEndpoints = endpoints.filter((e: any) => e.path.toLowerCase().includes(query.toLowerCase())).slice(0, 2);
             matchedEndpoints.forEach((ep: any) => {
@@ -385,15 +392,24 @@ export function CommandPalette({
           }
         }
 
-        setSearchResults(results);
+        if (!signal.aborted) {
+          setSearchResults(results);
+        }
       } catch (err) {
-        console.error('Command Palette Search Error:', err);
+        if (!signal.aborted) {
+          console.error('Command Palette Search Error:', err);
+        }
       } finally {
-        setIsSearching(false);
+        if (!signal.aborted) {
+          setIsSearching(false);
+        }
       }
     }, 300);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query, sensorId, isDemoMode, navigate, addToRecent, commandItems.length, smartAnswers.length]);
 
   const recentCommandItems = useMemo<CommandItem[]>(() => {

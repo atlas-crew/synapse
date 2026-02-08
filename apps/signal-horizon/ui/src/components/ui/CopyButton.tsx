@@ -12,9 +12,12 @@ export function CopyButton({ value, className, size = 'md' }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Clipboard access denied (non-HTTPS, permission denied, etc.)
+    });
   }, [value]);
 
   return (
