@@ -209,8 +209,15 @@ export class ClickHouseService {
     }
   }
 
-  private async acquireQueryPermit(op: string): Promise<(() => void) | null> {
-    const limiter = this.queryLimiter;
+  private async acquirePermit(options: {
+    limiter: AsyncSemaphore | null;
+    op: string;
+    queue: 'query' | 'stream';
+    timeoutError: string;
+    onAcquire?: () => void;
+    onRelease?: () => void;
+  }): Promise<(() => void) | null> {
+    const { limiter, op, queue, timeoutError, onAcquire, onRelease } = options;
     if (!limiter) return null;
 
     const controller = new AbortController();
@@ -218,26 +225,26 @@ export class ClickHouseService {
     const willQueue = limiter.getAvailable() <= 0;
 
     if (willQueue) {
-      metrics.clickhouseQueryQueueDepth.inc({ op });
+      metrics.clickhouseQueryQueueDepth.inc({ op, queue });
     }
 
     try {
       const release = await limiter.acquire({ signal: controller.signal });
       if (willQueue) {
-        metrics.clickhouseQueryQueueDepth.dec({ op });
+        metrics.clickhouseQueryQueueDepth.dec({ op, queue });
       }
-      metrics.clickhouseQueriesInFlight.inc({ op });
+      onAcquire?.();
 
       return () => {
-        metrics.clickhouseQueriesInFlight.dec({ op });
+        onRelease?.();
         release();
       };
     } catch (error) {
       if (willQueue) {
-        metrics.clickhouseQueryQueueDepth.dec({ op });
+        metrics.clickhouseQueryQueueDepth.dec({ op, queue });
       }
       if (controller.signal.aborted) {
-        throw new Error(`ClickHouse query permit wait timed out after ${this.queueTimeoutMs}ms`);
+        throw new Error(timeoutError);
       }
       throw error;
     } finally {
@@ -245,35 +252,24 @@ export class ClickHouseService {
     }
   }
 
+  private async acquireQueryPermit(op: string): Promise<(() => void) | null> {
+    return this.acquirePermit({
+      limiter: this.queryLimiter,
+      op,
+      queue: 'query',
+      timeoutError: `ClickHouse query permit wait timed out after ${this.queueTimeoutMs}ms`,
+      onAcquire: () => metrics.clickhouseQueriesInFlight.inc({ op }),
+      onRelease: () => metrics.clickhouseQueriesInFlight.dec({ op }),
+    });
+  }
+
   private async acquireStreamPermit(op: string): Promise<(() => void) | null> {
-    const limiter = this.streamLimiter;
-    if (!limiter) return null;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.queueTimeoutMs);
-    const willQueue = limiter.getAvailable() <= 0;
-
-    if (willQueue) {
-      metrics.clickhouseQueryQueueDepth.inc({ op });
-    }
-
-    try {
-      const release = await limiter.acquire({ signal: controller.signal });
-      if (willQueue) {
-        metrics.clickhouseQueryQueueDepth.dec({ op });
-      }
-      return () => release();
-    } catch (error) {
-      if (willQueue) {
-        metrics.clickhouseQueryQueueDepth.dec({ op });
-      }
-      if (controller.signal.aborted) {
-        throw new Error(`ClickHouse stream permit wait timed out after ${this.queueTimeoutMs}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return this.acquirePermit({
+      limiter: this.streamLimiter,
+      op,
+      queue: 'stream',
+      timeoutError: `ClickHouse stream permit wait timed out after ${this.queueTimeoutMs}ms`,
+    });
   }
 
   private async withQueryTelemetry<T>(
@@ -289,6 +285,8 @@ export class ClickHouseService {
       if (release) releases.push(release);
 
       if (options?.acquireExtraPermit) {
+        // Deadlock avoidance: stream limiter is clamped to <= query limiter, so at least one
+        // stream query holding a query permit can always acquire a stream permit and make progress.
         const extraRelease = await options.acquireExtraPermit();
         if (extraRelease) releases.push(extraRelease);
       }
@@ -378,11 +376,13 @@ export class ClickHouseService {
         { campaignId: event.campaign_id, eventType: event.event_type },
         'Inserted campaign history event'
       );
+      metrics.clickhouseInsertSuccess.inc({ table: 'campaign_history' });
     } catch (error) {
       this.logger.error(
         { error, campaignId: event.campaign_id },
         'Failed to insert campaign event'
       );
+      metrics.clickhouseInsertFailed.inc({ table: 'campaign_history' });
       throw error;
     }
   }
@@ -404,8 +404,10 @@ export class ClickHouseService {
         { action: event.action, indicator: event.indicator },
         'Inserted blocklist history event'
       );
+      metrics.clickhouseInsertSuccess.inc({ table: 'blocklist_history' });
     } catch (error) {
       this.logger.error({ error }, 'Failed to insert blocklist event');
+      metrics.clickhouseInsertFailed.inc({ table: 'blocklist_history' });
       throw error;
     }
   }
@@ -423,8 +425,10 @@ export class ClickHouseService {
         format: 'JSONEachRow',
       });
       this.logger.debug({ count: events.length }, 'Inserted blocklist history events');
+      metrics.clickhouseInsertSuccess.inc({ table: 'blocklist_history' });
     } catch (error) {
       this.logger.error({ error, count: events.length }, 'Failed to insert blocklist events');
+      metrics.clickhouseInsertFailed.inc({ table: 'blocklist_history' });
       throw error;
     }
   }
@@ -479,9 +483,15 @@ export class ClickHouseService {
    * @deprecated Use queryWithParams() for user-controlled inputs to prevent SQL injection
    */
   async query<T>(sql: string): Promise<T[]> {
-    if (!this.enabled || !this.client) {
+    if (!this.enabled) {
       throw new Error('ClickHouse is not enabled');
     }
+    if (!this.client) {
+      throw new Error('ClickHouse client is not available (closed)');
+    }
+
+    // Breadcrumb: raw SQL queries are allowed for legacy/internal use but are not safe for untrusted input.
+    metrics.clickhouseRawQueriesTotal.inc();
 
     return this.withQueryTelemetry('query', async () => {
       const client = this.client;
@@ -528,8 +538,11 @@ export class ClickHouseService {
    * ```
    */
   async queryWithParams<T>(sql: string, params: Record<string, unknown>): Promise<T[]> {
-    if (!this.enabled || !this.client) {
+    if (!this.enabled) {
       throw new Error('ClickHouse is not enabled');
+    }
+    if (!this.client) {
+      throw new Error('ClickHouse client is not available (closed)');
     }
 
     return this.withQueryTelemetry('queryWithParams', async () => {
@@ -588,8 +601,11 @@ export class ClickHouseService {
     batchSize: number,
     onBatch: (rows: T[]) => Promise<void>
   ): Promise<number> {
-    if (!this.enabled || !this.client) {
+    if (!this.enabled) {
       throw new Error('ClickHouse is not enabled');
+    }
+    if (!this.client) {
+      throw new Error('ClickHouse client is not available (closed)');
     }
 
     return this.withQueryTelemetry(

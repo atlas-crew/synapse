@@ -31,6 +31,7 @@ export class MetricsService {
   public clickhouseQueryDuration: client.Histogram;
   public clickhouseQueryErrors: client.Counter;
   public clickhouseQueriesInFlight: client.Gauge;
+  public clickhouseRawQueriesTotal: client.Counter;
   // Backpressure Metrics
   public signalsDroppedTotal: client.Counter;
   public nonceStoreEvictionsTotal: client.Counter;
@@ -124,8 +125,9 @@ export class MetricsService {
 
     this.clickhouseQueryQueueDepth = new client.Gauge({
       name: 'horizon_clickhouse_query_queue_depth',
-      help: 'Number of ClickHouse queries currently waiting for a permit',
-      labelNames: ['op'],
+      // NOTE: split by queue so streaming ops (long-lived) don't hide point-query backpressure.
+      help: 'Number of ClickHouse ops waiting for a permit (queue=query|stream)',
+      labelNames: ['op', 'queue'],
       registers: [this.register],
     });
 
@@ -156,6 +158,12 @@ export class MetricsService {
       name: 'horizon_clickhouse_queries_in_flight',
       help: 'Number of ClickHouse queries currently in flight (after limiter)',
       labelNames: ['op'],
+      registers: [this.register],
+    });
+
+    this.clickhouseRawQueriesTotal = new client.Counter({
+      name: 'horizon_clickhouse_raw_queries_total',
+      help: 'Total number of raw ClickHouse query() calls (deprecated; prefer queryWithParams())',
       registers: [this.register],
     });
 

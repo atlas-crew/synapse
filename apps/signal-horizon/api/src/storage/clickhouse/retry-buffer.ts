@@ -400,6 +400,11 @@ export class ClickHouseRetryBuffer {
       case 'log':
         await this.clickhouse.insertLogEntries(item.data);
         break;
+      default: {
+        // Defensive: persistent store corruption should never silently drop telemetry.
+        const unknownType = (item as unknown as { type?: unknown }).type;
+        throw new Error(`Unknown buffered item type: ${String(unknownType)}`);
+      }
     }
   }
 

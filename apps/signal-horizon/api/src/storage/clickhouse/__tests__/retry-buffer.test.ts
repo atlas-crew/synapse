@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ClickHouseRetryBuffer } from '../retry-buffer.js';
-import type { ClickHouseService, SignalEventRow, CampaignHistoryRow } from '../client.js';
+import type {
+  ClickHouseService,
+  SignalEventRow,
+  CampaignHistoryRow,
+  BlocklistHistoryRow,
+  HttpTransactionRow,
+  LogEntryRow,
+} from '../client.js';
 import type { Logger } from 'pino';
 
 // Mock ClickHouseService
@@ -10,6 +17,7 @@ const createMockClickhouse = (): ClickHouseService => ({
   insertCampaignEvent: vi.fn().mockResolvedValue(undefined),
   insertBlocklistEvents: vi.fn().mockResolvedValue(undefined),
   insertHttpTransactions: vi.fn().mockResolvedValue(undefined),
+  insertLogEntries: vi.fn().mockResolvedValue(undefined),
   ping: vi.fn().mockResolvedValue(true),
   close: vi.fn().mockResolvedValue(undefined),
 } as unknown as ClickHouseService);
@@ -35,6 +43,53 @@ const createTestSignal = (overrides: Partial<SignalEventRow> = {}): SignalEventR
   confidence: 0.95,
   event_count: 1,
   metadata: '{}',
+  ...overrides,
+});
+
+const createTestBlocklist = (overrides: Partial<BlocklistHistoryRow> = {}): BlocklistHistoryRow => ({
+  timestamp: new Date().toISOString(),
+  tenant_id: 'test-tenant',
+  request_id: 'r1',
+  action: 'added',
+  block_type: 'ip',
+  indicator: '1.2.3.4',
+  source: 'test',
+  reason: 'test',
+  campaign_id: 'campaign-1',
+  expires_at: null,
+  ...overrides,
+});
+
+const createTestTxn = (overrides: Partial<HttpTransactionRow> = {}): HttpTransactionRow => ({
+  timestamp: new Date().toISOString(),
+  tenant_id: 'test-tenant',
+  sensor_id: 'test-sensor',
+  request_id: 'r1',
+  site: 'example.com',
+  method: 'GET',
+  path: '/',
+  status_code: 200,
+  latency_ms: 1,
+  waf_action: null,
+  ...overrides,
+});
+
+const createTestLog = (overrides: Partial<LogEntryRow> = {}): LogEntryRow => ({
+  timestamp: new Date().toISOString(),
+  tenant_id: 'test-tenant',
+  sensor_id: 'test-sensor',
+  request_id: 'r1',
+  log_id: 'l1',
+  source: 'sensor',
+  level: 'info',
+  message: 'm',
+  fields: null,
+  method: null,
+  path: null,
+  status_code: null,
+  latency_ms: null,
+  client_ip: null,
+  rule_id: null,
   ...overrides,
 });
 
@@ -76,6 +131,7 @@ describe('ClickHouseRetryBuffer', () => {
         timestamp: new Date().toISOString(),
         campaign_id: 'campaign-1',
         tenant_id: 'test-tenant',
+        request_id: 'r1',
         event_type: 'created',
         name: 'Test Campaign',
         status: 'active',
@@ -90,6 +146,54 @@ describe('ClickHouseRetryBuffer', () => {
 
       expect(result).toBe(true);
       expect(clickhouse.insertCampaignEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('writes campaign events even when campaign_id is empty', async () => {
+      const event: CampaignHistoryRow = {
+        timestamp: new Date().toISOString(),
+        campaign_id: '',
+        tenant_id: 'test-tenant',
+        request_id: null,
+        event_type: 'created',
+        name: 'Test Campaign',
+        status: 'active',
+        severity: 'HIGH',
+        is_cross_tenant: 0,
+        tenants_affected: 1,
+        confidence: 0.9,
+        metadata: '{}',
+      };
+
+      const result = await buffer.insertCampaignEvent(event);
+      expect(result).toBe(true);
+      expect(clickhouse.insertCampaignEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('writes blocklist events directly on success', async () => {
+      const events = [createTestBlocklist()];
+      const result = await buffer.insertBlocklistEvents(events);
+
+      expect(result).toBe(true);
+      expect(clickhouse.insertBlocklistEvents).toHaveBeenCalledWith(events);
+      expect(buffer.getStats().bufferedCount).toBe(0);
+    });
+
+    it('writes HTTP transactions directly on success', async () => {
+      const events = [createTestTxn()];
+      const result = await buffer.insertHttpTransactions(events);
+
+      expect(result).toBe(true);
+      expect(clickhouse.insertHttpTransactions).toHaveBeenCalledWith(events);
+      expect(buffer.getStats().bufferedCount).toBe(0);
+    });
+
+    it('writes log entries directly on success', async () => {
+      const events = [createTestLog()];
+      const result = await buffer.insertLogEntries(events);
+
+      expect(result).toBe(true);
+      expect(clickhouse.insertLogEntries).toHaveBeenCalledWith(events);
+      expect(buffer.getStats().bufferedCount).toBe(0);
     });
   });
 
@@ -114,6 +218,7 @@ describe('ClickHouseRetryBuffer', () => {
         timestamp: new Date().toISOString(),
         campaign_id: 'campaign-1',
         tenant_id: 'test-tenant',
+        request_id: 'r1',
         event_type: 'created',
         name: 'Test Campaign',
         status: 'active',
@@ -126,6 +231,36 @@ describe('ClickHouseRetryBuffer', () => {
 
       const result = await buffer.insertCampaignEvent(event);
 
+      expect(result).toBe(false);
+      expect(buffer.getStats().bufferedCount).toBe(1);
+    });
+
+    it('buffers blocklist events when write fails', async () => {
+      (clickhouse.insertBlocklistEvents as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Timeout')
+      );
+
+      const result = await buffer.insertBlocklistEvents([createTestBlocklist()]);
+      expect(result).toBe(false);
+      expect(buffer.getStats().bufferedCount).toBe(1);
+    });
+
+    it('buffers HTTP transactions when write fails', async () => {
+      (clickhouse.insertHttpTransactions as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Timeout')
+      );
+
+      const result = await buffer.insertHttpTransactions([createTestTxn()]);
+      expect(result).toBe(false);
+      expect(buffer.getStats().bufferedCount).toBe(1);
+    });
+
+    it('buffers log entries when write fails', async () => {
+      (clickhouse.insertLogEntries as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Timeout')
+      );
+
+      const result = await buffer.insertLogEntries([createTestLog()]);
       expect(result).toBe(false);
       expect(buffer.getStats().bufferedCount).toBe(1);
     });
@@ -194,6 +329,10 @@ describe('ClickHouseRetryBuffer', () => {
 
       expect(buffer.getStats().bufferedCount).toBe(0);
       expect(buffer.getStats().droppedItems).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ dlq: true, reason: 'max_retries_exceeded' }),
+        expect.any(String)
+      );
     });
 
     it('removes processed items during a batch to avoid evicting new failures', async () => {
@@ -242,6 +381,7 @@ describe('ClickHouseRetryBuffer', () => {
         timestamp: new Date().toISOString(),
         campaign_id: 'campaign-1',
         tenant_id: 'test-tenant',
+        request_id: 'r1',
         event_type: 'created',
         name: 'Test Campaign',
         status: 'active',
@@ -294,6 +434,10 @@ describe('ClickHouseRetryBuffer', () => {
 
       expect(smallBuffer.getStats().bufferedCount).toBe(3);
       expect(smallBuffer.getStats().droppedItems).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ dlq: true, reason: 'buffer_overflow' }),
+        expect.any(String)
+      );
 
       smallBuffer.stop();
     });
@@ -422,6 +566,31 @@ describe('ClickHouseRetryBuffer', () => {
       vi.useFakeTimers();
     });
 
+    it('can start again after flush() and process retries', async () => {
+      (clickhouse.insertSignalEvents as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error('fail-1')) // insert buffers
+        .mockResolvedValueOnce(undefined) // flush succeeds
+        .mockRejectedValueOnce(new Error('fail-2')) // insert buffers again after restart
+        .mockResolvedValueOnce(undefined); // retry succeeds
+
+      await buffer.start();
+      await buffer.insertSignalEvents([createTestSignal({ request_id: 'r1' })]);
+      expect(buffer.getBufferSize()).toBe(1);
+
+      await buffer.flush();
+      expect(buffer.getBufferSize()).toBe(0);
+
+      await buffer.start();
+      await buffer.insertSignalEvents([createTestSignal({ request_id: 'r2' })]);
+      expect(buffer.getBufferSize()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(200);
+      await Promise.resolve();
+
+      expect(buffer.getBufferSize()).toBe(0);
+      expect(clickhouse.insertSignalEvents).toHaveBeenCalledTimes(4);
+    });
+
     it('returns immediately when buffer is empty', async () => {
       expect(buffer.getStats().bufferedCount).toBe(0);
 
@@ -452,6 +621,18 @@ describe('ClickHouseRetryBuffer', () => {
       const result = await buffer.insertBlocklistEvents([]);
       expect(result).toBe(true);
       expect(clickhouse.insertBlocklistEvents).not.toHaveBeenCalled();
+    });
+
+    it('handles empty transaction arrays', async () => {
+      const result = await buffer.insertHttpTransactions([]);
+      expect(result).toBe(true);
+      expect(clickhouse.insertHttpTransactions).not.toHaveBeenCalled();
+    });
+
+    it('handles empty log arrays', async () => {
+      const result = await buffer.insertLogEntries([]);
+      expect(result).toBe(true);
+      expect(clickhouse.insertLogEntries).not.toHaveBeenCalled();
     });
   });
 });
