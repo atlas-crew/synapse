@@ -109,6 +109,42 @@ export interface FleetFingerprintCandidate {
   sensorIds: string[];
 }
 
+export interface SigmaRule {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  sqlTemplate: string;
+  whereClause: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SigmaLead {
+  id: string;
+  tenantId: string;
+  ruleId: string;
+  ruleName: string;
+  status: 'OPEN' | 'ACKED';
+  acknowledgedAt: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  matchCount: number;
+  pivot: {
+    requestId: string | null;
+    anonFingerprint: string | null;
+    sourceIp: string | null;
+  };
+  sample: {
+    timestamp: string;
+    sensorId: string;
+    signalType: string;
+    severity: string;
+    confidence: number;
+  };
+}
+
 export interface IpActivity {
   totalHits: number;
   tenantsHit: number;
@@ -512,6 +548,59 @@ const FleetFingerprintIntelResponseSchema = z.object({
     limit: z.number(),
     count: z.number(),
     historical: z.boolean(),
+  }),
+});
+
+const SigmaRuleSchema = z.object({
+  id: z.string(),
+  tenantId: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  enabled: z.boolean(),
+  sqlTemplate: z.string(),
+  whereClause: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const SigmaRulesResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(SigmaRuleSchema),
+  meta: z.object({
+    count: z.number(),
+  }),
+});
+
+const SigmaLeadSchema = z.object({
+  id: z.string(),
+  tenantId: z.string(),
+  ruleId: z.string(),
+  ruleName: z.string(),
+  status: z.enum(['OPEN', 'ACKED']),
+  acknowledgedAt: z.string().nullable(),
+  firstSeenAt: z.string(),
+  lastSeenAt: z.string(),
+  matchCount: z.number(),
+  pivot: z.object({
+    requestId: z.string().nullable(),
+    anonFingerprint: z.string().nullable(),
+    sourceIp: z.string().nullable(),
+  }),
+  sample: z.object({
+    timestamp: z.string(),
+    sensorId: z.string(),
+    signalType: z.string(),
+    severity: z.string(),
+    confidence: z.number(),
+  }),
+});
+
+const SigmaLeadsResponseSchema = z.object({
+  success: z.boolean(),
+  data: z.array(SigmaLeadSchema),
+  meta: z.object({
+    count: z.number(),
+    limit: z.number(),
   }),
 });
 
@@ -925,6 +1014,87 @@ export function useHunt() {
     }
   }, [fetchApi]);
 
+  const getSigmaRules = useCallback(async (): Promise<SigmaRule[]> => {
+    try {
+      const data = await fetchApi<unknown>('/hunt/sigma/rules');
+      const result = SigmaRulesResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid sigma rules response');
+      }
+      return result.data.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get sigma rules';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  const createSigmaRule = useCallback(async (params: {
+    name: string;
+    description?: string;
+    sqlTemplate: string;
+    enabled?: boolean;
+  }): Promise<SigmaRule> => {
+    try {
+      const data = await fetchApi<unknown>('/hunt/sigma/rules', {
+        method: 'POST',
+        body: params,
+      });
+
+      const result = z.object({
+        success: z.boolean(),
+        data: SigmaRuleSchema,
+      }).safeParse(data);
+
+      if (!result.success) {
+        throw new Error('Invalid create sigma rule response');
+      }
+
+      return result.data.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create sigma rule';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  const getSigmaLeads = useCallback(async (limit: number = 200): Promise<SigmaLead[]> => {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.set('limit', String(limit));
+      const data = await fetchApi<unknown>(`/hunt/sigma/leads?${queryParams.toString()}`);
+      const result = SigmaLeadsResponseSchema.safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid sigma leads response');
+      }
+      return result.data.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to get sigma leads';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
+  const ackSigmaLead = useCallback(async (id: string): Promise<SigmaLead> => {
+    try {
+      const data = await fetchApi<unknown>(`/hunt/sigma/leads/${encodeURIComponent(id)}/ack`, {
+        method: 'POST',
+      });
+      const result = z.object({
+        success: z.boolean(),
+        data: SigmaLeadSchema,
+      }).safeParse(data);
+      if (!result.success) {
+        throw new Error('Invalid ack sigma lead response');
+      }
+      return result.data.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to ack sigma lead';
+      setError(message);
+      throw err;
+    }
+  }, [fetchApi]);
+
   const getRecentRequests = useCallback(async (limit: number = 25): Promise<RecentRequest[]> => {
     try {
       const queryParams = new URLSearchParams();
@@ -968,6 +1138,10 @@ export function useHunt() {
     getAnomalies,
     getLowAndSlowIps,
     getFleetFingerprintIntelligence,
+    getSigmaRules,
+    createSigmaRule,
+    getSigmaLeads,
+    ackSigmaLead,
 
     // Helpers
     clearError,

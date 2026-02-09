@@ -13,6 +13,7 @@ import type { HuntQuery } from '../../hooks/useHunt';
 interface HuntQueryBuilderProps {
   onQuery: (query: HuntQuery) => void;
   onSave?: (query: HuntQuery) => void;
+  onSaveSigmaBackgroundHunt?: (input: { name: string; description?: string; sqlTemplate: string }) => Promise<void>;
   isLoading?: boolean;
   historicalEnabled?: boolean;
   externalQuery?: HuntQuery | null;
@@ -46,6 +47,7 @@ const TIME_PRESETS = [
 export function HuntQueryBuilder({
   onQuery,
   onSave,
+  onSaveSigmaBackgroundHunt,
   isLoading = false,
   historicalEnabled = false,
   externalQuery,
@@ -478,6 +480,7 @@ export function HuntQueryBuilder({
             setSqlQuery(sql);
             setIsPowerMode(true);
           }}
+          onSaveBackgroundHunt={onSaveSigmaBackgroundHunt}
         />
       )}
     </div>

@@ -6,6 +6,7 @@ import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface SigmaImportModalProps {
   onImport: (sql: string) => void;
+  onSaveBackgroundHunt?: (input: { name: string; description?: string; sqlTemplate: string }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -18,9 +19,13 @@ detection:
     UserAgent|contains: 'curl/'
   condition: selection`;
 
-export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
+export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: SigmaImportModalProps) {
   const [sigmaYaml, setSigmaYaml] = useState(EXAMPLE_RULE);
   const [previewSql, setPreviewSql] = useState(convertSigmaToSql(EXAMPLE_RULE));
+  const [ruleName, setRuleName] = useState('Suspicious cURL User Agent');
+  const [ruleDescription, setRuleDescription] = useState('Detects suspicious cURL user agents often used by bots');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const stableOnClose = useCallback(() => onClose(), [onClose]);
   useFocusTrap(modalRef, true, stableOnClose);
@@ -28,11 +33,32 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
   const handleYamlChange = (value: string) => {
     setSigmaYaml(value);
     setPreviewSql(convertSigmaToSql(value));
+    setSaveStatus('idle');
+    setSaveError(null);
+
+    // Light-touch extraction of title/description for form defaults.
+    const titleMatch = value.match(/^\s*title:\s*(.+)\s*$/m);
+    if (titleMatch?.[1]) setRuleName(titleMatch[1].replace(/^['"]|['"]$/g, '').trim());
+    const descMatch = value.match(/^\s*description:\s*(.+)\s*$/m);
+    if (descMatch?.[1]) setRuleDescription(descMatch[1].replace(/^['"]|['"]$/g, '').trim());
   };
 
   const handleImport = () => {
     onImport(previewSql);
     onClose();
+  };
+
+  const handleSaveBackgroundHunt = async () => {
+    if (!onSaveBackgroundHunt) return;
+    setSaveStatus('saving');
+    setSaveError(null);
+    try {
+      await onSaveBackgroundHunt({ name: ruleName, description: ruleDescription, sqlTemplate: previewSql });
+      setSaveStatus('saved');
+    } catch (err) {
+      setSaveStatus('error');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save background hunt');
+    }
   };
 
   return (
@@ -97,8 +123,32 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-subtle flex justify-between items-center bg-surface-base">
-          <div className="text-xs text-ink-muted">
-            <p>Maps standard fields (UserAgent, c-ip) to <code className="bg-surface-subtle px-1 py-0.5 border border-border-subtle">signal_events</code> schema.</p>
+          <div className="min-w-0 flex-1 pr-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-ink-secondary">
+                Rule Name
+                <input
+                  className="mt-1 w-full px-2 py-1 border border-border-subtle bg-surface-inset text-ink-primary font-mono"
+                  value={ruleName}
+                  onChange={(e) => setRuleName(e.target.value)}
+                  maxLength={120}
+                />
+              </label>
+              <label className="text-xs text-ink-secondary">
+                Description
+                <input
+                  className="mt-1 w-full px-2 py-1 border border-border-subtle bg-surface-inset text-ink-primary font-mono"
+                  value={ruleDescription}
+                  onChange={(e) => setRuleDescription(e.target.value)}
+                  maxLength={2000}
+                />
+              </label>
+            </div>
+            <div className="mt-2 text-[11px] text-ink-muted">
+              Maps standard fields (UserAgent, c-ip) to <code className="bg-surface-subtle px-1 py-0.5 border border-border-subtle">signal_events</code>.
+              {saveStatus === 'saved' && <span className="ml-2 text-ac-green">Saved background hunt.</span>}
+              {saveStatus === 'error' && <span className="ml-2 text-ac-red">{saveError ?? 'Save failed.'}</span>}
+            </div>
           </div>
           <div className="flex gap-3">
             <button
@@ -106,6 +156,14 @@ export function SigmaImportModal({ onImport, onClose }: SigmaImportModalProps) {
               className="btn-outline px-4 py-2 text-sm"
             >
               Cancel
+            </button>
+            <button
+              onClick={handleSaveBackgroundHunt}
+              disabled={!onSaveBackgroundHunt || saveStatus === 'saving'}
+              className="btn-ghost px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Persist rule and enable scheduled background hunting"
+            >
+              {saveStatus === 'saving' ? 'Saving...' : 'Save Background Hunt'}
             </button>
             <button
               onClick={handleImport}

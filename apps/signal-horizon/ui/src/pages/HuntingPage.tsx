@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, AlertCircle } from 'lucide-react';
-import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries } from '../components/hunting';
+import { BehavioralAnomaliesPanel, FleetIntelligencePanel, HuntQueryBuilder, HuntResultsTable, LowAndSlowPanel, SavedQueries, SigmaLeadsPanel } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -27,6 +27,9 @@ export default function HuntingPage() {
     getAnomalies,
     getLowAndSlowIps,
     getFleetFingerprintIntelligence,
+    createSigmaRule,
+    getSigmaLeads,
+    ackSigmaLead,
     clearError,
   } = useHunt();
 
@@ -190,6 +193,9 @@ export default function HuntingPage() {
       <HuntQueryBuilder
         onQuery={handleQuery}
         onSave={handleSaveQuery}
+        onSaveSigmaBackgroundHunt={async (input) => {
+          await createSigmaRule(input);
+        }}
         isLoading={isLoading}
         historicalEnabled={status?.historical ?? false}
         externalQuery={activeExampleQuery}
@@ -199,6 +205,13 @@ export default function HuntingPage() {
         historicalEnabled={status?.historical ?? false}
         getTenantBaselines={getTenantBaselines}
         getAnomalies={getAnomalies}
+      />
+
+      <SigmaLeadsPanel
+        historicalEnabled={status?.historical ?? false}
+        getSigmaLeads={getSigmaLeads}
+        ackSigmaLead={ackSigmaLead}
+        onPivotExample={handleRunExample}
       />
 
       {status?.isFleetAdmin ? (
