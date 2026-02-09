@@ -31,7 +31,7 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "eslint src --ext .ts,.tsx",
+        "command": "../../../node_modules/.bin/eslint -c .eslintrc.cjs \"src/**/*.{ts,tsx}\"",
         "cwd": "apps/signal-horizon/ui"
       }
     },

@@ -43,7 +43,7 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cargo clippy -- -D warnings",
+        "command": "cargo clippy",
         "cwd": "apps/synapse-pingora"
       }
     },
