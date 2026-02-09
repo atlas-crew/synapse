@@ -12,6 +12,7 @@ import type { Logger } from 'pino';
 export const QUEUE_NAMES = {
   ROLLOUT: 'rollout-jobs',
   RETENTION: 'data-retention',
+  SIGMA_HUNT: 'sigma-hunt',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];

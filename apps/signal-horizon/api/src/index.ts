@@ -53,6 +53,7 @@ import {
 import { SecurityAuditService } from './services/audit/security-audit.js';
 import { DataRetentionService } from './jobs/data-retention.js';
 import { createRetentionQueue, createRetentionWorker, type RetentionJobData } from './jobs/retention-queue.js';
+import { createSigmaHuntQueue, createSigmaHuntWorker, type SigmaHuntJobData } from './jobs/sigma-hunt-queue.js';
 import { createBlocklistQueue, createBlocklistWorker, type BlocklistJobData } from './jobs/blocklist-queue.js';
 import { metrics } from './services/metrics.js';
 import {
@@ -68,6 +69,7 @@ import { createRolloutWorker, stopRolloutWorker, recoverStalledRollouts, closeQu
 import type { Queue, Worker } from 'bullmq';
 import type { RolloutJobData } from './jobs/queue.js';
 import type { SharingPreference } from './types/protocol.js';
+import { SigmaHuntService } from './services/sigma-hunt/index.js';
 // Tunnel broker for remote access
 import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.js';
 import { SynapseProxyService } from './services/synapse-proxy.js';
@@ -315,6 +317,8 @@ let blocklistQueue: Queue<BlocklistJobData> | null = null;
 let blocklistWorker: Worker<BlocklistJobData, void> | null = null;
 let retentionQueue: Queue<RetentionJobData> | null = null;
 let retentionWorker: Worker<RetentionJobData, Record<string, number>> | null = null;
+let sigmaHuntQueue: Queue<SigmaHuntJobData> | null = null;
+let sigmaHuntWorker: Worker<SigmaHuntJobData, { tenants: number; rules: number; matches: number; leadsUpserted: number }> | null = null;
 let retentionInterval: NodeJS.Timeout | null = null;
 let retentionTimeout: NodeJS.Timeout | null = null;
 let sharedRedis: SharedRedisKv | null = null;
@@ -879,8 +883,13 @@ async function start() {
   logger.info('Fleet service dependencies wired');
 
   // Mount API routes (including hunt routes, fleet routes, and synapse proxy)
+  const sigmaHuntService = sharedRedis
+    ? new SigmaHuntService(sharedRedis.kv, logger, clickhouse ?? null)
+    : null;
+
   const apiRouter = createApiRouter(prisma, logger, {
     huntService,
+    sigmaHuntService: sigmaHuntService ?? undefined,
     fleetAggregator,
     configManager,
     fleetCommander,
@@ -974,6 +983,31 @@ async function start() {
 
       retentionQueue = createRetentionQueue(logger);
       retentionWorker = createRetentionWorker(retentionService, logger);
+
+      if (sigmaHuntService) {
+        sigmaHuntQueue = createSigmaHuntQueue(logger);
+        sigmaHuntWorker = createSigmaHuntWorker(sigmaHuntService, logger);
+
+        try {
+          await sigmaHuntQueue.add(
+            'sigma-hunt-startup',
+            { trigger: 'startup' },
+            { jobId: 'sigma-hunt-startup', delay: 60000 }
+          );
+        } catch (error) {
+          logger.warn({ error }, 'Sigma hunt startup job already scheduled or failed');
+        }
+
+        try {
+          await sigmaHuntQueue.add(
+            'sigma-hunt-hourly',
+            { trigger: 'schedule' },
+            { jobId: 'sigma-hunt-hourly', repeat: { every: 60 * 60 * 1000 } }
+          );
+        } catch (error) {
+          logger.warn({ error }, 'Sigma hunt repeat job already scheduled or failed');
+        }
+      }
 
       try {
         await retentionQueue.add(
@@ -1141,6 +1175,14 @@ async function shutdown(signal: string) {
   if (retentionQueue) {
     await closeQueue(retentionQueue, logger);
     logger.info('Retention queue closed');
+  }
+  if (sigmaHuntWorker) {
+    await closeWorker(sigmaHuntWorker, logger);
+    logger.info('Sigma hunt worker stopped');
+  }
+  if (sigmaHuntQueue) {
+    await closeQueue(sigmaHuntQueue, logger);
+    logger.info('Sigma hunt queue closed');
   }
   logger.info('Fleet services stopped');
 

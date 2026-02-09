@@ -21,3 +21,9 @@ export {
   recoverStalledRollouts,
   type RolloutWorkerConfig,
 } from './rollout-worker.js';
+
+export {
+  createSigmaHuntQueue,
+  createSigmaHuntWorker,
+  type SigmaHuntJobData,
+} from './sigma-hunt-queue.js';

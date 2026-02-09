@@ -21,6 +21,7 @@ import { createBlocklistRoutes } from './blocklist.js';
 import { createWarRoomRoutes } from './warroom.js';
 import { createIntelRoutes } from './intel.js';
 import { createHuntRoutes } from './hunt.js';
+import { createHuntSigmaRoutes } from './hunt-sigma.js';
 import { createFleetRoutes } from './fleet.js';
 import { createFleetIntelRoutes } from './fleet-intel.js';
 import { createBeamRouter } from './beam/index.js';
@@ -46,6 +47,7 @@ import { createAuthManagementRoutes } from './auth-management.js';
 import type { RedisKv } from '../../storage/redis/kv.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
+import type { SigmaHuntService } from '../../services/sigma-hunt/index.js';
 import type { FleetAggregator } from '../../services/fleet/fleet-aggregator.js';
 import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
@@ -59,6 +61,7 @@ import type { PreferenceService } from '../../services/fleet/preference-service.
 
 export interface ApiRouterOptions {
   huntService?: HuntService;
+  sigmaHuntService?: SigmaHuntService;
   fleetAggregator?: FleetAggregator;
   configManager?: ConfigManager;
   fleetCommander?: FleetCommander;
@@ -191,6 +194,10 @@ export function createApiRouter(
   // Mount hunt routes if HuntService is provided
   if (options.huntService) {
     router.use('/hunt', createHuntRoutes(prisma, logger, options.huntService));
+    if (options.sigmaHuntService) {
+      router.use('/hunt/sigma', createHuntSigmaRoutes(prisma, logger, options.sigmaHuntService));
+      logger.info('Sigma hunt routes mounted at /api/v1/hunt/sigma');
+    }
     logger.info('Hunt routes mounted at /api/v1/hunt');
   }
 
