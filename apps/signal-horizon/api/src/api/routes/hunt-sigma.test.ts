@@ -156,6 +156,24 @@ describe('Hunt Sigma Routes', () => {
       .expect(400);
   });
 
+  it('POST /api/v1/hunt/sigma/rules rejects backticks (400)', async () => {
+    const kv = createMemoryKv();
+    const real = new RealSigmaHuntService(kv, mockLogger as any, null);
+
+    const realApp = express();
+    realApp.use(express.json());
+    realApp.use(injectAuth('tenant-1', ['hunt:read', 'hunt:write']));
+    realApp.use('/api/v1/hunt/sigma', createHuntSigmaRoutes({} as PrismaClient, mockLogger, real as any));
+
+    await request(realApp)
+      .post('/api/v1/hunt/sigma/rules')
+      .send({
+        name: 'evil-backtick',
+        sqlTemplate: 'SELECT * FROM signal_events WHERE `x` = 1 ORDER BY timestamp DESC LIMIT 1000',
+      })
+      .expect(400);
+  });
+
   it('POST /api/v1/hunt/sigma/rules returns 500 for unexpected errors', async () => {
     const boom = {
       ...sigma,

@@ -196,6 +196,8 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
   // Use regex so whitespace like `remote (` can't bypass checks.
   const forbiddenCalls = [
     'remote',
+    'cluster',
+    'clusterallreplicas',
     'url',
     'file',
     's3',

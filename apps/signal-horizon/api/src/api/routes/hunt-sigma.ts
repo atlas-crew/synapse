@@ -44,6 +44,7 @@ export function createHuntSigmaRoutes(
     if (!(error instanceof Error)) return false;
     return /^Sigma /.test(error.message)
       || /forbidden fragment/i.test(error.message)
+      || /forbidden character/i.test(error.message)
       || /must match: SELECT \*/i.test(error.message)
       || /name is required/i.test(error.message)
       || /description too long/i.test(error.message);
