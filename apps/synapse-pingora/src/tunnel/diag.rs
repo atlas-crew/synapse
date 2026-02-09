@@ -312,7 +312,11 @@ impl TunnelDiagService {
         let stats = self.actor_manager.stats().snapshot();
         let mut actors = self.actor_manager.snapshot();
 
-        actors.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap_or(std::cmp::Ordering::Equal));
+        actors.sort_by(|a, b| {
+            b.risk_score
+                .partial_cmp(&a.risk_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         actors.truncate(10);
 
         let top = actors
@@ -359,10 +363,17 @@ impl TunnelDiagService {
                 .iter()
                 .filter(|site| site.waf.as_ref().map(|w| w.enabled).unwrap_or(false))
                 .count();
-            let tls_sites = config.sites.iter().filter(|site| site.tls.is_some()).count();
+            let tls_sites = config
+                .sites
+                .iter()
+                .filter(|site| site.tls.is_some())
+                .count();
 
             settings.insert("siteCount".to_string(), Value::Number(site_count.into()));
-            settings.insert("wafEnabledSites".to_string(), Value::Number(waf_enabled.into()));
+            settings.insert(
+                "wafEnabledSites".to_string(),
+                Value::Number(waf_enabled.into()),
+            );
             settings.insert("tlsSiteCount".to_string(), Value::Number(tls_sites.into()));
         }
 

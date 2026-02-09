@@ -26,7 +26,7 @@ pub fn has_auth_header(headers: &RequestHeader) -> bool {
             return true;
         }
     }
-    
+
     // Check for auth-related cookies
     if let Some(cookie_header) = headers.headers.get("cookie") {
         if let Ok(cookie_str) = cookie_header.to_str() {
@@ -46,7 +46,7 @@ pub fn has_auth_header(headers: &RequestHeader) -> bool {
             }
         }
     }
-    
+
     false
 }
 
@@ -54,7 +54,7 @@ pub fn has_auth_header(headers: &RequestHeader) -> bool {
 mod tests {
     use super::*;
     use pingora::http::RequestHeader;
-    
+
     fn make_headers(pairs: &[(&'static str, &'static str)]) -> RequestHeader {
         let mut headers = RequestHeader::build("GET", b"/", None).unwrap();
         for (name, value) in pairs {
@@ -62,31 +62,31 @@ mod tests {
         }
         headers
     }
-    
+
     #[test]
     fn test_bearer_token() {
         let headers = make_headers(&[("authorization", "Bearer xyz123")]);
         assert!(has_auth_header(&headers));
     }
-    
+
     #[test]
     fn test_api_key() {
         let headers = make_headers(&[("x-api-key", "sk-test-123")]);
         assert!(has_auth_header(&headers));
     }
-    
+
     #[test]
     fn test_session_cookie() {
         let headers = make_headers(&[("cookie", "sessionid=abc123; other=value")]);
         assert!(has_auth_header(&headers));
     }
-    
+
     #[test]
     fn test_no_auth() {
         let headers = make_headers(&[("content-type", "application/json")]);
         assert!(!has_auth_header(&headers));
     }
-    
+
     #[test]
     fn test_unrelated_cookie() {
         let headers = make_headers(&[("cookie", "theme=dark; lang=en")]);

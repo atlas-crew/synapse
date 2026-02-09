@@ -28,17 +28,17 @@
 mod store;
 
 pub use store::{
-    // Configuration
-    EntityConfig,
-    // State types
-    EntityState,
-    RuleMatchHistory,
-    EntitySnapshot,
-    EntityMetrics,
-    // Manager
-    EntityManager,
     // Decision types
     BlockDecision,
-    RiskApplication,
+    // Configuration
+    EntityConfig,
+    // Manager
+    EntityManager,
+    EntityMetrics,
+    EntitySnapshot,
+    // State types
+    EntityState,
     Ja4ReputationResult,
+    RiskApplication,
+    RuleMatchHistory,
 };

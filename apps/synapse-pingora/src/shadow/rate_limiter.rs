@@ -110,9 +110,8 @@ impl RateLimiter {
 
     /// Evicts expired entries to reclaim capacity.
     fn evict_expired(&self, now: Instant) {
-        self.state.retain(|_, (_, window_start)| {
-            now.duration_since(*window_start) < self.window
-        });
+        self.state
+            .retain(|_, (_, window_start)| now.duration_since(*window_start) < self.window);
     }
 
     /// Checks if the IP would be allowed without incrementing.
@@ -144,9 +143,8 @@ impl RateLimiter {
         let now = Instant::now();
         let max_age = self.window * 2;
 
-        self.state.retain(|_, (_, window_start)| {
-            now.duration_since(*window_start) < max_age
-        });
+        self.state
+            .retain(|_, (_, window_start)| now.duration_since(*window_start) < max_age);
     }
 
     /// Returns the number of tracked IPs.

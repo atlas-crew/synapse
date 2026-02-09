@@ -20,9 +20,15 @@ mod signal_type {
             (AnomalySignalType::PayloadSizeHigh, "payload_size_high"),
             (AnomalySignalType::PayloadSizeLow, "payload_size_low"),
             (AnomalySignalType::UnexpectedParam, "unexpected_param"),
-            (AnomalySignalType::MissingExpectedParam, "missing_expected_param"),
+            (
+                AnomalySignalType::MissingExpectedParam,
+                "missing_expected_param",
+            ),
             (AnomalySignalType::ParamValueAnomaly, "param_value_anomaly"),
-            (AnomalySignalType::ContentTypeMismatch, "content_type_mismatch"),
+            (
+                AnomalySignalType::ContentTypeMismatch,
+                "content_type_mismatch",
+            ),
             (AnomalySignalType::RateBurst, "rate_burst"),
             (AnomalySignalType::ParamCountAnomaly, "param_count_anomaly"),
         ];
@@ -52,8 +58,14 @@ mod signal_type {
 
     #[test]
     fn test_signal_type_equality() {
-        assert_eq!(AnomalySignalType::PayloadSizeHigh, AnomalySignalType::PayloadSizeHigh);
-        assert_ne!(AnomalySignalType::PayloadSizeHigh, AnomalySignalType::PayloadSizeLow);
+        assert_eq!(
+            AnomalySignalType::PayloadSizeHigh,
+            AnomalySignalType::PayloadSizeHigh
+        );
+        assert_ne!(
+            AnomalySignalType::PayloadSizeHigh,
+            AnomalySignalType::PayloadSizeLow
+        );
     }
 
     #[test]
@@ -132,22 +144,14 @@ mod signal {
 
     #[test]
     fn test_severity_at_max() {
-        let signal = AnomalySignal::new(
-            AnomalySignalType::RateBurst,
-            10,
-            "Test".to_string(),
-        );
+        let signal = AnomalySignal::new(AnomalySignalType::RateBurst, 10, "Test".to_string());
 
         assert_eq!(signal.severity, 10);
     }
 
     #[test]
     fn test_severity_zero() {
-        let signal = AnomalySignal::new(
-            AnomalySignalType::PayloadSizeLow,
-            0,
-            "Test".to_string(),
-        );
+        let signal = AnomalySignal::new(AnomalySignalType::PayloadSizeLow, 0, "Test".to_string());
 
         assert_eq!(signal.severity, 0);
     }
@@ -259,7 +263,11 @@ mod result {
     #[test]
     fn test_add_single_signal() {
         let mut result = AnomalyResult::new();
-        result.add(AnomalySignalType::UnexpectedParam, 3, "New param".to_string());
+        result.add(
+            AnomalySignalType::UnexpectedParam,
+            3,
+            "New param".to_string(),
+        );
 
         assert!(result.has_anomalies());
         assert_eq!(result.signal_count(), 1);
@@ -269,7 +277,11 @@ mod result {
     #[test]
     fn test_add_multiple_signals() {
         let mut result = AnomalyResult::new();
-        result.add(AnomalySignalType::UnexpectedParam, 3, "New param".to_string());
+        result.add(
+            AnomalySignalType::UnexpectedParam,
+            3,
+            "New param".to_string(),
+        );
         result.add(AnomalySignalType::RateBurst, 6, "High rate".to_string());
 
         assert!(result.has_anomalies());
@@ -456,7 +468,11 @@ mod result {
     #[test]
     fn test_result_serialize() {
         let mut result = AnomalyResult::new();
-        result.add(AnomalySignalType::UnexpectedParam, 3, "Test param".to_string());
+        result.add(
+            AnomalySignalType::UnexpectedParam,
+            3,
+            "Test param".to_string(),
+        );
 
         let serialized = serde_json::to_string(&result).expect("Failed to serialize");
 
@@ -521,10 +537,22 @@ mod scenarios {
         let mut result = AnomalyResult::new();
 
         // Multiple signals indicating attack
-        result.add(AnomalySignalType::PayloadSizeHigh, 7, "Oversized payload".to_string());
-        result.add(AnomalySignalType::UnexpectedParam, 4, "SQL injection attempt".to_string());
+        result.add(
+            AnomalySignalType::PayloadSizeHigh,
+            7,
+            "Oversized payload".to_string(),
+        );
+        result.add(
+            AnomalySignalType::UnexpectedParam,
+            4,
+            "SQL injection attempt".to_string(),
+        );
         result.add(AnomalySignalType::RateBurst, 6, "Rate spike".to_string());
-        result.add(AnomalySignalType::ContentTypeMismatch, 5, "Wrong content type".to_string());
+        result.add(
+            AnomalySignalType::ContentTypeMismatch,
+            5,
+            "Wrong content type".to_string(),
+        );
 
         result.normalize();
 

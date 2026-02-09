@@ -117,7 +117,11 @@ fn derive_rule_id(external_id: &str) -> u32 {
     hasher.update(external_id.as_bytes());
     let digest = hasher.finalize();
     let value = u32::from_be_bytes([digest[0], digest[1], digest[2], digest[3]]);
-    if value == 0 { 1 } else { value }
+    if value == 0 {
+        1
+    } else {
+        value
+    }
 }
 
 pub fn rule_identifier(rule: &StoredRule) -> String {
@@ -184,7 +188,10 @@ fn apply_meta_overrides(meta: &mut RuleMetadata, value: &serde_json::Value) {
 }
 
 fn risk_for_type(rule_type: &str, actions: &[CustomRuleAction]) -> f64 {
-    if actions.iter().any(|a| a.action_type.eq_ignore_ascii_case("block")) {
+    if actions
+        .iter()
+        .any(|a| a.action_type.eq_ignore_ascii_case("block"))
+    {
         return 95.0;
     }
     if rule_type.eq_ignore_ascii_case("block") {
@@ -200,7 +207,10 @@ fn risk_for_type(rule_type: &str, actions: &[CustomRuleAction]) -> f64 {
 }
 
 fn blocking_for_rule(rule_type: &str, actions: &[CustomRuleAction]) -> bool {
-    if actions.iter().any(|a| a.action_type.eq_ignore_ascii_case("block")) {
+    if actions
+        .iter()
+        .any(|a| a.action_type.eq_ignore_ascii_case("block"))
+    {
         return true;
     }
     rule_type.eq_ignore_ascii_case("block")
@@ -310,14 +320,21 @@ fn operator_condition(operator: &str, value: &serde_json::Value) -> Result<Match
             if converted.is_empty() {
                 return Err("in operator requires non-empty array".to_string());
             }
-            Ok(base_match_condition("hashset", Some(MatchValue::Arr(converted))))
+            Ok(base_match_condition(
+                "hashset",
+                Some(MatchValue::Arr(converted)),
+            ))
         }
         "ne" => Err("ne operator not supported for WAF rules".to_string()),
         other => Err(format!("Unsupported operator: {}", other)),
     }
 }
 
-fn field_condition(field: &str, operator: &str, value: &serde_json::Value) -> Result<MatchCondition, String> {
+fn field_condition(
+    field: &str,
+    operator: &str,
+    value: &serde_json::Value,
+) -> Result<MatchCondition, String> {
     if operator == "ne" {
         let condition = field_condition(field, "eq", value)?;
         return Ok(negate_condition(condition));
@@ -329,7 +346,10 @@ fn field_condition(field: &str, operator: &str, value: &serde_json::Value) -> Re
     if field_lower == "method" {
         if operator == "eq" {
             if let Some(method) = scalar_to_string(value) {
-                return Ok(base_match_condition("method", Some(MatchValue::Str(method))));
+                return Ok(base_match_condition(
+                    "method",
+                    Some(MatchValue::Str(method)),
+                ));
             }
         }
         if operator == "in" {
@@ -341,49 +361,72 @@ fn field_condition(field: &str, operator: &str, value: &serde_json::Value) -> Re
                     }
                 }
                 if !methods.is_empty() {
-                    return Ok(base_match_condition("method", Some(MatchValue::Arr(methods))));
+                    return Ok(base_match_condition(
+                        "method",
+                        Some(MatchValue::Arr(methods)),
+                    ));
                 }
             }
         }
-        return Ok(base_match_condition("method", Some(MatchValue::Cond(Box::new(op_condition)))));
+        return Ok(base_match_condition(
+            "method",
+            Some(MatchValue::Cond(Box::new(op_condition))),
+        ));
     }
 
     if matches!(field_lower.as_str(), "uri" | "path" | "url") {
-        return Ok(base_match_condition("uri", Some(MatchValue::Cond(Box::new(op_condition)))));
+        return Ok(base_match_condition(
+            "uri",
+            Some(MatchValue::Cond(Box::new(op_condition))),
+        ));
     }
 
     if field_lower == "args" || field_lower == "query" {
-        return Ok(base_match_condition("args", Some(MatchValue::Cond(Box::new(op_condition)))));
+        return Ok(base_match_condition(
+            "args",
+            Some(MatchValue::Cond(Box::new(op_condition))),
+        ));
     }
 
     if let Some(name) = field_lower.strip_prefix("arg.") {
-        let mut cond = base_match_condition("named_argument", Some(MatchValue::Cond(Box::new(op_condition))));
+        let mut cond = base_match_condition(
+            "named_argument",
+            Some(MatchValue::Cond(Box::new(op_condition))),
+        );
         cond.name = Some(name.to_string());
         return Ok(cond);
     }
 
     if let Some(name) = field_lower.strip_prefix("param.") {
-        let mut cond = base_match_condition("named_argument", Some(MatchValue::Cond(Box::new(op_condition))));
+        let mut cond = base_match_condition(
+            "named_argument",
+            Some(MatchValue::Cond(Box::new(op_condition))),
+        );
         cond.name = Some(name.to_string());
         return Ok(cond);
     }
 
     if let Some(name) = field_lower.strip_prefix("header.") {
-        let mut cond = base_match_condition("header", Some(MatchValue::Cond(Box::new(op_condition))));
+        let mut cond =
+            base_match_condition("header", Some(MatchValue::Cond(Box::new(op_condition))));
         cond.field = Some(name.to_string());
         cond.direction = Some("c2s".to_string());
         return Ok(cond);
     }
 
     if let Some(name) = field_lower.strip_prefix("header:") {
-        let mut cond = base_match_condition("header", Some(MatchValue::Cond(Box::new(op_condition))));
+        let mut cond =
+            base_match_condition("header", Some(MatchValue::Cond(Box::new(op_condition))));
         cond.field = Some(name.to_string());
         cond.direction = Some("c2s".to_string());
         return Ok(cond);
     }
 
     if field_lower == "body" || field_lower == "request" {
-        return Ok(base_match_condition("request", Some(MatchValue::Cond(Box::new(op_condition)))));
+        return Ok(base_match_condition(
+            "request",
+            Some(MatchValue::Cond(Box::new(op_condition))),
+        ));
     }
 
     let mut cond = base_match_condition("header", Some(MatchValue::Cond(Box::new(op_condition))));
@@ -392,7 +435,9 @@ fn field_condition(field: &str, operator: &str, value: &serde_json::Value) -> Re
     Ok(cond)
 }
 
-fn conditions_to_matches(conditions: &[CustomRuleCondition]) -> Result<Vec<MatchCondition>, String> {
+fn conditions_to_matches(
+    conditions: &[CustomRuleCondition],
+) -> Result<Vec<MatchCondition>, String> {
     let mut matches = Vec::new();
     for condition in conditions {
         matches.push(field_condition(
@@ -468,7 +513,10 @@ impl RuleView {
         let hit_count = meta.hit_count.unwrap_or(0);
         let last_hit = meta.last_hit.clone();
         let created_at = meta.created_at.clone().unwrap_or_else(now_rfc3339);
-        let updated_at = meta.updated_at.clone().unwrap_or_else(|| created_at.clone());
+        let updated_at = meta
+            .updated_at
+            .clone()
+            .unwrap_or_else(|| created_at.clone());
 
         Self {
             id,
@@ -523,7 +571,10 @@ pub fn parse_rules_payload(value: serde_json::Value) -> Result<Vec<StoredRule>, 
     Ok(rules)
 }
 
-pub fn merge_rule_update(existing: &StoredRule, update: CustomRuleUpdate) -> Result<StoredRule, String> {
+pub fn merge_rule_update(
+    existing: &StoredRule,
+    update: CustomRuleUpdate,
+) -> Result<StoredRule, String> {
     let mut meta = existing.meta.clone();
     if meta.created_at.is_none() {
         meta.created_at = Some(now_rfc3339());

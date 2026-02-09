@@ -24,7 +24,9 @@ pub enum DnsError {
     Timeout(u64),
     #[error("DNS rate limit exceeded, try again later")]
     RateLimited,
-    #[error("DNS verification failed: IP not in forward lookup results (possible rebinding attack)")]
+    #[error(
+        "DNS verification failed: IP not in forward lookup results (possible rebinding attack)"
+    )]
     IpMismatch,
 }
 
@@ -114,7 +116,11 @@ impl DnsResolver {
                 Ok(None)
             }
             Err(_) => {
-                tracing::debug!("Reverse DNS lookup for {} timed out after {}ms", ip, self.timeout.as_millis());
+                tracing::debug!(
+                    "Reverse DNS lookup for {} timed out after {}ms",
+                    ip,
+                    self.timeout.as_millis()
+                );
                 Err(DnsError::Timeout(self.timeout.as_millis() as u64))
             }
         }
@@ -127,15 +133,17 @@ impl DnsResolver {
         let _permit = self.acquire_permit().await.ok_or(DnsError::RateLimited)?;
 
         match tokio::time::timeout(self.timeout, self.resolver.lookup_ip(hostname)).await {
-            Ok(Ok(response)) => {
-                Ok(response.iter().collect())
-            }
+            Ok(Ok(response)) => Ok(response.iter().collect()),
             Ok(Err(e)) => {
                 tracing::debug!("Forward DNS lookup for {} failed: {}", hostname, e);
                 Err(DnsError::LookupFailed(e.to_string()))
             }
             Err(_) => {
-                tracing::debug!("Forward DNS lookup for {} timed out after {}ms", hostname, self.timeout.as_millis());
+                tracing::debug!(
+                    "Forward DNS lookup for {} timed out after {}ms",
+                    hostname,
+                    self.timeout.as_millis()
+                );
                 Err(DnsError::Timeout(self.timeout.as_millis() as u64))
             }
         }

@@ -15,18 +15,18 @@ use std::time::Duration;
 use subtle::ConstantTimeEq;
 use sysinfo::System;
 use tokio::sync::{broadcast, mpsc, watch};
-use tokio_tungstenite::Connector;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::Connector;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::metrics::MetricsRegistry;
 use super::config::TunnelConfig;
 use super::error::TunnelError;
 use super::types::{
     ConnectionState, LegacyTunnelMessage, TunnelAuthMessage, TunnelAuthMetadata, TunnelAuthPayload,
     TunnelChannel, TunnelEnvelope,
 };
+use crate::metrics::MetricsRegistry;
 
 const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 256;
 const LOGS_CHANNEL_BUFFER_SIZE: usize = 2048;
@@ -364,10 +364,7 @@ impl TunnelClient {
 
     /// Send a message to the hub.
     pub async fn send_json(&self, value: serde_json::Value) -> Result<(), TunnelError> {
-        let tx = self
-            .outbound_tx
-            .as_ref()
-            .ok_or(TunnelError::NotConnected)?;
+        let tx = self.outbound_tx.as_ref().ok_or(TunnelError::NotConnected)?;
         tx.send(value)
             .await
             .map_err(|e| TunnelError::SendFailed(e.to_string()))
@@ -404,7 +401,16 @@ impl TunnelClient {
         self.router.start();
 
         let handle = tokio::spawn(async move {
-            connection_loop(config, state_tx, router, stats, metrics, outbound_rx, shutdown_rx).await;
+            connection_loop(
+                config,
+                state_tx,
+                router,
+                stats,
+                metrics,
+                outbound_rx,
+                shutdown_rx,
+            )
+            .await;
         });
         self.task_handle = Some(handle);
 
@@ -419,7 +425,9 @@ impl TunnelClient {
         self.outbound_tx = None;
         if let Some(handle) = self.task_handle.take() {
             let mut handle = handle;
-            match tokio::time::timeout(Duration::from_millis(SHUTDOWN_TIMEOUT_MS), &mut handle).await {
+            match tokio::time::timeout(Duration::from_millis(SHUTDOWN_TIMEOUT_MS), &mut handle)
+                .await
+            {
                 Ok(Ok(())) => {}
                 Ok(Err(err)) => {
                     warn!("Tunnel shutdown task failed: {}", err);
@@ -536,11 +544,12 @@ async fn connection_loop(
                     }
                     update_circuit_state(&mut circuit_state, &stats, CircuitBreakerState::Open);
                     delay_ms = open_backoff_ms;
-                    open_backoff_ms =
-                        (open_backoff_ms.saturating_mul(2)).clamp(OPEN_MIN_BACKOFF_MS, OPEN_MAX_BACKOFF_MS);
+                    open_backoff_ms = (open_backoff_ms.saturating_mul(2))
+                        .clamp(OPEN_MIN_BACKOFF_MS, OPEN_MAX_BACKOFF_MS);
                 } else {
                     update_circuit_state(&mut circuit_state, &stats, CircuitBreakerState::Closed);
-                    reconnect_delay = (reconnect_delay.saturating_mul(2)).min(MAX_RECONNECT_DELAY_MS);
+                    reconnect_delay =
+                        (reconnect_delay.saturating_mul(2)).min(MAX_RECONNECT_DELAY_MS);
                 }
 
                 let delay_ms = apply_jitter(delay_ms.max(1));
@@ -553,7 +562,7 @@ async fn connection_loop(
                     attempt,
                     circuit_state.as_str()
                 );
-                
+
                 tokio::select! {
                     _ = shutdown_rx.recv() => {
                         info!("Tunnel client shutdown requested during backoff");
@@ -562,7 +571,7 @@ async fn connection_loop(
                     }
                     _ = tokio::time::sleep(delay) => {}
                 }
-                
+
                 if circuit_state == CircuitBreakerState::Open {
                     update_circuit_state(&mut circuit_state, &stats, CircuitBreakerState::HalfOpen);
                 }
@@ -688,15 +697,14 @@ async fn connect_and_run(
         }
     };
 
-    let (ws_stream, response) =
-        match tokio_tungstenite::connect_async_tls_with_config(
-            &config.url,
-            None,
-            false,
-            tls_connector,
-        )
-        .await
-        {
+    let (ws_stream, response) = match tokio_tungstenite::connect_async_tls_with_config(
+        &config.url,
+        None,
+        false,
+        tls_connector,
+    )
+    .await
+    {
         Ok((stream, response)) => (stream, response),
         Err(e) => {
             error!("Tunnel WebSocket connection failed: {}", e);
@@ -740,7 +748,9 @@ async fn connect_and_run(
         return ConnectionResult::Disconnected { connected: false };
     }
 
-    let auth_timeout_ms = auth_timeout_override.unwrap_or(config.auth_timeout_ms).max(1);
+    let auth_timeout_ms = auth_timeout_override
+        .unwrap_or(config.auth_timeout_ms)
+        .max(1);
     let auth_timeout =
         tokio::time::timeout(Duration::from_millis(auth_timeout_ms), ws_rx.next()).await;
 
@@ -782,8 +792,7 @@ async fn connect_and_run(
     }
 
     let authenticated = true;
-    let heartbeat_interval_duration =
-        Duration::from_millis(config.heartbeat_interval_ms.max(1));
+    let heartbeat_interval_duration = Duration::from_millis(config.heartbeat_interval_ms.max(1));
     let mut heartbeat_interval = tokio::time::interval(heartbeat_interval_duration);
     let mut heartbeat_inflight_at: Option<tokio::time::Instant> = None;
     let mut heartbeat_misses: u32 = 0;
@@ -906,7 +915,11 @@ fn build_metadata(config: &TunnelConfig) -> TunnelAuthMetadata {
     let hostname = System::host_name().unwrap_or_default();
     let platform = std::env::consts::OS.to_string();
     TunnelAuthMetadata {
-        hostname: if hostname.is_empty() { None } else { Some(hostname) },
+        hostname: if hostname.is_empty() {
+            None
+        } else {
+            Some(hostname)
+        },
         version: Some(config.version.clone()),
         platform: Some(platform),
     }
@@ -931,7 +944,9 @@ fn parse_auth_response(
             let sensor_id = payload
                 .get("sensorId")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| TunnelError::AuthFailed("auth-success missing sensorId".to_string()))?;
+                .ok_or_else(|| {
+                    TunnelError::AuthFailed("auth-success missing sensorId".to_string())
+                })?;
             if sensor_id != expected_sensor_id {
                 return Err(TunnelError::AuthFailed(format!(
                     "auth-success sensorId mismatch: {}",
@@ -941,14 +956,18 @@ fn parse_auth_response(
             let tenant_id = payload
                 .get("tenantId")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| TunnelError::AuthFailed("auth-success missing tenantId".to_string()))?;
+                .ok_or_else(|| {
+                    TunnelError::AuthFailed("auth-success missing tenantId".to_string())
+                })?;
             let sensor_name = payload.get("sensorName").and_then(|v| v.as_str());
             let capabilities = parse_capabilities(payload.get("capabilities"));
 
             let session_id = value
                 .get("sessionId")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| TunnelError::AuthFailed("auth-success missing sessionId".to_string()))?;
+                .ok_or_else(|| {
+                    TunnelError::AuthFailed("auth-success missing sessionId".to_string())
+                })?;
             if session_id.is_empty() || Uuid::parse_str(session_id).is_err() {
                 return Err(TunnelError::AuthFailed(
                     "auth-success sessionId invalid".to_string(),
@@ -970,7 +989,9 @@ fn parse_auth_response(
             let signature = value
                 .get("signature")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| TunnelError::AuthFailed("auth-success missing signature".to_string()))?;
+                .ok_or_else(|| {
+                    TunnelError::AuthFailed("auth-success missing signature".to_string())
+                })?;
             let signature_payload = build_auth_signature_payload(AuthSignaturePayload {
                 sensor_id,
                 tenant_id,
@@ -981,7 +1002,9 @@ fn parse_auth_response(
             });
             let expected = compute_hmac_sha256(api_key, &signature_payload)?;
             if !constant_time_eq(expected.as_bytes(), signature.as_bytes()) {
-                return Err(TunnelError::AuthFailed("auth-success signature invalid".to_string()));
+                return Err(TunnelError::AuthFailed(
+                    "auth-success signature invalid".to_string(),
+                ));
             }
 
             Ok(true)
@@ -1171,10 +1194,7 @@ mod tests {
     #[serial]
     fn tls_connector_rejects_empty_bundle() {
         let temp = NamedTempFile::new().expect("create temp file");
-        let _guard = EnvVarGuard::set(
-            "SYNAPSE_CA_BUNDLE",
-            temp.path().to_string_lossy().as_ref(),
-        );
+        let _guard = EnvVarGuard::set("SYNAPSE_CA_BUNDLE", temp.path().to_string_lossy().as_ref());
         let result = build_tls_connector("wss://example.com/ws/tunnel/sensor");
         assert!(result.is_err());
     }
@@ -1185,10 +1205,7 @@ mod tests {
         let cert_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("certs")
             .join("server.crt");
-        let _guard = EnvVarGuard::set(
-            "SYNAPSE_CA_BUNDLE",
-            cert_path.to_string_lossy().as_ref(),
-        );
+        let _guard = EnvVarGuard::set("SYNAPSE_CA_BUNDLE", cert_path.to_string_lossy().as_ref());
         let connector = build_tls_connector("wss://example.com/ws/tunnel/sensor").unwrap();
         assert!(connector.is_some());
     }
@@ -1217,7 +1234,10 @@ mod tests {
             "capabilities": capabilities,
             "sensorName": "sensor-alpha",
         });
-        let caps = capabilities.iter().map(|c| c.to_string()).collect::<Vec<_>>();
+        let caps = capabilities
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>();
         let signature_payload = build_auth_signature_payload(AuthSignaturePayload {
             sensor_id,
             tenant_id,

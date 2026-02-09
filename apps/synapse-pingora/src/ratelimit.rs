@@ -3,12 +3,12 @@
 //! Provides hostname-aware rate limiting with configurable limits,
 //! burst capacity, and sliding window tracking.
 
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use parking_lot::RwLock;
-use serde::{Serialize, Deserialize};
 use tracing::{debug, warn};
 
 /// Rate limit decision.
@@ -295,7 +295,10 @@ impl KeyedRateLimiter {
             // Previous approach used arbitrary HashMap iteration order; now we sort by
             // last_access timestamp and evict the stalest 10%.
             if buckets.len() >= self.max_keys {
-                warn!("Rate limiter at capacity ({}), evicting stale entries", buckets.len());
+                warn!(
+                    "Rate limiter at capacity ({}), evicting stale entries",
+                    buckets.len()
+                );
                 let evict_count = self.max_keys / 10;
                 let mut entries: Vec<_> = buckets
                     .iter()
@@ -375,9 +378,7 @@ impl RateLimitManager {
 
     /// Removes a site-specific rate limiter.
     pub fn remove_site(&self, hostname: &str) {
-        self.site_limiters
-            .write()
-            .remove(&hostname.to_lowercase());
+        self.site_limiters.write().remove(&hostname.to_lowercase());
     }
 
     /// Checks if a request is allowed.
@@ -414,7 +415,11 @@ impl RateLimitManager {
     pub fn stats(&self) -> RateLimitStats {
         let limiters = self.site_limiters.read();
         let total_keys: usize = limiters.values().map(|l| l.key_count()).sum();
-        let global_keys = self.global_limiter.as_ref().map(|l| l.key_count()).unwrap_or(0);
+        let global_keys = self
+            .global_limiter
+            .as_ref()
+            .map(|l| l.key_count())
+            .unwrap_or(0);
 
         RateLimitStats {
             site_count: limiters.len(),

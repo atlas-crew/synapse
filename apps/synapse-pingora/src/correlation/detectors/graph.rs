@@ -12,13 +12,13 @@
 //! - Triggers campaign if component size exceeds threshold
 //! - Supports depth-limited traversal to limit performance impact
 
+use super::{Detector, DetectorResult};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
+use dashmap::DashMap;
+use sha2::{Digest, Sha256};
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use dashmap::DashMap;
-use sha2::{Sha256, Digest};
-use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
-use super::{Detector, DetectorResult};
 
 /// Options for graph export
 #[derive(Debug, Clone, Default)]
@@ -118,11 +118,17 @@ enum NodeType {
 
 impl NodeType {
     fn from_id(id: &str) -> Self {
-        if id.starts_with("ip:") { NodeType::Ip }
-        else if id.starts_with("fp:") { NodeType::Fingerprint }
-        else if id.starts_with("token:") { NodeType::Token }
-        else if id.starts_with("asn:") { NodeType::Asn }
-        else { NodeType::Other }
+        if id.starts_with("ip:") {
+            NodeType::Ip
+        } else if id.starts_with("fp:") {
+            NodeType::Fingerprint
+        } else if id.starts_with("token:") {
+            NodeType::Token
+        } else if id.starts_with("asn:") {
+            NodeType::Asn
+        } else {
+            NodeType::Other
+        }
     }
 }
 
@@ -156,7 +162,9 @@ impl GraphDetector {
     ///
     /// Returns false if graph bounds are exceeded.
     pub fn record_relation(&self, entity_a: &str, entity_b: &str) -> bool {
-        if entity_a == entity_b { return true; }
+        if entity_a == entity_b {
+            return true;
+        }
 
         let now = Instant::now();
 
@@ -228,10 +236,18 @@ impl GraphDetector {
     }
 
     /// Helpers to format IDs
-    pub fn ip_id(ip: &str) -> String { format!("ip:{}", ip) }
-    pub fn fp_id(fp: &str) -> String { format!("fp:{}", fp) }
-    pub fn token_id(token: &str) -> String { format!("token:{}", token) }
-    pub fn asn_id(asn: &str) -> String { format!("asn:{}", asn) }
+    pub fn ip_id(ip: &str) -> String {
+        format!("ip:{}", ip)
+    }
+    pub fn fp_id(fp: &str) -> String {
+        format!("fp:{}", fp)
+    }
+    pub fn token_id(token: &str) -> String {
+        format!("token:{}", token)
+    }
+    pub fn asn_id(asn: &str) -> String {
+        format!("asn:{}", asn)
+    }
 
     /// BFS to find component
     fn find_connected_ips(&self, start_node: &str) -> HashSet<String> {
@@ -295,7 +311,11 @@ impl GraphDetector {
     /// Export graph data with pagination and optional identifier hashing.
     /// P1 fix: Adds pagination to prevent unbounded memory usage and
     /// hashes identifiers to prevent information disclosure.
-    pub fn get_cytoscape_data_paginated(&self, ips: &[String], options: GraphExportOptions) -> PaginatedGraph {
+    pub fn get_cytoscape_data_paginated(
+        &self,
+        ips: &[String],
+        options: GraphExportOptions,
+    ) -> PaginatedGraph {
         let limit = options.limit.unwrap_or(500);
         let offset = options.offset.unwrap_or(0);
         let hash_ids = options.hash_identifiers;
@@ -332,23 +352,26 @@ impl GraphDetector {
 
             // Add node
             let node_type = NodeType::from_id(&current_id);
-            all_nodes.push((current_id.clone(), serde_json::json!({
-                "data": {
-                    "id": display_id.clone(),
-                    "label": if hash_ids {
-                        display_id.split(':').nth(1).unwrap_or(&display_id).to_string()
-                    } else {
-                        current_id.split(':').nth(1).unwrap_or(&current_id).to_string()
-                    },
-                    "type": match node_type {
-                        NodeType::Ip => "ip",
-                        NodeType::Fingerprint => "actor", // Mapping to UI terminology
-                        NodeType::Token => "token",
-                        NodeType::Asn => "asn",
-                        _ => "other",
+            all_nodes.push((
+                current_id.clone(),
+                serde_json::json!({
+                    "data": {
+                        "id": display_id.clone(),
+                        "label": if hash_ids {
+                            display_id.split(':').nth(1).unwrap_or(&display_id).to_string()
+                        } else {
+                            current_id.split(':').nth(1).unwrap_or(&current_id).to_string()
+                        },
+                        "type": match node_type {
+                            NodeType::Ip => "ip",
+                            NodeType::Fingerprint => "actor", // Mapping to UI terminology
+                            NodeType::Token => "token",
+                            NodeType::Asn => "asn",
+                            _ => "other",
+                        }
                     }
-                }
-            })));
+                }),
+            ));
 
             if depth >= self.config.max_traversal_depth {
                 continue;
@@ -441,18 +464,19 @@ impl GraphDetector {
     fn cleanup(&self) {
         let now = Instant::now();
         let ttl = self.config.edge_ttl;
-        
+
         // Remove old nodes
-        self.nodes.retain(|_, node| now.duration_since(node.last_seen) < ttl);
+        self.nodes
+            .retain(|_, node| now.duration_since(node.last_seen) < ttl);
 
         // Clean up adjacency list (remove keys that no longer exist in nodes)
         // This is expensive, so it should run infrequently
         self.adjacency.retain(|k, _| self.nodes.contains_key(k));
-        
+
         // We also need to remove values from the HashSets inside adjacency
-        // This requires iterating all values. For performance in this PoC, 
-        // we might rely on the fact that if A links to B, and B expires, 
-        // A's link to B becomes a dead end which find_connected_ips handles gracefully 
+        // This requires iterating all values. For performance in this PoC,
+        // we might rely on the fact that if A links to B, and B expires,
+        // A's link to B becomes a dead end which find_connected_ips handles gracefully
         // (it just won't find B in adjacency or won't find B's neighbors).
         // A complete cleanup would iterate all sets.
     }
@@ -469,7 +493,9 @@ impl Detector for GraphDetector {
 
         // Iterate over all IP nodes to find components
         // We clone the keys to avoid holding locks during traversal
-        let ip_nodes: Vec<String> = self.nodes.iter()
+        let ip_nodes: Vec<String> = self
+            .nodes
+            .iter()
             .filter(|r| r.value().node_type == NodeType::Ip)
             .map(|r| r.key().clone())
             .collect();
@@ -497,9 +523,8 @@ impl Detector for GraphDetector {
                     confidence: 0.9, // High confidence for graph connections
                     evidence: component_ips.into_iter().collect(),
                     description: format!(
-                        "Graph correlation: {} IPs connected via shared attributes (depth {})", 
-                        self.config.min_component_size, 
-                        self.config.max_traversal_depth
+                        "Graph correlation: {} IPs connected via shared attributes (depth {})",
+                        self.config.min_component_size, self.config.max_traversal_depth
                     ),
                 };
 
@@ -522,10 +547,10 @@ impl Detector for GraphDetector {
         if let Ok(mut last) = self.last_cleanup.try_lock() {
             if last.elapsed() > Duration::from_secs(300) {
                 *last = Instant::now();
-                // Spawn cleanup to avoid blocking analyze? 
+                // Spawn cleanup to avoid blocking analyze?
                 // For safety in this trait method, we'll run it synchronously but it might be slow.
                 // In production, use a background task.
-                self.cleanup(); 
+                self.cleanup();
             }
         }
 
@@ -533,10 +558,10 @@ impl Detector for GraphDetector {
     }
 
     fn should_trigger(&self, _ip: &std::net::IpAddr, _index: &FingerprintIndex) -> bool {
-        // Graph updates are implicit via record_relation, this check is less relevant 
+        // Graph updates are implicit via record_relation, this check is less relevant
         // unless we want to do immediate subgraph checks.
         // For now, return false to rely on periodic analyze().
-        false 
+        false
     }
 }
 
@@ -549,8 +574,14 @@ mod tests {
         let detector = GraphDetector::new(GraphConfig::default());
 
         // Link IP1 -> FP1 -> IP2
-        assert!(detector.record_relation(&GraphDetector::ip_id("1.1.1.1"), &GraphDetector::fp_id("fp_a")));
-        assert!(detector.record_relation(&GraphDetector::fp_id("fp_a"), &GraphDetector::ip_id("2.2.2.2")));
+        assert!(detector.record_relation(
+            &GraphDetector::ip_id("1.1.1.1"),
+            &GraphDetector::fp_id("fp_a")
+        ));
+        assert!(detector.record_relation(
+            &GraphDetector::fp_id("fp_a"),
+            &GraphDetector::ip_id("2.2.2.2")
+        ));
 
         let ips = detector.find_connected_ips(&GraphDetector::ip_id("1.1.1.1"));
         assert!(ips.contains("1.1.1.1"));
@@ -592,9 +623,9 @@ mod tests {
         });
 
         // Add 5 unique nodes (should succeed)
-        assert!(detector.record_relation("ip:1", "fp:a"));  // 2 nodes
-        assert!(detector.record_relation("ip:2", "fp:b"));  // 4 nodes
-        assert!(detector.record_relation("ip:3", "fp:a"));  // 5 nodes (ip:3 is new, fp:a exists)
+        assert!(detector.record_relation("ip:1", "fp:a")); // 2 nodes
+        assert!(detector.record_relation("ip:2", "fp:b")); // 4 nodes
+        assert!(detector.record_relation("ip:3", "fp:a")); // 5 nodes (ip:3 is new, fp:a exists)
 
         // Try to add 2 more new nodes (should fail - would exceed limit)
         assert!(!detector.record_relation("ip:4", "fp:c")); // Would need 2 new nodes
@@ -641,6 +672,9 @@ mod tests {
         // BFS should terminate early
         let ips = detector.find_connected_ips("ip:0");
         // Due to iteration limit, we may not find all IPs
-        assert!(ips.len() < 20, "Should have stopped early due to iteration limit");
+        assert!(
+            ips.len() < 20,
+            "Should have stopped early due to iteration limit"
+        );
     }
 }

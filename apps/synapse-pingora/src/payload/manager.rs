@@ -5,7 +5,9 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::anomaly::{PayloadAnomaly, PayloadAnomalyMetadata, PayloadAnomalySeverity, PayloadAnomalyType};
+use super::anomaly::{
+    PayloadAnomaly, PayloadAnomalyMetadata, PayloadAnomalySeverity, PayloadAnomalyType,
+};
 use super::config::PayloadConfig;
 use super::endpoint_stats::{EndpointPayloadStats, EndpointPayloadStatsSnapshot};
 use super::entity_bandwidth::{EntityBandwidth, EntityBandwidthSnapshot};
@@ -71,8 +73,10 @@ impl PayloadManager {
     ) {
         // Update global counters
         self.total_requests.fetch_add(1, Ordering::Relaxed);
-        self.total_request_bytes.fetch_add(request_bytes, Ordering::Relaxed);
-        self.total_response_bytes.fetch_add(response_bytes, Ordering::Relaxed);
+        self.total_request_bytes
+            .fetch_add(request_bytes, Ordering::Relaxed);
+        self.total_response_bytes
+            .fetch_add(response_bytes, Ordering::Relaxed);
 
         // Update endpoint stats
         self.record_endpoint(template, request_bytes, response_bytes);
@@ -85,24 +89,30 @@ impl PayloadManager {
     }
 
     fn record_endpoint(&self, template: &str, request_bytes: u64, response_bytes: u64) {
-        let entry = self.endpoints.entry(template.to_string()).or_insert_with(|| {
-            RwLock::new(EndpointPayloadStats::new(
-                template.to_string(),
-                self.config.window_duration_ms,
-                self.config.max_windows,
-            ))
-        });
+        let entry = self
+            .endpoints
+            .entry(template.to_string())
+            .or_insert_with(|| {
+                RwLock::new(EndpointPayloadStats::new(
+                    template.to_string(),
+                    self.config.window_duration_ms,
+                    self.config.max_windows,
+                ))
+            });
         entry.write().record(request_bytes, response_bytes);
     }
 
     fn record_entity(&self, entity_id: &str, request_bytes: u64, response_bytes: u64) {
-        let entry = self.entities.entry(entity_id.to_string()).or_insert_with(|| {
-            RwLock::new(EntityBandwidth::new(
-                entity_id.to_string(),
-                self.config.window_duration_ms,
-                self.config.max_windows,
-            ))
-        });
+        let entry = self
+            .entities
+            .entry(entity_id.to_string())
+            .or_insert_with(|| {
+                RwLock::new(EntityBandwidth::new(
+                    entity_id.to_string(),
+                    self.config.window_duration_ms,
+                    self.config.max_windows,
+                ))
+            });
         entry.write().record(request_bytes, response_bytes);
     }
 
@@ -160,7 +170,9 @@ impl PayloadManager {
 
             // We'd need to track individual requests to detect oversized ones
             // For now, detect if max >> p99 (indicating outliers exist)
-            if req_stats.max_bytes as f64 > req_threshold && req_stats.max_bytes > self.config.min_large_payload_bytes {
+            if req_stats.max_bytes as f64 > req_threshold
+                && req_stats.max_bytes > self.config.min_large_payload_bytes
+            {
                 detected.push(PayloadAnomaly::new(
                     PayloadAnomalyType::OversizedRequest,
                     PayloadAnomalySeverity::Medium,
@@ -179,7 +191,9 @@ impl PayloadManager {
                 ));
             }
 
-            if resp_stats.max_bytes as f64 > resp_threshold && resp_stats.max_bytes > self.config.min_large_payload_bytes {
+            if resp_stats.max_bytes as f64 > resp_threshold
+                && resp_stats.max_bytes > self.config.min_large_payload_bytes
+            {
                 detected.push(PayloadAnomaly::new(
                     PayloadAnomalyType::OversizedResponse,
                     PayloadAnomalySeverity::Low,
@@ -236,10 +250,7 @@ impl PayloadManager {
                             PayloadAnomalySeverity::Critical,
                             "".to_string(),
                             entity.entity_id.clone(),
-                            format!(
-                                "Exfiltration pattern: response/request ratio {:.1}x",
-                                ratio
-                            ),
+                            format!("Exfiltration pattern: response/request ratio {:.1}x", ratio),
                             PayloadAnomalyMetadata::DataPattern {
                                 request_bytes: avg_req,
                                 response_bytes: avg_resp,
@@ -259,10 +270,7 @@ impl PayloadManager {
                             PayloadAnomalySeverity::High,
                             "".to_string(),
                             entity.entity_id.clone(),
-                            format!(
-                                "Upload pattern: request/response ratio {:.1}x",
-                                ratio
-                            ),
+                            format!("Upload pattern: request/response ratio {:.1}x", ratio),
                             PayloadAnomalyMetadata::DataPattern {
                                 request_bytes: avg_req,
                                 response_bytes: avg_resp,
@@ -317,17 +325,26 @@ impl PayloadManager {
 
     /// Get statistics for a specific endpoint.
     pub fn get_endpoint_stats(&self, template: &str) -> Option<EndpointPayloadStatsSnapshot> {
-        self.endpoints.get(template).map(|e| EndpointPayloadStatsSnapshot::from(&*e.read()))
+        self.endpoints
+            .get(template)
+            .map(|e| EndpointPayloadStatsSnapshot::from(&*e.read()))
     }
 
     /// Get bandwidth for a specific entity.
     pub fn get_entity_bandwidth(&self, entity_id: &str) -> Option<EntityBandwidthSnapshot> {
-        self.entities.get(entity_id).map(|e| EntityBandwidthSnapshot::from(&*e.read()))
+        self.entities
+            .get(entity_id)
+            .map(|e| EntityBandwidthSnapshot::from(&*e.read()))
     }
 
     /// List top endpoints by specified metric.
-    pub fn list_top_endpoints(&self, limit: usize, sort_by: EndpointSortBy) -> Vec<EndpointPayloadStatsSnapshot> {
-        let mut endpoints: Vec<_> = self.endpoints
+    pub fn list_top_endpoints(
+        &self,
+        limit: usize,
+        sort_by: EndpointSortBy,
+    ) -> Vec<EndpointPayloadStatsSnapshot> {
+        let mut endpoints: Vec<_> = self
+            .endpoints
             .iter()
             .map(|e| EndpointPayloadStatsSnapshot::from(&*e.read()))
             .collect();
@@ -353,7 +370,8 @@ impl PayloadManager {
 
     /// List top entities by bandwidth.
     pub fn list_top_entities(&self, limit: usize) -> Vec<EntityBandwidthSnapshot> {
-        let mut entities: Vec<_> = self.entities
+        let mut entities: Vec<_> = self
+            .entities
             .iter()
             .map(|e| EntityBandwidthSnapshot::from(&*e.read()))
             .collect();

@@ -17,7 +17,10 @@ use synapse_pingora::tunnel::{ConnectionState, TunnelChannel, TunnelClient, Tunn
 type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Parser, Debug)]
-#[command(name = "tunnel-load-test", about = "Mock tunnel load test for synapse-pingora")]
+#[command(
+    name = "tunnel-load-test",
+    about = "Mock tunnel load test for synapse-pingora"
+)]
 struct Args {
     /// Number of concurrent tunnel clients
     #[arg(long, default_value_t = 50)]
@@ -398,7 +401,14 @@ async fn handle_mock_connection(
     let session_id = Uuid::new_v4().to_string();
     let timestamp = chrono::Utc::now().to_rfc3339();
     let tenant_id = "tenant-load".to_string();
-    let signature_payload = build_signature_payload(&sensor_id, &tenant_id, &session_id, &timestamp, &capabilities, sensor_name.as_deref());
+    let signature_payload = build_signature_payload(
+        &sensor_id,
+        &tenant_id,
+        &session_id,
+        &timestamp,
+        &capabilities,
+        sensor_name.as_deref(),
+    );
     let signature = compute_hmac(&api_key, &signature_payload);
 
     let response = serde_json::json!({

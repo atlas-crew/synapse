@@ -37,9 +37,9 @@
 mod credential_stuffing;
 mod types;
 
-pub use credential_stuffing::{CredentialStuffingDetector, StuffingStats, StuffingState};
+pub use credential_stuffing::{CredentialStuffingDetector, StuffingState, StuffingStats};
 pub use types::{
     AuthAttempt, AuthMetrics, AuthResult, DistributedAttack, EntityEndpointKey,
-    GlobalVelocityTracker, StuffingConfig, StuffingEvent, StuffingSeverity,
-    StuffingVerdict, TakeoverAlert, UsernameTargetedAttack,
+    GlobalVelocityTracker, StuffingConfig, StuffingEvent, StuffingSeverity, StuffingVerdict,
+    TakeoverAlert, UsernameTargetedAttack,
 };

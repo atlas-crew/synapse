@@ -7,14 +7,14 @@
 //! - Uses `unicase::Ascii` for zero-allocation case-insensitive matching
 //! - Uses `ahash::RandomState` for 2-3x faster HashMap lookups
 
-use std::collections::HashMap;
-use regex::Regex;
-use tracing::{debug, warn};
-use unicase::Ascii;
-use ahash::RandomState;
 use crate::config::AccessControlConfig;
 use crate::headers::CompiledHeaderConfig;
 use crate::shadow::ShadowMirrorConfig;
+use ahash::RandomState;
+use regex::Regex;
+use std::collections::HashMap;
+use tracing::{debug, warn};
+use unicase::Ascii;
 
 /// Configuration for a single virtual host site.
 #[derive(Debug, Clone)]
@@ -62,7 +62,11 @@ impl From<crate::config::SiteYamlConfig> for SiteConfig {
     fn from(yaml: crate::config::SiteYamlConfig) -> Self {
         Self {
             hostname: yaml.hostname,
-            upstreams: yaml.upstreams.iter().map(|u| format!("{}:{}", u.host, u.port)).collect(),
+            upstreams: yaml
+                .upstreams
+                .iter()
+                .map(|u| format!("{}:{}", u.host, u.port))
+                .collect(),
             tls_enabled: yaml.tls.is_some(),
             tls_cert: yaml.tls.as_ref().map(|t| t.cert_path.clone()),
             tls_key: yaml.tls.as_ref().map(|t| t.key_path.clone()),
@@ -254,9 +258,11 @@ impl VhostMatcher {
 
     /// Validates that a hostname contains only valid DNS characters.
     fn is_valid_hostname(hostname: &str) -> bool {
-        hostname.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c == '-' || c == '.'
-        }) && !hostname.starts_with('-') && !hostname.ends_with('-')
+        hostname
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+            && !hostname.starts_with('-')
+            && !hostname.ends_with('-')
     }
 
     /// Matches a host header to a site configuration.
@@ -325,7 +331,11 @@ pub enum VhostError {
     HostnameTooLong { hostname: String, max_len: usize },
 
     #[error("pattern '{pattern}' has {count} wildcards, max is {max}")]
-    TooManyWildcards { pattern: String, count: usize, max: usize },
+    TooManyWildcards {
+        pattern: String,
+        count: usize,
+        max: usize,
+    },
 
     #[error("invalid pattern '{pattern}': {reason}")]
     InvalidPattern { pattern: String, reason: String },
@@ -348,10 +358,7 @@ mod tests {
 
     #[test]
     fn test_exact_match() {
-        let sites = vec![
-            make_site("example.com"),
-            make_site("api.example.com"),
-        ];
+        let sites = vec![make_site("example.com"), make_site("api.example.com")];
         let matcher = VhostMatcher::new(sites).unwrap();
 
         assert!(matcher.match_host("example.com").is_some());
@@ -371,10 +378,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_match() {
-        let sites = vec![
-            make_site("*.example.com"),
-            make_site("example.com"),
-        ];
+        let sites = vec![make_site("*.example.com"), make_site("example.com")];
         let matcher = VhostMatcher::new(sites).unwrap();
 
         assert!(matcher.match_host("example.com").is_some());
@@ -394,10 +398,7 @@ mod tests {
 
     #[test]
     fn test_default_site() {
-        let sites = vec![
-            make_site("example.com"),
-            make_site("_"),
-        ];
+        let sites = vec![make_site("example.com"), make_site("_")];
         let matcher = VhostMatcher::new(sites).unwrap();
 
         assert!(matcher.match_host("example.com").is_some());
@@ -433,10 +434,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_specificity() {
-        let sites = vec![
-            make_site("*.example.com"),
-            make_site("*.api.example.com"),
-        ];
+        let sites = vec![make_site("*.example.com"), make_site("*.api.example.com")];
         let matcher = VhostMatcher::new(sites).unwrap();
 
         // More specific pattern should match first

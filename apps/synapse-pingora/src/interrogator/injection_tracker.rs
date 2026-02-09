@@ -401,7 +401,9 @@ impl InjectionTracker {
         record.js_attempts += 1;
         if success {
             record.js_successes += 1;
-            self.stats.js_successes_total.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .js_successes_total
+                .fetch_add(1, Ordering::Relaxed);
         }
         record.last_seen = now;
         record.request_count += 1;
@@ -527,10 +529,7 @@ impl InjectionTracker {
         let is_headless = self.is_likely_headless(&record, &indicators);
 
         if is_headless {
-            let reason = format!(
-                "Headless browser detected: {}",
-                indicators.description()
-            );
+            let reason = format!("Headless browser detected: {}", indicators.description());
             self.stats.blocks_issued.fetch_add(1, Ordering::Relaxed);
             (true, Some(reason))
         } else {
@@ -599,8 +598,8 @@ impl InjectionTracker {
             && timing_variance < self.config.timing_variance_threshold_ms;
 
         // Check for rapid requests
-        let rapid_requests = record.request_count >= 10
-            && rps > self.config.rapid_request_threshold_rps;
+        let rapid_requests =
+            record.request_count >= 10 && rps > self.config.rapid_request_threshold_rps;
 
         // Check for fingerprint anomaly
         // Anomaly = never changes after many requests OR changes too frequently
@@ -609,8 +608,7 @@ impl InjectionTracker {
             let never_changes =
                 record.fingerprints_seen.len() <= 1 && record.fingerprint_changes == 0;
             // Changes too frequently (spoofing)
-            let too_many_changes =
-                record.fingerprint_changes > self.config.max_fingerprint_changes;
+            let too_many_changes = record.fingerprint_changes > self.config.max_fingerprint_changes;
             never_changes || too_many_changes
         } else {
             false
@@ -629,7 +627,11 @@ impl InjectionTracker {
     }
 
     /// Determine if actor is likely a headless browser
-    fn is_likely_headless(&self, record: &InjectionRecord, indicators: &HeadlessIndicators) -> bool {
+    fn is_likely_headless(
+        &self,
+        record: &InjectionRecord,
+        indicators: &HeadlessIndicators,
+    ) -> bool {
         // Need minimum data before making determination
         if record.js_attempts < self.config.min_attempts_for_detection {
             return false;
@@ -726,8 +728,7 @@ mod tests {
     fn test_record_js_attempt_success() {
         let tracker = InjectionTracker::new(test_config());
 
-        let indicators =
-            tracker.record_js_attempt("192.168.1.1", "Mozilla/5.0", true, 100, None);
+        let indicators = tracker.record_js_attempt("192.168.1.1", "Mozilla/5.0", true, 100, None);
 
         assert!(!indicators.is_suspicious());
         assert_eq!(tracker.len(), 1);
@@ -741,8 +742,7 @@ mod tests {
     fn test_record_js_attempt_failure() {
         let tracker = InjectionTracker::new(test_config());
 
-        let indicators =
-            tracker.record_js_attempt("192.168.1.1", "Mozilla/5.0", false, 100, None);
+        let indicators = tracker.record_js_attempt("192.168.1.1", "Mozilla/5.0", false, 100, None);
 
         assert!(!indicators.is_suspicious()); // Not enough attempts yet
         assert_eq!(tracker.len(), 1);

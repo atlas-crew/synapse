@@ -3,9 +3,9 @@
 //! Provides IP-based access control with support for IPv4 and IPv6 CIDR notation.
 //! Rules are evaluated in order: first matching rule wins.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 /// Access decision result.
@@ -83,12 +83,10 @@ impl std::str::FromStr for CidrRange {
             (cidr, None)
         };
 
-        let network: IpAddr = addr_str
-            .parse()
-            .map_err(|_| AccessError::InvalidCidr {
-                cidr: cidr.to_string(),
-                reason: "invalid IP address".to_string(),
-            })?;
+        let network: IpAddr = addr_str.parse().map_err(|_| AccessError::InvalidCidr {
+            cidr: cidr.to_string(),
+            reason: "invalid IP address".to_string(),
+        })?;
 
         let max_prefix = match network {
             IpAddr::V4(_) => 32,
@@ -106,7 +104,10 @@ impl std::str::FromStr for CidrRange {
         if prefix_len > max_prefix {
             return Err(AccessError::InvalidCidr {
                 cidr: cidr.to_string(),
-                reason: format!("prefix length {} exceeds maximum {}", prefix_len, max_prefix),
+                reason: format!(
+                    "prefix length {} exceeds maximum {}",
+                    prefix_len, max_prefix
+                ),
             });
         }
 
@@ -230,7 +231,10 @@ impl AccessList {
             }
         }
 
-        debug!("IP {} no match, using default {:?}", ip, self.default_action);
+        debug!(
+            "IP {} no match, using default {:?}",
+            ip, self.default_action
+        );
         match self.default_action {
             AccessAction::Allow => AccessDecision::Allow,
             AccessAction::Deny => AccessDecision::Deny,
@@ -433,10 +437,7 @@ pub fn extract_mapped_ipv4(ip: &IpAddr) -> Option<std::net::Ipv4Addr> {
             {
                 let octets = v6.octets();
                 Some(std::net::Ipv4Addr::new(
-                    octets[12],
-                    octets[13],
-                    octets[14],
-                    octets[15],
+                    octets[12], octets[13], octets[14], octets[15],
                 ))
             } else {
                 None
@@ -786,14 +787,14 @@ mod tests {
         let mut list = AccessList::deny_all();
         // Order matters: first match wins
         // To deny a specific IP within an allow range, add the deny first
-        list.deny("10.0.0.1").unwrap();        // Specific deny - must come first
-        list.allow("10.0.0.0/8").unwrap();     // Then allow the broader range
+        list.deny("10.0.0.1").unwrap(); // Specific deny - must come first
+        list.allow("10.0.0.0/8").unwrap(); // Then allow the broader range
         list.allow("192.168.1.0/24").unwrap();
 
         assert!(!list.is_allowed(&"10.0.0.1".parse().unwrap())); // Denied by specific rule
-        assert!(list.is_allowed(&"10.0.0.2".parse().unwrap()));  // Allowed by /8 rule
+        assert!(list.is_allowed(&"10.0.0.2".parse().unwrap())); // Allowed by /8 rule
         assert!(list.is_allowed(&"192.168.1.100".parse().unwrap()));
-        assert!(!list.is_allowed(&"8.8.8.8".parse().unwrap()));  // Default deny
+        assert!(!list.is_allowed(&"8.8.8.8".parse().unwrap())); // Default deny
     }
 
     #[test]

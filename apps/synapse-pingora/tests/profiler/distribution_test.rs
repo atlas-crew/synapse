@@ -38,7 +38,11 @@ mod percentiles_tracker {
 
         for i in 1..=4 {
             pt.update(i as f64);
-            assert!(!pt.is_initialized(), "Should not be initialized after {} samples", i);
+            assert!(
+                !pt.is_initialized(),
+                "Should not be initialized after {} samples",
+                i
+            );
         }
 
         pt.update(5.0);
@@ -536,7 +540,8 @@ mod serialization {
         }
 
         let serialized = serde_json::to_string(&d).expect("Failed to serialize");
-        let deserialized: Distribution = serde_json::from_str(&serialized).expect("Failed to deserialize");
+        let deserialized: Distribution =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
 
         assert_eq!(d.count(), deserialized.count());
         assert_eq!(d.mean(), deserialized.mean());
@@ -550,7 +555,8 @@ mod serialization {
         }
 
         let serialized = serde_json::to_string(&pt).expect("Failed to serialize");
-        let deserialized: PercentilesTracker = serde_json::from_str(&serialized).expect("Failed to deserialize");
+        let deserialized: PercentilesTracker =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
 
         assert_eq!(pt.get(), deserialized.get());
         assert_eq!(pt.min(), deserialized.min());

@@ -25,16 +25,16 @@
 //! - [`crate::entity`] - Per-IP entity tracking with fingerprint storage
 
 pub mod campaign_state;
-pub mod fingerprint_index;
 pub mod detectors;
+pub mod fingerprint_index;
 pub mod manager;
 
 #[cfg(test)]
 mod integration_tests;
 
 pub use campaign_state::{
-    Campaign, CampaignError, CampaignStatus, CampaignStore, CampaignStoreStats,
-    CampaignUpdate, CorrelationReason, CorrelationType,
+    Campaign, CampaignError, CampaignStatus, CampaignStore, CampaignStoreStats, CampaignUpdate,
+    CorrelationReason, CorrelationType,
 };
 pub use fingerprint_index::{FingerprintGroup, FingerprintIndex, FingerprintType, IndexStats};
 pub use manager::{CampaignManager, ManagerConfig, ManagerStats};

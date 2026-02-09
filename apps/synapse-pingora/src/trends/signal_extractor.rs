@@ -163,12 +163,7 @@ impl SignalExtractor {
             session_id: session_id.map(String::from),
             metadata: SignalMetadata::AuthToken(AuthTokenMetadata {
                 header_name: "Authorization".to_string(),
-                token_prefix: Some(
-                    auth.split_whitespace()
-                        .next()
-                        .unwrap_or("")
-                        .to_string(),
-                ),
+                token_prefix: Some(auth.split_whitespace().next().unwrap_or("").to_string()),
                 token_hash,
                 jwt_claims,
             }),

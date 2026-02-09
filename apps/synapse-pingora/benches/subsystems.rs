@@ -5,28 +5,38 @@
 //!
 //! Run with: `cargo bench --bench subsystems`
 
-use criterion::{
-    black_box, criterion_group, criterion_main, Criterion, BenchmarkId,
-};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use synapse_pingora::{
-    // Session
-    SessionConfig, SessionManager,
-    // Trends
-    TrendsManager, TrendsConfig,
-    Signal, SignalMetadata, AnomalyQueryOptions, TrendQueryOptions,
-    TrendsSignalType,
-    // Crawler
-    CrawlerDetector, CrawlerConfig,
-    // Credential stuffing
-    CredentialStuffingDetector, AuthAttempt, AuthResult,
-    // Geo / impossible travel
-    ImpossibleTravelDetector, TravelConfig, LoginEvent, GeoLocation,
+    AnomalyQueryOptions,
+    AuthAttempt,
+    AuthResult,
+    CookieConfig,
     // Cookie manager (interrogator)
-    CookieManager, CookieConfig,
+    CookieManager,
+    CrawlerConfig,
+    // Crawler
+    CrawlerDetector,
+    // Credential stuffing
+    CredentialStuffingDetector,
+    GeoLocation,
+    // Geo / impossible travel
+    ImpossibleTravelDetector,
+    LoginEvent,
+    // Session
+    SessionConfig,
+    SessionManager,
+    Signal,
+    SignalMetadata,
+    TravelConfig,
+    TrendQueryOptions,
+    TrendsConfig,
+    // Trends
+    TrendsManager,
+    TrendsSignalType,
 };
 
 // ============================================================================
@@ -62,10 +72,9 @@ fn test_cookie_config() -> CookieConfig {
         cookie_name: "__tx_bench".to_string(),
         cookie_max_age_secs: 86400,
         secret_key: [
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-            0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-            0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+            0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c,
+            0x1d, 0x1e, 0x1f, 0x20,
         ],
         secure_only: true,
         http_only: true,
@@ -98,7 +107,8 @@ fn bench_session_validation(c: &mut Criterion) {
         let mut idx = 0usize;
         b.iter(|| {
             let token = &tokens[idx % tokens.len()];
-            let decision = manager.validate_request(black_box(token), black_box(ip), black_box(Some(ja4)));
+            let decision =
+                manager.validate_request(black_box(token), black_box(ip), black_box(Some(ja4)));
             black_box(decision);
             idx += 1;
         });
@@ -108,7 +118,8 @@ fn bench_session_validation(c: &mut Criterion) {
         let mut idx = 0usize;
         b.iter(|| {
             let token = format!("unknown_token_{}", idx);
-            let decision = manager.validate_request(black_box(&token), black_box(ip), black_box(None));
+            let decision =
+                manager.validate_request(black_box(&token), black_box(ip), black_box(None));
             black_box(decision);
             idx += 1;
         });
@@ -119,7 +130,8 @@ fn bench_session_validation(c: &mut Criterion) {
         let mut idx = 0usize;
         b.iter(|| {
             let token = &tokens[idx % tokens.len()];
-            let decision = manager.validate_request(black_box(token), black_box(alt_ip), black_box(Some(ja4)));
+            let decision =
+                manager.validate_request(black_box(token), black_box(alt_ip), black_box(Some(ja4)));
             black_box(decision);
             idx += 1;
         });
@@ -154,7 +166,8 @@ fn bench_session_creation(c: &mut Criterion) {
         let mut idx = 0u64;
         b.iter(|| {
             let token = format!("new_token_{}", idx);
-            let session = manager.create_session(black_box(&token), black_box(ip), black_box(Some(ja4)));
+            let session =
+                manager.create_session(black_box(&token), black_box(ip), black_box(Some(ja4)));
             black_box(session);
             idx += 1;
         });
@@ -214,7 +227,9 @@ fn bench_trends_recording(c: &mut Criterion) {
             manager.record_request(
                 black_box(&entity),
                 black_box(Some(sess.as_str())),
-                black_box(Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")),
+                black_box(Some(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                )),
                 black_box(Some("Bearer eyJhbGciOiJSUzI1NiJ9.test")),
                 black_box(Some(&entity)),
                 black_box(Some("t13d1516h2_abcdef123456")),
@@ -316,9 +331,8 @@ fn bench_crawler_detection(c: &mut Criterion) {
 
     group.bench_function("known_good_bot", |b| {
         b.iter(|| {
-            let result = detector.check_bad_bot(black_box(
-                "Googlebot/2.1 (+http://www.google.com/bot.html)",
-            ));
+            let result = detector
+                .check_bad_bot(black_box("Googlebot/2.1 (+http://www.google.com/bot.html)"));
             black_box(result);
         });
     });
@@ -579,7 +593,8 @@ fn bench_session_contention(c: &mut Criterion) {
                                         black_box(session);
                                     } else {
                                         // 75% validates on existing tokens
-                                        let token = format!("contention_token_{}", global_idx % 500);
+                                        let token =
+                                            format!("contention_token_{}", global_idx % 500);
                                         let decision = mgr.validate_request(&token, ip, Some(ja4));
                                         black_box(decision);
                                     }
@@ -605,36 +620,17 @@ criterion_group!(
     bench_session_creation,
 );
 
-criterion_group!(
-    trends_benches,
-    bench_trends_recording,
-    bench_trends_query,
-);
+criterion_group!(trends_benches, bench_trends_recording, bench_trends_query,);
 
-criterion_group!(
-    crawler_benches,
-    bench_crawler_detection,
-);
+criterion_group!(crawler_benches, bench_crawler_detection,);
 
-criterion_group!(
-    detection_benches,
-    bench_credential_stuffing,
-);
+criterion_group!(detection_benches, bench_credential_stuffing,);
 
-criterion_group!(
-    geo_benches,
-    bench_impossible_travel,
-);
+criterion_group!(geo_benches, bench_impossible_travel,);
 
-criterion_group!(
-    interrogator_benches,
-    bench_cookie_signing,
-);
+criterion_group!(interrogator_benches, bench_cookie_signing,);
 
-criterion_group!(
-    contention_benches,
-    bench_session_contention,
-);
+criterion_group!(contention_benches, bench_session_contention,);
 
 criterion_main!(
     session_benches,

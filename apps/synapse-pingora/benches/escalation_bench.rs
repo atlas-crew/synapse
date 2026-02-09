@@ -234,10 +234,8 @@ fn bench_state_machine_contention(c: &mut Criterion) {
                                     if i % 3 == 0 {
                                         mgr.record_failure(black_box(&actor));
                                     } else {
-                                        let response = mgr.get_challenge(
-                                            black_box(&actor),
-                                            black_box(0.5),
-                                        );
+                                        let response =
+                                            mgr.get_challenge(black_box(&actor), black_box(0.5));
                                         black_box(response);
                                     }
                                 }

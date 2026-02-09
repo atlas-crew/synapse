@@ -1,13 +1,13 @@
 //! Block event logging for dashboard visibility.
 //! Maintains a circular buffer of recent WAF block events.
 
-use std::collections::VecDeque;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::time::{SystemTime, UNIX_EPOCH};
 use hmac::{Hmac, Mac};
 use parking_lot::RwLock;
 use serde::Serialize;
 use sha2::Sha256;
+use std::collections::VecDeque;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
 type HmacSha256 = Hmac<Sha256>;

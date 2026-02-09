@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::config::ProfilerConfig;
-    use crate::profiler::{Profiler, AnomalySignalType, redact_value, is_likely_pii};
+    use crate::profiler::{is_likely_pii, redact_value, AnomalySignalType, Profiler};
 
     fn default_config() -> ProfilerConfig {
         ProfilerConfig {
@@ -29,7 +29,10 @@ mod tests {
         let long_string = "a".repeat(100);
         let result = profiler.analyze_request(template, 100, &[("param", &long_string)], None);
 
-        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::ParamValueAnomaly));
+        assert!(result
+            .signals
+            .iter()
+            .any(|s| s.signal_type == AnomalySignalType::ParamValueAnomaly));
     }
 
     #[test]
@@ -45,7 +48,10 @@ mod tests {
         // Test with non-numeric string
         let result = profiler.analyze_request(template, 100, &[("id", "not_a_number")], None);
 
-        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::ParamValueAnomaly));
+        assert!(result
+            .signals
+            .iter()
+            .any(|s| s.signal_type == AnomalySignalType::ParamValueAnomaly));
     }
 
     #[test]
@@ -229,7 +235,10 @@ mod tests {
         let result = profiler.analyze_request(template, 100, &[("new_param", "value")], None);
 
         // Should not panic, should flag as unexpected param
-        assert!(result.signals.iter().any(|s| s.signal_type == AnomalySignalType::UnexpectedParam));
+        assert!(result
+            .signals
+            .iter()
+            .any(|s| s.signal_type == AnomalySignalType::UnexpectedParam));
     }
 
     // ========================================================================
@@ -259,6 +268,9 @@ mod tests {
         let result = profiler.analyze_request(template, 200, &[], None);
 
         // With z-threshold of 10.0, a 2x payload shouldn't trigger
-        assert!(!result.signals.iter().any(|s| s.signal_type == AnomalySignalType::PayloadSizeHigh));
+        assert!(!result
+            .signals
+            .iter()
+            .any(|s| s.signal_type == AnomalySignalType::PayloadSizeHigh));
     }
 }

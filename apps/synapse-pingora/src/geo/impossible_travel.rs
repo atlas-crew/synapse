@@ -122,13 +122,12 @@ impl ImpossibleTravelDetector {
         let login = StoredLogin::from(event);
 
         // Get or create user history
-        let history = self
-            .user_history
-            .entry(event.user_id.clone())
-            .or_default();
+        let history = self.user_history.entry(event.user_id.clone()).or_default();
 
         // Prune old entries (outside window)
-        let cutoff = event.timestamp_ms.saturating_sub(self.config.history_window_ms);
+        let cutoff = event
+            .timestamp_ms
+            .saturating_sub(self.config.history_window_ms);
         while let Some(front) = history.front() {
             if front.timestamp_ms < cutoff {
                 history.pop_front();
@@ -682,7 +681,10 @@ mod tests {
             detector.calculate_severity(3000.0, 2000.0),
             Severity::Medium
         );
-        assert_eq!(detector.calculate_severity(1500.0, 6000.0), Severity::Medium);
+        assert_eq!(
+            detector.calculate_severity(1500.0, 6000.0),
+            Severity::Medium
+        );
     }
 
     #[test]
@@ -741,7 +743,11 @@ mod tests {
         let alert = detector.check_login(&event2).unwrap();
 
         // Should have high confidence due to same fingerprint + different country + high speed
-        assert!(alert.confidence >= 0.85, "Same fingerprint should increase confidence, got {}", alert.confidence);
+        assert!(
+            alert.confidence >= 0.85,
+            "Same fingerprint should increase confidence, got {}",
+            alert.confidence
+        );
     }
 
     // ========================================================================

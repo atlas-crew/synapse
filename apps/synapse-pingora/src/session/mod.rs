@@ -50,12 +50,6 @@
 mod manager;
 
 pub use manager::{
-    HijackAlert,
-    HijackType,
-    SessionConfig,
-    SessionDecision,
-    SessionManager,
-    SessionState,
-    SessionStats,
-    SessionStatsSnapshot,
+    HijackAlert, HijackType, SessionConfig, SessionDecision, SessionManager, SessionState,
+    SessionStats, SessionStatsSnapshot,
 };

@@ -4,8 +4,8 @@ use std::collections::{HashMap, VecDeque};
 
 use super::config::TrendsConfig;
 use super::types::{
-    BucketSummary, CategorySummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend, SignalType, TimeRange, TopSignalType, TrendHistogramBucket,
-    TrendQueryOptions, TrendsSummary,
+    BucketSummary, CategorySummary, CategoryTrendSummary, Signal, SignalBucketData, SignalTrend,
+    SignalType, TimeRange, TopSignalType, TrendHistogramBucket, TrendQueryOptions, TrendsSummary,
 };
 
 /// A time bucket for signal aggregation.
@@ -44,9 +44,7 @@ impl SignalBucket {
             .or_insert_with(CategorySummary::default);
 
         category_summary.count += 1;
-        category_summary
-            .unique_values
-            .insert(signal.value.clone());
+        category_summary.unique_values.insert(signal.value.clone());
         category_summary
             .unique_entities
             .insert(signal.entity_id.clone());
@@ -164,7 +162,11 @@ impl TimeStore {
     }
 
     /// Get signals for an entity.
-    pub fn get_signals_for_entity(&self, entity_id: &str, options: &TrendQueryOptions) -> Vec<Signal> {
+    pub fn get_signals_for_entity(
+        &self,
+        entity_id: &str,
+        options: &TrendQueryOptions,
+    ) -> Vec<Signal> {
         let mut signals = Vec::new();
 
         let bucket_indices = match self.entity_index.get(entity_id) {
@@ -274,7 +276,7 @@ impl TimeStore {
 
         let now = chrono::Utc::now().timestamp_millis();
         summary.time_range = TimeRange {
-            from: options.from.unwrap_or(now - 3600_000), // 1 hour ago
+            from: options.from.unwrap_or(now - 3_600_000), // 1 hour ago
             to: options.to.unwrap_or(now),
         };
 
@@ -282,7 +284,9 @@ impl TimeStore {
 
         for bucket in &self.buckets {
             // Apply time filters
-            if bucket.timestamp < summary.time_range.from || bucket.timestamp > summary.time_range.to {
+            if bucket.timestamp < summary.time_range.from
+                || bucket.timestamp > summary.time_range.to
+            {
                 continue;
             }
 
@@ -457,8 +461,8 @@ pub struct TimeStoreStats {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::SignalCategory;
+    use super::*;
 
     fn create_test_signal(entity_id: &str, timestamp: i64) -> Signal {
         Signal {

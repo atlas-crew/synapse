@@ -565,7 +565,8 @@ mod serialization {
         }
 
         let serialized = serde_json::to_string(&rt).expect("Failed to serialize");
-        let deserialized: RateTracker = serde_json::from_str(&serialized).expect("Failed to deserialize");
+        let deserialized: RateTracker =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
 
         // Timestamps are skipped, so deserialized will have reset timestamps
         // but write_idx and valid_count are preserved
@@ -579,7 +580,8 @@ mod serialization {
         rt.record(2000);
 
         let serialized = serde_json::to_string(&rt).expect("Failed to serialize");
-        let deserialized: RateTracker = serde_json::from_str(&serialized).expect("Failed to deserialize");
+        let deserialized: RateTracker =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
 
         // After deserialization, timestamps are zeroed but count is preserved
         // Rate calculation will return 0 because all timestamps are 0

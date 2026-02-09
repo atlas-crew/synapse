@@ -49,24 +49,35 @@ use parking_lot::RwLock as ParkingLotRwLock;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
 
-use crate::correlation::{
-    Campaign, CampaignStatus, CampaignStore, CampaignStoreStats, CampaignUpdate,
-    FingerprintGroup, FingerprintIndex, IndexStats,
-};
 use crate::access::AccessListManager;
+use crate::correlation::{
+    Campaign, CampaignStatus, CampaignStore, CampaignStoreStats, CampaignUpdate, FingerprintGroup,
+    FingerprintIndex, IndexStats,
+};
 use crate::telemetry::{TelemetryClient, TelemetryEvent};
 
 use crate::correlation::detectors::{
-    Detector, DetectorError, DetectorResult,
-    // Fingerprint detectors
-    SharedFingerprintDetector, Ja4RotationDetector, RotationConfig,
+    AttackPayload,
+    AttackSequenceConfig,
     // New detectors
-    AttackSequenceDetector, AttackSequenceConfig, AttackPayload,
-    AuthTokenDetector, AuthTokenConfig,
-    BehavioralSimilarityDetector, BehavioralConfig,
-    TimingCorrelationDetector, TimingConfig,
-    NetworkProximityDetector, NetworkProximityConfig,
-    GraphDetector, GraphConfig,
+    AttackSequenceDetector,
+    AuthTokenConfig,
+    AuthTokenDetector,
+    BehavioralConfig,
+    BehavioralSimilarityDetector,
+    Detector,
+    DetectorError,
+    DetectorResult,
+    GraphConfig,
+    GraphDetector,
+    Ja4RotationDetector,
+    NetworkProximityConfig,
+    NetworkProximityDetector,
+    RotationConfig,
+    // Fingerprint detectors
+    SharedFingerprintDetector,
+    TimingConfig,
+    TimingCorrelationDetector,
 };
 
 // ============================================================================
@@ -94,7 +105,11 @@ pub struct MitigationRateLimiter {
 
 impl MitigationRateLimiter {
     /// Creates a new rate limiter.
-    pub fn new(max_bans_per_window: u64, window_duration: Duration, max_ips_per_campaign: usize) -> Self {
+    pub fn new(
+        max_bans_per_window: u64,
+        window_duration: Duration,
+        max_ips_per_campaign: usize,
+    ) -> Self {
         Self {
             bans_in_window: AtomicU64::new(0),
             window_start: Mutex::new(Instant::now()),
@@ -124,7 +139,7 @@ impl MitigationRateLimiter {
     /// Resets the window if it has expired.
     async fn maybe_reset_window(&self) {
         let mut start = self.window_start.lock().await;
-        
+
         // Double-check expiration under the lock to prevent multiple resets
         if start.elapsed() >= self.window_duration {
             *start = Instant::now();
@@ -146,9 +161,9 @@ impl MitigationRateLimiter {
 impl Default for MitigationRateLimiter {
     fn default() -> Self {
         Self::new(
-            50,                          // Max 50 bans per window
-            Duration::from_secs(60),     // 1 minute window
-            10,                          // Max 10 IPs per campaign
+            50,                      // Max 50 bans per window
+            Duration::from_secs(60), // 1 minute window
+            10,                      // Max 10 IPs per campaign
         )
     }
 }
@@ -201,7 +216,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Attack Sequence Detector Configuration (weight: 50)
     // ========================================================================
-
     /// Minimum IPs sharing same payload to trigger detection.
     ///
     /// Default: 2
@@ -215,7 +229,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Auth Token Detector Configuration (weight: 45)
     // ========================================================================
-
     /// Minimum IPs sharing token structure to trigger detection.
     ///
     /// Default: 2
@@ -229,7 +242,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Behavioral Similarity Detector Configuration (weight: 30)
     // ========================================================================
-
     /// Minimum IPs with same behavior pattern.
     ///
     /// Default: 2
@@ -248,7 +260,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Timing Correlation Detector Configuration (weight: 25)
     // ========================================================================
-
     /// Minimum IPs with synchronized timing.
     ///
     /// Default: 3
@@ -272,7 +283,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Network Proximity Detector Configuration (weight: 15)
     // ========================================================================
-
     /// Minimum IPs in same network segment.
     ///
     /// Default: 3
@@ -286,7 +296,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Graph Correlation Detector Configuration (weight: 20)
     // ========================================================================
-
     /// Minimum connected component size.
     ///
     /// Default: 3
@@ -305,7 +314,6 @@ pub struct ManagerConfig {
     // ========================================================================
     // Automated Response Configuration
     // ========================================================================
-
     /// Enable automated mitigation (blocking) of high-confidence campaigns.
     ///
     /// Default: false
@@ -566,7 +574,6 @@ pub struct CampaignManager {
     // ========================================================================
     // All 7 Detectors (ordered by weight)
     // ========================================================================
-
     /// Attack sequence detector (weight: 50 - highest signal).
     attack_sequence_detector: AttackSequenceDetector,
 
@@ -757,10 +764,12 @@ impl CampaignManager {
         self.index.update_entity(&ip_str, Some(&fingerprint), None);
 
         // Record in rotation detector
-        self.tls_fingerprint_detector.record_fingerprint(ip, fingerprint);
+        self.tls_fingerprint_detector
+            .record_fingerprint(ip, fingerprint);
 
         // Increment stats
-        self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+        self.stats_fingerprints_registered
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Register a JA4 fingerprint using Arc<str> to reduce allocations.
@@ -782,10 +791,12 @@ impl CampaignManager {
         self.index.update_entity(&ip_str, Some(&fingerprint), None);
 
         // Record in rotation detector (requires String, but Arc<str> → String is cheap clone)
-        self.tls_fingerprint_detector.record_fingerprint(ip, fingerprint.to_string());
+        self.tls_fingerprint_detector
+            .record_fingerprint(ip, fingerprint.to_string());
 
         // Increment stats
-        self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+        self.stats_fingerprints_registered
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Register a combined (JA4+JA4H) fingerprint for an IP address.
@@ -808,11 +819,13 @@ impl CampaignManager {
 
         // Record in rotation detector if tracking combined
         if self.config.track_combined {
-            self.tls_fingerprint_detector.record_fingerprint(ip, fingerprint);
+            self.tls_fingerprint_detector
+                .record_fingerprint(ip, fingerprint);
         }
 
         // Increment stats
-        self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+        self.stats_fingerprints_registered
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Register a combined fingerprint using Arc<str> to reduce allocations.
@@ -835,11 +848,13 @@ impl CampaignManager {
 
         // Record in rotation detector if tracking combined
         if self.config.track_combined {
-            self.tls_fingerprint_detector.record_fingerprint(ip, fingerprint.to_string());
+            self.tls_fingerprint_detector
+                .record_fingerprint(ip, fingerprint.to_string());
         }
 
         // Increment stats
-        self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+        self.stats_fingerprints_registered
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Register both JA4 and JA4H fingerprints.
@@ -858,11 +873,7 @@ impl CampaignManager {
         let ja4_ref = ja4.as_deref();
         let combined = ja4h.as_ref().map(|h| {
             // Create combined hash from JA4+JA4H
-            format!(
-                "{}_{}",
-                ja4.as_deref().unwrap_or(""),
-                h
-            )
+            format!("{}_{}", ja4.as_deref().unwrap_or(""), h)
         });
         let combined_ref = combined.as_deref();
 
@@ -871,7 +882,8 @@ impl CampaignManager {
         // Record JA4 in rotation detector
         if let Some(ref fp) = ja4 {
             if !fp.is_empty() {
-                self.tls_fingerprint_detector.record_fingerprint(ip, fp.clone());
+                self.tls_fingerprint_detector
+                    .record_fingerprint(ip, fp.clone());
                 registered = true;
             }
         }
@@ -880,14 +892,16 @@ impl CampaignManager {
         if self.config.track_combined {
             if let Some(ref fp) = combined {
                 if !fp.is_empty() {
-                    self.tls_fingerprint_detector.record_fingerprint(ip, fp.clone());
+                    self.tls_fingerprint_detector
+                        .record_fingerprint(ip, fp.clone());
                     registered = true;
                 }
             }
         }
 
         if registered {
-            self.stats_fingerprints_registered.fetch_add(1, Ordering::Relaxed);
+            self.stats_fingerprints_registered
+                .fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -905,13 +919,22 @@ impl CampaignManager {
     /// * `payload_hash` - Hash of the normalized attack payload
     /// * `attack_type` - Classification (sqli, xss, path_traversal, etc.)
     /// * `path` - Target path of the attack
-    pub fn record_attack(&self, ip: IpAddr, payload_hash: String, attack_type: String, path: String) {
-        self.attack_sequence_detector.record_attack(ip, AttackPayload {
-            payload_hash,
-            attack_type,
-            target_path: path,
-            timestamp: std::time::Instant::now(),
-        });
+    pub fn record_attack(
+        &self,
+        ip: IpAddr,
+        payload_hash: String,
+        attack_type: String,
+        path: String,
+    ) {
+        self.attack_sequence_detector.record_attack(
+            ip,
+            AttackPayload {
+                payload_hash,
+                attack_type,
+                target_path: path,
+                timestamp: std::time::Instant::now(),
+            },
+        );
     }
 
     /// Record a JWT token observation for campaign correlation.
@@ -983,7 +1006,11 @@ impl CampaignManager {
                 self.record_token(ip, token);
                 // Graph correlation: Link IP to Token (use hash or prefix for ID)
                 // Using first 16 chars of token as ID to avoid sensitive data in graph keys
-                let token_id = if token.len() > 16 { &token[..16] } else { token };
+                let token_id = if token.len() > 16 {
+                    &token[..16]
+                } else {
+                    token
+                };
                 self.record_relation(&ip_id, &GraphDetector::token_id(token_id));
             }
         }
@@ -1051,10 +1078,19 @@ impl CampaignManager {
         // Create futures for each detector using trait objects for dynamic dispatch
         // This allows heterogeneous detectors to be run in parallel via join_all
         let detectors: Vec<(&dyn Detector, &'static str)> = vec![
-            (&self.attack_sequence_detector as &dyn Detector, "attack_sequence"),
+            (
+                &self.attack_sequence_detector as &dyn Detector,
+                "attack_sequence",
+            ),
             (&self.auth_token_detector as &dyn Detector, "auth_token"),
-            (&self.http_fingerprint_detector as &dyn Detector, "http_fingerprint"),
-            (&self.tls_fingerprint_detector as &dyn Detector, "tls_fingerprint"),
+            (
+                &self.http_fingerprint_detector as &dyn Detector,
+                "http_fingerprint",
+            ),
+            (
+                &self.tls_fingerprint_detector as &dyn Detector,
+                "tls_fingerprint",
+            ),
             (&self.behavioral_detector as &dyn Detector, "behavioral"),
             (&self.timing_detector as &dyn Detector, "timing"),
             (&self.network_detector as &dyn Detector, "network"),
@@ -1079,7 +1115,8 @@ impl CampaignManager {
 
         // Process all results and collect updates
         let mut total_updates = 0;
-        let mut stats_updates: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        let mut stats_updates: std::collections::HashMap<String, u64> =
+            std::collections::HashMap::new();
 
         for (name, result) in results {
             match result {
@@ -1194,7 +1231,7 @@ impl CampaignManager {
                 for ip in &ips {
                     let _ = self.store.add_actor_to_campaign(&campaign_id, ip);
                 }
-                
+
                 check_mitigation = true;
                 target_campaign_id = campaign_id;
             }
@@ -1241,9 +1278,9 @@ impl CampaignManager {
         if check_mitigation {
             if let Some(campaign) = self.store.get_campaign(&target_campaign_id) {
                 // Auto-mitigation (Block)
-                if self.config.auto_mitigation_enabled 
-                   && campaign.confidence >= self.config.auto_mitigation_threshold 
-                   && campaign.status != CampaignStatus::Resolved 
+                if self.config.auto_mitigation_enabled
+                    && campaign.confidence >= self.config.auto_mitigation_threshold
+                    && campaign.status != CampaignStatus::Resolved
                 {
                     self.mitigate_campaign(&campaign).await;
                 }
@@ -1268,9 +1305,17 @@ impl CampaignManager {
             let event = TelemetryEvent::CampaignReport {
                 campaign_id: campaign.id.clone(),
                 confidence: campaign.confidence,
-                attack_types: campaign.attack_types.iter().map(|at| format!("{:?}", at)).collect(),
+                attack_types: campaign
+                    .attack_types
+                    .iter()
+                    .map(|at| format!("{:?}", at))
+                    .collect(),
                 actor_count: campaign.actor_count,
-                correlation_reasons: campaign.correlation_reasons.iter().map(|r| r.description.clone()).collect(),
+                correlation_reasons: campaign
+                    .correlation_reasons
+                    .iter()
+                    .map(|r| r.description.clone())
+                    .collect(),
                 timestamp_ms: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -1338,7 +1383,10 @@ impl CampaignManager {
             }
 
             // Add deny rule
-            let comment = format!("Campaign {} (confidence: {:.2})", campaign.id, campaign.confidence);
+            let comment = format!(
+                "Campaign {} (confidence: {:.2})",
+                campaign.id, campaign.confidence
+            );
             {
                 let mut al = access_list.write();
                 if let Err(e) = al.add_deny_ip(ip, Some(&comment)) {
@@ -1350,7 +1398,11 @@ impl CampaignManager {
         }
 
         // Log audit event
-        let attack_types: Vec<String> = campaign.attack_types.iter().map(|at| format!("{:?}", at)).collect();
+        let attack_types: Vec<String> = campaign
+            .attack_types
+            .iter()
+            .map(|at| format!("{:?}", at))
+            .collect();
         tracing::info!(
             campaign_id = %campaign.id,
             confidence = campaign.confidence,
@@ -1372,7 +1424,10 @@ impl CampaignManager {
                     confidence: campaign.confidence,
                     attack_types,
                     actor_count: blocked_count,
-                    correlation_reasons: vec![format!("Auto-mitigation applied: {} IPs blocked", blocked_count)],
+                    correlation_reasons: vec![format!(
+                        "Auto-mitigation applied: {} IPs blocked",
+                        blocked_count
+                    )],
                     timestamp_ms: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -1401,10 +1456,15 @@ impl CampaignManager {
     /// `true` if immediate detection should be triggered.
     pub fn should_trigger_detection(&self, ip: &IpAddr) -> bool {
         // Check detectors in order of weight (short-circuit on first match)
-        self.attack_sequence_detector.should_trigger(ip, &self.index)
+        self.attack_sequence_detector
+            .should_trigger(ip, &self.index)
             || self.auth_token_detector.should_trigger(ip, &self.index)
-            || self.http_fingerprint_detector.should_trigger(ip, &self.index)
-            || self.tls_fingerprint_detector.should_trigger(ip, &self.index)
+            || self
+                .http_fingerprint_detector
+                .should_trigger(ip, &self.index)
+            || self
+                .tls_fingerprint_detector
+                .should_trigger(ip, &self.index)
             || self.behavioral_detector.should_trigger(ip, &self.index)
             || self.timing_detector.should_trigger(ip, &self.index)
             || self.network_detector.should_trigger(ip, &self.index)
@@ -1511,7 +1571,8 @@ impl CampaignManager {
             hash_identifiers,
         };
 
-        self.graph_detector.get_cytoscape_data_paginated(&ips_str, options)
+        self.graph_detector
+            .get_cytoscape_data_paginated(&ips_str, options)
     }
 
     /// Get current statistics.

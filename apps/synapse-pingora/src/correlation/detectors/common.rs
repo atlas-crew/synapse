@@ -225,7 +225,10 @@ where
     /// Note: This includes keys that may have only expired entries.
     /// Use `get_keys_with_min_count(1)` for only active keys.
     pub fn keys(&self) -> Vec<K> {
-        self.entries.iter().map(|entry| entry.key().clone()).collect()
+        self.entries
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// Check if any key has the given value and meets a minimum count threshold.

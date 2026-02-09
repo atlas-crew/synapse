@@ -207,7 +207,10 @@ mod tests {
     fn test_sanitize_headers() {
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        headers.insert("Authorization".to_string(), "Bearer secret-token".to_string());
+        headers.insert(
+            "Authorization".to_string(),
+            "Bearer secret-token".to_string(),
+        );
         headers.insert("Cookie".to_string(), "session=abc123".to_string());
         headers.insert("X-Api-Key".to_string(), "api-key-value".to_string());
         headers.insert("User-Agent".to_string(), "test-agent".to_string());
@@ -313,8 +316,14 @@ mod tests {
         .with_rules(vec!["sqli-001".to_string(), "xss-002".to_string()])
         .with_campaign(Some("campaign-12345".to_string()));
 
-        assert_eq!(payload.ja4_fingerprint, Some("t13d1516h2_abc123".to_string()));
-        assert_eq!(payload.ja4h_fingerprint, Some("ge11cn20enus_xyz789".to_string()));
+        assert_eq!(
+            payload.ja4_fingerprint,
+            Some("t13d1516h2_abc123".to_string())
+        );
+        assert_eq!(
+            payload.ja4h_fingerprint,
+            Some("ge11cn20enus_xyz789".to_string())
+        );
         assert_eq!(payload.matched_rules.len(), 2);
         assert_eq!(payload.campaign_id, Some("campaign-12345".to_string()));
     }

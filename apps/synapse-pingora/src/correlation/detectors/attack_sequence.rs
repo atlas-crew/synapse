@@ -8,11 +8,9 @@ use std::time::{Duration, Instant};
 
 use dashmap::DashSet;
 
-use crate::correlation::{
-    FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
-};
-use super::{Detector, DetectorResult};
 use super::common::TimeWindowedIndex;
+use super::{Detector, DetectorResult};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
 /// Configuration for attack sequence detection
 #[derive(Debug, Clone)]
@@ -78,7 +76,8 @@ impl AttackSequenceDetector {
 
     /// Record an attack payload observation
     pub fn record_attack(&self, ip: IpAddr, payload: AttackPayload) {
-        self.payload_index.insert_with_timestamp(payload.payload_hash, ip, payload.timestamp);
+        self.payload_index
+            .insert_with_timestamp(payload.payload_hash, ip, payload.timestamp);
     }
 
     /// Get IPs sharing a specific payload
@@ -97,17 +96,23 @@ impl AttackSequenceDetector {
 }
 
 impl Detector for AttackSequenceDetector {
-    fn name(&self) -> &'static str { "attack_sequence" }
+    fn name(&self) -> &'static str {
+        "attack_sequence"
+    }
 
     fn analyze(&self, _index: &FingerprintIndex) -> DetectorResult<Vec<CampaignUpdate>> {
         let groups = self.get_correlated_groups();
         let mut updates = Vec::new();
 
         for (payload_hash, ips) in groups {
-            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0)
+                * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
-                campaign_id: Some(format!("attack-seq-{}", &payload_hash[..8.min(payload_hash.len())])),
+                campaign_id: Some(format!(
+                    "attack-seq-{}",
+                    &payload_hash[..8.min(payload_hash.len())]
+                )),
                 status: None,
                 confidence: Some(confidence),
                 attack_types: Some(vec!["attack_sequence".to_string()]),
@@ -136,7 +141,9 @@ impl Detector for AttackSequenceDetector {
         )
     }
 
-    fn scan_interval_ms(&self) -> u64 { 3000 } // 3 seconds
+    fn scan_interval_ms(&self) -> u64 {
+        3000
+    } // 3 seconds
 }
 
 #[cfg(test)]
@@ -155,12 +162,15 @@ mod tests {
         let detector = AttackSequenceDetector::new(AttackSequenceConfig::default());
         let ip: IpAddr = "192.168.1.1".parse().unwrap();
 
-        detector.record_attack(ip, AttackPayload {
-            payload_hash: "hash123".to_string(),
-            attack_type: "sqli".to_string(),
-            target_path: "/api/login".to_string(),
-            timestamp: Instant::now(),
-        });
+        detector.record_attack(
+            ip,
+            AttackPayload {
+                payload_hash: "hash123".to_string(),
+                attack_type: "sqli".to_string(),
+                target_path: "/api/login".to_string(),
+                timestamp: Instant::now(),
+            },
+        );
 
         let ips = detector.get_ips_for_payload("hash123");
         assert_eq!(ips.len(), 1);
@@ -173,12 +183,15 @@ mod tests {
 
         for i in 1..=3 {
             let ip: IpAddr = format!("192.168.1.{}", i).parse().unwrap();
-            detector.record_attack(ip, AttackPayload {
-                payload_hash: "shared_payload".to_string(),
-                attack_type: "sqli".to_string(),
-                target_path: "/api".to_string(),
-                timestamp: Instant::now(),
-            });
+            detector.record_attack(
+                ip,
+                AttackPayload {
+                    payload_hash: "shared_payload".to_string(),
+                    attack_type: "sqli".to_string(),
+                    target_path: "/api".to_string(),
+                    timestamp: Instant::now(),
+                },
+            );
         }
 
         let index = FingerprintIndex::new();
@@ -196,12 +209,15 @@ mod tests {
         });
 
         let ip: IpAddr = "192.168.1.1".parse().unwrap();
-        detector.record_attack(ip, AttackPayload {
-            payload_hash: "hash".to_string(),
-            attack_type: "xss".to_string(),
-            target_path: "/".to_string(),
-            timestamp: Instant::now(),
-        });
+        detector.record_attack(
+            ip,
+            AttackPayload {
+                payload_hash: "hash".to_string(),
+                attack_type: "xss".to_string(),
+                target_path: "/".to_string(),
+                timestamp: Instant::now(),
+            },
+        );
 
         let index = FingerprintIndex::new();
         let updates = detector.analyze(&index).unwrap();
@@ -214,12 +230,15 @@ mod tests {
         let ip1: IpAddr = "10.0.0.1".parse().unwrap();
         let ip2: IpAddr = "10.0.0.2".parse().unwrap();
 
-        detector.record_attack(ip1, AttackPayload {
-            payload_hash: "test".to_string(),
-            attack_type: "sqli".to_string(),
-            target_path: "/".to_string(),
-            timestamp: Instant::now(),
-        });
+        detector.record_attack(
+            ip1,
+            AttackPayload {
+                payload_hash: "test".to_string(),
+                attack_type: "sqli".to_string(),
+                target_path: "/".to_string(),
+                timestamp: Instant::now(),
+            },
+        );
 
         // Should trigger because one more IP would reach threshold
         let index = FingerprintIndex::new();

@@ -108,7 +108,9 @@ fn bench_verify(c: &mut Criterion) {
     group.bench_function("verify_cached", |b| {
         b.iter(|| {
             rt.block_on(async {
-                let result = detector.verify(black_box(GOOD_CRAWLER), black_box(test_ip)).await;
+                let result = detector
+                    .verify(black_box(GOOD_CRAWLER), black_box(test_ip))
+                    .await;
                 black_box(result);
             });
         });
@@ -117,11 +119,18 @@ fn bench_verify(c: &mut Criterion) {
     group.bench_function("verify_cold", |b| {
         let mut idx = 0u32;
         b.iter(|| {
-            let ip: IpAddr = format!("10.{}.{}.{}", (idx >> 16) & 0xFF, (idx >> 8) & 0xFF, idx & 0xFF)
-                .parse()
-                .unwrap();
+            let ip: IpAddr = format!(
+                "10.{}.{}.{}",
+                (idx >> 16) & 0xFF,
+                (idx >> 8) & 0xFF,
+                idx & 0xFF
+            )
+            .parse()
+            .unwrap();
             rt.block_on(async {
-                let result = detector.verify(black_box(NORMAL_BROWSER), black_box(ip)).await;
+                let result = detector
+                    .verify(black_box(NORMAL_BROWSER), black_box(ip))
+                    .await;
                 black_box(result);
             });
             idx = idx.wrapping_add(1);

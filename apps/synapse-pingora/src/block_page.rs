@@ -3,8 +3,8 @@
 //! Provides template-based rendering for block pages with support for both
 //! browser (HTML) and API (JSON) clients.
 
-use serde::{Deserialize, Serialize};
 use html_escape::encode_text;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -84,7 +84,11 @@ pub struct BlockContext {
 }
 
 impl BlockContext {
-    pub fn new(reason: BlockReason, request_id: impl Into<String>, client_ip: impl Into<String>) -> Self {
+    pub fn new(
+        reason: BlockReason,
+        request_id: impl Into<String>,
+        client_ip: impl Into<String>,
+    ) -> Self {
         let timestamp = chrono::Utc::now().to_rfc3339();
         Self {
             reason,
@@ -144,7 +148,10 @@ impl BlockPageJsonResponse {
         Self {
             error: ctx.reason.error_code().to_string(),
             code: ctx.reason.http_status().to_string(),
-            message: ctx.message.clone().unwrap_or_else(|| ctx.reason.description().to_string()),
+            message: ctx
+                .message
+                .clone()
+                .unwrap_or_else(|| ctx.reason.description().to_string()),
             request_id: ctx.request_id.clone(),
             timestamp: ctx.timestamp.clone(),
             support_email: ctx.support_email.clone(),
@@ -213,7 +220,13 @@ impl BlockPageConfig {
         self
     }
 
-    pub fn with_show_details(mut self, request_id: bool, timestamp: bool, client_ip: bool, rule_id: bool) -> Self {
+    pub fn with_show_details(
+        mut self,
+        request_id: bool,
+        timestamp: bool,
+        client_ip: bool,
+        rule_id: bool,
+    ) -> Self {
         self.show_request_id = request_id;
         self.show_timestamp = timestamp;
         self.show_client_ip = client_ip;
@@ -233,7 +246,11 @@ impl BlockPageRenderer {
     }
 
     /// Renders a block page based on Accept header.
-    pub fn render(&self, ctx: &BlockContext, accept_header: Option<&str>) -> (String, &'static str) {
+    pub fn render(
+        &self,
+        ctx: &BlockContext,
+        accept_header: Option<&str>,
+    ) -> (String, &'static str) {
         let prefers_json = accept_header
             .map(|h| Self::prefers_json(h))
             .unwrap_or(false);
@@ -247,7 +264,11 @@ impl BlockPageRenderer {
 
     /// Renders HTML block page.
     pub fn render_html(&self, ctx: &BlockContext) -> String {
-        let template = self.config.custom_template.as_deref().unwrap_or(DEFAULT_TEMPLATE);
+        let template = self
+            .config
+            .custom_template
+            .as_deref()
+            .unwrap_or(DEFAULT_TEMPLATE);
         self.render_template(template, ctx)
     }
 
@@ -266,7 +287,12 @@ impl BlockPageRenderer {
         vars.insert("status_code", ctx.reason.http_status().to_string());
         vars.insert("error_code", ctx.reason.error_code().to_string());
         vars.insert("title", ctx.reason.description().to_string());
-        vars.insert("message", ctx.message.clone().unwrap_or_else(|| ctx.reason.description().to_string()));
+        vars.insert(
+            "message",
+            ctx.message
+                .clone()
+                .unwrap_or_else(|| ctx.reason.description().to_string()),
+        );
         vars.insert("request_id", ctx.request_id.clone());
         vars.insert("timestamp", ctx.timestamp.clone());
         vars.insert("client_ip", ctx.client_ip.clone());
@@ -274,21 +300,90 @@ impl BlockPageRenderer {
         // Optional variables
         vars.insert("site_name", ctx.site_name.clone().unwrap_or_default());
         vars.insert("rule_id", ctx.rule_id.clone().unwrap_or_default());
-        vars.insert("support_email", ctx.support_email.clone()
-            .or_else(|| self.config.support_email.clone())
-            .unwrap_or_default());
-        vars.insert("company_name", self.config.company_name.clone().unwrap_or_else(|| "WAF Protection".to_string()));
+        vars.insert(
+            "support_email",
+            ctx.support_email
+                .clone()
+                .or_else(|| self.config.support_email.clone())
+                .unwrap_or_default(),
+        );
+        vars.insert(
+            "company_name",
+            self.config
+                .company_name
+                .clone()
+                .unwrap_or_else(|| "WAF Protection".to_string()),
+        );
         vars.insert("logo_url", self.config.logo_url.clone().unwrap_or_default());
-        vars.insert("custom_css", self.config.custom_css.clone().unwrap_or_default());
+        vars.insert(
+            "custom_css",
+            self.config.custom_css.clone().unwrap_or_default(),
+        );
 
         // Visibility flags
-        vars.insert("show_request_id", if self.config.show_request_id && ctx.show_details { "true" } else { "" }.to_string());
-        vars.insert("show_timestamp", if self.config.show_timestamp && ctx.show_details { "true" } else { "" }.to_string());
-        vars.insert("show_client_ip", if self.config.show_client_ip && ctx.show_details { "true" } else { "" }.to_string());
-        vars.insert("show_rule_id", if self.config.show_rule_id && ctx.rule_id.is_some() && ctx.show_details { "true" } else { "" }.to_string());
-        vars.insert("has_support_email", if ctx.support_email.is_some() || self.config.support_email.is_some() { "true" } else { "" }.to_string());
-        vars.insert("has_logo", if self.config.logo_url.is_some() { "true" } else { "" }.to_string());
-        vars.insert("has_custom_css", if self.config.custom_css.is_some() { "true" } else { "" }.to_string());
+        vars.insert(
+            "show_request_id",
+            if self.config.show_request_id && ctx.show_details {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
+        vars.insert(
+            "show_timestamp",
+            if self.config.show_timestamp && ctx.show_details {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
+        vars.insert(
+            "show_client_ip",
+            if self.config.show_client_ip && ctx.show_details {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
+        vars.insert(
+            "show_rule_id",
+            if self.config.show_rule_id && ctx.rule_id.is_some() && ctx.show_details {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
+        vars.insert(
+            "has_support_email",
+            if ctx.support_email.is_some() || self.config.support_email.is_some() {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
+        vars.insert(
+            "has_logo",
+            if self.config.logo_url.is_some() {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
+        vars.insert(
+            "has_custom_css",
+            if self.config.custom_css.is_some() {
+                "true"
+            } else {
+                ""
+            }
+            .to_string(),
+        );
 
         Self::substitute_template(template, &vars)
     }
@@ -297,9 +392,7 @@ impl BlockPageRenderer {
         let mut result = template.to_string();
 
         // Process conditionals first: {{#if var}}...{{/if}}
-        if let Ok(conditional_re) =
-            regex::Regex::new(r"\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{/if\}\}")
-        {
+        if let Ok(conditional_re) = regex::Regex::new(r"\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{/if\}\}") {
             result = conditional_re
                 .replace_all(&result, |caps: &regex::Captures| {
                     let var_name = &caps[1];
@@ -534,11 +627,20 @@ mod tests {
 
     #[test]
     fn test_block_reason_description() {
-        assert_eq!(BlockReason::WafRule.description(), "Request blocked by security rules");
+        assert_eq!(
+            BlockReason::WafRule.description(),
+            "Request blocked by security rules"
+        );
         assert_eq!(BlockReason::RateLimit.description(), "Rate limit exceeded");
         assert_eq!(BlockReason::AccessDenied.description(), "Access denied");
-        assert_eq!(BlockReason::DlpViolation.description(), "Data loss prevention policy violation");
-        assert_eq!(BlockReason::Maintenance.description(), "Service temporarily unavailable");
+        assert_eq!(
+            BlockReason::DlpViolation.description(),
+            "Data loss prevention policy violation"
+        );
+        assert_eq!(
+            BlockReason::Maintenance.description(),
+            "Service temporarily unavailable"
+        );
     }
 
     #[test]
@@ -667,7 +769,8 @@ mod tests {
         let ctx = BlockContext::new(BlockReason::WafRule, "req-123", "192.168.1.1");
 
         // HTML preference
-        let (content, content_type) = renderer.render(&ctx, Some("text/html,application/json;q=0.9"));
+        let (content, content_type) =
+            renderer.render(&ctx, Some("text/html,application/json;q=0.9"));
         assert_eq!(content_type, "text/html; charset=utf-8");
         assert!(content.contains("<!DOCTYPE html>"));
 
@@ -685,13 +788,19 @@ mod tests {
     #[test]
     fn test_accept_header_quality_parsing() {
         // JSON with higher quality
-        assert!(BlockPageRenderer::prefers_json("text/html;q=0.5,application/json;q=0.9"));
+        assert!(BlockPageRenderer::prefers_json(
+            "text/html;q=0.5,application/json;q=0.9"
+        ));
 
         // HTML with higher quality
-        assert!(!BlockPageRenderer::prefers_json("text/html;q=0.9,application/json;q=0.5"));
+        assert!(!BlockPageRenderer::prefers_json(
+            "text/html;q=0.9,application/json;q=0.5"
+        ));
 
         // Equal quality, HTML wins (default)
-        assert!(!BlockPageRenderer::prefers_json("text/html,application/json"));
+        assert!(!BlockPageRenderer::prefers_json(
+            "text/html,application/json"
+        ));
 
         // JSON only
         assert!(BlockPageRenderer::prefers_json("application/json"));
@@ -748,7 +857,7 @@ mod tests {
     fn test_ipv6_client_ip() {
         let ctx = BlockContext::new(BlockReason::WafRule, "req-123", "2001:db8::1");
         let renderer = BlockPageRenderer::new(
-            BlockPageConfig::new().with_show_details(true, true, true, false)
+            BlockPageConfig::new().with_show_details(true, true, true, false),
         );
 
         let html = renderer.render_html(&ctx);
@@ -788,14 +897,16 @@ mod tests {
 
     #[test]
     fn test_block_reason_display() {
-        assert_eq!(format!("{}", BlockReason::WafRule), "Request blocked by security rules");
+        assert_eq!(
+            format!("{}", BlockReason::WafRule),
+            "Request blocked by security rules"
+        );
         assert_eq!(format!("{}", BlockReason::RateLimit), "Rate limit exceeded");
     }
 
     #[test]
     fn test_config_custom_css() {
-        let config = BlockPageConfig::new()
-            .with_css("body { background: red; }");
+        let config = BlockPageConfig::new().with_css("body { background: red; }");
         let renderer = BlockPageRenderer::new(config);
         let ctx = BlockContext::new(BlockReason::WafRule, "req-123", "192.168.1.1");
 

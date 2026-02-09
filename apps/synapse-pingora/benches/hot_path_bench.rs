@@ -94,10 +94,7 @@ fn bench_sni_validation(c: &mut Criterion) {
     group.bench_function("validate_from_headers", |b| {
         let headers = vec![
             ("host".to_string(), "example.com".to_string()),
-            (
-                "x-forwarded-host".to_string(),
-                "example.com".to_string(),
-            ),
+            ("x-forwarded-host".to_string(), "example.com".to_string()),
         ];
         b.iter(|| {
             let result = validator.validate_from_headers(black_box(&headers), black_box(true));
@@ -173,7 +170,8 @@ fn bench_body_inspection(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(small_json.len() as u64));
     group.bench_function("inspect_small_json", |b| {
         b.iter(|| {
-            let result = inspector.inspect(black_box(small_json), black_box(Some("application/json")));
+            let result =
+                inspector.inspect(black_box(small_json), black_box(Some("application/json")));
             black_box(result);
         });
     });
@@ -191,8 +189,10 @@ fn bench_body_inspection(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(medium_bytes.len() as u64));
     group.bench_function("inspect_medium_json_1kb", |b| {
         b.iter(|| {
-            let result =
-                inspector.inspect(black_box(&medium_bytes), black_box(Some("application/json")));
+            let result = inspector.inspect(
+                black_box(&medium_bytes),
+                black_box(Some("application/json")),
+            );
             black_box(result);
         });
     });
@@ -214,8 +214,7 @@ fn bench_body_inspection(c: &mut Criterion) {
     let binary_body: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
     group.bench_function("inspect_binary_skip", |b| {
         b.iter(|| {
-            let result =
-                inspector.inspect(black_box(&binary_body), black_box(Some("image/png")));
+            let result = inspector.inspect(black_box(&binary_body), black_box(Some("image/png")));
             black_box(result);
         });
     });
@@ -279,12 +278,26 @@ fn bench_trap_matching(c: &mut Criterion) {
 
     // Throughput: mixed traffic (95% normal, 5% trap)
     let paths: Vec<&str> = vec![
-        "/api/users", "/api/products", "/api/orders", "/static/app.js",
-        "/static/style.css", "/api/search?q=test", "/api/auth/login",
-        "/api/auth/logout", "/api/v2/dashboard", "/api/v2/settings",
-        "/api/health", "/api/metrics", "/api/webhooks", "/api/events",
-        "/api/notifications", "/api/reports", "/api/billing", "/api/teams",
-        "/api/invites", "/.git/config", // 5% trap
+        "/api/users",
+        "/api/products",
+        "/api/orders",
+        "/static/app.js",
+        "/static/style.css",
+        "/api/search?q=test",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/v2/dashboard",
+        "/api/v2/settings",
+        "/api/health",
+        "/api/metrics",
+        "/api/webhooks",
+        "/api/events",
+        "/api/notifications",
+        "/api/reports",
+        "/api/billing",
+        "/api/teams",
+        "/api/invites",
+        "/.git/config", // 5% trap
     ];
     group.bench_function("mixed_traffic_95_5", |b| {
         let mut idx = 0usize;

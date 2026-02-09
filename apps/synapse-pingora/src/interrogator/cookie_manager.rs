@@ -210,7 +210,8 @@ impl CookieManager {
         };
 
         // Store challenge for later validation
-        self.challenges.insert(actor_id.to_string(), challenge.clone());
+        self.challenges
+            .insert(actor_id.to_string(), challenge.clone());
         self.stats.cookies_issued.fetch_add(1, Ordering::Relaxed);
 
         challenge
@@ -484,7 +485,10 @@ mod tests {
 
         // Tamper with the signature
         let parts: Vec<&str> = challenge.cookie_value.split('.').collect();
-        let tampered = format!("{}.{}.{}", parts[0], parts[1], "0000000000000000000000000000000");
+        let tampered = format!(
+            "{}.{}.{}",
+            parts[0], parts[1], "0000000000000000000000000000000"
+        );
 
         let result = manager.validate_cookie("actor_123", &tampered);
         assert!(matches!(result, ValidationResult::Invalid(_)));

@@ -69,10 +69,13 @@ impl ShadowMirrorClient {
         let url_index = self.select_url_index(&payload.request_id, urls.len());
         let url = &urls[url_index];
 
-        let json = payload.to_json_bytes().map_err(ShadowMirrorError::Serialization)?;
+        let json = payload
+            .to_json_bytes()
+            .map_err(ShadowMirrorError::Serialization)?;
         let json_len = json.len() as u64;
 
-        let mut request = self.http_client
+        let mut request = self
+            .http_client
             .post(url)
             .timeout(timeout)
             .header("Content-Type", "application/json")
@@ -246,21 +249,17 @@ mod tests {
 
     #[test]
     fn test_client_with_hmac() {
-        let client = ShadowMirrorClient::new(
-            Some("my-secret-key".to_string()),
-            Duration::from_secs(5),
-        )
-        .expect("client creation should succeed");
+        let client =
+            ShadowMirrorClient::new(Some("my-secret-key".to_string()), Duration::from_secs(5))
+                .expect("client creation should succeed");
         assert!(client.hmac_secret.is_some());
     }
 
     #[test]
     fn test_hmac_computation() {
-        let client = ShadowMirrorClient::new(
-            Some("test-secret".to_string()),
-            Duration::from_secs(5),
-        )
-        .expect("client creation should succeed");
+        let client =
+            ShadowMirrorClient::new(Some("test-secret".to_string()), Duration::from_secs(5))
+                .expect("client creation should succeed");
 
         let data = b"test payload data";
         let signature = client.compute_hmac("test-secret", data);
@@ -348,7 +347,9 @@ mod tests {
             .expect("client creation should succeed");
         let payload = create_test_payload();
 
-        let result = client.send_to_honeypot(&[], payload, Duration::from_secs(1)).await;
+        let result = client
+            .send_to_honeypot(&[], payload, Duration::from_secs(1))
+            .await;
         assert!(matches!(result, Err(ShadowMirrorError::NoHoneypotUrls)));
     }
 }

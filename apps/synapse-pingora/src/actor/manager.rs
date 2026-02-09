@@ -76,8 +76,8 @@ impl Default for ActorConfig {
             correlation_threshold: 0.7,
             risk_decay_factor: 0.9,
             max_rule_matches: 100,
-            max_session_ids: 50, // Prevents memory exhaustion
-            max_fingerprints_per_actor: 20, // Prevents per-actor memory exhaustion
+            max_session_ids: 50,               // Prevents memory exhaustion
+            max_fingerprints_per_actor: 20,    // Prevents per-actor memory exhaustion
             max_fingerprint_mappings: 500_000, // 5x max_actors for global limit
             enabled: true,
             max_risk: 100.0,
@@ -420,10 +420,13 @@ impl ActorManager {
                 if let Some(fp) = fingerprint {
                     if !fp.is_empty() {
                         // Only update fingerprint mapping if the actor accepted it
-                        if entry.add_fingerprint(fp.to_string(), self.config.max_fingerprints_per_actor) {
+                        if entry
+                            .add_fingerprint(fp.to_string(), self.config.max_fingerprints_per_actor)
+                        {
                             // Check global fingerprint mapping capacity before inserting
                             self.maybe_evict_fingerprint_mappings();
-                            self.fingerprint_to_actor.insert(fp.to_string(), actor_id.clone());
+                            self.fingerprint_to_actor
+                                .insert(fp.to_string(), actor_id.clone());
                         }
                     }
                 }
@@ -444,7 +447,8 @@ impl ActorManager {
                 if actor.add_fingerprint(fp.to_string(), self.config.max_fingerprints_per_actor) {
                     // Check global fingerprint mapping capacity before inserting
                     self.maybe_evict_fingerprint_mappings();
-                    self.fingerprint_to_actor.insert(fp.to_string(), actor_id.clone());
+                    self.fingerprint_to_actor
+                        .insert(fp.to_string(), actor_id.clone());
                 }
             }
         }
@@ -479,11 +483,8 @@ impl ActorManager {
         }
 
         if let Some(mut entry) = self.actors.get_mut(actor_id) {
-            let rule_match = RuleMatch::new(
-                rule_id.to_string(),
-                risk_contribution,
-                category.to_string(),
-            );
+            let rule_match =
+                RuleMatch::new(rule_id.to_string(), risk_contribution, category.to_string());
 
             // Add risk (capped at max)
             entry.risk_score = (entry.risk_score + risk_contribution).min(self.config.max_risk);
@@ -492,7 +493,9 @@ impl ActorManager {
             entry.add_rule_match(rule_match, self.config.max_rule_matches);
 
             // Update stats
-            self.stats.total_rule_matches.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .total_rule_matches
+                .fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -720,7 +723,8 @@ impl ActorManager {
 
             // Restore fingerprint mappings
             for fp in &actor.fingerprints {
-                self.fingerprint_to_actor.insert(fp.clone(), actor_id.clone());
+                self.fingerprint_to_actor
+                    .insert(fp.clone(), actor_id.clone());
             }
 
             // Track blocked count
@@ -734,9 +738,15 @@ impl ActorManager {
 
         // Update stats
         let actor_count = self.actors.len() as u64;
-        self.stats.total_actors.store(actor_count, Ordering::Relaxed);
-        self.stats.blocked_actors.store(blocked_count, Ordering::Relaxed);
-        self.stats.total_created.store(actor_count, Ordering::Relaxed);
+        self.stats
+            .total_actors
+            .store(actor_count, Ordering::Relaxed);
+        self.stats
+            .blocked_actors
+            .store(blocked_count, Ordering::Relaxed);
+        self.stats
+            .total_created
+            .store(actor_count, Ordering::Relaxed);
     }
 
     // ========================================================================
@@ -822,7 +832,9 @@ impl ActorManager {
             self.fingerprint_to_actor.remove(&key);
         }
 
-        self.stats.fingerprint_evictions.fetch_add(to_evict as u64, Ordering::Relaxed);
+        self.stats
+            .fingerprint_evictions
+            .fetch_add(to_evict as u64, Ordering::Relaxed);
     }
 
     /// Evict the N oldest actors by last_seen timestamp.
@@ -937,7 +949,9 @@ fn generate_actor_id() -> String {
         u16::from_be_bytes([bytes[4], bytes[5]]),
         u16::from_be_bytes([bytes[6], bytes[7]]),
         u16::from_be_bytes([bytes[8], bytes[9]]),
-        u64::from_be_bytes([0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]])
+        u64::from_be_bytes([
+            0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ])
     )
 }
 
@@ -1257,7 +1271,10 @@ mod tests {
 
         // The key invariant: we should have created many actors but evicted some
         let created = manager.stats().total_created.load(Ordering::Relaxed);
-        assert!(created > final_len as u64, "Expected some actors to be evicted");
+        assert!(
+            created > final_len as u64,
+            "Expected some actors to be evicted"
+        );
 
         println!(
             "LRU eviction test: created={}, evicted={}, final_len={}",
@@ -1290,7 +1307,10 @@ mod tests {
         // If first actor was evicted, its mappings should be gone
         if manager.get_actor(&first_actor_id).is_none() {
             assert!(manager.ip_to_actor.get(&first_ip).is_none());
-            assert!(manager.fingerprint_to_actor.get(first_fingerprint).is_none());
+            assert!(manager
+                .fingerprint_to_actor
+                .get(first_fingerprint)
+                .is_none());
         }
     }
 
@@ -1464,8 +1484,9 @@ mod tests {
             let manager = Arc::clone(&manager);
             handles.push(thread::spawn(move || {
                 for i in 0..500 {
-                    let ip: IpAddr =
-                        format!("10.{}.{}.{}", thread_id, i / 256, i % 256).parse().unwrap();
+                    let ip: IpAddr = format!("10.{}.{}.{}", thread_id, i / 256, i % 256)
+                        .parse()
+                        .unwrap();
                     let fingerprint = format!("fp_t{}_{}", thread_id, i % 20);
                     let actor_id = manager.get_or_create_actor(ip, Some(&fingerprint));
 

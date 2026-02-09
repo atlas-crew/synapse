@@ -331,7 +331,7 @@ mod tests {
 
         // Test with a request actually inside the window
         rt.record(1); // request at ts=1
-        // At 60000ms, cutoff = 0, ts=1 > 0 is true
+                      // At 60000ms, cutoff = 0, ts=1 > 0 is true
         let rate_with_in_window = rt.current_rate(60_000);
         assert_eq!(rate_with_in_window, 1.0);
     }

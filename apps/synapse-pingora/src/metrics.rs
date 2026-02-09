@@ -3,12 +3,12 @@
 //! Provides a `/metrics` endpoint compatible with Prometheus scraping,
 //! exposing request counts, latencies, WAF statistics, and backend health.
 
+use crate::tunnel::TunnelChannel;
+use parking_lot::RwLock;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use parking_lot::RwLock;
-use std::collections::{HashMap, VecDeque};
-use crate::tunnel::TunnelChannel;
 
 /// Maximum number of entries allowed in any metrics hash map to prevent DoS via memory exhaustion. (labs-7tdw)
 const MAX_METRICS_MAP_SIZE: usize = 1000;
@@ -164,8 +164,7 @@ pub struct MsHistogram {
 impl Default for MsHistogram {
     fn default() -> Self {
         let buckets = vec![
-            1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000,
-            300000,
+            1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000,
         ];
         let counts = buckets.iter().map(|_| AtomicU64::new(0)).collect();
         Self {
@@ -236,7 +235,8 @@ impl Default for TunnelMetrics {
 
 impl TunnelMetrics {
     pub fn set_connected(&self, connected: bool) {
-        self.connected.store(u64::from(connected), Ordering::Relaxed);
+        self.connected
+            .store(u64::from(connected), Ordering::Relaxed);
     }
 
     pub fn record_message_sent(&self) {
@@ -425,9 +425,7 @@ impl ProfilingMetrics {
     /// Get all schema violations by endpoint.
     pub fn get_schema_violations(&self) -> Vec<(String, u64)> {
         let violations = self.schema_violations_total.read();
-        violations.iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect()
+        violations.iter().map(|(k, v)| (k.clone(), *v)).collect()
     }
 
     /// Record an anomaly detection.
@@ -458,18 +456,20 @@ impl ProfilingMetrics {
             .unwrap_or(0);
 
         let mut stats = self.endpoint_stats.write();
-        
+
         // Memory protection: don't track more than MAX_METRICS_MAP_SIZE unique endpoints
         if !stats.contains_key(path) && stats.len() >= MAX_METRICS_MAP_SIZE {
             return;
         }
 
-        let entry = stats.entry(path.to_string()).or_insert_with(|| EndpointStats {
-            hit_count: 0,
-            first_seen: now,
-            last_seen: now,
-            methods: Vec::new(),
-        });
+        let entry = stats
+            .entry(path.to_string())
+            .or_insert_with(|| EndpointStats {
+                hit_count: 0,
+                first_seen: now,
+                last_seen: now,
+                methods: Vec::new(),
+            });
 
         entry.hit_count += 1;
         entry.last_seen = now;
@@ -488,9 +488,7 @@ impl ProfilingMetrics {
     /// Get all endpoint statistics for the profiling API.
     pub fn get_endpoint_stats(&self) -> Vec<(String, EndpointStats)> {
         let stats = self.endpoint_stats.read();
-        stats.iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
+        stats.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 
     /// Record bandwidth for a request body.
@@ -695,7 +693,9 @@ pub struct LatencyHistogram {
 impl Default for LatencyHistogram {
     fn default() -> Self {
         // Buckets: 100us, 500us, 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s
-        let buckets = vec![100, 500, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
+        let buckets = vec![
+            100, 500, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000,
+        ];
         let counts = buckets.iter().map(|_| AtomicU64::new(0)).collect();
         Self {
             buckets,
@@ -829,7 +829,8 @@ impl WindowedCounter {
 
             // Update current index
             let new_index = (current + elapsed_secs) % self.window_secs;
-            self.current_index.store(new_index as u64, Ordering::Relaxed);
+            self.current_index
+                .store(new_index as u64, Ordering::Relaxed);
             *last = now;
         }
     }
@@ -855,7 +856,11 @@ impl WindowedCounter {
         if total_count == 0 {
             return 0.0;
         }
-        let total_latency: u64 = self.latency_buckets.iter().map(|b| b.load(Ordering::Relaxed)).sum();
+        let total_latency: u64 = self
+            .latency_buckets
+            .iter()
+            .map(|b| b.load(Ordering::Relaxed))
+            .sum();
         total_latency as f64 / total_count as f64
     }
 }
@@ -881,7 +886,8 @@ impl WafMetrics {
     /// Records a WAF analysis result.
     pub fn record(&self, blocked: bool, challenged: bool, logged: bool, detection_us: u64) {
         self.analyzed.fetch_add(1, Ordering::Relaxed);
-        self.detection_time_us.fetch_add(detection_us, Ordering::Relaxed);
+        self.detection_time_us
+            .fetch_add(detection_us, Ordering::Relaxed);
 
         if blocked {
             self.blocked.fetch_add(1, Ordering::Relaxed);
@@ -929,7 +935,8 @@ impl ShadowMetrics {
     pub fn record_success(&self, bytes: u64, delivery_us: u64) {
         self.mirrored.fetch_add(1, Ordering::Relaxed);
         self.bytes_sent.fetch_add(bytes, Ordering::Relaxed);
-        self.delivery_time_us.fetch_add(delivery_us, Ordering::Relaxed);
+        self.delivery_time_us
+            .fetch_add(delivery_us, Ordering::Relaxed);
     }
 
     /// Records a rate-limited mirror attempt.
@@ -984,10 +991,22 @@ impl MetricsRegistry {
         self.windowed_requests.record(latency_us);
 
         match status_code {
-            200..=299 => self.request_counts.success_2xx.fetch_add(1, Ordering::Relaxed),
-            300..=399 => self.request_counts.redirect_3xx.fetch_add(1, Ordering::Relaxed),
-            400..=499 => self.request_counts.client_error_4xx.fetch_add(1, Ordering::Relaxed),
-            500..=599 => self.request_counts.server_error_5xx.fetch_add(1, Ordering::Relaxed),
+            200..=299 => self
+                .request_counts
+                .success_2xx
+                .fetch_add(1, Ordering::Relaxed),
+            300..=399 => self
+                .request_counts
+                .redirect_3xx
+                .fetch_add(1, Ordering::Relaxed),
+            400..=499 => self
+                .request_counts
+                .client_error_4xx
+                .fetch_add(1, Ordering::Relaxed),
+            500..=599 => self
+                .request_counts
+                .server_error_5xx
+                .fetch_add(1, Ordering::Relaxed),
             _ => 0, // Ignore other status codes
         };
     }
@@ -1022,13 +1041,8 @@ impl MetricsRegistry {
 
     /// Returns the total number of error responses (4xx + 5xx).
     pub fn error_requests(&self) -> u64 {
-        self.request_counts
-            .client_error_4xx
-            .load(Ordering::Relaxed)
-            + self
-                .request_counts
-                .server_error_5xx
-                .load(Ordering::Relaxed)
+        self.request_counts.client_error_4xx.load(Ordering::Relaxed)
+            + self.request_counts.server_error_5xx.load(Ordering::Relaxed)
     }
 
     /// Returns latency percentile in milliseconds.
@@ -1043,7 +1057,8 @@ impl MetricsRegistry {
 
     /// Records WAF metrics.
     pub fn record_waf(&self, blocked: bool, challenged: bool, logged: bool, detection_us: u64) {
-        self.waf_metrics.record(blocked, challenged, logged, detection_us);
+        self.waf_metrics
+            .record(blocked, challenged, logged, detection_us);
     }
 
     /// Records a rule match.
@@ -1083,7 +1098,8 @@ impl MetricsRegistry {
 
     /// Records profiling metrics (Phase 2).
     pub fn record_profile_metrics(&self, active_profiles: usize, anomalies: &[(String, f64)]) {
-        self.profiling_metrics.set_active_profiles(active_profiles as u64);
+        self.profiling_metrics
+            .set_active_profiles(active_profiles as u64);
         for (anomaly_type, score) in anomalies {
             self.profiling_metrics.record_anomaly(anomaly_type, *score);
         }
@@ -1116,16 +1132,27 @@ impl MetricsRegistry {
 
     /// Resets all endpoint profile metrics.
     pub fn reset_profiles(&self) {
-        self.profiling_metrics.profiles_active.store(0, Ordering::Relaxed);
-        self.profiling_metrics.profiles_total.store(0, Ordering::Relaxed);
-        self.profiling_metrics.profile_updates_total.store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .profiles_active
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .profiles_total
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .profile_updates_total
+            .store(0, Ordering::Relaxed);
         self.profiling_metrics.endpoint_stats.write().clear();
     }
 
     /// Resets all schema metrics.
     pub fn reset_schemas(&self) {
-        self.profiling_metrics.schemas_total.store(0, Ordering::Relaxed);
-        self.profiling_metrics.schema_violations_total.write().clear();
+        self.profiling_metrics
+            .schemas_total
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .schema_violations_total
+            .write()
+            .clear();
     }
 
     /// Records backend response.
@@ -1143,15 +1170,13 @@ impl MetricsRegistry {
             metrics.failures += 1;
         }
         // Update health: >50% success rate = healthy
-        metrics.healthy = metrics.requests == 0 ||
-            (metrics.successes as f64 / metrics.requests as f64) > 0.5;
+        metrics.healthy =
+            metrics.requests == 0 || (metrics.successes as f64 / metrics.requests as f64) > 0.5;
     }
 
     /// Returns the uptime in seconds.
     pub fn uptime_secs(&self) -> u64 {
-        self.start_time
-            .map(|t| t.elapsed().as_secs())
-            .unwrap_or(0)
+        self.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0)
     }
 
     /// Renders metrics in Prometheus exposition format.
@@ -1246,18 +1271,23 @@ impl MetricsRegistry {
         ));
 
         // Profiling metrics (Phase 2)
-        output.push_str("# HELP synapse_profiles_active_count Number of active endpoint profiles\n");
+        output
+            .push_str("# HELP synapse_profiles_active_count Number of active endpoint profiles\n");
         output.push_str("# TYPE synapse_profiles_active_count gauge\n");
         output.push_str(&format!(
             "synapse_profiles_active_count {}\n",
-            self.profiling_metrics.profiles_active.load(Ordering::Relaxed)
+            self.profiling_metrics
+                .profiles_active
+                .load(Ordering::Relaxed)
         ));
 
         output.push_str("# HELP synapse_profiles_total Total number of endpoint profiles\n");
         output.push_str("# TYPE synapse_profiles_total gauge\n");
         output.push_str(&format!(
             "synapse_profiles_total {}\n",
-            self.profiling_metrics.profiles_total.load(Ordering::Relaxed)
+            self.profiling_metrics
+                .profiles_total
+                .load(Ordering::Relaxed)
         ));
 
         output.push_str("# HELP synapse_schemas_total Total number of learned schemas\n");
@@ -1271,7 +1301,9 @@ impl MetricsRegistry {
         output.push_str("# TYPE synapse_profile_updates_total counter\n");
         output.push_str(&format!(
             "synapse_profile_updates_total {}\n",
-            self.profiling_metrics.profile_updates_total.load(Ordering::Relaxed)
+            self.profiling_metrics
+                .profile_updates_total
+                .load(Ordering::Relaxed)
         ));
 
         output.push_str("# HELP synapse_schema_violations_total Schema violations by endpoint\n");
@@ -1298,7 +1330,10 @@ impl MetricsRegistry {
         output.push_str("# TYPE synapse_avg_anomaly_score gauge\n");
         output.push_str(&format!(
             "synapse_avg_anomaly_score {:.2}\n",
-            self.profiling_metrics.avg_anomaly_score.load(Ordering::Relaxed) as f64 / 1000.0
+            self.profiling_metrics
+                .avg_anomaly_score
+                .load(Ordering::Relaxed) as f64
+                / 1000.0
         ));
 
         // Backend metrics
@@ -1315,7 +1350,8 @@ impl MetricsRegistry {
             ));
             output.push_str(&format!(
                 "synapse_backend_healthy{{backend=\"{}\"}} {}\n",
-                backend, if metrics.healthy { 1 } else { 0 }
+                backend,
+                if metrics.healthy { 1 } else { 0 }
             ));
         }
 
@@ -1327,7 +1363,8 @@ impl MetricsRegistry {
             self.shadow_metrics.mirrored.load(Ordering::Relaxed)
         ));
 
-        output.push_str("# HELP synapse_shadow_rate_limited Requests rate-limited from mirroring\n");
+        output
+            .push_str("# HELP synapse_shadow_rate_limited Requests rate-limited from mirroring\n");
         output.push_str("# TYPE synapse_shadow_rate_limited counter\n");
         output.push_str(&format!(
             "synapse_shadow_rate_limited {}\n",
@@ -1390,7 +1427,9 @@ impl MetricsRegistry {
             ));
         }
 
-        output.push_str("# HELP synapse_dlp_violations_dropped Violations dropped due to buffer overflow\n");
+        output.push_str(
+            "# HELP synapse_dlp_violations_dropped Violations dropped due to buffer overflow\n",
+        );
         output.push_str("# TYPE synapse_dlp_violations_dropped counter\n");
         output.push_str(&format!(
             "synapse_dlp_violations_dropped {}\n",
@@ -1426,11 +1465,20 @@ impl MetricsRegistry {
             self.signal_dispatch_metrics.timeout.load(Ordering::Relaxed)
         ));
 
-        output.push_str("# HELP synapse_signal_dispatch_duration_us Signal dispatch duration in microseconds\n");
+        output.push_str(
+            "# HELP synapse_signal_dispatch_duration_us Signal dispatch duration in microseconds\n",
+        );
         output.push_str("# TYPE synapse_signal_dispatch_duration_us histogram\n");
         let mut cumulative_dispatch = 0u64;
-        for (i, &boundary) in self.signal_dispatch_metrics.latencies.buckets.iter().enumerate() {
-            cumulative_dispatch += self.signal_dispatch_metrics.latencies.counts[i].load(Ordering::Relaxed);
+        for (i, &boundary) in self
+            .signal_dispatch_metrics
+            .latencies
+            .buckets
+            .iter()
+            .enumerate()
+        {
+            cumulative_dispatch +=
+                self.signal_dispatch_metrics.latencies.counts[i].load(Ordering::Relaxed);
             output.push_str(&format!(
                 "synapse_signal_dispatch_duration_us_bucket{{le=\"{}\"}} {}\n",
                 boundary, cumulative_dispatch
@@ -1438,15 +1486,24 @@ impl MetricsRegistry {
         }
         output.push_str(&format!(
             "synapse_signal_dispatch_duration_us_bucket{{le=\"+Inf\"}} {}\n",
-            self.signal_dispatch_metrics.latencies.count.load(Ordering::Relaxed)
+            self.signal_dispatch_metrics
+                .latencies
+                .count
+                .load(Ordering::Relaxed)
         ));
         output.push_str(&format!(
             "synapse_signal_dispatch_duration_us_sum {}\n",
-            self.signal_dispatch_metrics.latencies.sum_us.load(Ordering::Relaxed)
+            self.signal_dispatch_metrics
+                .latencies
+                .sum_us
+                .load(Ordering::Relaxed)
         ));
         output.push_str(&format!(
             "synapse_signal_dispatch_duration_us_count {}\n",
-            self.signal_dispatch_metrics.latencies.count.load(Ordering::Relaxed)
+            self.signal_dispatch_metrics
+                .latencies
+                .count
+                .load(Ordering::Relaxed)
         ));
 
         // Tunnel metrics (labs-82yr)
@@ -1468,21 +1525,35 @@ impl MetricsRegistry {
         output.push_str("# TYPE synapse_tunnel_messages_received_total counter\n");
         output.push_str(&format!(
             "synapse_tunnel_messages_received_total {}\n",
-            self.tunnel_metrics.messages_received.load(Ordering::Relaxed)
+            self.tunnel_metrics
+                .messages_received
+                .load(Ordering::Relaxed)
         ));
 
-        output.push_str("# HELP synapse_tunnel_reconnect_attempts_total Tunnel reconnect attempts\n");
+        output
+            .push_str("# HELP synapse_tunnel_reconnect_attempts_total Tunnel reconnect attempts\n");
         output.push_str("# TYPE synapse_tunnel_reconnect_attempts_total counter\n");
         output.push_str(&format!(
             "synapse_tunnel_reconnect_attempts_total {}\n",
-            self.tunnel_metrics.reconnect_attempts.load(Ordering::Relaxed)
+            self.tunnel_metrics
+                .reconnect_attempts
+                .load(Ordering::Relaxed)
         ));
 
-        output.push_str("# HELP synapse_tunnel_reconnect_delay_ms Tunnel reconnect backoff in milliseconds\n");
+        output.push_str(
+            "# HELP synapse_tunnel_reconnect_delay_ms Tunnel reconnect backoff in milliseconds\n",
+        );
         output.push_str("# TYPE synapse_tunnel_reconnect_delay_ms histogram\n");
         let mut reconnect_cumulative = 0u64;
-        for (idx, &boundary) in self.tunnel_metrics.reconnect_delay_ms.buckets.iter().enumerate() {
-            reconnect_cumulative += self.tunnel_metrics.reconnect_delay_ms.counts[idx].load(Ordering::Relaxed);
+        for (idx, &boundary) in self
+            .tunnel_metrics
+            .reconnect_delay_ms
+            .buckets
+            .iter()
+            .enumerate()
+        {
+            reconnect_cumulative +=
+                self.tunnel_metrics.reconnect_delay_ms.counts[idx].load(Ordering::Relaxed);
             output.push_str(&format!(
                 "synapse_tunnel_reconnect_delay_ms_bucket{{le=\"{}\"}} {}\n",
                 boundary, reconnect_cumulative
@@ -1490,15 +1561,24 @@ impl MetricsRegistry {
         }
         output.push_str(&format!(
             "synapse_tunnel_reconnect_delay_ms_bucket{{le=\"+Inf\"}} {}\n",
-            self.tunnel_metrics.reconnect_delay_ms.count.load(Ordering::Relaxed)
+            self.tunnel_metrics
+                .reconnect_delay_ms
+                .count
+                .load(Ordering::Relaxed)
         ));
         output.push_str(&format!(
             "synapse_tunnel_reconnect_delay_ms_sum {}\n",
-            self.tunnel_metrics.reconnect_delay_ms.sum_ms.load(Ordering::Relaxed)
+            self.tunnel_metrics
+                .reconnect_delay_ms
+                .sum_ms
+                .load(Ordering::Relaxed)
         ));
         output.push_str(&format!(
             "synapse_tunnel_reconnect_delay_ms_count {}\n",
-            self.tunnel_metrics.reconnect_delay_ms.count.load(Ordering::Relaxed)
+            self.tunnel_metrics
+                .reconnect_delay_ms
+                .count
+                .load(Ordering::Relaxed)
         ));
 
         output.push_str("# HELP synapse_tunnel_auth_timeout_total Tunnel auth timeouts\n");
@@ -1515,11 +1595,14 @@ impl MetricsRegistry {
             self.tunnel_metrics.heartbeats_sent.load(Ordering::Relaxed)
         ));
 
-        output.push_str("# HELP synapse_tunnel_heartbeat_timeout_total Tunnel heartbeat timeouts\n");
+        output
+            .push_str("# HELP synapse_tunnel_heartbeat_timeout_total Tunnel heartbeat timeouts\n");
         output.push_str("# TYPE synapse_tunnel_heartbeat_timeout_total counter\n");
         output.push_str(&format!(
             "synapse_tunnel_heartbeat_timeout_total {}\n",
-            self.tunnel_metrics.heartbeat_timeouts.load(Ordering::Relaxed)
+            self.tunnel_metrics
+                .heartbeat_timeouts
+                .load(Ordering::Relaxed)
         ));
 
         output.push_str(
@@ -1534,7 +1617,9 @@ impl MetricsRegistry {
             ));
         }
 
-        output.push_str("# HELP synapse_tunnel_handler_latency_ms Tunnel handler latency in milliseconds\n");
+        output.push_str(
+            "# HELP synapse_tunnel_handler_latency_ms Tunnel handler latency in milliseconds\n",
+        );
         output.push_str("# TYPE synapse_tunnel_handler_latency_ms histogram\n");
         for channel in TunnelChannel::ALL.iter().copied() {
             let hist = self.tunnel_metrics.handler_latency_hist(channel);
@@ -1579,8 +1664,12 @@ impl MetricsRegistry {
         self.request_counts.total.store(0, Ordering::Relaxed);
         self.request_counts.success_2xx.store(0, Ordering::Relaxed);
         self.request_counts.redirect_3xx.store(0, Ordering::Relaxed);
-        self.request_counts.client_error_4xx.store(0, Ordering::Relaxed);
-        self.request_counts.server_error_5xx.store(0, Ordering::Relaxed);
+        self.request_counts
+            .client_error_4xx
+            .store(0, Ordering::Relaxed);
+        self.request_counts
+            .server_error_5xx
+            .store(0, Ordering::Relaxed);
         self.request_counts.blocked.store(0, Ordering::Relaxed);
 
         // Reset latency histogram
@@ -1595,18 +1684,35 @@ impl MetricsRegistry {
         self.waf_metrics.blocked.store(0, Ordering::Relaxed);
         self.waf_metrics.challenged.store(0, Ordering::Relaxed);
         self.waf_metrics.logged.store(0, Ordering::Relaxed);
-        self.waf_metrics.detection_time_us.store(0, Ordering::Relaxed);
+        self.waf_metrics
+            .detection_time_us
+            .store(0, Ordering::Relaxed);
         self.waf_metrics.rule_matches.write().clear();
 
         // Reset profiling metrics
-        self.profiling_metrics.profiles_active.store(0, Ordering::Relaxed);
-        self.profiling_metrics.profiles_total.store(0, Ordering::Relaxed);
-        self.profiling_metrics.schemas_total.store(0, Ordering::Relaxed);
-        self.profiling_metrics.profile_updates_total.store(0, Ordering::Relaxed);
-        self.profiling_metrics.schema_violations_total.write().clear();
+        self.profiling_metrics
+            .profiles_active
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .profiles_total
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .schemas_total
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .profile_updates_total
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .schema_violations_total
+            .write()
+            .clear();
         self.profiling_metrics.anomalies_detected.write().clear();
-        self.profiling_metrics.avg_anomaly_score.store(0, Ordering::Relaxed);
-        self.profiling_metrics.requests_with_anomalies.store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .avg_anomaly_score
+            .store(0, Ordering::Relaxed);
+        self.profiling_metrics
+            .requests_with_anomalies
+            .store(0, Ordering::Relaxed);
         self.profiling_metrics.endpoint_stats.write().clear();
 
         // Reset shadow metrics
@@ -1614,32 +1720,56 @@ impl MetricsRegistry {
         self.shadow_metrics.rate_limited.store(0, Ordering::Relaxed);
         self.shadow_metrics.failed.store(0, Ordering::Relaxed);
         self.shadow_metrics.bytes_sent.store(0, Ordering::Relaxed);
-        self.shadow_metrics.delivery_time_us.store(0, Ordering::Relaxed);
+        self.shadow_metrics
+            .delivery_time_us
+            .store(0, Ordering::Relaxed);
 
         // Reset DLP metrics (P1 fix)
         self.dlp_metrics.scans_total.store(0, Ordering::Relaxed);
         self.dlp_metrics.matches_total.store(0, Ordering::Relaxed);
         self.dlp_metrics.matches_by_type.write().clear();
         self.dlp_metrics.matches_by_severity.write().clear();
-        self.dlp_metrics.violations_dropped.store(0, Ordering::Relaxed);
+        self.dlp_metrics
+            .violations_dropped
+            .store(0, Ordering::Relaxed);
         self.dlp_metrics.graph_export_durations.write().clear();
 
         // Reset signal dispatch metrics
-        self.signal_dispatch_metrics.total.store(0, Ordering::Relaxed);
-        self.signal_dispatch_metrics.success.store(0, Ordering::Relaxed);
-        self.signal_dispatch_metrics.failure.store(0, Ordering::Relaxed);
-        self.signal_dispatch_metrics.timeout.store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics
+            .total
+            .store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics
+            .success
+            .store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics
+            .failure
+            .store(0, Ordering::Relaxed);
+        self.signal_dispatch_metrics
+            .timeout
+            .store(0, Ordering::Relaxed);
         self.signal_dispatch_metrics.latencies.reset();
 
         // Reset tunnel metrics
         self.tunnel_metrics.connected.store(0, Ordering::Relaxed);
-        self.tunnel_metrics.messages_sent.store(0, Ordering::Relaxed);
-        self.tunnel_metrics.messages_received.store(0, Ordering::Relaxed);
-        self.tunnel_metrics.reconnect_attempts.store(0, Ordering::Relaxed);
+        self.tunnel_metrics
+            .messages_sent
+            .store(0, Ordering::Relaxed);
+        self.tunnel_metrics
+            .messages_received
+            .store(0, Ordering::Relaxed);
+        self.tunnel_metrics
+            .reconnect_attempts
+            .store(0, Ordering::Relaxed);
         self.tunnel_metrics.reconnect_delay_ms.reset();
-        self.tunnel_metrics.auth_timeouts.store(0, Ordering::Relaxed);
-        self.tunnel_metrics.heartbeats_sent.store(0, Ordering::Relaxed);
-        self.tunnel_metrics.heartbeat_timeouts.store(0, Ordering::Relaxed);
+        self.tunnel_metrics
+            .auth_timeouts
+            .store(0, Ordering::Relaxed);
+        self.tunnel_metrics
+            .heartbeats_sent
+            .store(0, Ordering::Relaxed);
+        self.tunnel_metrics
+            .heartbeat_timeouts
+            .store(0, Ordering::Relaxed);
         for channel in TunnelChannel::ALL.iter().copied() {
             let idx = tunnel_channel_index(channel);
             self.tunnel_metrics.channel_overflows[idx].store(0, Ordering::Relaxed);
@@ -1683,19 +1813,34 @@ mod tests {
         registry.record_request(500, 2000);
 
         assert_eq!(registry.request_counts.total.load(Ordering::Relaxed), 4);
-        assert_eq!(registry.request_counts.success_2xx.load(Ordering::Relaxed), 2);
-        assert_eq!(registry.request_counts.client_error_4xx.load(Ordering::Relaxed), 1);
-        assert_eq!(registry.request_counts.server_error_5xx.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            registry.request_counts.success_2xx.load(Ordering::Relaxed),
+            2
+        );
+        assert_eq!(
+            registry
+                .request_counts
+                .client_error_4xx
+                .load(Ordering::Relaxed),
+            1
+        );
+        assert_eq!(
+            registry
+                .request_counts
+                .server_error_5xx
+                .load(Ordering::Relaxed),
+            1
+        );
     }
 
     #[test]
     fn test_latency_histogram() {
         let histogram = LatencyHistogram::default();
 
-        histogram.observe(50);    // 100us bucket
-        histogram.observe(150);   // 500us bucket
-        histogram.observe(750);   // 1000us bucket
-        histogram.observe(5000);  // 5000us bucket
+        histogram.observe(50); // 100us bucket
+        histogram.observe(150); // 500us bucket
+        histogram.observe(750); // 1000us bucket
+        histogram.observe(5000); // 5000us bucket
 
         assert_eq!(histogram.count.load(Ordering::Relaxed), 4);
         assert_eq!(histogram.sum_us.load(Ordering::Relaxed), 5950);
@@ -1716,9 +1861,9 @@ mod tests {
     fn test_waf_metrics() {
         let registry = MetricsRegistry::new();
 
-        registry.record_waf(true, false, false, 50);   // blocked
-        registry.record_waf(false, true, false, 30);   // challenged
-        registry.record_waf(false, false, true, 20);   // logged
+        registry.record_waf(true, false, false, 50); // blocked
+        registry.record_waf(false, true, false, 30); // challenged
+        registry.record_waf(false, false, true, 20); // logged
 
         assert_eq!(registry.waf_metrics.analyzed.load(Ordering::Relaxed), 3);
         assert_eq!(registry.waf_metrics.blocked.load(Ordering::Relaxed), 1);
@@ -1868,7 +2013,10 @@ mod tests {
         // Record a large value (10 MB)
         metrics.record_request_bytes(10 * 1024 * 1024);
 
-        assert_eq!(metrics.total_bytes_in.load(Ordering::Relaxed), 10 * 1024 * 1024);
+        assert_eq!(
+            metrics.total_bytes_in.load(Ordering::Relaxed),
+            10 * 1024 * 1024
+        );
     }
 
     // =========================================================================
@@ -2185,10 +2333,32 @@ mod tests {
         registry.reset();
 
         // Verify profiling-specific reset
-        assert_eq!(registry.profiling_metrics.profiles_active.load(Ordering::Relaxed), 0);
-        assert_eq!(registry.profiling_metrics.avg_anomaly_score.load(Ordering::Relaxed), 0);
-        assert_eq!(registry.profiling_metrics.requests_with_anomalies.load(Ordering::Relaxed), 0);
-        assert!(registry.profiling_metrics.anomalies_detected.read().is_empty());
+        assert_eq!(
+            registry
+                .profiling_metrics
+                .profiles_active
+                .load(Ordering::Relaxed),
+            0
+        );
+        assert_eq!(
+            registry
+                .profiling_metrics
+                .avg_anomaly_score
+                .load(Ordering::Relaxed),
+            0
+        );
+        assert_eq!(
+            registry
+                .profiling_metrics
+                .requests_with_anomalies
+                .load(Ordering::Relaxed),
+            0
+        );
+        assert!(registry
+            .profiling_metrics
+            .anomalies_detected
+            .read()
+            .is_empty());
         assert!(registry.profiling_metrics.endpoint_stats.read().is_empty());
     }
 

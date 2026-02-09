@@ -6,12 +6,24 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HubMessage {
-    ConfigUpdate { enabled: bool },
-    RuleUpdate { sensor_config: SensorConfig },
-    BlocklistUpdate { ips: Vec<String> },
-    Ping { message: String },
-    SensorAck { message: String },
-    Error { message: String },
+    ConfigUpdate {
+        enabled: bool,
+    },
+    RuleUpdate {
+        sensor_config: SensorConfig,
+    },
+    BlocklistUpdate {
+        ips: Vec<String>,
+    },
+    Ping {
+        message: String,
+    },
+    SensorAck {
+        message: String,
+    },
+    Error {
+        message: String,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -75,21 +87,36 @@ fn test_blocklist_update() {
 fn test_ping_message() {
     let json = r#"{"type": "ping", "message": "keepalive"}"#;
     let msg: HubMessage = serde_json::from_str(json).unwrap();
-    assert_eq!(msg, HubMessage::Ping { message: "keepalive".to_string() });
+    assert_eq!(
+        msg,
+        HubMessage::Ping {
+            message: "keepalive".to_string()
+        }
+    );
 }
 
 #[test]
 fn test_sensor_ack_message() {
     let json = r#"{"type": "sensor_ack", "message": "registered"}"#;
     let msg: HubMessage = serde_json::from_str(json).unwrap();
-    assert_eq!(msg, HubMessage::SensorAck { message: "registered".to_string() });
+    assert_eq!(
+        msg,
+        HubMessage::SensorAck {
+            message: "registered".to_string()
+        }
+    );
 }
 
 #[test]
 fn test_error_message() {
     let json = r#"{"type": "error", "message": "auth failed"}"#;
     let msg: HubMessage = serde_json::from_str(json).unwrap();
-    assert_eq!(msg, HubMessage::Error { message: "auth failed".to_string() });
+    assert_eq!(
+        msg,
+        HubMessage::Error {
+            message: "auth failed".to_string()
+        }
+    );
 }
 
 #[test]
@@ -114,7 +141,8 @@ fn test_rule_update_minimal() {
 
 #[test]
 fn test_rule_update_with_waf() {
-    let json = r#"{"type": "rule_update", "sensor_config": {"waf": {"enabled": true, "mode": "block"}}}"#;
+    let json =
+        r#"{"type": "rule_update", "sensor_config": {"waf": {"enabled": true, "mode": "block"}}}"#;
     let msg: HubMessage = serde_json::from_str(json).unwrap();
     match msg {
         HubMessage::RuleUpdate { sensor_config } => {
@@ -232,7 +260,9 @@ fn transition(state: ConnState, event: &str) -> ConnState {
         (ConnState::Connected, "shutdown") => ConnState::Disconnected,
         (ConnState::Reconnecting { .. }, "success") => ConnState::Connected,
         (ConnState::Reconnecting { attempt }, "failure") if attempt < 10 => {
-            ConnState::Reconnecting { attempt: attempt + 1 }
+            ConnState::Reconnecting {
+                attempt: attempt + 1,
+            }
         }
         (ConnState::Reconnecting { .. }, "failure") => ConnState::Failed,
         (ConnState::Reconnecting { .. }, "shutdown") => ConnState::Disconnected,
@@ -290,7 +320,9 @@ fn test_config_update_roundtrip() {
 
 #[test]
 fn test_blocklist_roundtrip() {
-    let orig = HubMessage::BlocklistUpdate { ips: vec!["1.2.3.4".to_string()] };
+    let orig = HubMessage::BlocklistUpdate {
+        ips: vec!["1.2.3.4".to_string()],
+    };
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: HubMessage = serde_json::from_str(&json).unwrap();
     assert_eq!(orig, parsed);
@@ -298,7 +330,9 @@ fn test_blocklist_roundtrip() {
 
 #[test]
 fn test_ping_roundtrip() {
-    let orig = HubMessage::Ping { message: "test".to_string() };
+    let orig = HubMessage::Ping {
+        message: "test".to_string(),
+    };
     let json = serde_json::to_string(&orig).unwrap();
     let parsed: HubMessage = serde_json::from_str(&json).unwrap();
     assert_eq!(orig, parsed);
@@ -310,13 +344,13 @@ fn test_ping_roundtrip() {
 // These tests use actual WebSocket connections with mock servers to verify
 // connection lifecycle, authentication, heartbeats, and reconnection logic.
 
+use futures_util::{SinkExt, StreamExt};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 /// Helper struct to manage test server lifecycle
@@ -386,7 +420,11 @@ async fn create_echo_server() -> TestServer {
         }
     });
 
-    TestServer { addr, shutdown_tx, handle }
+    TestServer {
+        addr,
+        shutdown_tx,
+        handle,
+    }
 }
 
 /// Create a mock server that rejects authentication
@@ -424,7 +462,11 @@ async fn create_auth_rejecting_server() -> TestServer {
         }
     });
 
-    TestServer { addr, shutdown_tx, handle }
+    TestServer {
+        addr,
+        shutdown_tx,
+        handle,
+    }
 }
 
 /// Create a server that disconnects after a configurable number of messages
@@ -471,7 +513,11 @@ async fn create_disconnecting_server(disconnect_after: u32) -> TestServer {
         }
     });
 
-    TestServer { addr, shutdown_tx, handle }
+    TestServer {
+        addr,
+        shutdown_tx,
+        handle,
+    }
 }
 
 /// Create a server that tracks heartbeat count
@@ -513,7 +559,14 @@ async fn create_heartbeat_tracking_server() -> (TestServer, Arc<AtomicU32>) {
         }
     });
 
-    (TestServer { addr, shutdown_tx, handle }, heartbeat_count)
+    (
+        TestServer {
+            addr,
+            shutdown_tx,
+            handle,
+        },
+        heartbeat_count,
+    )
 }
 
 #[tokio::test]
@@ -614,7 +667,11 @@ async fn test_real_websocket_heartbeat_flow() {
     }
 
     // Verify heartbeats were received
-    assert_eq!(heartbeat_count.load(Ordering::SeqCst), 3, "Server should receive 3 heartbeats");
+    assert_eq!(
+        heartbeat_count.load(Ordering::SeqCst),
+        3,
+        "Server should receive 3 heartbeats"
+    );
 
     server.shutdown().await;
 }
@@ -645,7 +702,10 @@ async fn test_real_websocket_reconnection_scenario() {
 
     // Verify we can reconnect
     let result = tokio_tungstenite::connect_async(&url).await;
-    assert!(result.is_ok(), "Should be able to reconnect after disconnect");
+    assert!(
+        result.is_ok(),
+        "Should be able to reconnect after disconnect"
+    );
 
     server.shutdown().await;
 }
@@ -675,8 +735,11 @@ async fn test_real_websocket_signal_acknowledgment() {
         .unwrap();
 
     if let Message::Text(text) = response {
-        assert!(text.contains("signal_ack") || text.contains("batch_ack"),
-                "Should receive signal acknowledgment, got: {}", text);
+        assert!(
+            text.contains("signal_ack") || text.contains("batch_ack"),
+            "Should receive signal acknowledgment, got: {}",
+            text
+        );
     } else {
         panic!("Expected text message");
     }
@@ -709,8 +772,11 @@ async fn test_real_websocket_blocklist_sync() {
         .unwrap();
 
     if let Message::Text(text) = response {
-        assert!(text.contains("blocklist_snapshot"),
-                "Should receive blocklist snapshot, got: {}", text);
+        assert!(
+            text.contains("blocklist_snapshot"),
+            "Should receive blocklist snapshot, got: {}",
+            text
+        );
     } else {
         panic!("Expected text message");
     }
@@ -762,7 +828,9 @@ async fn test_real_websocket_ping_pong() {
     let (mut sink, mut stream) = ws_stream.split();
 
     // Send WebSocket-level ping
-    sink.send(Message::Ping(vec![1, 2, 3].into())).await.unwrap();
+    sink.send(Message::Ping(vec![1, 2, 3].into()))
+        .await
+        .unwrap();
 
     // Should receive pong
     let response = tokio::time::timeout(Duration::from_secs(2), stream.next())
@@ -771,7 +839,10 @@ async fn test_real_websocket_ping_pong() {
         .unwrap()
         .unwrap();
 
-    assert!(matches!(response, Message::Pong(_)), "Should receive pong response");
+    assert!(
+        matches!(response, Message::Pong(_)),
+        "Should receive pong response"
+    );
 
     server.shutdown().await;
 }

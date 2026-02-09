@@ -6,17 +6,17 @@ lazy_static! {
     static ref UUID_REGEX: Regex = Regex::new(
         r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
     ).unwrap();
-    
+
     // Numeric IDs: pure digits, 1+ chars
     static ref NUMERIC_ID_REGEX: Regex = Regex::new(
         r"^\d+$"
     ).unwrap();
-    
+
     // Base64-ish IDs: alphanumeric with possible padding, 16+ chars
     static ref BASE64_ID_REGEX: Regex = Regex::new(
         r"^[A-Za-z0-9_-]{16,}$"
     ).unwrap();
-    
+
     // MongoDB ObjectId: 24 hex chars
     static ref OBJECTID_REGEX: Regex = Regex::new(
         r"^[0-9a-fA-F]{24}$"
@@ -68,13 +68,16 @@ pub fn endpoint_key(method: &str, path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_normalize_numeric_ids() {
         assert_eq!(normalize_path("/api/users/123"), "/api/users/{id}");
-        assert_eq!(normalize_path("/api/users/123/posts/456"), "/api/users/{id}/posts/{id}");
+        assert_eq!(
+            normalize_path("/api/users/123/posts/456"),
+            "/api/users/{id}/posts/{id}"
+        );
     }
-    
+
     #[test]
     fn test_normalize_uuids() {
         assert_eq!(
@@ -82,7 +85,7 @@ mod tests {
             "/api/orders/{id}"
         );
     }
-    
+
     #[test]
     fn test_normalize_objectids() {
         assert_eq!(
@@ -90,7 +93,7 @@ mod tests {
             "/api/docs/{id}"
         );
     }
-    
+
     #[test]
     fn test_preserve_static_paths() {
         assert_eq!(normalize_path("/api/health"), "/api/health");
@@ -108,12 +111,9 @@ mod tests {
         assert_eq!(normalize_path("/api/users/123/"), "/api/users/{id}");
         assert_eq!(normalize_path("/api/health/"), "/api/health");
     }
-    
+
     #[test]
     fn test_endpoint_key() {
-        assert_eq!(
-            endpoint_key("GET", "/api/users/123"),
-            "GET /api/users/{id}"
-        );
+        assert_eq!(endpoint_key("GET", "/api/users/123"), "GET /api/users/{id}");
     }
 }

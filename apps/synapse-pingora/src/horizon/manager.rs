@@ -114,7 +114,7 @@ impl HorizonManager {
         // doesn't expose a setter for config_manager.
         // Better to add a setter on HorizonClient or rebuild it.
         // Actually, HorizonClient::with_config_manager consumes self.
-        
+
         // Since we can't easily replace the client in-place if it's already running,
         // we should really pass it during construction.
         // Let's rely on the Builder pattern.

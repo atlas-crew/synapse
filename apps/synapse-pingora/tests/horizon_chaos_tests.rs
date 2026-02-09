@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{watch, Mutex};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 use synapse_pingora::horizon::{
@@ -43,7 +43,9 @@ async fn spawn_hub_server(
         None => "127.0.0.1:0".to_string(),
     };
 
-    let listener = TcpListener::bind(&bind_addr).await.expect("bind hub server");
+    let listener = TcpListener::bind(&bind_addr)
+        .await
+        .expect("bind hub server");
     let addr = listener.local_addr().expect("hub server addr");
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let received = Arc::new(Mutex::new(Vec::new()));
@@ -247,7 +249,10 @@ async fn test_high_latency_hub_does_not_block_reporting() {
     client.report_signal(make_signal("10.0.1.1"));
     let elapsed = start.elapsed();
 
-    assert!(elapsed < Duration::from_millis(50), "report_signal should be non-blocking");
+    assert!(
+        elapsed < Duration::from_millis(50),
+        "report_signal should be non-blocking"
+    );
     assert!(wait_for_received(&server.received, 1, Duration::from_secs(2)).await);
 
     client.stop().await;

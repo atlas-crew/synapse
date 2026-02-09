@@ -3,6 +3,7 @@
 //! Provides resilient asynchronous telemetry delivery with batching,
 //! retry logic, and circuit breaker patterns for the synapse-pingora WAF proxy.
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,7 +12,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::sync::{broadcast, Mutex, Notify};
 use tracing::{debug, warn};
-use async_trait::async_trait;
 
 use crate::signals::auth_coverage::AuthCoverageSummary;
 
@@ -183,7 +183,11 @@ impl TimestampedEvent {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        Self { timestamp_ms, instance_id, event }
+        Self {
+            timestamp_ms,
+            instance_id,
+            event,
+        }
     }
 }
 
@@ -202,7 +206,11 @@ impl TelemetryBatch {
             .unwrap_or_default()
             .as_millis() as u64;
         let batch_id = format!("batch-{}", created_at_ms);
-        Self { batch_id, events, created_at_ms }
+        Self {
+            batch_id,
+            events,
+            created_at_ms,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -474,18 +482,24 @@ impl TelemetryClient {
 
         // Map TelemetryEvent::SensorReport to the flat format expected by Risk Server
         let payload = match event {
-            TelemetryEvent::SensorReport { sensor_id, actor, signal, request } => {
+            TelemetryEvent::SensorReport {
+                sensor_id,
+                actor,
+                signal,
+                request,
+            } => {
                 serde_json::json!({
                     "sensorId": sensor_id,
                     "actor": actor,
                     "signal": signal,
                     "request": request,
-                    "timestamp": TimestampedEvent::new(TelemetryEvent::ServiceHealth { 
-                        uptime_secs: 0, memory_mb: 0, active_connections: 0, requests_per_sec: 0.0 
+                    "timestamp": TimestampedEvent::new(TelemetryEvent::ServiceHealth {
+                        uptime_secs: 0, memory_mb: 0, active_connections: 0, requests_per_sec: 0.0
                     }, None).timestamp_ms
                 })
-            },
-            _ => serde_json::to_value(&event).map_err(|e| TelemetryError::SerializationError(e.to_string()))?
+            }
+            _ => serde_json::to_value(&event)
+                .map_err(|e| TelemetryError::SerializationError(e.to_string()))?,
         };
 
         let client = reqwest::Client::new();
@@ -493,14 +507,15 @@ impl TelemetryClient {
             .post(&self.config.endpoint)
             .json(&payload)
             .timeout(Duration::from_secs(2));
-        let response = self.apply_auth_headers(request)
-            .send()
-            .await
-            .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
+        let response = self.apply_auth_headers(request).send().await.map_err(|e| {
+            TelemetryError::EndpointUnreachable {
+                message: e.to_string(),
+            }
+        })?;
 
         if !response.status().is_success() {
-            return Err(TelemetryError::EndpointUnreachable { 
-                message: format!("HTTP {}", response.status()) 
+            return Err(TelemetryError::EndpointUnreachable {
+                message: format!("HTTP {}", response.status()),
             });
         }
 
@@ -510,7 +525,9 @@ impl TelemetryClient {
     async fn send_batch_with_retry(&self, batch: &TelemetryBatch) -> TelemetryResult<()> {
         // In dry_run mode, skip actual HTTP sending but still update stats
         if self.config.dry_run {
-            self.stats.events_sent.fetch_add(batch.len() as u64, Ordering::SeqCst);
+            self.stats
+                .events_sent
+                .fetch_add(batch.len() as u64, Ordering::SeqCst);
             self.stats.batches_sent.fetch_add(1, Ordering::SeqCst);
             return Ok(());
         }
@@ -521,20 +538,32 @@ impl TelemetryClient {
             match self.send_batch(batch).await {
                 Ok(()) => {
                     self.circuit_breaker.record_success().await;
-                    self.stats.events_sent.fetch_add(batch.len() as u64, Ordering::SeqCst);
+                    self.stats
+                        .events_sent
+                        .fetch_add(batch.len() as u64, Ordering::SeqCst);
                     self.stats.batches_sent.fetch_add(1, Ordering::SeqCst);
                     return Ok(());
                 }
                 Err(e) => {
                     if attempt < self.config.max_retries {
                         self.stats.retries.fetch_add(1, Ordering::SeqCst);
-                        debug!("Telemetry send failed (attempt {}), retrying: {}", attempt + 1, e);
+                        debug!(
+                            "Telemetry send failed (attempt {}), retrying: {}",
+                            attempt + 1,
+                            e
+                        );
                         tokio::time::sleep(backoff).await;
-                        backoff = backoff.checked_mul(2).unwrap_or(self.config.max_backoff).min(self.config.max_backoff);
+                        backoff = backoff
+                            .checked_mul(2)
+                            .unwrap_or(self.config.max_backoff)
+                            .min(self.config.max_backoff);
                     } else {
                         self.circuit_breaker.record_failure().await;
                         self.stats.send_failures.fetch_add(1, Ordering::SeqCst);
-                        warn!("Telemetry send failed after {} retries: {}", self.config.max_retries, e);
+                        warn!(
+                            "Telemetry send failed after {} retries: {}",
+                            self.config.max_retries, e
+                        );
                         return Err(e);
                     }
                 }
@@ -566,17 +595,20 @@ impl TelemetryClient {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .build()
-            .map_err(|e| TelemetryError::EndpointUnreachable { message: e.to_string() })?;
+            .map_err(|e| TelemetryError::EndpointUnreachable {
+                message: e.to_string(),
+            })?;
 
-        let response = client
-            .post(&self.config.endpoint)
-            .json(&payload);
-        let response = self.apply_auth_headers(response)
+        let response = client.post(&self.config.endpoint).json(&payload);
+        let response = self
+            .apply_auth_headers(response)
             .send()
             .await
             .map_err(|e| {
                 warn!(error = %e, "Telemetry batch send failed");
-                TelemetryError::EndpointUnreachable { message: e.to_string() }
+                TelemetryError::EndpointUnreachable {
+                    message: e.to_string(),
+                }
             })?;
 
         if !response.status().is_success() {
@@ -648,12 +680,12 @@ pub trait SignalEmitter: Send + Sync {
 impl SignalEmitter for TelemetryClient {
     async fn emit(&self, signal_type: &str, payload: serde_json::Value) {
         if signal_type == "auth_coverage_summary" {
-             if let Ok(summary) = serde_json::from_value::<AuthCoverageSummary>(payload) {
-                 // Clone self is cheap because it just increments ref counts of Arcs
-                 // Wait, TelemetryClient struct fields are Arc except config.
-                 // So cloning TelemetryClient is cheap.
-                 let _ = self.record(TelemetryEvent::AuthCoverage(summary)).await;
-             }
+            if let Ok(summary) = serde_json::from_value::<AuthCoverageSummary>(payload) {
+                // Clone self is cheap because it just increments ref counts of Arcs
+                // Wait, TelemetryClient struct fields are Arc except config.
+                // So cloning TelemetryClient is cheap.
+                let _ = self.record(TelemetryEvent::AuthCoverage(summary)).await;
+            }
         }
     }
 }
@@ -695,16 +727,48 @@ pub fn waf_block(
     }
 }
 
-pub fn rate_limit_hit(request_id: Option<String>, client_ip: String, limit: u32, window_secs: u32, site: String) -> TelemetryEvent {
-    TelemetryEvent::RateLimitHit { request_id, client_ip, limit, window_secs, site }
+pub fn rate_limit_hit(
+    request_id: Option<String>,
+    client_ip: String,
+    limit: u32,
+    window_secs: u32,
+    site: String,
+) -> TelemetryEvent {
+    TelemetryEvent::RateLimitHit {
+        request_id,
+        client_ip,
+        limit,
+        window_secs,
+        site,
+    }
 }
 
-pub fn config_reload(sites_loaded: usize, duration_ms: u64, success: bool, error: Option<String>) -> TelemetryEvent {
-    TelemetryEvent::ConfigReload { sites_loaded, duration_ms, success, error }
+pub fn config_reload(
+    sites_loaded: usize,
+    duration_ms: u64,
+    success: bool,
+    error: Option<String>,
+) -> TelemetryEvent {
+    TelemetryEvent::ConfigReload {
+        sites_loaded,
+        duration_ms,
+        success,
+        error,
+    }
 }
 
-pub fn service_health(uptime_secs: u64, memory_mb: u64, active_connections: u64, requests_per_sec: f64) -> TelemetryEvent {
-    TelemetryEvent::ServiceHealth { uptime_secs, memory_mb, active_connections, requests_per_sec }
+pub fn service_health(
+    uptime_secs: u64,
+    memory_mb: u64,
+    active_connections: u64,
+    requests_per_sec: f64,
+) -> TelemetryEvent {
+    TelemetryEvent::ServiceHealth {
+        uptime_secs,
+        memory_mb,
+        active_connections,
+        requests_per_sec,
+    }
 }
 
 #[cfg(test)]
@@ -750,7 +814,13 @@ mod tests {
         let event = request_processed(100, 200, None, "site".into(), "GET".into(), "/".into());
         assert_eq!(event.event_type(), EventType::RequestProcessed);
 
-        let event = waf_block("rule-1".into(), "high".into(), "1.2.3.4".into(), "site".into(), "/".into());
+        let event = waf_block(
+            "rule-1".into(),
+            "high".into(),
+            "1.2.3.4".into(),
+            "site".into(),
+            "/".into(),
+        );
         assert_eq!(event.event_type(), EventType::WafBlock);
 
         let event = TelemetryEvent::LogEntry {
@@ -782,7 +852,14 @@ mod tests {
 
     #[test]
     fn test_event_serialization() {
-        let event = request_processed(100, 200, Some("pass".into()), "site".into(), "GET".into(), "/api".into());
+        let event = request_processed(
+            100,
+            200,
+            Some("pass".into()),
+            "site".into(),
+            "GET".into(),
+            "/api".into(),
+        );
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("request_processed"));
         assert!(json.contains("100"));
@@ -839,7 +916,8 @@ mod tests {
     fn test_batch_creation() {
         let events: Vec<TimestampedEvent> = (0..5)
             .map(|i| {
-                let event = request_processed(i * 10, 200, None, "site".into(), "GET".into(), "/".into());
+                let event =
+                    request_processed(i * 10, 200, None, "site".into(), "GET".into(), "/".into());
                 TimestampedEvent::new(event, None)
             })
             .collect();
@@ -976,7 +1054,13 @@ mod tests {
         client.record(event).await.unwrap();
 
         // This event type is enabled
-        let event = waf_block("rule-1".into(), "high".into(), "1.2.3.4".into(), "site".into(), "/".into());
+        let event = waf_block(
+            "rule-1".into(),
+            "high".into(),
+            "1.2.3.4".into(),
+            "site".into(),
+            "/".into(),
+        );
         client.record(event).await.unwrap();
 
         client.flush().await.unwrap();

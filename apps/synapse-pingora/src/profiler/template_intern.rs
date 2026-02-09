@@ -250,9 +250,15 @@ mod tests {
         let (_, _, _, size_after) = cache_stats();
 
         // Verify entries were added (size increased)
-        assert!(size_after >= size_before, "Cache size should not decrease after adding entries");
+        assert!(
+            size_after >= size_before,
+            "Cache size should not decrease after adding entries"
+        );
 
         // Verify cache is bounded (won't exceed MAX_CACHE_ENTRIES)
-        assert!(size_after <= 10_000, "Cache should remain bounded at MAX_CACHE_ENTRIES");
+        assert!(
+            size_after <= 10_000,
+            "Cache should remain bounded at MAX_CACHE_ENTRIES"
+        );
     }
 }

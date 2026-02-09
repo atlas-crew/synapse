@@ -105,11 +105,7 @@ pub struct LoginEvent {
 
 impl LoginEvent {
     /// Create a new login event.
-    pub fn new(
-        user_id: impl Into<String>,
-        timestamp_ms: u64,
-        location: GeoLocation,
-    ) -> Self {
+    pub fn new(user_id: impl Into<String>, timestamp_ms: u64, location: GeoLocation) -> Self {
         Self {
             user_id: user_id.into(),
             timestamp_ms,

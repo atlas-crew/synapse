@@ -25,13 +25,14 @@ use bytes::Bytes;
 use http::header::{HeaderName, HeaderValue, AUTHORIZATION, COOKIE, USER_AGENT};
 // WAF engine types (integrated Synapse WAF engine)
 use synapse_pingora::waf::{
-    Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest,
-    Synapse, Verdict as SynapseVerdict, BlockingMode,
+    Action as SynapseAction, BlockingMode, Header as SynapseHeader, Request as SynapseRequest,
+    Synapse, Verdict as SynapseVerdict,
 };
 // Schema learning and validation (API anomaly detection)
-use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig};
-use log::{debug, info, warn, error};
+use dashmap::DashMap;
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
+use pingora::listeners::tls::TlsSettings;
 use pingora_core::prelude::*;
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_limits::rate::Rate;
@@ -44,17 +45,15 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use dashmap::DashMap;
-use tokio::sync::oneshot;
-use pingora::listeners::tls::TlsSettings;
+use synapse_pingora::profiler::{SchemaLearner, SchemaLearnerConfig};
 use sysinfo::{Disks, System};
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 // Admin API imports
 use synapse_pingora::admin_server::{
-    start_admin_server, register_profiles_getter, register_schemas_getter, 
-    register_evaluate_callback, register_integrations_callbacks,
-    EvaluationResult, IntegrationsConfig
+    register_evaluate_callback, register_integrations_callbacks, register_profiles_getter,
+    register_schemas_getter, start_admin_server, EvaluationResult, IntegrationsConfig,
 };
 use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
@@ -62,83 +61,71 @@ use synapse_pingora::metrics::{ActiveRequestGuard, MetricsRegistry};
 
 // Phase 3: Fingerprinting (Feature Migration from risk-server)
 use synapse_pingora::fingerprint::{
-    ClientFingerprint, HttpHeaders, extract_client_fingerprint, analyze_ja4, analyze_integrity,
+    analyze_integrity, analyze_ja4, extract_client_fingerprint, ClientFingerprint, HttpHeaders,
 };
 
 // Phase 6: Security hardening (Validation)
-use synapse_pingora::validation::validate_tls_config;
 use synapse_pingora::tls::TlsManager;
+use synapse_pingora::validation::validate_tls_config;
 
 // Phase 3: Entity Tracking (Feature Migration from risk-server)
-use synapse_pingora::entity::{
-    EntityManager, EntityConfig, BlockDecision,
-};
+use synapse_pingora::entity::{BlockDecision, EntityConfig, EntityManager};
 
 // Phase 3: Tarpitting (Feature Migration from risk-server)
-use synapse_pingora::tarpit::{TarpitManager, TarpitConfig};
+use synapse_pingora::tarpit::{TarpitConfig, TarpitManager};
 
 // Phase 3: DLP Scanning (Feature Migration from risk-server)
-use synapse_pingora::dlp::{DlpScanner, DlpConfig};
+use synapse_pingora::dlp::{DlpConfig, DlpScanner};
 
 // Multi-site configuration and routing
-use synapse_pingora::vhost::{VhostMatcher, SiteConfig};
+use synapse_pingora::access::{AccessListManager, CidrRange};
+use synapse_pingora::block_log::{BlockEvent, BlockLog, IpAnonymization};
 use synapse_pingora::config::ConfigLoader;
 use synapse_pingora::config_manager::ConfigManager;
-use synapse_pingora::site_waf::{SiteWafManager, WafAction};
-use synapse_pingora::ratelimit::RateLimitManager;
-use synapse_pingora::access::{AccessListManager, CidrRange};
-use synapse_pingora::headers;
-use synapse_pingora::telemetry::{
-    TelemetryClient, TelemetryConfig, TelemetryEvent, SignalEmitter,
-};
-use synapse_pingora::telemetry::auth_coverage_aggregator::AuthCoverageAggregator;
-use synapse_pingora::signals::auth_coverage::ResponseClass;
-use synapse_pingora::utils::path_normalizer::endpoint_key;
-use synapse_pingora::utils::auth_detection::has_auth_header;
-use synapse_pingora::trap::{TrapConfig, TrapMatcher};
-use synapse_pingora::block_log::{BlockLog, BlockEvent, IpAnonymization};
 use synapse_pingora::correlation::CampaignManager;
-use synapse_pingora::shadow::{ShadowMirrorManager, MirrorPayload};
+use synapse_pingora::headers;
+use synapse_pingora::ratelimit::RateLimitManager;
+use synapse_pingora::shadow::{MirrorPayload, ShadowMirrorManager};
+use synapse_pingora::signals::auth_coverage::ResponseClass;
+use synapse_pingora::site_waf::{SiteWafManager, WafAction};
+use synapse_pingora::telemetry::auth_coverage_aggregator::AuthCoverageAggregator;
+use synapse_pingora::telemetry::{SignalEmitter, TelemetryClient, TelemetryConfig, TelemetryEvent};
+use synapse_pingora::trap::{TrapConfig, TrapMatcher};
+use synapse_pingora::utils::auth_detection::has_auth_header;
+use synapse_pingora::utils::path_normalizer::endpoint_key;
+use synapse_pingora::vhost::{SiteConfig, VhostMatcher};
 
 // Phase 5: Actor and Session State Management (previously sleeping capabilities)
-use synapse_pingora::actor::{ActorConfig, ActorManager};
-use synapse_pingora::session::{SessionConfig, SessionManager, SessionDecision};
 use parking_lot::{Mutex, RwLock};
-use sha2::{Sha256, Digest};
 use percent_encoding::percent_decode_str;
+use sha2::{Digest, Sha256};
+use synapse_pingora::actor::{ActorConfig, ActorManager};
+use synapse_pingora::session::{SessionConfig, SessionDecision, SessionManager};
 
 // CLI
 use clap::{Parser, Subcommand};
 
 // Phase 9: Crawler Detection
-use synapse_pingora::crawler::{CrawlerDetector, CrawlerConfig};
+use synapse_pingora::crawler::{CrawlerConfig, CrawlerDetector};
 
 // Phase 9: Signal Horizon Hub integration (fleet-wide threat intelligence)
-use synapse_pingora::horizon::{HorizonManager, HorizonConfig, ThreatSignal, SignalType, Severity};
+use synapse_pingora::horizon::{HorizonConfig, HorizonManager, Severity, SignalType, ThreatSignal};
 use synapse_pingora::tunnel::{
-    publish_access_log,
-    publish_waf_log,
-    LogTelemetryService,
-    TunnelClient,
-    TunnelConfig,
-    TunnelDiagService,
-    TunnelLogService,
-    TunnelShellService,
+    publish_access_log, publish_waf_log, LogTelemetryService, TunnelClient, TunnelConfig,
+    TunnelDiagService, TunnelLogService, TunnelShellService,
 };
 
 // Phase 9: Payload Profiling (bandwidth tracking and anomaly detection)
-use synapse_pingora::payload::{PayloadManager, PayloadConfig};
+use synapse_pingora::payload::{PayloadConfig, PayloadManager};
 
 // Phase 9: Trends (signal tracking and anomaly detection)
-use synapse_pingora::trends::{TrendsManager, TrendsConfig};
-use synapse_pingora::intelligence::{SignalManager, SignalManagerConfig, SignalCategory};
+use synapse_pingora::intelligence::{SignalCategory, SignalManager, SignalManagerConfig};
+use synapse_pingora::trends::{TrendsConfig, TrendsManager};
 
 // Phase 10: Interrogator System (progressive challenge escalation)
 use synapse_pingora::interrogator::{
-    ChallengeResponse, ProgressionConfig, ProgressionManager, ValidationResult,
-    CookieConfig, CookieManager,
-    JsChallengeConfig, JsChallengeManager,
-    CaptchaConfig, CaptchaManager,
+    CaptchaConfig, CaptchaManager, ChallengeResponse, CookieConfig, CookieManager,
+    JsChallengeConfig, JsChallengeManager, ProgressionConfig, ProgressionManager, ValidationResult,
 };
 
 // ============================================================================
@@ -279,7 +266,10 @@ pub struct ServerConfig {
     /// Can be a single address string or array of addresses:
     /// - Single: "0.0.0.0:6190"
     /// - Array: ["0.0.0.0:6190", "[::]:6190"]
-    #[serde(default = "default_listen", deserialize_with = "deserialize_listen_addrs")]
+    #[serde(
+        default = "default_listen",
+        deserialize_with = "deserialize_listen_addrs"
+    )]
     pub listen: Vec<String>,
     #[serde(default = "default_admin_listen")]
     pub admin_listen: String,
@@ -427,7 +417,7 @@ fn default_rps() -> usize {
 }
 
 fn default_per_ip_rps() -> usize {
-    100  // 100 RPS per IP is reasonable for most use cases
+    100 // 100 RPS per IP is reasonable for most use cases
 }
 
 fn default_enabled() -> bool {
@@ -659,8 +649,8 @@ impl Config {
             return Err(format!("Config file not found: {}", path));
         }
 
-        let contents = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read config file: {}", e))?;
+        let contents =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read config file: {}", e))?;
 
         let config: Self = serde_yaml::from_str(&contents)
             .map_err(|e| format!("Failed to parse config file: {}", e))?;
@@ -675,8 +665,12 @@ impl Config {
                 .map(|c| (c.domain.clone(), c.cert_path.clone(), c.key_path.clone()))
                 .collect();
 
-            validate_tls_config(&config.tls.cert_path, &config.tls.key_path, &per_domain_tuples)
-                .map_err(|e| format!("TLS configuration validation failed: {}", e))?;
+            validate_tls_config(
+                &config.tls.cert_path,
+                &config.tls.key_path,
+                &per_domain_tuples,
+            )
+            .map_err(|e| format!("TLS configuration validation failed: {}", e))?;
 
             info!("TLS configuration validated successfully");
         }
@@ -691,7 +685,11 @@ impl Config {
 
     /// Try to load config from default locations, fall back to defaults
     pub fn load_or_default() -> Self {
-        let paths = ["config.yaml", "config.yml", "/etc/synapse-pingora/config.yaml"];
+        let paths = [
+            "config.yaml",
+            "config.yml",
+            "/etc/synapse-pingora/config.yaml",
+        ];
 
         for path in &paths {
             if Path::new(path).exists() {
@@ -790,9 +788,8 @@ static RULES_DATA: Lazy<Option<Vec<u8>>> = Lazy::new(|| {
 // Using RwLock for concurrent access.
 // Note: In extremely high-throughput scenarios, this lock might become a contention point.
 // For 100k RPS, we might need a sharded lock or channel-based aggregation.
-static SYNAPSE: Lazy<Arc<parking_lot::RwLock<Synapse>>> = Lazy::new(|| {
-    Arc::new(parking_lot::RwLock::new(create_synapse_engine()))
-});
+static SYNAPSE: Lazy<Arc<parking_lot::RwLock<Synapse>>> =
+    Lazy::new(|| Arc::new(parking_lot::RwLock::new(create_synapse_engine())));
 
 // Global Schema Learner for API anomaly detection
 // Learns request/response JSON schemas per endpoint and validates against them.
@@ -817,7 +814,8 @@ static RULES_HASH: Lazy<Arc<RwLock<String>>> = Lazy::new(|| Arc::new(RwLock::new
 // WAF regex evaluation timeout in microseconds (prevents ReDoS attacks).
 // Default: 100ms. Configurable via server.waf_regex_timeout_ms.
 // Using AtomicU64 for lock-free access in hot path.
-static WAF_REGEX_TIMEOUT_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(100_000); // 100ms default
+static WAF_REGEX_TIMEOUT_US: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(100_000); // 100ms default
 
 /// Compute SHA256 hash of data and return as hex string.
 fn compute_hash(data: &[u8]) -> String {
@@ -836,7 +834,9 @@ thread_local! {
 /// Get a buffer from the thread-local pool or allocate a new one
 fn get_buffer() -> Vec<u8> {
     BUFFER_POOL.with(|pool| {
-        pool.borrow_mut().pop().unwrap_or_else(|| Vec::with_capacity(8192))
+        pool.borrow_mut()
+            .pop()
+            .unwrap_or_else(|| Vec::with_capacity(8192))
     })
 }
 
@@ -873,7 +873,9 @@ fn normalize_path_to_template(path: &str) -> String {
             if segment.len() == 36 && segment.chars().filter(|&c| c == '-').count() == 4 {
                 let hex_parts: Vec<&str> = segment.split('-').collect();
                 if hex_parts.len() == 5
-                    && hex_parts.iter().all(|p| p.chars().all(|c| c.is_ascii_hexdigit()))
+                    && hex_parts
+                        .iter()
+                        .all(|p| p.chars().all(|c| c.is_ascii_hexdigit()))
                 {
                     return "{id}";
                 }
@@ -915,9 +917,7 @@ fn create_synapse_engine() -> Synapse {
 
 /// Get the global rule count (from first instance)
 #[allow(dead_code)]
-static RULE_COUNT: Lazy<usize> = Lazy::new(|| {
-    SYNAPSE.read().rule_count()
-});
+static RULE_COUNT: Lazy<usize> = Lazy::new(|| SYNAPSE.read().rule_count());
 
 /// The Synapse detection engine wrapper
 pub struct DetectionEngine;
@@ -929,7 +929,13 @@ impl DetectionEngine {
     /// The timeout is configurable via `server.waf_regex_timeout_ms` in the config file.
     /// Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).
     #[inline]
-    pub fn analyze(method: &str, uri: &str, headers: &[HeaderSnapshot], body: Option<&[u8]>, client_ip: &str) -> DetectionResult {
+    pub fn analyze(
+        method: &str,
+        uri: &str,
+        headers: &[HeaderSnapshot],
+        body: Option<&[u8]>,
+        client_ip: &str,
+    ) -> DetectionResult {
         let start = Instant::now();
 
         // Build Synapse Request
@@ -1100,9 +1106,9 @@ impl Drop for RequestContext {
         // Return response buffer to pool
         let resp_buf = std::mem::take(&mut self.response_body_buffer);
         if resp_buf.capacity() > 0 {
-             return_buffer(resp_buf);
+            return_buffer(resp_buf);
         }
-        
+
         // Request body buffer might have been moved to async task, but if not, return it
         let req_buf = std::mem::take(&mut self.request_body_buffer);
         if req_buf.capacity() > 0 {
@@ -1230,7 +1236,11 @@ impl SynapseProxy {
         info!("SynapseProxy internal background tasks started");
     }
 
-    pub async fn new(backends: Vec<(String, u16)>, rps_limit: usize, tls_manager: Arc<TlsManager>) -> Self {
+    pub async fn new(
+        backends: Vec<(String, u16)>,
+        rps_limit: usize,
+        tls_manager: Arc<TlsManager>,
+    ) -> Self {
         let crawler_detector = build_crawler_detector(CrawlerConfig::default()).await;
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
@@ -1241,7 +1251,10 @@ impl SynapseProxy {
             default_per_ip_rps(), // Default per-IP limit
             Arc::new(HealthChecker::default()),
             Arc::new(MetricsRegistry::new()),
-            Arc::new(TelemetryClient::new(TelemetryConfig { enabled: false, ..TelemetryConfig::default() })),
+            Arc::new(TelemetryClient::new(TelemetryConfig {
+                enabled: false,
+                ..TelemetryConfig::default()
+            })),
             Vec::new(),
             tls_manager,
             TarpitConfig::default(),
@@ -1331,7 +1344,14 @@ impl SynapseProxy {
         }
     }
 
-    pub async fn with_entity_config(backends: Vec<(String, u16)>, rps_limit: usize, entity_config: EntityConfig, tls_manager: Arc<TlsManager>, tarpit_config: TarpitConfig, dlp_config: DlpConfig) -> Self {
+    pub async fn with_entity_config(
+        backends: Vec<(String, u16)>,
+        rps_limit: usize,
+        entity_config: EntityConfig,
+        tls_manager: Arc<TlsManager>,
+        tarpit_config: TarpitConfig,
+        dlp_config: DlpConfig,
+    ) -> Self {
         let crawler_detector = build_crawler_detector(CrawlerConfig::default()).await;
         let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
         let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
@@ -1392,15 +1412,12 @@ impl SynapseProxy {
     }
 
     fn build_auth_coverage(telemetry_client: Arc<TelemetryClient>) -> Arc<AuthCoverageAggregator> {
-        let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
-            .unwrap_or_else(|_| "synapse-default".to_string());
+        let sensor_id =
+            std::env::var("SYNAPSE_SENSOR_ID").unwrap_or_else(|_| "synapse-default".to_string());
         let tenant_id = std::env::var("SYNAPSE_TENANT_ID").ok();
         let emitter: Arc<dyn SignalEmitter> = telemetry_client;
         let auth_coverage = Arc::new(AuthCoverageAggregator::new(
-            sensor_id,
-            tenant_id,
-            emitter,
-            60,
+            sensor_id, tenant_id, emitter, 60,
         ));
         auth_coverage.clone().start_flush_task();
         auth_coverage
@@ -1509,7 +1526,12 @@ impl SynapseProxy {
             // Strip port from address (handles both IPv4 "1.2.3.4:80" and IPv6 "[::1]:80")
             if addr_str.starts_with('[') {
                 // IPv6 format: [ip]:port
-                addr_str.split(']').next().unwrap_or(&addr_str).trim_start_matches('[').to_string()
+                addr_str
+                    .split(']')
+                    .next()
+                    .unwrap_or(&addr_str)
+                    .trim_start_matches('[')
+                    .to_string()
             } else {
                 // IPv4 format: ip:port
                 addr_str.split(':').next().unwrap_or(&addr_str).to_string()
@@ -1522,11 +1544,11 @@ impl SynapseProxy {
         }
 
         // Validate that the direct connection is from a trusted proxy before trusting XFF
-        let conn_ip_trusted = conn_ip.as_ref().and_then(|ip_str| {
-            ip_str.parse::<IpAddr>().ok()
-        }).map(|ip| {
-            self.trusted_proxies.iter().any(|cidr| cidr.contains(&ip))
-        }).unwrap_or(false);
+        let conn_ip_trusted = conn_ip
+            .as_ref()
+            .and_then(|ip_str| ip_str.parse::<IpAddr>().ok())
+            .map(|ip| self.trusted_proxies.iter().any(|cidr| cidr.contains(&ip)))
+            .unwrap_or(false);
 
         if !conn_ip_trusted {
             // Connection is not from a trusted proxy - don't trust XFF headers
@@ -1577,7 +1599,7 @@ impl SynapseProxy {
     fn extract_headers(session: &Session) -> Vec<HeaderSnapshot> {
         let headers = &session.req_header().headers;
         let mut result = Vec::with_capacity(headers.len());
-        
+
         for (name, value) in headers {
             result.push((name.clone(), value.clone()));
         }
@@ -1586,7 +1608,9 @@ impl SynapseProxy {
 
     /// Resolve WAF action based on site config and detection result.
     fn resolve_waf_action(&self, ctx: &RequestContext, result: &DetectionResult) -> WafAction {
-        if let (Some(ref site), Some(ref site_waf_mgr)) = (&ctx.matched_site, &self.site_waf_manager) {
+        if let (Some(ref site), Some(ref site_waf_mgr)) =
+            (&ctx.matched_site, &self.site_waf_manager)
+        {
             let waf = site_waf_mgr.read();
             let config = waf.get_config(&site.hostname);
 
@@ -1626,7 +1650,7 @@ impl SynapseProxy {
 
     /// Resolve combined WAF actions with priority ordering.
     fn combine_waf_action(current: WafAction, next: WafAction) -> WafAction {
-        use WafAction::{Allow, Log, Challenge, Block};
+        use WafAction::{Allow, Block, Challenge, Log};
         match (current, next) {
             (Block, _) | (_, Block) => Block,
             (Challenge, _) | (_, Challenge) => Challenge,
@@ -1729,7 +1753,10 @@ impl SynapseProxy {
         if trimmed.is_empty() || trimmed.len() > 128 {
             return None;
         }
-        if !trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        if !trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        {
             return None;
         }
         Some(trimmed.to_string())
@@ -1838,11 +1865,7 @@ impl ProxyHttp for SynapseProxy {
     }
 
     /// Early request filter - runs before TLS, used for rate limiting
-    async fn early_request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<()> {
+    async fn early_request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<()> {
         // Extract client IP early (with trusted proxy validation)
         ctx.client_ip = self.get_client_ip(session);
         if let Some(raw_request_id) = session
@@ -1903,7 +1926,10 @@ impl ProxyHttp for SynapseProxy {
                 // Send 429 Too Many Requests response
                 let mut resp = ResponseHeader::build(429, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                headers::apply_security_response_headers(
+                    &mut resp,
+                    Self::is_https_request(session),
+                );
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("retry-after", "1")?;
 
@@ -1918,7 +1944,8 @@ impl ProxyHttp for SynapseProxy {
                 // Record rate limit hit in metrics
                 self.metrics_registry.record_blocked();
 
-                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(429)).into_err();
+                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(429))
+                    .into_err();
             }
         }
 
@@ -1990,7 +2017,9 @@ impl ProxyHttp for SynapseProxy {
             session.write_response_header(Box::new(resp), false).await?;
             session
                 .write_response_body(
-                    Some(Bytes::from(r#"{"error": "rate_limit_exceeded", "message": "Too Many Requests"}"#)),
+                    Some(Bytes::from(
+                        r#"{"error": "rate_limit_exceeded", "message": "Too Many Requests"}"#,
+                    )),
                     true,
                 )
                 .await?;
@@ -2014,9 +2043,18 @@ impl ProxyHttp for SynapseProxy {
                 let cookie_name = self.progression_manager.cookie_name();
 
                 // Check cookie-based challenge response
-                if let Some(cookie_header) = req_header.headers.get("cookie").and_then(|v| v.to_str().ok()) {
-                    if let Some(cookie_value) = Self::extract_cookie_value(cookie_header, cookie_name) {
-                        match self.progression_manager.validate_challenge(&actor_id, &cookie_value) {
+                if let Some(cookie_header) = req_header
+                    .headers
+                    .get("cookie")
+                    .and_then(|v| v.to_str().ok())
+                {
+                    if let Some(cookie_value) =
+                        Self::extract_cookie_value(cookie_header, cookie_name)
+                    {
+                        match self
+                            .progression_manager
+                            .validate_challenge(&actor_id, &cookie_value)
+                        {
                             ValidationResult::Valid => {
                                 ctx.challenge_validated = true;
                                 self.actor_manager.touch_actor(&actor_id);
@@ -2039,13 +2077,21 @@ impl ProxyHttp for SynapseProxy {
                                 let body = r#"{"error": "challenge_failed"}"#;
                                 let mut resp = ResponseHeader::build(403, None)?;
                                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                                headers::apply_security_response_headers(
+                                    &mut resp,
+                                    Self::is_https_request(session),
+                                );
                                 resp.insert_header("content-type", "application/json")?;
                                 resp.insert_header("content-length", body.len().to_string())?;
                                 session.write_response_header(Box::new(resp), false).await?;
-                                session.write_response_body(Some(Bytes::from(body)), true).await?;
+                                session
+                                    .write_response_body(Some(Bytes::from(body)), true)
+                                    .await?;
                                 self.metrics_registry.record_blocked();
-                                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                                return pingora_core::Error::new(
+                                    pingora_core::ErrorType::HTTPStatus(403),
+                                )
+                                .into_err();
                             }
                             ValidationResult::Expired => {
                                 self.signal_manager.record_event(
@@ -2058,13 +2104,21 @@ impl ProxyHttp for SynapseProxy {
                                 let body = r#"{"error": "challenge_expired"}"#;
                                 let mut resp = ResponseHeader::build(403, None)?;
                                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                                headers::apply_security_response_headers(
+                                    &mut resp,
+                                    Self::is_https_request(session),
+                                );
                                 resp.insert_header("content-type", "application/json")?;
                                 resp.insert_header("content-length", body.len().to_string())?;
                                 session.write_response_header(Box::new(resp), false).await?;
-                                session.write_response_body(Some(Bytes::from(body)), true).await?;
+                                session
+                                    .write_response_body(Some(Bytes::from(body)), true)
+                                    .await?;
                                 self.metrics_registry.record_blocked();
-                                return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                                return pingora_core::Error::new(
+                                    pingora_core::ErrorType::HTTPStatus(403),
+                                )
+                                .into_err();
                             }
                             ValidationResult::NotFound => {}
                         }
@@ -2073,10 +2127,15 @@ impl ProxyHttp for SynapseProxy {
 
                 // Check query parameter for JS challenge response
                 if let Some(query) = req_header.uri.query() {
-                    if let Some(challenge_kind) = Self::extract_query_param(query, "synapse_challenge") {
+                    if let Some(challenge_kind) =
+                        Self::extract_query_param(query, "synapse_challenge")
+                    {
                         if challenge_kind == "js" {
                             if let Some(nonce) = Self::extract_query_param(query, "synapse_nonce") {
-                                match self.progression_manager.validate_challenge(&actor_id, &nonce) {
+                                match self
+                                    .progression_manager
+                                    .validate_challenge(&actor_id, &nonce)
+                                {
                                     ValidationResult::Valid => {
                                         ctx.challenge_validated = true;
                                         self.actor_manager.touch_actor(&actor_id);
@@ -2099,13 +2158,26 @@ impl ProxyHttp for SynapseProxy {
                                         let body = r#"{"error": "challenge_failed"}"#;
                                         let mut resp = ResponseHeader::build(403, None)?;
                                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                                        headers::apply_security_response_headers(
+                                            &mut resp,
+                                            Self::is_https_request(session),
+                                        );
                                         resp.insert_header("content-type", "application/json")?;
-                                        resp.insert_header("content-length", body.len().to_string())?;
-                                        session.write_response_header(Box::new(resp), false).await?;
-                                        session.write_response_body(Some(Bytes::from(body)), true).await?;
+                                        resp.insert_header(
+                                            "content-length",
+                                            body.len().to_string(),
+                                        )?;
+                                        session
+                                            .write_response_header(Box::new(resp), false)
+                                            .await?;
+                                        session
+                                            .write_response_body(Some(Bytes::from(body)), true)
+                                            .await?;
                                         self.metrics_registry.record_blocked();
-                                        return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                                        return pingora_core::Error::new(
+                                            pingora_core::ErrorType::HTTPStatus(403),
+                                        )
+                                        .into_err();
                                     }
                                     ValidationResult::Expired => {
                                         self.signal_manager.record_event(
@@ -2118,13 +2190,26 @@ impl ProxyHttp for SynapseProxy {
                                         let body = r#"{"error": "challenge_expired"}"#;
                                         let mut resp = ResponseHeader::build(403, None)?;
                                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                                        headers::apply_security_response_headers(
+                                            &mut resp,
+                                            Self::is_https_request(session),
+                                        );
                                         resp.insert_header("content-type", "application/json")?;
-                                        resp.insert_header("content-length", body.len().to_string())?;
-                                        session.write_response_header(Box::new(resp), false).await?;
-                                        session.write_response_body(Some(Bytes::from(body)), true).await?;
+                                        resp.insert_header(
+                                            "content-length",
+                                            body.len().to_string(),
+                                        )?;
+                                        session
+                                            .write_response_header(Box::new(resp), false)
+                                            .await?;
+                                        session
+                                            .write_response_body(Some(Bytes::from(body)), true)
+                                            .await?;
                                         self.metrics_registry.record_blocked();
-                                        return pingora_core::Error::new(pingora_core::ErrorType::HTTPStatus(403)).into_err();
+                                        return pingora_core::Error::new(
+                                            pingora_core::ErrorType::HTTPStatus(403),
+                                        )
+                                        .into_err();
                                     }
                                     ValidationResult::NotFound => {}
                                 }
@@ -2141,11 +2226,7 @@ impl ProxyHttp for SynapseProxy {
     /// Main request filter - runs detection engine
     /// Returns Ok(true) if we handled the request (blocked)
     /// Returns Ok(false) to continue to upstream
-    async fn request_filter(
-        &self,
-        session: &mut Session,
-        ctx: &mut Self::CTX,
-    ) -> Result<bool> {
+    async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         let req_header = session.req_header();
 
         // Extract request info for detection
@@ -2196,12 +2277,15 @@ impl ProxyHttp for SynapseProxy {
 
                         let mut resp = ResponseHeader::build(403, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                        headers::apply_security_response_headers(
+                            &mut resp,
+                            Self::is_https_request(session),
+                        );
                         resp.insert_header("content-type", "application/json")?;
-                        
+
                         session.write_response_header(Box::new(resp), false).await?;
                         session.write_response_body(Some(Bytes::from("{\"error\": \"access_denied\", \"message\": \"IP address not allowed\"}")), true).await?;
-                        
+
                         self.metrics_registry.record_blocked();
                         return Ok(true);
                     }
@@ -2229,11 +2313,16 @@ impl ProxyHttp for SynapseProxy {
                 let body = r#"{"error": "access_denied"}"#;
                 let mut resp = ResponseHeader::build(403, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                headers::apply_security_response_headers(
+                    &mut resp,
+                    Self::is_https_request(session),
+                );
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("content-length", body.len().to_string())?;
                 session.write_response_header(Box::new(resp), false).await?;
-                session.write_response_body(Some(Bytes::from(body)), true).await?;
+                session
+                    .write_response_body(Some(Bytes::from(body)), true)
+                    .await?;
 
                 self.metrics_registry.record_blocked();
                 return Ok(true);
@@ -2282,10 +2371,7 @@ impl ProxyHttp for SynapseProxy {
 
             session.write_response_header(Box::new(resp), false).await?;
             session
-                .write_response_body(
-                    Some(Bytes::from(response_body)),
-                    true,
-                )
+                .write_response_body(Some(Bytes::from(response_body)), true)
                 .await?;
 
             debug!(
@@ -2309,7 +2395,8 @@ impl ProxyHttp for SynapseProxy {
                 // Apply maximum risk to entity
                 if trap_matcher.config().apply_max_risk {
                     let reason = format!("Accessed trap: {} (pattern: {})", uri, trap_pattern);
-                    self.entity_manager.apply_external_risk(client_ip, 100.0, &reason);
+                    self.entity_manager
+                        .apply_external_risk(client_ip, 100.0, &reason);
                 }
 
                 // Extended tarpitting (waste attacker's time)
@@ -2319,20 +2406,30 @@ impl ProxyHttp for SynapseProxy {
 
                 // Send telemetry alert
                 if trap_matcher.config().alert_telemetry && self.telemetry_client.is_enabled() {
-                    let _ = self.telemetry_client.report(TelemetryEvent::WafBlock {
-                        request_id: Some(ctx.request_id.clone()),
-                        rule_id: format!("TRAP_HIT:{}", trap_pattern),
-                        severity: "CRITICAL".to_string(),
-                        client_ip: client_ip.to_string(),
-                        site: ctx.matched_site.as_ref().map(|s| s.hostname.clone()).unwrap_or_default(),
-                        path: uri.clone(),
-                    }).await;
+                    let _ = self
+                        .telemetry_client
+                        .report(TelemetryEvent::WafBlock {
+                            request_id: Some(ctx.request_id.clone()),
+                            rule_id: format!("TRAP_HIT:{}", trap_pattern),
+                            severity: "CRITICAL".to_string(),
+                            client_ip: client_ip.to_string(),
+                            site: ctx
+                                .matched_site
+                                .as_ref()
+                                .map(|s| s.hostname.clone())
+                                .unwrap_or_default(),
+                            path: uri.clone(),
+                        })
+                        .await;
                 }
 
                 // Return 404 (don't reveal trap existence)
                 let mut resp = ResponseHeader::build(404, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                headers::apply_security_response_headers(
+                    &mut resp,
+                    Self::is_https_request(session),
+                );
                 session.write_response_header(Box::new(resp), true).await?;
                 self.metrics_registry.record_blocked();
                 return Ok(true);
@@ -2395,9 +2492,11 @@ impl ProxyHttp for SynapseProxy {
             }) {
                 if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
                     let crawler_result = self.crawler_detector.verify(user_agent, ip_addr).await;
-                    
+
                     // Handle bad bots (immediate block)
-                    if crawler_result.bad_bot_match.is_some() && self.crawler_detector.should_block_bad_bots() {
+                    if crawler_result.bad_bot_match.is_some()
+                        && self.crawler_detector.should_block_bad_bots()
+                    {
                         let bot_name = crawler_result.bad_bot_match.as_deref().unwrap_or("unknown");
                         warn!("Blocking bad bot: {} from {}", bot_name, client_ip);
 
@@ -2423,24 +2522,29 @@ impl ProxyHttp for SynapseProxy {
                         );
 
                         if self.telemetry_client.is_enabled() {
-                            let site = ctx.matched_site.as_ref()
+                            let site = ctx
+                                .matched_site
+                                .as_ref()
                                 .map(|s| s.hostname.clone())
                                 .unwrap_or_else(|| "_default".to_string());
-                            let _ = self.telemetry_client.report(TelemetryEvent::WafBlock {
-                                request_id: Some(ctx.request_id.clone()),
-                                rule_id: format!("BAD_BOT:{}", bot_name),
-                                severity: "critical".to_string(),
-                                client_ip: client_ip.to_string(),
-                                site,
-                                path: uri.clone(),
-                            }).await;
+                            let _ = self
+                                .telemetry_client
+                                .report(TelemetryEvent::WafBlock {
+                                    request_id: Some(ctx.request_id.clone()),
+                                    rule_id: format!("BAD_BOT:{}", bot_name),
+                                    severity: "critical".to_string(),
+                                    client_ip: client_ip.to_string(),
+                                    site,
+                                    path: uri.clone(),
+                                })
+                                .await;
                         }
-                        
+
                         self.block_log.record(BlockEvent::new(
                             client_ip.to_string(),
                             method.to_string(),
                             uri.clone(),
-                            100, // Max risk
+                            100,    // Max risk
                             vec![], // No rule ID for bot block
                             reason,
                             ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
@@ -2449,30 +2553,44 @@ impl ProxyHttp for SynapseProxy {
                         let body = r#"{"error": "access_denied"}"#;
                         let mut resp = ResponseHeader::build(403, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                        headers::apply_security_response_headers(
+                            &mut resp,
+                            Self::is_https_request(session),
+                        );
                         resp.insert_header("content-type", "application/json")?;
                         resp.insert_header("content-length", body.len().to_string())?;
                         session.write_response_header(Box::new(resp), false).await?;
                         // Security: Generic error message to prevent information disclosure
-                        session.write_response_body(Some(Bytes::from(body)), true).await?;
+                        session
+                            .write_response_body(Some(Bytes::from(body)), true)
+                            .await?;
                         self.metrics_registry.record_blocked();
                         return Ok(true);
                     }
 
                     // Handle suspicious crawlers (failed verification)
                     if crawler_result.suspicious {
-                        warn!("Suspicious crawler from {}: {:?}", client_ip, crawler_result.suspicion_reasons);
+                        warn!(
+                            "Suspicious crawler from {}: {:?}",
+                            client_ip, crawler_result.suspicion_reasons
+                        );
                         // Apply risk penalty
                         if self.entity_manager.is_enabled() {
                             self.entity_manager.apply_external_risk(
                                 client_ip,
                                 40.0, // Significant risk penalty
-                                &format!("suspicious_crawler: {:?}", crawler_result.suspicion_reasons)
+                                &format!(
+                                    "suspicious_crawler: {:?}",
+                                    crawler_result.suspicion_reasons
+                                ),
                             );
                         }
                     } else if crawler_result.verified {
                         // Whitelist verified legitimate crawlers (optional: skip WAF?)
-                        debug!("Verified crawler: {:?} from {}", crawler_result.crawler_name, client_ip);
+                        debug!(
+                            "Verified crawler: {:?} from {}",
+                            crawler_result.crawler_name, client_ip
+                        );
                     }
                 }
             }
@@ -2513,16 +2631,17 @@ impl ProxyHttp for SynapseProxy {
                 // In production, each rule would have its own risk value
                 let base_risk = result.risk_score as f64 / result.matched_rules.len().max(1) as f64;
                 if let Some(risk_result) = self.entity_manager.apply_rule_risk(
-                    client_ip,
-                    rule_id,
-                    base_risk,
-                    true, // enable repeat offender multiplier
+                    client_ip, rule_id, base_risk, true, // enable repeat offender multiplier
                 ) {
                     ctx.entity_risk = risk_result.new_risk;
                     debug!(
                         "Entity {} rule {} risk: base={:.1} x{:.2} = {:.1}, total={:.1}",
-                        client_ip, rule_id, risk_result.base_risk, risk_result.multiplier,
-                        risk_result.final_risk, risk_result.new_risk
+                        client_ip,
+                        rule_id,
+                        risk_result.base_risk,
+                        risk_result.multiplier,
+                        risk_result.final_risk,
+                        risk_result.new_risk
                     );
                 }
             }
@@ -2572,11 +2691,10 @@ impl ProxyHttp for SynapseProxy {
                 }
 
                 // 2. Check for rapid fingerprint changes (bot behavior)
-                if let Some(reputation) = self.entity_manager.check_ja4_reputation(
-                    client_ip,
-                    &ja4.raw,
-                    now_ms,
-                ) {
+                if let Some(reputation) = self
+                    .entity_manager
+                    .check_ja4_reputation(client_ip, &ja4.raw, now_ms)
+                {
                     if reputation.rapid_changes {
                         let change_risk = 40.0;
                         warn!(
@@ -2587,7 +2705,10 @@ impl ProxyHttp for SynapseProxy {
                             SignalCategory::Anomaly,
                             "ja4_rapid_change",
                             Some(client_ip.to_string()),
-                            Some(format!("JA4 changed {} times in 60s", reputation.change_count)),
+                            Some(format!(
+                                "JA4 changed {} times in 60s",
+                                reputation.change_count
+                            )),
                             serde_json::json!({ "change_count": reputation.change_count }),
                         );
                         ctx.entity_risk += change_risk;
@@ -2629,7 +2750,7 @@ impl ProxyHttp for SynapseProxy {
                         "issues": integrity.inconsistencies
                     }),
                 );
-                
+
                 ctx.entity_risk += integrity.suspicion_score as f64;
                 self.entity_manager.apply_external_risk(
                     client_ip,
@@ -2644,16 +2765,16 @@ impl ProxyHttp for SynapseProxy {
         // Actors are correlated via IP + fingerprint (unlike EntityManager's simple IP-based tracking)
         if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
             // Get or create actor based on IP + fingerprint correlation
-            let actor_id = self.actor_manager.get_or_create_actor(
-                ip_addr,
-                fingerprint.ja4.as_ref().map(|j| j.raw.as_str()),
-            );
+            let actor_id = self
+                .actor_manager
+                .get_or_create_actor(ip_addr, fingerprint.ja4.as_ref().map(|j| j.raw.as_str()));
             ctx.actor_id = Some(actor_id.clone());
 
             // Record rule matches to actor's history
             for &rule_id in &result.matched_rules {
                 let category = categorize_rule_id(rule_id);
-                let risk_contribution = result.risk_score as f64 / result.matched_rules.len().max(1) as f64;
+                let risk_contribution =
+                    result.risk_score as f64 / result.matched_rules.len().max(1) as f64;
                 self.actor_manager.record_rule_match(
                     &actor_id,
                     &format!("rule_{}", rule_id),
@@ -2691,7 +2812,10 @@ impl ProxyHttp for SynapseProxy {
                 let body = r#"{"error": "access_denied"}"#;
                 let mut resp = ResponseHeader::build(403, None)?;
                 Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                headers::apply_security_response_headers(
+                    &mut resp,
+                    Self::is_https_request(session),
+                );
                 resp.insert_header("content-type", "application/json")?;
                 resp.insert_header("content-length", body.len().to_string())?;
                 session.write_response_header(Box::new(resp), false).await?;
@@ -2740,18 +2864,24 @@ impl ProxyHttp for SynapseProxy {
 
                 if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
                     let ja4_str = fingerprint.ja4.as_ref().map(|j| j.raw.as_str());
-                    let session_decision = self.session_manager.validate_request(
-                        &token_hash,
-                        ip_addr,
-                        ja4_str,
-                    );
+                    let session_decision =
+                        self.session_manager
+                            .validate_request(&token_hash, ip_addr, ja4_str);
 
                     match session_decision {
                         SessionDecision::Valid => {
-                            debug!("Session validated for {} (token_hash: {})", client_ip, &token_hash[..8]);
+                            debug!(
+                                "Session validated for {} (token_hash: {})",
+                                client_ip,
+                                &token_hash[..8]
+                            );
                         }
                         SessionDecision::New => {
-                            debug!("New session created for {} (token_hash: {})", client_ip, &token_hash[..8]);
+                            debug!(
+                                "New session created for {} (token_hash: {})",
+                                client_ip,
+                                &token_hash[..8]
+                            );
                         }
                         SessionDecision::Suspicious(alert) => {
                             warn!(
@@ -2767,10 +2897,19 @@ impl ProxyHttp for SynapseProxy {
                             );
                         }
                         SessionDecision::Expired => {
-                            debug!("Session expired for {} (token_hash: {})", client_ip, &token_hash[..8]);
+                            debug!(
+                                "Session expired for {} (token_hash: {})",
+                                client_ip,
+                                &token_hash[..8]
+                            );
                         }
                         SessionDecision::Invalid(reason) => {
-                            warn!("Invalid session for {}: {} (token_hash: {})", client_ip, reason, &token_hash[..8]);
+                            warn!(
+                                "Invalid session for {}: {} (token_hash: {})",
+                                client_ip,
+                                reason,
+                                &token_hash[..8]
+                            );
                         }
                     }
                 }
@@ -2807,7 +2946,9 @@ impl ProxyHttp for SynapseProxy {
                 user_agent,
                 authorization,
                 Some(client_ip),
-                ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.as_str())),
+                ctx.fingerprint
+                    .as_ref()
+                    .and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.as_str())),
                 ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.as_str()),
                 None, // last_request_time - not tracked yet
             );
@@ -2827,7 +2968,10 @@ impl ProxyHttp for SynapseProxy {
             if tarpit_decision.is_tarpitted {
                 info!(
                     "Tarpit applied: {} delay={}ms level={} hits={}",
-                    client_ip, tarpit_decision.delay_ms, tarpit_decision.level, tarpit_decision.hit_count
+                    client_ip,
+                    tarpit_decision.delay_ms,
+                    tarpit_decision.level,
+                    tarpit_decision.hit_count
                 );
                 self.signal_manager.record_event(
                     SignalCategory::Behavior,
@@ -2954,13 +3098,18 @@ impl ProxyHttp for SynapseProxy {
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(200, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                        headers::apply_security_response_headers(
+                            &mut resp,
+                            Self::is_https_request(session),
+                        );
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
                         resp.insert_header("x-challenge-level", "2")?;
                         resp.insert_header("x-challenge-type", "js_pow")?;
                         session.write_response_header(Box::new(resp), false).await?;
-                        session.write_response_body(Some(Bytes::from(html)), true).await?;
+                        session
+                            .write_response_body(Some(Bytes::from(html)), true)
+                            .await?;
                         return Ok(true);
                     }
 
@@ -2974,13 +3123,18 @@ impl ProxyHttp for SynapseProxy {
                         ctx.detection = Some(detection.clone());
                         let mut resp = ResponseHeader::build(200, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                        headers::apply_security_response_headers(
+                            &mut resp,
+                            Self::is_https_request(session),
+                        );
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("cache-control", "no-cache, no-store, must-revalidate")?;
                         resp.insert_header("x-challenge-level", "3")?;
                         resp.insert_header("x-challenge-type", "captcha")?;
                         session.write_response_header(Box::new(resp), false).await?;
-                        session.write_response_body(Some(Bytes::from(html)), true).await?;
+                        session
+                            .write_response_body(Some(Bytes::from(html)), true)
+                            .await?;
                         return Ok(true);
                     }
 
@@ -3014,13 +3168,18 @@ impl ProxyHttp for SynapseProxy {
                         let body_len = block_html.len();
                         let mut resp = ResponseHeader::build(403, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                        headers::apply_security_response_headers(
+                            &mut resp,
+                            Self::is_https_request(session),
+                        );
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("content-length", body_len.to_string())?;
                         resp.insert_header("x-challenge-level", "4")?;
                         resp.insert_header("x-challenge-type", "tarpit")?;
                         session.write_response_header(Box::new(resp), false).await?;
-                        session.write_response_body(Some(Bytes::from(block_html)), true).await?;
+                        session
+                            .write_response_body(Some(Bytes::from(block_html)), true)
+                            .await?;
                         return Ok(true);
                     }
 
@@ -3052,13 +3211,18 @@ impl ProxyHttp for SynapseProxy {
                         let body_len = html.len();
                         let mut resp = ResponseHeader::build(status_code, None)?;
                         Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                        headers::apply_security_response_headers(&mut resp, Self::is_https_request(session));
+                        headers::apply_security_response_headers(
+                            &mut resp,
+                            Self::is_https_request(session),
+                        );
                         resp.insert_header("content-type", "text/html; charset=utf-8")?;
                         resp.insert_header("content-length", body_len.to_string())?;
                         resp.insert_header("x-challenge-level", "5")?;
                         resp.insert_header("x-challenge-type", "block")?;
                         session.write_response_header(Box::new(resp), false).await?;
-                        session.write_response_body(Some(Bytes::from(html)), true).await?;
+                        session
+                            .write_response_body(Some(Bytes::from(html)), true)
+                            .await?;
                         return Ok(true);
                     }
                 }
@@ -3070,12 +3234,19 @@ impl ProxyHttp for SynapseProxy {
         // Fire-and-forget pattern: uses tokio::spawn to avoid impacting production latency
         if let Some(ref shadow_manager) = self.shadow_mirror_manager {
             // Get site-specific shadow config or skip if not configured
-            let shadow_config = ctx.matched_site.as_ref().and_then(|site| site.shadow_mirror.as_ref());
+            let shadow_config = ctx
+                .matched_site
+                .as_ref()
+                .and_then(|site| site.shadow_mirror.as_ref());
 
             if let Some(config) = shadow_config {
-                if config.enabled && shadow_manager.should_mirror(result.risk_score as f32, client_ip) {
+                if config.enabled
+                    && shadow_manager.should_mirror(result.risk_score as f32, client_ip)
+                {
                     // Build mirror payload with request context
-                    let site_name = ctx.matched_site.as_ref()
+                    let site_name = ctx
+                        .matched_site
+                        .as_ref()
                         .map(|s| s.hostname.clone())
                         .unwrap_or_else(|| "unknown".to_string());
 
@@ -3094,9 +3265,19 @@ impl ProxyHttp for SynapseProxy {
                         site_name,
                         sensor_id,
                     )
-                    .with_ja4(ctx.fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.clone())))
+                    .with_ja4(
+                        ctx.fingerprint
+                            .as_ref()
+                            .and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.clone())),
+                    )
                     .with_ja4h(ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.clone()))
-                    .with_rules(result.matched_rules.iter().map(|r| format!("rule_{}", r)).collect())
+                    .with_rules(
+                        result
+                            .matched_rules
+                            .iter()
+                            .map(|r| format!("rule_{}", r))
+                            .collect(),
+                    )
                     .with_headers(
                         headers
                             .iter()
@@ -3196,17 +3377,20 @@ impl ProxyHttp for SynapseProxy {
                 let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
 
                 let result = DetectionEngine::analyze(
-                    method, 
-                    &uri, 
-                    &ctx.headers, 
-                    Some(&ctx.request_body_buffer), 
-                    client_ip
+                    method,
+                    &uri,
+                    &ctx.headers,
+                    Some(&ctx.request_body_buffer),
+                    client_ip,
                 );
 
                 if result.blocked {
                     warn!(
                         "BLOCKED (Body): {} from {} - risk={}, rules={:?}, reason={}",
-                        uri, client_ip, result.risk_score, result.matched_rules,
+                        uri,
+                        client_ip,
+                        result.risk_score,
+                        result.matched_rules,
                         result.block_reason.as_deref().unwrap_or("unknown")
                     );
 
@@ -3217,7 +3401,10 @@ impl ProxyHttp for SynapseProxy {
                         uri.clone(),
                         result.risk_score,
                         result.matched_rules.clone(),
-                        result.block_reason.clone().unwrap_or_else(|| "body_payload".to_string()),
+                        result
+                            .block_reason
+                            .clone()
+                            .unwrap_or_else(|| "body_payload".to_string()),
                         ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
                     ));
 
@@ -3229,12 +3416,19 @@ impl ProxyHttp for SynapseProxy {
                     let body = r#"{"error": "access_denied"}"#;
                     let mut resp = ResponseHeader::build(403, None)?;
                     Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                    headers::apply_security_response_headers(&mut resp, Self::is_https_request(_session));
+                    headers::apply_security_response_headers(
+                        &mut resp,
+                        Self::is_https_request(_session),
+                    );
                     resp.insert_header("content-type", "application/json")?;
                     resp.insert_header("content-length", body.len().to_string())?;
-                    _session.write_response_header(Box::new(resp), false).await?;
-                    _session.write_response_body(Some(Bytes::from(body)), true).await?;
-                    
+                    _session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    _session
+                        .write_response_body(Some(Bytes::from(body)), true)
+                        .await?;
+
                     // We can't easily abort the upstream request here without returning an error
                     // But returning an error might cause Pingora to log a 502/error
                     // Since we wrote the response, returning Ok(()) might be ambiguous
@@ -3245,14 +3439,17 @@ impl ProxyHttp for SynapseProxy {
 
             // Schema Learning and Validation (API Anomaly Detection)
             // Only process JSON content types for schema learning
-            let is_json_content = ctx.request_content_type
+            let is_json_content = ctx
+                .request_content_type
                 .as_ref()
                 .map(|ct| ct.contains("json"))
                 .unwrap_or(false);
 
             if is_json_content {
                 // Try to parse the body as JSON
-                if let Ok(json_body) = serde_json::from_slice::<serde_json::Value>(&ctx.request_body_buffer) {
+                if let Ok(json_body) =
+                    serde_json::from_slice::<serde_json::Value>(&ctx.request_body_buffer)
+                {
                     let req_header = _session.req_header();
                     let uri = req_header.uri.path();
 
@@ -3266,7 +3463,8 @@ impl ProxyHttp for SynapseProxy {
                     SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
 
                     // Schema validation: check for anomalies against learned baseline
-                    let validation_result = SCHEMA_LEARNER.validate_request(&template_path, &json_body);
+                    let validation_result =
+                        SCHEMA_LEARNER.validate_request(&template_path, &json_body);
                     if !validation_result.is_valid() {
                         // Calculate risk contribution from schema violations
                         let severity_score = validation_result.total_score.min(25) as f32;
@@ -3310,11 +3508,11 @@ impl ProxyHttp for SynapseProxy {
             if self.dlp_scanner.is_enabled() {
                 // Take ownership of the buffer to send to the async task
                 let body_data = ctx.request_body_buffer.clone(); // Clone because we might need it? No, we can take it if we are sure WAF is done.
-                // Actually, we just ran WAF. We can take it now.
-                // But wait, `ctx.request_body_buffer` is `Vec<u8>`. `mem::take` works.
-                // But we used it above. So we must clone or restructure.
-                // Let's just clone for the async task, it's safer.
-                
+                                                                 // Actually, we just ran WAF. We can take it now.
+                                                                 // But wait, `ctx.request_body_buffer` is `Vec<u8>`. `mem::take` works.
+                                                                 // But we used it above. So we must clone or restructure.
+                                                                 // Let's just clone for the async task, it's safer.
+
                 let scanner = Arc::clone(&self.dlp_scanner);
                 let client_ip = ctx.client_ip.clone();
 
@@ -3368,8 +3566,7 @@ impl ProxyHttp for SynapseProxy {
                     if scan_result.truncated {
                         debug!(
                             "DLP: Truncated {} bytes to {} for inspection",
-                            scan_result.original_length,
-                            scan_result.content_length
+                            scan_result.original_length, scan_result.content_length
                         );
                     }
 
@@ -3389,7 +3586,8 @@ impl ProxyHttp for SynapseProxy {
 
         if end_of_stream && ctx.body_bytes_seen > 0 {
             // Record bandwidth metrics for the request body
-            self.metrics_registry.record_request_bandwidth(ctx.body_bytes_seen as u64);
+            self.metrics_registry
+                .record_request_bandwidth(ctx.body_bytes_seen as u64);
 
             info!(
                 "Request body complete: {} bytes from {:?}, DLP scan spawned, request_id={}",
@@ -3410,7 +3608,8 @@ impl ProxyHttp for SynapseProxy {
         if let Some(ref site) = ctx.matched_site {
             if !site.upstreams.is_empty() {
                 // Parse and round-robin through site's upstreams
-                let idx = self.backend_counter.fetch_add(1, Ordering::Relaxed) % site.upstreams.len();
+                let idx =
+                    self.backend_counter.fetch_add(1, Ordering::Relaxed) % site.upstreams.len();
                 let upstream = &site.upstreams[idx];
 
                 // Parse "host:port" format
@@ -3429,7 +3628,11 @@ impl ProxyHttp for SynapseProxy {
                 );
 
                 let tls = site.tls_enabled;
-                let sni = if tls { site.hostname.clone() } else { String::new() };
+                let sni = if tls {
+                    site.hostname.clone()
+                } else {
+                    String::new()
+                };
                 let peer = HttpPeer::new((&host as &str, port), tls, sni);
                 return Ok(Box::new(peer));
             }
@@ -3480,7 +3683,10 @@ impl ProxyHttp for SynapseProxy {
                 }
                 Err(_) => {
                     // Task was cancelled or panicked
-                    warn!("DLP scan task failed or was cancelled, request_id={}", ctx.request_id);
+                    warn!(
+                        "DLP scan task failed or was cancelled, request_id={}",
+                        ctx.request_id
+                    );
                 }
             }
         }
@@ -3525,15 +3731,17 @@ impl ProxyHttp for SynapseProxy {
 
         // Phase 3: Add entity tracking headers for dual-running validation
         // These headers allow risk-server to compare its entity tracking with Pingora's
-        upstream_request.insert_header(
-            "X-Entity-Risk-Pingora",
-            format!("{:.1}", ctx.entity_risk),
-        )?;
+        upstream_request
+            .insert_header("X-Entity-Risk-Pingora", format!("{:.1}", ctx.entity_risk))?;
 
         if let Some(ref block_decision) = ctx.entity_blocked {
             upstream_request.insert_header(
                 "X-Entity-Blocked-Pingora",
-                if block_decision.blocked { "true" } else { "false" },
+                if block_decision.blocked {
+                    "true"
+                } else {
+                    "false"
+                },
             )?;
             if let Some(ref reason) = block_decision.reason {
                 upstream_request.insert_header("X-Entity-Block-Reason-Pingora", reason)?;
@@ -3542,14 +3750,9 @@ impl ProxyHttp for SynapseProxy {
 
         // Phase 3: Add tarpit headers for dual-running validation
         // These headers allow risk-server to compare its tarpit calculations with Pingora's
-        upstream_request.insert_header(
-            "X-Tarpit-Delay-Pingora-Ms",
-            ctx.tarpit_delay_ms.to_string(),
-        )?;
-        upstream_request.insert_header(
-            "X-Tarpit-Level-Pingora",
-            ctx.tarpit_level.to_string(),
-        )?;
+        upstream_request
+            .insert_header("X-Tarpit-Delay-Pingora-Ms", ctx.tarpit_delay_ms.to_string())?;
+        upstream_request.insert_header("X-Tarpit-Level-Pingora", ctx.tarpit_level.to_string())?;
 
         // Phase 4: Add request-side DLP headers for dual-running validation
         // These headers allow risk-server to compare its DLP scanning with Pingora's
@@ -3558,10 +3761,8 @@ impl ProxyHttp for SynapseProxy {
             ctx.request_dlp_match_count.to_string(),
         )?;
         if !ctx.request_dlp_types.is_empty() {
-            upstream_request.insert_header(
-                "X-DLP-Request-Types-Pingora",
-                &ctx.request_dlp_types,
-            )?;
+            upstream_request
+                .insert_header("X-DLP-Request-Types-Pingora", &ctx.request_dlp_types)?;
         }
 
         Ok(())
@@ -3573,9 +3774,11 @@ impl ProxyHttp for SynapseProxy {
         session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
-    ) -> Result<()>
-    {
-        headers::apply_security_response_headers(upstream_response, Self::is_https_request(session));
+    ) -> Result<()> {
+        headers::apply_security_response_headers(
+            upstream_response,
+            Self::is_https_request(session),
+        );
         upstream_response.insert_header("X-Request-ID", ctx.request_id.as_str())?;
         // Extract Content-Type for response schema validation
         ctx.response_content_type = upstream_response
@@ -3635,7 +3838,8 @@ impl ProxyHttp for SynapseProxy {
 
         // Record response bandwidth on end of stream
         if end_of_stream && !ctx.response_body_buffer.is_empty() {
-            self.metrics_registry.record_response_bandwidth(ctx.response_body_buffer.len() as u64);
+            self.metrics_registry
+                .record_response_bandwidth(ctx.response_body_buffer.len() as u64);
         }
 
         // Scan on end of stream
@@ -3658,7 +3862,8 @@ impl ProxyHttp for SynapseProxy {
                 // Record violations for dashboard
                 let client_ip = ctx.client_ip.as_deref();
                 let path = ctx.request_path.as_deref().unwrap_or("/");
-                self.dlp_scanner.record_violations(&scan_result, client_ip, path);
+                self.dlp_scanner
+                    .record_violations(&scan_result, client_ip, path);
 
                 warn!(
                     "DLP: {} matches found in response ({} bytes, {}μs) - types: {}",
@@ -3690,16 +3895,21 @@ impl ProxyHttp for SynapseProxy {
         // that might indicate compromise or data exfiltration
         if end_of_stream && !ctx.response_body_buffer.is_empty() {
             // Check if response is JSON
-            let is_json_response = ctx.response_content_type
+            let is_json_response = ctx
+                .response_content_type
                 .as_ref()
                 .map(|ct| ct.contains("json"))
                 .unwrap_or(false);
 
             if is_json_response {
                 // Try to parse the response as JSON
-                if let Ok(json_body) = serde_json::from_slice::<serde_json::Value>(&ctx.response_body_buffer) {
+                if let Ok(json_body) =
+                    serde_json::from_slice::<serde_json::Value>(&ctx.response_body_buffer)
+                {
                     // Get request path from context for template mapping
-                    let template_path = ctx.request_path.as_deref()
+                    let template_path = ctx
+                        .request_path
+                        .as_deref()
                         .map(normalize_path_to_template)
                         .unwrap_or_default();
 
@@ -3710,7 +3920,8 @@ impl ProxyHttp for SynapseProxy {
 
                     // Schema validation: check for anomalies in backend responses
                     // This helps detect backend compromise or data exfiltration
-                    let validation_result = SCHEMA_LEARNER.validate_response(&template_path, &json_body);
+                    let validation_result =
+                        SCHEMA_LEARNER.validate_response(&template_path, &json_body);
                     if !validation_result.is_valid() {
                         // Response schema violations are logged but not added to risk score
                         // since the entity has already received the response
@@ -3775,7 +3986,9 @@ impl ProxyHttp for SynapseProxy {
 
         // Phase 3: Record per-request telemetry for HTTP transaction history
         if self.telemetry_client.is_enabled() {
-            let site = ctx.matched_site.as_ref()
+            let site = ctx
+                .matched_site
+                .as_ref()
                 .map(|s| s.hostname.clone())
                 .unwrap_or_else(|| "_default".to_string());
             let method = session.req_header().method.to_string();
@@ -3807,7 +4020,7 @@ impl ProxyHttp for SynapseProxy {
                 }
             });
         }
-        
+
         if let Some(ref detection) = ctx.detection {
             let blocked = detection.blocked;
             let challenged = ctx.waf_challenged;
@@ -3816,31 +4029,44 @@ impl ProxyHttp for SynapseProxy {
                 blocked,
                 challenged,
                 logged,
-                detection.detection_time_us
+                detection.detection_time_us,
             );
-            
+
             for &rule_id in &detection.matched_rules {
-                self.metrics_registry.record_rule_match(&rule_id.to_string());
+                self.metrics_registry
+                    .record_rule_match(&rule_id.to_string());
             }
 
             // Phase 3: Send telemetry alert if blocked or high risk detection
             // Uses existing TelemetryEvent::WafBlock variant for security events
-            if self.telemetry_client.is_enabled() && (detection.blocked || detection.risk_score > 50) {
-                let client_ip = session.client_addr()
+            if self.telemetry_client.is_enabled()
+                && (detection.blocked || detection.risk_score > 50)
+            {
+                let client_ip = session
+                    .client_addr()
                     .map(|addr| addr.to_string())
                     .unwrap_or_else(|| "unknown".to_string());
 
-                let site = ctx.matched_site.as_ref()
+                let site = ctx
+                    .matched_site
+                    .as_ref()
                     .map(|s| s.hostname.clone())
                     .unwrap_or_else(|| "_default".to_string());
 
-                let rule_id = detection.matched_rules.first()
+                let rule_id = detection
+                    .matched_rules
+                    .first()
                     .map(|r| r.to_string())
                     .unwrap_or_else(|| "high_risk".to_string());
 
-                let severity = if detection.risk_score > 80 { "critical" }
-                    else if detection.risk_score > 50 { "high" }
-                    else { "medium" }.to_string();
+                let severity = if detection.risk_score > 80 {
+                    "critical"
+                } else if detection.risk_score > 50 {
+                    "high"
+                } else {
+                    "medium"
+                }
+                .to_string();
 
                 let event = synapse_pingora::telemetry::TelemetryEvent::WafBlock {
                     request_id: Some(ctx.request_id.clone()),
@@ -3868,11 +4094,13 @@ impl ProxyHttp for SynapseProxy {
             // For now, we just update the active profile count periodically
             // Ideally, DetectionResult should carry the anomalies
         }
-        
+
         // Report active profiles count (sampled, not every request)
-        if fastrand::bool() && fastrand::u8(0..100) < 5 { // ~5% sample rate
-             let profiles = DetectionEngine::get_profiles();
-             self.metrics_registry.record_profile_metrics(profiles.len(), &[]);
+        if fastrand::bool() && fastrand::u8(0..100) < 5 {
+            // ~5% sample rate
+            let profiles = DetectionEngine::get_profiles();
+            self.metrics_registry
+                .record_profile_metrics(profiles.len(), &[]);
         }
 
         // Phase 3: Include fingerprint in access log
@@ -3891,14 +4119,25 @@ impl ProxyHttp for SynapseProxy {
 
         // Phase 4/5: Include DLP metrics in access log for dual-running validation
         // Phase 5 adds dlp_scan_time_us from parallel execution
-        let dlp_info = if ctx.request_dlp_match_count > 0 || ctx.dlp_match_count > 0 || ctx.dlp_scan_time_us > 0 {
+        let dlp_info = if ctx.request_dlp_match_count > 0
+            || ctx.dlp_match_count > 0
+            || ctx.dlp_scan_time_us > 0
+        {
             format!(
                 " dlp_req={}:{}:{}us dlp_resp={}:{}",
                 ctx.request_dlp_match_count,
-                if ctx.request_dlp_types.is_empty() { "-" } else { &ctx.request_dlp_types },
+                if ctx.request_dlp_types.is_empty() {
+                    "-"
+                } else {
+                    &ctx.request_dlp_types
+                },
                 ctx.dlp_scan_time_us,
                 ctx.dlp_match_count,
-                if ctx.dlp_types.is_empty() { "-" } else { &ctx.dlp_types }
+                if ctx.dlp_types.is_empty() {
+                    "-"
+                } else {
+                    &ctx.dlp_types
+                }
             )
         } else {
             String::new()
@@ -3954,12 +4193,8 @@ impl ProxyHttp for SynapseProxy {
         let request_bytes = ctx.body_bytes_seen as u64;
         let response_bytes = ctx.response_body_buffer.len() as u64;
 
-        self.payload_manager.record_request(
-            template,
-            client_ip,
-            request_bytes,
-            response_bytes,
-        );
+        self.payload_manager
+            .record_request(template, client_ip, request_bytes, response_bytes);
         // ===== End Payload Profiling =====
     }
 }
@@ -4036,7 +4271,11 @@ use synapse_pingora::config::ConfigFile as MultisiteConfigFile;
 /// Attempts to load multi-site configuration from YAML files.
 /// Returns (ConfigFile, Vec<SiteConfig>) if successful.
 fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)> {
-    let paths = ["config.sites.yaml", "config.yaml", "/etc/synapse-pingora/config.yaml"];
+    let paths = [
+        "config.sites.yaml",
+        "config.yaml",
+        "/etc/synapse-pingora/config.yaml",
+    ];
 
     for path in &paths {
         if !std::path::Path::new(path).exists() {
@@ -4058,7 +4297,10 @@ fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)>
                     let timeout_ms = config_file.server.waf_regex_timeout_ms.min(500);
                     let timeout_us = timeout_ms * 1000;
                     WAF_REGEX_TIMEOUT_US.store(timeout_us, std::sync::atomic::Ordering::Relaxed);
-                    info!("WAF regex timeout configured: {}ms (ReDoS protection)", timeout_ms);
+                    info!(
+                        "WAF regex timeout configured: {}ms (ReDoS protection)",
+                        timeout_ms
+                    );
 
                     return Some((config_file, sites));
                 }
@@ -4083,11 +4325,10 @@ fn create_multisite_managers(
     Arc<RwLock<AccessListManager>>,
 ) {
     // Create VhostMatcher from sites
-    let vhost_matcher = VhostMatcher::new(sites.to_vec())
-        .unwrap_or_else(|e| {
-            warn!("Failed to create VhostMatcher: {}, using empty matcher", e);
-            VhostMatcher::empty()
-        });
+    let vhost_matcher = VhostMatcher::new(sites.to_vec()).unwrap_or_else(|e| {
+        warn!("Failed to create VhostMatcher: {}, using empty matcher", e);
+        VhostMatcher::empty()
+    });
 
     // Create SiteWafManager
     let mut site_waf = SiteWafManager::new();
@@ -4163,8 +4404,8 @@ fn create_shadow_mirror_manager(sites: &[SiteConfig]) -> Option<Arc<ShadowMirror
         warn!("Multiple shadow_mirror configs found; using the first configured site");
     }
 
-    let sensor_id = std::env::var("SYNAPSE_SENSOR_ID")
-        .unwrap_or_else(|_| "synapse-default".to_string());
+    let sensor_id =
+        std::env::var("SYNAPSE_SENSOR_ID").unwrap_or_else(|_| "synapse-default".to_string());
 
     match ShadowMirrorManager::new(config, sensor_id) {
         Ok(manager) => Some(Arc::new(manager)),
@@ -4196,7 +4437,9 @@ fn run_config_check(file: &str, json_output: bool) {
 
     // Check file exists
     if !Path::new(file).exists() {
-        result.errors.push(format!("Configuration file not found: {}", file));
+        result
+            .errors
+            .push(format!("Configuration file not found: {}", file));
         output_validation_result(&result, json_output);
         std::process::exit(1);
     }
@@ -4204,7 +4447,9 @@ fn run_config_check(file: &str, json_output: bool) {
     let contents = match fs::read_to_string(file) {
         Ok(contents) => contents,
         Err(e) => {
-            result.errors.push(format!("Failed to read config file: {}", e));
+            result
+                .errors
+                .push(format!("Failed to read config file: {}", e));
             output_validation_result(&result, json_output);
             std::process::exit(1);
         }
@@ -4267,7 +4512,9 @@ fn run_config_check(file: &str, json_output: bool) {
 
                 // Validate server listen addresses
                 if config.server.listen.is_empty() {
-                    result.errors.push("Server listen addresses cannot be empty".to_string());
+                    result
+                        .errors
+                        .push("Server listen addresses cannot be empty".to_string());
                     result.valid = false;
                 }
                 for (idx, addr) in config.server.listen.iter().enumerate() {
@@ -4328,15 +4575,16 @@ fn run_config_check(file: &str, json_output: bool) {
                     }
                 } else if rules_path != "data/rules.json" {
                     // Only warn if non-default path is missing
-                    result.warnings.push(format!(
-                        "WAF rules file not found: {}",
-                        rules_path
-                    ));
+                    result
+                        .warnings
+                        .push(format!("WAF rules file not found: {}", rules_path));
                 }
 
                 // Additional validation checks
                 if config.upstreams.is_empty() {
-                    result.errors.push("No upstream backends configured".to_string());
+                    result
+                        .errors
+                        .push("No upstream backends configured".to_string());
                     result.valid = false;
                 }
 
@@ -4348,10 +4596,9 @@ fn run_config_check(file: &str, json_output: bool) {
                             .push("TLS cert path is empty while TLS is enabled".to_string());
                         result.valid = false;
                     } else if !Path::new(&config.tls.cert_path).exists() {
-                        result.errors.push(format!(
-                            "TLS cert file not found: {}",
-                            config.tls.cert_path
-                        ));
+                        result
+                            .errors
+                            .push(format!("TLS cert file not found: {}", config.tls.cert_path));
                         result.valid = false;
                     }
 
@@ -4361,10 +4608,9 @@ fn run_config_check(file: &str, json_output: bool) {
                             .push("TLS key path is empty while TLS is enabled".to_string());
                         result.valid = false;
                     } else if !Path::new(&config.tls.key_path).exists() {
-                        result.errors.push(format!(
-                            "TLS key file not found: {}",
-                            config.tls.key_path
-                        ));
+                        result
+                            .errors
+                            .push(format!("TLS key file not found: {}", config.tls.key_path));
                         result.valid = false;
                     }
                 }
@@ -4386,26 +4632,29 @@ fn run_config_check(file: &str, json_output: bool) {
 
 fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) {
     if json_output {
-        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(result).unwrap_or_default()
+        );
     } else {
         // Human-readable output using colors and icons
         let json = serde_json::to_value(result).unwrap_or_default();
         let valid = json["valid"].as_bool().unwrap_or(false);
         let file = json["file"].as_str().unwrap_or("unknown");
-        
+
         println!("\nConfiguration Check: {}", file);
         println!("--------------------------------------------------");
-        
+
         if valid {
             println!("✅ Configuration is VALID");
         } else {
             println!("❌ Configuration is INVALID");
         }
-        
+
         if let Some(sites) = json["sites"].as_u64() {
             println!("Found {} site(s) configured.", sites);
         }
-        
+
         if let Some(errors) = json["errors"].as_array() {
             if !errors.is_empty() {
                 println!("\nErrors:");
@@ -4414,7 +4663,7 @@ fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) 
                 }
             }
         }
-        
+
         if let Some(warnings) = json["warnings"].as_array() {
             if !warnings.is_empty() {
                 println!("\nWarnings:");
@@ -4423,7 +4672,7 @@ fn output_validation_result<T: serde::Serialize>(result: &T, json_output: bool) 
                 }
             }
         }
-        
+
         println!("\nResult: {}\n", if valid { "PASSED" } else { "FAILED" });
     }
 }
@@ -4452,7 +4701,12 @@ fn main() {
     let demo_mode = cli.demo || parse_bool_env("SYNAPSE_DEMO");
     let is_explicitly_non_production = parse_bool_env_neg("SYNAPSE_PRODUCTION")
         || std::env::var("NODE_ENV")
-            .map(|v| matches!(v.to_lowercase().as_str(), "development" | "dev" | "local" | "test"))
+            .map(|v| {
+                matches!(
+                    v.to_lowercase().as_str(),
+                    "development" | "dev" | "local" | "test"
+                )
+            })
             .unwrap_or(false);
 
     if dev_mode_cli {
@@ -4491,7 +4745,9 @@ fn main() {
     let rules_path = if config.detection.rules_path.trim().is_empty() {
         None
     } else {
-        Some(std::path::PathBuf::from(config.detection.rules_path.clone()))
+        Some(std::path::PathBuf::from(
+            config.detection.rules_path.clone(),
+        ))
     };
 
     // Compute and cache config hash for heartbeat reporting
@@ -4506,7 +4762,11 @@ fn main() {
     for path in &config_paths {
         if let Ok(config_bytes) = std::fs::read(path) {
             let _ = CONFIG_HASH.set(compute_hash(&config_bytes));
-            debug!("Config hash from {}: {}", path, CONFIG_HASH.get().unwrap_or(&"none".to_string()));
+            debug!(
+                "Config hash from {}: {}",
+                path,
+                CONFIG_HASH.get().unwrap_or(&"none".to_string())
+            );
             break;
         }
     }
@@ -4525,29 +4785,29 @@ fn main() {
     // ... (metrics init)
 
     // Load profiles on startup (if file exists)
-    // Note: This only loads for the MAIN thread or initial state. 
-    // Since we use thread_local!, each worker needs to load. 
-    // Pingora is multi-process/multi-thread. 
+    // Note: This only loads for the MAIN thread or initial state.
+    // Since we use thread_local!, each worker needs to load.
+    // Pingora is multi-process/multi-thread.
     // Ideally, we'd load this inside `new_ctx` or `server.bootstrap()`, but `SYNAPSE` is thread_local.
     // For this PoC, we'll rely on the background task saving the profiles from ONE thread (the one running the admin API if we moved it, or we spawn a specific monitor).
     //
-    // Actually, thread_local! is specific to the thread. 
+    // Actually, thread_local! is specific to the thread.
     // A robust solution requires shared state (Arc<RwLock>) for profiles or a dedicated "aggregator".
     //
-    // IMPLEMENTATION SHORTCUT: We will spawn a background task that periodically asks the CURRENT thread's engine 
+    // IMPLEMENTATION SHORTCUT: We will spawn a background task that periodically asks the CURRENT thread's engine
     // to save. But `main` spawns `server.run_forever()` which blocks.
     //
     // The `metrics` endpoint effectively aggregates if we had a registry.
     //
-    // Let's implement a simple "Load on init" for the main thread, and a "Save on interval" that runs in a spawned thread 
+    // Let's implement a simple "Load on init" for the main thread, and a "Save on interval" that runs in a spawned thread
     // BUT that spawned thread won't have access to the Worker threads' TLS.
     //
     // CORRECT APPROACH FOR PINGORA:
     // Pingora uses a "Service" model. We should create a Background Service that aggregates data.
     //
-    // For this iteration, we will skip the complexity of cross-thread aggregation and just implement the 
+    // For this iteration, we will skip the complexity of cross-thread aggregation and just implement the
     // *mechanism* to save/load, which we verify via the Admin API (which runs in its own thread).
-    
+
     // Attempt to load profiles for the Admin API thread (so debug/profiles shows persistence)
     if Path::new("data/profiles.json").exists() {
         if let Ok(profiles) = SnapshotManager::load_profiles(Path::new("data/profiles.json")) {
@@ -4570,7 +4830,10 @@ fn main() {
             .map(|u| format!("{}:{}", u.host, u.port))
             .collect::<Vec<_>>()
     );
-    info!("Rate limit: {} rps (enabled: {})", config.rate_limit.rps, config.rate_limit.enabled);
+    info!(
+        "Rate limit: {} rps (enabled: {})",
+        config.rate_limit.rps, config.rate_limit.enabled
+    );
 
     // Force engine initialization and rule loading at startup
     let rule_count = DetectionEngine::rule_count();
@@ -4590,12 +4853,16 @@ fn main() {
         risk_config.blocking_mode = BlockingMode::Enforcement;
         risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
         synapse.set_risk_config(risk_config);
-        info!("Anomaly blocking ENABLED (threshold: {:.1})", config.detection.anomaly_blocking.threshold);
+        info!(
+            "Anomaly blocking ENABLED (threshold: {:.1})",
+            config.detection.anomaly_blocking.threshold
+        );
     }
 
     // Phase 6: Initialize TLS Manager
     let tls_manager = Arc::new(TlsManager::new(
-        synapse_pingora::tls::TlsVersion::from_str(&config.tls.min_version).unwrap_or(synapse_pingora::tls::TlsVersion::Tls12)
+        synapse_pingora::tls::TlsVersion::from_str(&config.tls.min_version)
+            .unwrap_or(synapse_pingora::tls::TlsVersion::Tls12),
     ));
 
     if config.tls.enabled {
@@ -4619,10 +4886,16 @@ fn main() {
                 key_path: cert_cfg.key_path.clone(),
                 is_wildcard: cert_cfg.domain.starts_with("*."),
             }) {
-                error!("Failed to load TLS certificate for {}: {}", cert_cfg.domain, e);
+                error!(
+                    "Failed to load TLS certificate for {}: {}",
+                    cert_cfg.domain, e
+                );
             }
         }
-        info!("TLS Manager initialized with {} certificates", tls_manager.cert_count());
+        info!(
+            "TLS Manager initialized with {} certificates",
+            tls_manager.cert_count()
+        );
     }
 
     // Create shared health checker and metrics registry for admin API
@@ -4655,7 +4928,10 @@ fn main() {
     }
 
     if telemetry_config.enabled {
-        info!("Telemetry enabled, reporting to {}", telemetry_config.endpoint);
+        info!(
+            "Telemetry enabled, reporting to {}",
+            telemetry_config.endpoint
+        );
     }
     let telemetry_client = Arc::new(TelemetryClient::new(telemetry_config));
     if telemetry_client.is_enabled() {
@@ -4682,48 +4958,49 @@ fn main() {
 
     // Create shared CampaignManager for threat correlation (mutable for initialization)
     let mut campaign_manager_raw = CampaignManager::new();
-    
+
     // Inject TelemetryClient for cross-tenant correlation
     campaign_manager_raw.set_telemetry_client(Arc::clone(&telemetry_client));
 
     // Create multi-site managers if available
-    let config_manager: Option<Arc<ConfigManager>> = if let Some((ref config_file, ref sites)) = multisite_config {
-        let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
-            create_multisite_managers(config_file, sites);
+    let config_manager: Option<Arc<ConfigManager>> =
+        if let Some((ref config_file, ref sites)) = multisite_config {
+            let (vhost_matcher, site_waf_mgr, rate_limit_mgr, access_list_mgr) =
+                create_multisite_managers(config_file, sites);
 
-        // Inject AccessListManager into CampaignManager for automated mitigation
-        campaign_manager_raw.set_access_list_manager(Arc::clone(&access_list_mgr));
+            // Inject AccessListManager into CampaignManager for automated mitigation
+            campaign_manager_raw.set_access_list_manager(Arc::clone(&access_list_mgr));
 
-        // Create shared sites vector for ConfigManager
-        let sites_arc = Arc::new(RwLock::new(sites.clone()));
-        let config_arc = Arc::new(RwLock::new(config_file.clone()));
+            // Create shared sites vector for ConfigManager
+            let sites_arc = Arc::new(RwLock::new(sites.clone()));
+            let config_arc = Arc::new(RwLock::new(config_file.clone()));
 
-        // Create ConfigManager with all managers
-        let manager = ConfigManager::new(
-            config_arc,
-            sites_arc,
-            Arc::clone(&vhost_matcher),
-            Arc::clone(&site_waf_mgr),
-            Arc::clone(&rate_limit_mgr),
-            Arc::clone(&access_list_mgr),
-        )
-        .with_rules(
-            Arc::clone(&SYNAPSE),
-            rules_path.clone(),
-            Some(Arc::clone(&RULES_HASH)),
-        );
+            // Create ConfigManager with all managers
+            let manager = ConfigManager::new(
+                config_arc,
+                sites_arc,
+                Arc::clone(&vhost_matcher),
+                Arc::clone(&site_waf_mgr),
+                Arc::clone(&rate_limit_mgr),
+                Arc::clone(&access_list_mgr),
+            )
+            .with_rules(
+                Arc::clone(&SYNAPSE),
+                rules_path.clone(),
+                Some(Arc::clone(&RULES_HASH)),
+            );
 
-        info!(
-            "Multi-site mode enabled: {} sites, {} exact matches",
-            sites.len(),
-            vhost_matcher.read().site_count()
-        );
+            info!(
+                "Multi-site mode enabled: {} sites, {} exact matches",
+                sites.len(),
+                vhost_matcher.read().site_count()
+            );
 
-        Some(Arc::new(manager))
-    } else {
-        info!("Legacy single-backend mode (no multi-site config found)");
-        None
-    };
+            Some(Arc::new(manager))
+        } else {
+            info!("Legacy single-backend mode (no multi-site config found)");
+            None
+        };
 
     // Wrap CampaignManager in Arc for shared use
     let campaign_manager = Arc::new(campaign_manager_raw);
@@ -4744,7 +5021,10 @@ fn main() {
     if let Some(ref snapshot) = loaded_snapshot {
         if !snapshot.entities.is_empty() {
             shared_entity_manager.restore(snapshot.entities.clone());
-            info!("Restored {} entities from snapshot", snapshot.entities.len());
+            info!(
+                "Restored {} entities from snapshot",
+                snapshot.entities.len()
+            );
         }
     }
 
@@ -4761,7 +5041,10 @@ fn main() {
     if let Some(ref snapshot) = loaded_snapshot {
         if !snapshot.campaigns.is_empty() {
             campaign_manager.restore(snapshot.campaigns.clone());
-            info!("Restored {} campaigns from snapshot", snapshot.campaigns.len());
+            info!(
+                "Restored {} campaigns from snapshot",
+                snapshot.campaigns.len()
+            );
         }
     }
 
@@ -4812,7 +5095,7 @@ fn main() {
                             shell_enabled,
                             Arc::clone(&metrics),
                         )
-                            .run(handle.subscribe_shutdown()),
+                        .run(handle.subscribe_shutdown()),
                     );
                     tokio::spawn(
                         TunnelLogService::new(handle.clone(), Arc::clone(&metrics))
@@ -4840,7 +5123,10 @@ fn main() {
     if let Some(ref snapshot) = loaded_snapshot {
         if !snapshot.profiles.is_empty() {
             DetectionEngine::load_profiles(snapshot.profiles.clone());
-            info!("Restored {} endpoint profiles from snapshot", snapshot.profiles.len());
+            info!(
+                "Restored {} endpoint profiles from snapshot",
+                snapshot.profiles.len()
+            );
         }
     }
 
@@ -4862,13 +5148,18 @@ fn main() {
         };
         rt.block_on(build_crawler_detector(config.crawler.clone()))
     };
-    info!("CrawlerDetector initialized with {} known crawlers and {} bad bot signatures",
+    info!(
+        "CrawlerDetector initialized with {} known crawlers and {} bad bot signatures",
         synapse_pingora::crawler::KNOWN_CRAWLERS.len(),
-        synapse_pingora::crawler::BAD_BOT_SIGNATURES.len());
+        synapse_pingora::crawler::BAD_BOT_SIGNATURES.len()
+    );
 
     // Phase 4: Create shared DlpScanner for both admin API and proxy
     let shared_dlp_scanner = Arc::new(DlpScanner::new(config.dlp.clone()));
-    info!("DlpScanner initialized with {} patterns", shared_dlp_scanner.pattern_count());
+    info!(
+        "DlpScanner initialized with {} patterns",
+        shared_dlp_scanner.pattern_count()
+    );
 
     // Phase 9: Shared TrendsManager for anomaly detection + dashboard reporting
     let shared_trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
@@ -4904,7 +5195,10 @@ fn main() {
     let admin_addr: SocketAddr = match config.server.admin_listen.parse() {
         Ok(addr) => addr,
         Err(err) => {
-            error!("Invalid admin_listen address '{}': {}", config.server.admin_listen, err);
+            error!(
+                "Invalid admin_listen address '{}': {}",
+                config.server.admin_listen, err
+            );
             std::process::exit(1);
         }
     };
@@ -4951,7 +5245,8 @@ fn main() {
 
     // Parse trusted proxies for X-Forwarded-For validation
     // Fail startup on invalid CIDR to prevent misconfiguration from silently degrading security
-    let mut trusted_proxies: Vec<CidrRange> = Vec::with_capacity(config.server.trusted_proxies.len());
+    let mut trusted_proxies: Vec<CidrRange> =
+        Vec::with_capacity(config.server.trusted_proxies.len());
     for cidr_str in &config.server.trusted_proxies {
         match CidrRange::parse(cidr_str) {
             Ok(cidr) => trusted_proxies.push(cidr),
@@ -5009,7 +5304,10 @@ fn main() {
             }
         }
 
-        info!("Trusted proxies configured: {} CIDR ranges", trusted_proxies.len());
+        info!(
+            "Trusted proxies configured: {} CIDR ranges",
+            trusted_proxies.len()
+        );
         for cidr in &config.server.trusted_proxies {
             debug!("  Trusted: {}", cidr);
         }
@@ -5039,7 +5337,7 @@ fn main() {
             *ic = new_config;
             // In a real implementation, we would also update the active managers
             // or trigger a reload.
-        }
+        },
     );
 
     // Register WAF evaluation callback for dry-run testing (Phase 2: Lab View)
@@ -5089,7 +5387,10 @@ fn main() {
         });
     });
 
-    info!("Admin API server starting on {}", config.server.admin_listen);
+    info!(
+        "Admin API server starting on {}",
+        config.server.admin_listen
+    );
 
     // Create Pingora server
     let mut server = match Server::new(None) {
@@ -5205,21 +5506,22 @@ fn main() {
         // Note: TlsSettings::intermediate defaults to TLS 1.2+
         // TlsSettings doesn't implement Clone, so we create fresh settings for each listener
         for addr in &config.server.listen {
-            let tls_settings = match TlsSettings::intermediate(
-                &config.tls.cert_path,
-                &config.tls.key_path,
-            ) {
-                Ok(settings) => settings,
-                Err(err) => {
-                    error!(
-                        "Failed to create TLS settings from configured paths: {}",
-                        err
-                    );
-                    std::process::exit(1);
-                }
-            };
+            let tls_settings =
+                match TlsSettings::intermediate(&config.tls.cert_path, &config.tls.key_path) {
+                    Ok(settings) => settings,
+                    Err(err) => {
+                        error!(
+                            "Failed to create TLS settings from configured paths: {}",
+                            err
+                        );
+                        std::process::exit(1);
+                    }
+                };
             proxy_service.add_tls_with_settings(addr, None, tls_settings);
-            info!("TLS listener enabled on {} (min_version: {})", addr, config.tls.min_version);
+            info!(
+                "TLS listener enabled on {} (min_version: {})",
+                addr, config.tls.min_version
+            );
         }
     } else {
         // Fallback to TCP if TLS is not enabled or configured
@@ -5235,8 +5537,10 @@ fn main() {
     info!("Synapse-Pingora ready");
     info!("  Proxy:  {}", listen_addrs);
     info!("  Admin:  {}", config.server.admin_listen);
-    info!("  Tarpit: enabled={}, base_delay={}ms, max_delay={}ms",
-        config.tarpit.enabled, config.tarpit.base_delay_ms, config.tarpit.max_delay_ms);
+    info!(
+        "  Tarpit: enabled={}, base_delay={}ms, max_delay={}ms",
+        config.tarpit.enabled, config.tarpit.base_delay_ms, config.tarpit.max_delay_ms
+    );
     info!("Graceful reload: pkill -SIGQUIT synapse-pingora && ./synapse-pingora -u");
 
     // Phase 7: Persistence - Start background snapshotting
@@ -5244,7 +5548,11 @@ fn main() {
     let entity_mgr_for_snapshot = Arc::clone(&shared_entity_manager);
     let campaign_mgr_for_snapshot = Arc::clone(&campaign_manager);
     let actor_mgr_for_snapshot = Arc::clone(&shared_actor_manager);
-    let instance_id = config.telemetry.instance_id.clone().unwrap_or_else(|| "synapse".to_string());
+    let instance_id = config
+        .telemetry
+        .instance_id
+        .clone()
+        .unwrap_or_else(|| "synapse".to_string());
 
     if let Err(e) = snapshot_manager.clone().start_background_saver(move || {
         WafSnapshot::new(
@@ -5257,7 +5565,10 @@ fn main() {
     }) {
         error!("Failed to start background persistence: {}", e);
     } else {
-        info!("WAF state persistence enabled (interval: {}s)", persistence_config.save_interval_secs);
+        info!(
+            "WAF state persistence enabled (interval: {}s)",
+            persistence_config.save_interval_secs
+        );
     }
 
     server.run_forever();
@@ -5267,9 +5578,8 @@ fn init_logging() {
     use log::Level;
     use std::io::Write;
 
-    let mut builder = env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info")
-    );
+    let mut builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
 
     builder.format(|buf, record| {
         // ANSI color codes for log levels
@@ -5328,7 +5638,11 @@ mod tests {
     fn test_engine_rule_count() {
         // Verify we have rules loaded
         let count = DetectionEngine::rule_count();
-        assert!(count > 0, "Should have at least 1 rule loaded, got {}", count);
+        assert!(
+            count > 0,
+            "Should have at least 1 rule loaded, got {}",
+            count
+        );
         println!("Engine loaded {} rules", count);
     }
 
@@ -5405,24 +5719,23 @@ mod tests {
         );
         assert!(result.blocked, "UNION SELECT should be blocked");
         assert!(result.risk_score > 0, "Should have risk score");
-        println!("UNION SELECT: blocked={}, risk={}, rules={:?}",
-            result.blocked, result.risk_score, result.matched_rules);
+        println!(
+            "UNION SELECT: blocked={}, risk={}, rules={:?}",
+            result.blocked, result.risk_score, result.matched_rules
+        );
     }
 
     #[test]
     #[serial]
     fn test_path_traversal_dotdot() {
         // Path traversal is commonly caught by production WAFs
-        let result = DetectionEngine::analyze(
-            "GET",
-            "/files/../../../etc/passwd",
-            &[],
-            None,
-            TEST_IP,
-        );
+        let result =
+            DetectionEngine::analyze("GET", "/files/../../../etc/passwd", &[], None, TEST_IP);
         assert!(result.blocked, "Path traversal should be blocked");
-        println!("Path traversal: blocked={}, risk={}, rules={:?}",
-            result.blocked, result.risk_score, result.matched_rules);
+        println!(
+            "Path traversal: blocked={}, risk={}, rules={:?}",
+            result.blocked, result.risk_score, result.matched_rules
+        );
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -5437,16 +5750,19 @@ mod tests {
 
         // Run performance tests - measure timing regardless of detection result
         let test_cases = vec![
-            ("GET", "/api/users?id=1 UNION SELECT * FROM users"),  // Should block
-            ("GET", "/files/../../../etc/passwd"),                  // Should block
-            ("GET", "/api/users/123"),                              // Should pass
-            ("GET", "/api/search?q=hello+world&page=1&limit=10"),   // Should pass
+            ("GET", "/api/users?id=1 UNION SELECT * FROM users"), // Should block
+            ("GET", "/files/../../../etc/passwd"),                // Should block
+            ("GET", "/api/users/123"),                            // Should pass
+            ("GET", "/api/search?q=hello+world&page=1&limit=10"), // Should pass
         ];
 
         for (method, uri) in test_cases {
             let result = DetectionEngine::analyze(method, uri, &[], None, TEST_IP);
 
-            println!("URI: {} -> blocked={}, time={}μs", uri, result.blocked, result.detection_time_us);
+            println!(
+                "URI: {} -> blocked={}, time={}μs",
+                uri, result.blocked, result.detection_time_us
+            );
 
             // Performance assertion: real engine with 237 rules
             // Debug mode: up to 10ms due to lack of optimizations
@@ -5495,12 +5811,27 @@ mod tests {
         println!("╔══════════════════════════════════════════════════════╗");
         println!("║           HONEST BENCHMARK RESULTS                   ║");
         println!("╠══════════════════════════════════════════════════════╣");
-        println!("║  Rules loaded:        {:>6}                         ║", rule_count);
-        println!("║  Iterations:          {:>6}                         ║", iterations);
-        println!("║  Blocked requests:    {:>6} ({:.1}%)               ║",
-            blocked_count, (blocked_count as f64 / iterations as f64) * 100.0);
-        println!("║  Avg detection time:  {:>6} μs                      ║", avg_time);
-        println!("║  Total time:          {:>6} ms                      ║", total_time / 1000);
+        println!(
+            "║  Rules loaded:        {:>6}                         ║",
+            rule_count
+        );
+        println!(
+            "║  Iterations:          {:>6}                         ║",
+            iterations
+        );
+        println!(
+            "║  Blocked requests:    {:>6} ({:.1}%)               ║",
+            blocked_count,
+            (blocked_count as f64 / iterations as f64) * 100.0
+        );
+        println!(
+            "║  Avg detection time:  {:>6} μs                      ║",
+            avg_time
+        );
+        println!(
+            "║  Total time:          {:>6} ms                      ║",
+            total_time / 1000
+        );
         println!("╚══════════════════════════════════════════════════════╝");
 
         // Real engine with 237 rules: documented ~30μs
@@ -5510,7 +5841,8 @@ mod tests {
         assert!(
             avg_time < 100,
             "Average detection time {}μs exceeds 100μs target for real engine with {} rules",
-            avg_time, rule_count
+            avg_time,
+            rule_count
         );
     }
 
@@ -5554,8 +5886,11 @@ mod tests {
         let response = checker.check();
 
         // Default status should be Healthy (no backends registered yet)
-        assert_eq!(response.status, synapse_pingora::health::HealthStatus::Healthy,
-            "Default health status should be Healthy");
+        assert_eq!(
+            response.status,
+            synapse_pingora::health::HealthStatus::Healthy,
+            "Default health status should be Healthy"
+        );
     }
 
     #[test]
@@ -5588,10 +5923,22 @@ mod tests {
         let config = TlsConfig::default();
 
         assert!(!config.enabled, "TLS should be disabled by default");
-        assert!(config.cert_path.is_empty(), "Certificate path should be empty by default");
-        assert!(config.key_path.is_empty(), "Key path should be empty by default");
-        assert_eq!(config.min_version, "1.2", "Minimum TLS version should default to 1.2");
-        assert!(config.per_domain_certs.is_empty(), "Per-domain certs should be empty by default");
+        assert!(
+            config.cert_path.is_empty(),
+            "Certificate path should be empty by default"
+        );
+        assert!(
+            config.key_path.is_empty(),
+            "Key path should be empty by default"
+        );
+        assert_eq!(
+            config.min_version, "1.2",
+            "Minimum TLS version should default to 1.2"
+        );
+        assert!(
+            config.per_domain_certs.is_empty(),
+            "Per-domain certs should be empty by default"
+        );
     }
 
     #[test]
@@ -5617,8 +5964,7 @@ tls:
   enabled: false
   min_version: "1.3"
 "#;
-        let config: Config = serde_yaml::from_str(yaml)
-            .expect("Failed to parse config with TLS");
+        let config: Config = serde_yaml::from_str(yaml).expect("Failed to parse config with TLS");
 
         assert!(!config.tls.enabled, "TLS should be disabled in test config");
         assert_eq!(config.tls.min_version, "1.3", "TLS version should be 1.3");
@@ -5676,8 +6022,11 @@ tls:
 
         // Verify health status is accessible through proxy
         let response = proxy.health_checker.check();
-        assert_eq!(response.status, synapse_pingora::health::HealthStatus::Healthy,
-            "Proxy should have healthy status by default");
+        assert_eq!(
+            response.status,
+            synapse_pingora::health::HealthStatus::Healthy,
+            "Proxy should have healthy status by default"
+        );
     }
 
     #[tokio::test(start_paused = true)]
@@ -5761,8 +6110,8 @@ domain: "*.example.com"
 cert_path: "/etc/certs/example.pem"
 key_path: "/etc/keys/example.key"
 "#;
-        let cert_config: PerDomainCert = serde_yaml::from_str(yaml)
-            .expect("Failed to parse per-domain cert config");
+        let cert_config: PerDomainCert =
+            serde_yaml::from_str(yaml).expect("Failed to parse per-domain cert config");
 
         assert_eq!(cert_config.domain, "*.example.com");
         assert_eq!(cert_config.cert_path, "/etc/certs/example.pem");
@@ -5776,8 +6125,14 @@ key_path: "/etc/keys/example.key"
 
     #[test]
     fn test_normalize_path_numeric_ids() {
-        assert_eq!(normalize_path_to_template("/api/users/123"), "/api/users/{id}");
-        assert_eq!(normalize_path_to_template("/api/orders/456/items/789"), "/api/orders/{id}/items/{id}");
+        assert_eq!(
+            normalize_path_to_template("/api/users/123"),
+            "/api/users/{id}"
+        );
+        assert_eq!(
+            normalize_path_to_template("/api/orders/456/items/789"),
+            "/api/orders/{id}/items/{id}"
+        );
     }
 
     #[test]
@@ -5798,7 +6153,10 @@ key_path: "/etc/keys/example.key"
 
     #[test]
     fn test_normalize_path_unchanged() {
-        assert_eq!(normalize_path_to_template("/api/v1/products"), "/api/v1/products");
+        assert_eq!(
+            normalize_path_to_template("/api/v1/products"),
+            "/api/v1/products"
+        );
         assert_eq!(normalize_path_to_template("/health"), "/health");
     }
 

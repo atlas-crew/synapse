@@ -18,10 +18,16 @@ use synapse_pingora::HeaderProfiler;
 
 fn normal_headers() -> Vec<(String, String)> {
     vec![
-        ("accept".into(), "text/html,application/xhtml+xml,application/xml;q=0.9".into()),
+        (
+            "accept".into(),
+            "text/html,application/xhtml+xml,application/xml;q=0.9".into(),
+        ),
         ("accept-encoding".into(), "gzip, deflate, br".into()),
         ("accept-language".into(), "en-US,en;q=0.9".into()),
-        ("user-agent".into(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".into()),
+        (
+            "user-agent".into(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".into(),
+        ),
         ("connection".into(), "keep-alive".into()),
         ("cache-control".into(), "max-age=0".into()),
     ]
@@ -32,7 +38,10 @@ fn anomalous_headers() -> Vec<(String, String)> {
         ("accept".into(), "*/*".into()),
         ("user-agent".into(), "curl/7.68.0".into()),
         // Missing common headers like accept-encoding, accept-language
-        ("x-custom-attack".into(), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+        (
+            "x-custom-attack".into(),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+        ),
         ("x-unusual-1".into(), "val".into()),
         ("x-unusual-2".into(), "val".into()),
         ("x-unusual-3".into(), "val".into()),
@@ -87,15 +96,11 @@ fn bench_header_learn(c: &mut Criterion) {
         let hdrs: Vec<(String, String)> = (0..count)
             .map(|i| (format!("x-header-{}", i), format!("value-{}", i)))
             .collect();
-        group.bench_with_input(
-            BenchmarkId::new("header_count", count),
-            &hdrs,
-            |b, hdrs| {
-                b.iter(|| {
-                    profiler.learn(black_box("/api/sized"), black_box(hdrs));
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("header_count", count), &hdrs, |b, hdrs| {
+            b.iter(|| {
+                profiler.learn(black_box("/api/sized"), black_box(hdrs));
+            });
+        });
     }
 
     group.finish();
@@ -250,17 +255,12 @@ fn bench_header_profiler_contention(c: &mut Criterion) {
                                     if i % 4 == 0 {
                                         // 25% analysis
                                         let hdrs = if t % 2 == 0 { &headers } else { &anomalous };
-                                        let result = profiler.analyze(
-                                            black_box(&ep),
-                                            black_box(hdrs),
-                                        );
+                                        let result =
+                                            profiler.analyze(black_box(&ep), black_box(hdrs));
                                         black_box(result);
                                     } else {
                                         // 75% learning
-                                        profiler.learn(
-                                            black_box(&ep),
-                                            black_box(&headers),
-                                        );
+                                        profiler.learn(black_box(&ep), black_box(&headers));
                                     }
                                 }
                             });

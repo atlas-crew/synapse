@@ -255,11 +255,15 @@ impl SnapshotManager {
                 };
 
                 rt.block_on(async move {
-                    let mut interval = time::interval(Duration::from_secs(config.save_interval_secs));
+                    let mut interval =
+                        time::interval(Duration::from_secs(config.save_interval_secs));
 
                     // Ensure data directory exists
                     if let Err(e) = tokio::fs::create_dir_all(&config.data_dir).await {
-                        error!("Failed to create data directory {:?}: {}", config.data_dir, e);
+                        error!(
+                            "Failed to create data directory {:?}: {}",
+                            config.data_dir, e
+                        );
                         return;
                     }
 
@@ -408,13 +412,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("test_state.json");
 
-        let snapshot = WafSnapshot::new(
-            "test-sensor".to_string(),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
+        let snapshot = WafSnapshot::new("test-sensor".to_string(), vec![], vec![], vec![], vec![]);
 
         SnapshotManager::save_snapshot(&snapshot, &path).unwrap();
         let loaded = SnapshotManager::load_snapshot(&path).unwrap().unwrap();
@@ -425,13 +423,7 @@ mod tests {
 
     #[test]
     fn test_empty_snapshot() {
-        let snapshot = WafSnapshot::new(
-            "test".to_string(),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
+        let snapshot = WafSnapshot::new("test".to_string(), vec![], vec![], vec![], vec![]);
         assert!(snapshot.is_empty());
     }
 

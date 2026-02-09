@@ -8,10 +8,8 @@ use std::net::IpAddr;
 
 use dashmap::{DashMap, DashSet};
 
-use crate::correlation::{
-    FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
-};
 use super::{Detector, DetectorResult};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
 /// Configuration for network proximity detection
 #[derive(Debug, Clone)]
@@ -79,7 +77,9 @@ impl NetworkProximityDetector {
         if let Some(subnet) = Self::subnet_key(&ip) {
             self.subnet_index
                 .entry(subnet)
-                .and_modify(|ips| { ips.insert(ip); })
+                .and_modify(|ips| {
+                    ips.insert(ip);
+                })
                 .or_insert_with(|| {
                     let mut set = HashSet::new();
                     set.insert(ip);
@@ -95,7 +95,9 @@ impl NetworkProximityDetector {
         if self.config.check_asn {
             self.asn_index
                 .entry(asn)
-                .and_modify(|ips| { ips.insert(ip); })
+                .and_modify(|ips| {
+                    ips.insert(ip);
+                })
                 .or_insert_with(|| {
                     let mut set = HashSet::new();
                     set.insert(ip);
@@ -105,7 +107,8 @@ impl NetworkProximityDetector {
     }
 
     fn get_subnet_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
-        self.subnet_index.iter()
+        self.subnet_index
+            .iter()
             .filter(|entry| !self.detected_subnets.contains(entry.key()))
             .filter(|entry| entry.value().len() >= self.config.min_ips)
             .map(|entry| (entry.key().clone(), entry.value().iter().copied().collect()))
@@ -115,7 +118,8 @@ impl NetworkProximityDetector {
     /// Get IPs in the same subnet as the given IP
     pub fn get_subnet_peers(&self, ip: &IpAddr) -> Vec<IpAddr> {
         if let Some(subnet) = Self::subnet_key(ip) {
-            self.subnet_index.get(&subnet)
+            self.subnet_index
+                .get(&subnet)
                 .map(|ips| ips.iter().filter(|&i| i != ip).copied().collect())
                 .unwrap_or_default()
         } else {
@@ -125,7 +129,9 @@ impl NetworkProximityDetector {
 }
 
 impl Detector for NetworkProximityDetector {
-    fn name(&self) -> &'static str { "network_proximity" }
+    fn name(&self) -> &'static str {
+        "network_proximity"
+    }
 
     fn analyze(&self, _index: &FingerprintIndex) -> DetectorResult<Vec<CampaignUpdate>> {
         if !self.config.check_subnet {
@@ -137,10 +143,15 @@ impl Detector for NetworkProximityDetector {
 
         for (subnet, ips) in groups {
             // Network proximity alone is weak - use lower confidence
-            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(self.config.max_confidence) * self.config.base_confidence;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor)
+                .min(self.config.max_confidence)
+                * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
-                campaign_id: Some(format!("network-{}", subnet.replace('/', "-").replace('.', "-"))),
+                campaign_id: Some(format!(
+                    "network-{}",
+                    subnet.replace('/', "-").replace('.', "-")
+                )),
                 status: None,
                 confidence: Some(confidence),
                 attack_types: Some(vec!["distributed_attack".to_string()]),
@@ -165,7 +176,9 @@ impl Detector for NetworkProximityDetector {
         peers.len() >= self.config.min_ips - 1
     }
 
-    fn scan_interval_ms(&self) -> u64 { 10000 } // 10 seconds - slow changing
+    fn scan_interval_ms(&self) -> u64 {
+        10000
+    } // 10 seconds - slow changing
 }
 
 #[cfg(test)]
@@ -183,7 +196,10 @@ mod tests {
     #[test]
     fn test_subnet_key() {
         let ip: IpAddr = "192.168.1.100".parse().unwrap();
-        assert_eq!(NetworkProximityDetector::subnet_key(&ip), Some("192.168.1.0/24".to_string()));
+        assert_eq!(
+            NetworkProximityDetector::subnet_key(&ip),
+            Some("192.168.1.0/24".to_string())
+        );
     }
 
     #[test]

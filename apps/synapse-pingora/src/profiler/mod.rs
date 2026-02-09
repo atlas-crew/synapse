@@ -67,12 +67,12 @@ mod value_analysis_tests;
 
 // Core re-exports
 pub use distribution::{Distribution, PercentilesTracker};
-pub use endpoint_profile::{EndpointProfile, ParamStats, redact_value, is_likely_pii};
+pub use endpoint_profile::{is_likely_pii, redact_value, EndpointProfile, ParamStats};
 pub use rate_tracker::RateTracker;
 pub use signals::{AnomalyResult, AnomalySignal, AnomalySignalType};
 
 // Header profiler re-exports
-pub use entropy::{shannon_entropy, normalized_entropy, is_entropy_anomaly, entropy_z_score};
+pub use entropy::{entropy_z_score, is_entropy_anomaly, normalized_entropy, shannon_entropy};
 pub use header_profiler::{HeaderProfiler, HeaderProfilerStats};
 pub use header_types::{HeaderAnomaly, HeaderAnomalyResult, HeaderBaseline, ValueStats};
 
@@ -83,12 +83,14 @@ pub use profile_store::{
 };
 pub use schema_learner::{SchemaLearner, SchemaLearnerConfig, SchemaLearnerStats};
 pub use schema_types::{
-    EndpointSchema as JsonEndpointSchema, FieldSchema, FieldType, PatternType,
-    SchemaViolation, ValidationResult, ViolationSeverity, ViolationType,
+    EndpointSchema as JsonEndpointSchema, FieldSchema, FieldType, PatternType, SchemaViolation,
+    ValidationResult, ViolationSeverity, ViolationType,
 };
 
 // Template interning re-exports
-pub use template_intern::{cache_stats as template_cache_stats, intern_template, normalize_and_intern};
+pub use template_intern::{
+    cache_stats as template_cache_stats, intern_template, normalize_and_intern,
+};
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -212,10 +214,12 @@ impl Profiler {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        Some(profiles
-            .entry(template.to_string())
-            .or_insert_with(|| EndpointProfile::new(template.to_string(), now_ms))
-            .clone())
+        Some(
+            profiles
+                .entry(template.to_string())
+                .or_insert_with(|| EndpointProfile::new(template.to_string(), now_ms))
+                .clone(),
+        )
     }
 
     /// Update an endpoint profile with request data.
@@ -382,13 +386,20 @@ impl Profiler {
             result.add(
                 AnomalySignalType::PayloadSizeHigh,
                 (z_score.min(10.0) as u8).max(1),
-                format!("Payload size {} is {:.1} std devs above mean", payload_size, z_score),
+                format!(
+                    "Payload size {} is {:.1} std devs above mean",
+                    payload_size, z_score
+                ),
             );
         } else if z_score < -self.config.payload_z_threshold {
             result.add(
                 AnomalySignalType::PayloadSizeLow,
                 2,
-                format!("Payload size {} is {:.1} std devs below mean", payload_size, z_score.abs()),
+                format!(
+                    "Payload size {} is {:.1} std devs below mean",
+                    payload_size,
+                    z_score.abs()
+                ),
             );
         }
 
@@ -424,7 +435,10 @@ impl Profiler {
                         (len_z.min(10.0) as u8).max(1),
                         format!(
                             "Parameter {} length {} is anomalous (z={:.1}, value: {})",
-                            param, value.len(), len_z, display_value
+                            param,
+                            value.len(),
+                            len_z,
+                            display_value
                         ),
                     );
                 }
@@ -432,8 +446,8 @@ impl Profiler {
                 // Type check (if numeric is dominant)
                 // FIX: Prevent division by zero when stats.count is 0
                 if stats.count > 0 {
-                    let numeric_ratio = *stats.type_counts.get("numeric").unwrap_or(&0) as f64
-                        / stats.count as f64;
+                    let numeric_ratio =
+                        *stats.type_counts.get("numeric").unwrap_or(&0) as f64 / stats.count as f64;
                     if numeric_ratio > self.config.type_ratio_threshold {
                         if value.parse::<f64>().is_err() {
                             result.add(
@@ -454,7 +468,10 @@ impl Profiler {
                     result.add(
                         AnomalySignalType::ContentTypeMismatch,
                         5,
-                        format!("Content-Type {} not seen before (expected {})", ct, dominant),
+                        format!(
+                            "Content-Type {} not seen before (expected {})",
+                            ct, dominant
+                        ),
                     );
                 }
             }
@@ -492,18 +509,25 @@ impl Profiler {
             result.add(
                 AnomalySignalType::PayloadSizeHigh, // Re-using PayloadSizeHigh for response too
                 (size_z.min(10.0) as u8).max(1),
-                format!("Response size {} is {:.1} std devs above mean (possible leak)", response_size, size_z),
+                format!(
+                    "Response size {} is {:.1} std devs above mean (possible leak)",
+                    response_size, size_z
+                ),
             );
         }
 
         // Check status code anomaly (error spike)
         if status_code >= 500 {
             let error_rate = profile.error_rate();
-            if error_rate < 0.05 { // Normally stable endpoint
+            if error_rate < 0.05 {
+                // Normally stable endpoint
                 result.add(
                     AnomalySignalType::AbnormalErrorRate,
                     5,
-                    format!("Unexpected 5xx error (usual rate: {:.1}%)", error_rate * 100.0),
+                    format!(
+                        "Unexpected 5xx error (usual rate: {:.1}%)",
+                        error_rate * 100.0
+                    ),
                 );
             }
         }
@@ -515,7 +539,10 @@ impl Profiler {
                     result.add(
                         AnomalySignalType::ContentTypeMismatch,
                         3,
-                        format!("Response Content-Type {} not seen before (expected {})", ct, dominant),
+                        format!(
+                            "Response Content-Type {} not seen before (expected {})",
+                            ct, dominant
+                        ),
                     );
                 }
             }
@@ -567,7 +594,12 @@ mod tests {
     fn test_profiler_update_and_get_profile() {
         let profiler = Profiler::new(default_config());
 
-        profiler.update_profile("/api/users", 100, &[("name", "alice"), ("email", "a@example.com")], Some("application/json"));
+        profiler.update_profile(
+            "/api/users",
+            100,
+            &[("name", "alice"), ("email", "a@example.com")],
+            Some("application/json"),
+        );
 
         assert_eq!(profiler.profile_count(), 1);
 
@@ -614,7 +646,12 @@ mod tests {
 
         // Add samples
         for i in 0..10 {
-            profiler.update_profile("/api/users", 100 + i, &[("name", "alice")], Some("application/json"));
+            profiler.update_profile(
+                "/api/users",
+                100 + i,
+                &[("name", "alice")],
+                Some("application/json"),
+            );
         }
 
         profiler.learn_schema("/api/users");

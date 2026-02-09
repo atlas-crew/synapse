@@ -57,15 +57,13 @@ fn read_fixture(name: &str) -> String {
 #[test]
 fn protocol_compat_sensor_auth() {
     let json = read_fixture("sensor-auth");
-    let msg: SensorMessage = serde_json::from_str(&json).expect("Failed to deserialize sensor-auth");
+    let msg: SensorMessage =
+        serde_json::from_str(&json).expect("Failed to deserialize sensor-auth");
     match &msg {
         SensorMessage::Auth { payload } => {
             assert_eq!(payload.sensor_id, "sensor-prod-01");
             assert_eq!(payload.version, "1.2.0");
-            assert_eq!(
-                payload.protocol_version,
-                Some("1.0".to_string())
-            );
+            assert_eq!(payload.protocol_version, Some("1.0".to_string()));
             assert!(payload.sensor_name.is_some());
         }
         other => panic!("Expected Auth, got {:?}", other),
@@ -344,13 +342,9 @@ fn protocol_compat_hub_signal_ack() {
 #[test]
 fn protocol_compat_hub_batch_ack() {
     let json = read_fixture("hub-batch-ack");
-    let msg: HubMessage =
-        serde_json::from_str(&json).expect("Failed to deserialize hub-batch-ack");
+    let msg: HubMessage = serde_json::from_str(&json).expect("Failed to deserialize hub-batch-ack");
     match &msg {
-        HubMessage::BatchAck {
-            count,
-            sequence_id,
-        } => {
+        HubMessage::BatchAck { count, sequence_id } => {
             assert_eq!(*count, 3);
             assert_eq!(*sequence_id, 43);
         }
@@ -688,11 +682,26 @@ fn protocol_compat_rust_wire_format_sensor_signal() {
     let json = serde_json::to_string(&msg).unwrap();
 
     // Verify wire format expectations
-    assert!(json.contains(r#""type":"signal""#), "type tag must be kebab-case");
-    assert!(json.contains(r#""signalType":"IP_THREAT""#), "signalType must be SCREAMING_SNAKE_CASE");
-    assert!(json.contains(r#""severity":"HIGH""#), "severity must be SCREAMING_SNAKE_CASE");
-    assert!(json.contains(r#""sourceIp":"1.2.3.4""#), "field names must be camelCase");
-    assert!(json.contains(r#""confidence":0.9"#), "confidence must be a number");
+    assert!(
+        json.contains(r#""type":"signal""#),
+        "type tag must be kebab-case"
+    );
+    assert!(
+        json.contains(r#""signalType":"IP_THREAT""#),
+        "signalType must be SCREAMING_SNAKE_CASE"
+    );
+    assert!(
+        json.contains(r#""severity":"HIGH""#),
+        "severity must be SCREAMING_SNAKE_CASE"
+    );
+    assert!(
+        json.contains(r#""sourceIp":"1.2.3.4""#),
+        "field names must be camelCase"
+    );
+    assert!(
+        json.contains(r#""confidence":0.9"#),
+        "confidence must be a number"
+    );
 }
 
 #[test]
@@ -705,9 +714,21 @@ fn protocol_compat_rust_wire_format_hub_auth_success() {
     };
     let json = serde_json::to_string(&msg).unwrap();
 
-    assert!(json.contains(r#""type":"auth-success""#), "type tag must be kebab-case");
-    assert!(json.contains(r#""sensorId":"s1""#), "sensorId must be camelCase");
-    assert!(json.contains(r#""tenantId":"t1""#), "tenantId must be camelCase");
+    assert!(
+        json.contains(r#""type":"auth-success""#),
+        "type tag must be kebab-case"
+    );
+    assert!(
+        json.contains(r#""sensorId":"s1""#),
+        "sensorId must be camelCase"
+    );
+    assert!(
+        json.contains(r#""tenantId":"t1""#),
+        "tenantId must be camelCase"
+    );
     // protocolVersion should not appear when None (skip_serializing_if)
-    assert!(!json.contains("protocolVersion"), "None fields should be omitted");
+    assert!(
+        !json.contains("protocolVersion"),
+        "None fields should be omitted"
+    );
 }

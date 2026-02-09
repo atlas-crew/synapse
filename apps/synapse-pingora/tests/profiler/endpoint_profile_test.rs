@@ -80,12 +80,23 @@ mod update {
     fn test_update_tracks_params() {
         let mut profile = EndpointProfile::new("/api/users".to_string(), 1000);
 
-        profile.update(100, &[("name", "John"), ("email", "john@test.com")], Some("application/json"), 2000);
+        profile.update(
+            100,
+            &[("name", "John"), ("email", "john@test.com")],
+            Some("application/json"),
+            2000,
+        );
 
         assert!(profile.expected_params.contains_key("name"));
         assert!(profile.expected_params.contains_key("email"));
-        assert_eq!(profile.expected_params.get("name").map(|s| s.count), Some(1));
-        assert_eq!(profile.expected_params.get("email").map(|s| s.count), Some(1));
+        assert_eq!(
+            profile.expected_params.get("name").map(|s| s.count),
+            Some(1)
+        );
+        assert_eq!(
+            profile.expected_params.get("email").map(|s| s.count),
+            Some(1)
+        );
     }
 
     #[test]
@@ -96,7 +107,10 @@ mod update {
         profile.update(100, &[("name", "Jane")], None, 1001);
         profile.update(100, &[("name", "Bob")], None, 1002);
 
-        assert_eq!(profile.expected_params.get("name").map(|s| s.count), Some(3));
+        assert_eq!(
+            profile.expected_params.get("name").map(|s| s.count),
+            Some(3)
+        );
     }
 
     #[test]
@@ -172,7 +186,12 @@ mod content_type_bounds {
 
         // Add MAX_CONTENT_TYPES unique content types
         for i in 0..MAX_CONTENT_TYPES {
-            profile.update(100, &[], Some(&format!("application/type-{}", i)), 1000 + i as u64);
+            profile.update(
+                100,
+                &[],
+                Some(&format!("application/type-{}", i)),
+                1000 + i as u64,
+            );
         }
 
         assert_eq!(profile.content_types.len(), MAX_CONTENT_TYPES);
@@ -184,12 +203,22 @@ mod content_type_bounds {
 
         // Fill to limit
         for i in 0..MAX_CONTENT_TYPES {
-            profile.update(100, &[], Some(&format!("application/type-{}", i)), 1000 + i as u64);
+            profile.update(
+                100,
+                &[],
+                Some(&format!("application/type-{}", i)),
+                1000 + i as u64,
+            );
         }
 
         // Try to add more
         for i in 0..10 {
-            profile.update(100, &[], Some(&format!("application/extra-{}", i)), 2000 + i as u64);
+            profile.update(
+                100,
+                &[],
+                Some(&format!("application/extra-{}", i)),
+                2000 + i as u64,
+            );
         }
 
         // Should still be at limit
@@ -382,7 +411,11 @@ mod param_frequency {
 
         // "name" in 9/10 requests
         for i in 0..10 {
-            let params: Vec<(&str, &str)> = if i < 9 { vec![("name", "John")] } else { vec![] };
+            let params: Vec<(&str, &str)> = if i < 9 {
+                vec![("name", "John")]
+            } else {
+                vec![]
+            };
             profile.update(100, &params, None, 1000 + i);
         }
 
@@ -395,7 +428,11 @@ mod param_frequency {
 
         // "optional" in 2/10 requests
         for i in 0..10 {
-            let params: Vec<(&str, &str)> = if i < 2 { vec![("optional", "value")] } else { vec![] };
+            let params: Vec<(&str, &str)> = if i < 2 {
+                vec![("optional", "value")]
+            } else {
+                vec![]
+            };
             profile.update(100, &params, None, 1000 + i);
         }
 
@@ -408,7 +445,11 @@ mod param_frequency {
 
         // "param" in 8/10 requests
         for i in 0..10 {
-            let params: Vec<(&str, &str)> = if i < 8 { vec![("param", "value")] } else { vec![] };
+            let params: Vec<(&str, &str)> = if i < 8 {
+                vec![("param", "value")]
+            } else {
+                vec![]
+            };
             profile.update(100, &params, None, 1000 + i);
         }
 
@@ -695,7 +736,12 @@ mod serialization {
     #[test]
     fn test_serialize_deserialize() {
         let mut profile = EndpointProfile::new("/api/users".to_string(), 1000);
-        profile.update(100, &[("name", "John"), ("email", "john@test.com")], Some("application/json"), 2000);
+        profile.update(
+            100,
+            &[("name", "John"), ("email", "john@test.com")],
+            Some("application/json"),
+            2000,
+        );
         profile.record_status(200);
 
         let serialized = serde_json::to_string(&profile).expect("Failed to serialize");

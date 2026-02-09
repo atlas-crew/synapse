@@ -45,21 +45,19 @@ mod trace;
 mod types;
 
 pub use engine::Engine;
-pub use synapse::Synapse;
 pub use index::{
-    build_rule_index, get_candidate_rule_indices, method_to_mask,
-    CandidateCache, CandidateCacheKey, IndexedRule, RuleIndex,
-    RuleRequirements, UriAnchor, UriAnchorKind, UriTransform,
-    METHOD_GET, METHOD_HEAD, METHOD_PATCH, METHOD_POST, METHOD_PUT,
-    REQ_ARGS, REQ_ARG_ENTRIES, REQ_BODY, REQ_JSON, REQ_MULTIPART,
-    REQ_RESPONSE, REQ_RESPONSE_BODY,
+    build_rule_index, get_candidate_rule_indices, method_to_mask, CandidateCache,
+    CandidateCacheKey, IndexedRule, RuleIndex, RuleRequirements, UriAnchor, UriAnchorKind,
+    UriTransform, METHOD_GET, METHOD_HEAD, METHOD_PATCH, METHOD_POST, METHOD_PUT, REQ_ARGS,
+    REQ_ARG_ENTRIES, REQ_BODY, REQ_JSON, REQ_MULTIPART, REQ_RESPONSE, REQ_RESPONSE_BODY,
 };
 pub use rule::{boolean_operands, MatchCondition, MatchValue, WafRule};
 pub use state::{now_ms, StateStore};
+pub use synapse::Synapse;
 pub use trace::{TraceEvent, TraceSink, TraceState};
 pub use types::{
-    Action, AnomalyContribution, AnomalySignal, AnomalySignalType, AnomalyType, ArgEntry,
-    BlockingMode, EvalContext, Header, repeat_multiplier, Request, RiskConfig, RiskContribution, Verdict,
+    repeat_multiplier, Action, AnomalyContribution, AnomalySignal, AnomalySignalType, AnomalyType,
+    ArgEntry, BlockingMode, EvalContext, Header, Request, RiskConfig, RiskContribution, Verdict,
 };
 
 /// Error type for WAF operations.

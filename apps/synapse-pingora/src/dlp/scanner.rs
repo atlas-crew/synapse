@@ -11,12 +11,12 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use lazy_static::lazy_static;
 use regex::{Regex, RegexSet};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
-use sha2::{Sha256, Digest};
 
 /// Sensitive data type categories
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -297,10 +297,10 @@ impl Default for DlpConfig {
         Self {
             enabled: true,
             max_scan_size: 5 * 1024 * 1024, // 5MB max (reject if larger)
-            max_matches: 100, // Stop after 100 matches
+            max_matches: 100,               // Stop after 100 matches
             scan_text_only: true,
             max_body_inspection_bytes: 8 * 1024, // 8KB inspection cap for performance
-            fast_mode: false, // Disabled by default for comprehensive scanning
+            fast_mode: false,                    // Disabled by default for comprehensive scanning
             custom_keywords: None,
             redaction: HashMap::new(),
             hash_salt: None,
@@ -511,21 +511,79 @@ pub fn validate_phone(phone: &str) -> bool {
 
 /// Country-specific IBAN lengths (ISO 13616)
 const IBAN_LENGTHS: &[(&str, usize)] = &[
-    ("AL", 28), ("AD", 24), ("AT", 20), ("AZ", 28), ("BH", 22),
-    ("BY", 28), ("BE", 16), ("BA", 20), ("BR", 29), ("BG", 22),
-    ("CR", 22), ("HR", 21), ("CY", 28), ("CZ", 24), ("DK", 18),
-    ("DO", 28), ("TL", 23), ("EE", 20), ("FO", 18), ("FI", 18),
-    ("FR", 27), ("GE", 22), ("DE", 22), ("GI", 23), ("GR", 27),
-    ("GL", 18), ("GT", 28), ("HU", 28), ("IS", 26), ("IQ", 23),
-    ("IE", 22), ("IL", 23), ("IT", 27), ("JO", 30), ("KZ", 20),
-    ("XK", 20), ("KW", 30), ("LV", 21), ("LB", 28), ("LI", 21),
-    ("LT", 20), ("LU", 20), ("MK", 19), ("MT", 31), ("MR", 27),
-    ("MU", 30), ("MC", 27), ("MD", 24), ("ME", 22), ("NL", 18),
-    ("NO", 15), ("PK", 24), ("PS", 29), ("PL", 28), ("PT", 25),
-    ("QA", 29), ("RO", 24), ("SM", 27), ("SA", 24), ("RS", 22),
-    ("SC", 31), ("SK", 24), ("SI", 19), ("ES", 24), ("SE", 24),
-    ("CH", 21), ("TN", 24), ("TR", 26), ("UA", 29), ("AE", 23),
-    ("GB", 22), ("VA", 22), ("VG", 24),
+    ("AL", 28),
+    ("AD", 24),
+    ("AT", 20),
+    ("AZ", 28),
+    ("BH", 22),
+    ("BY", 28),
+    ("BE", 16),
+    ("BA", 20),
+    ("BR", 29),
+    ("BG", 22),
+    ("CR", 22),
+    ("HR", 21),
+    ("CY", 28),
+    ("CZ", 24),
+    ("DK", 18),
+    ("DO", 28),
+    ("TL", 23),
+    ("EE", 20),
+    ("FO", 18),
+    ("FI", 18),
+    ("FR", 27),
+    ("GE", 22),
+    ("DE", 22),
+    ("GI", 23),
+    ("GR", 27),
+    ("GL", 18),
+    ("GT", 28),
+    ("HU", 28),
+    ("IS", 26),
+    ("IQ", 23),
+    ("IE", 22),
+    ("IL", 23),
+    ("IT", 27),
+    ("JO", 30),
+    ("KZ", 20),
+    ("XK", 20),
+    ("KW", 30),
+    ("LV", 21),
+    ("LB", 28),
+    ("LI", 21),
+    ("LT", 20),
+    ("LU", 20),
+    ("MK", 19),
+    ("MT", 31),
+    ("MR", 27),
+    ("MU", 30),
+    ("MC", 27),
+    ("MD", 24),
+    ("ME", 22),
+    ("NL", 18),
+    ("NO", 15),
+    ("PK", 24),
+    ("PS", 29),
+    ("PL", 28),
+    ("PT", 25),
+    ("QA", 29),
+    ("RO", 24),
+    ("SM", 27),
+    ("SA", 24),
+    ("RS", 22),
+    ("SC", 31),
+    ("SK", 24),
+    ("SI", 19),
+    ("ES", 24),
+    ("SE", 24),
+    ("CH", 21),
+    ("TN", 24),
+    ("TR", 26),
+    ("UA", 29),
+    ("AE", 23),
+    ("GB", 22),
+    ("VA", 22),
+    ("VG", 24),
 ];
 
 /// Validate IBAN format using mod-97 check with country-specific length validation
@@ -941,7 +999,7 @@ impl DlpScanner {
 
         // Force lazy_static initialization to validate all patterns at construction time.
         let pattern_count = PATTERNS.len();
-        
+
         // Build combined patterns list for Aho-Corasick
         // 1. Standard prefixes
         let mut patterns = Vec::new();
@@ -968,7 +1026,11 @@ impl DlpScanner {
         log::debug!(
             "DLP scanner initialized with {} standard patterns and {} custom keywords",
             pattern_count,
-            config.custom_keywords.as_ref().map(|k| k.len()).unwrap_or(0)
+            config
+                .custom_keywords
+                .as_ref()
+                .map(|k| k.len())
+                .unwrap_or(0)
         );
 
         Ok(Self {
@@ -1004,12 +1066,12 @@ impl DlpScanner {
                 return;
             }
         };
-        
+
         for m in &result.matches {
             if violations.len() >= 100 {
                 violations.pop_front();
             }
-            
+
             violations.push_back(DlpViolation {
                 timestamp: now,
                 pattern_name: m.pattern_name.to_string(),
@@ -1176,7 +1238,8 @@ impl DlpScanner {
 
         // Update stats
         self.total_scans.fetch_add(1, Ordering::Relaxed);
-        self.total_matches.fetch_add(match_count as u64, Ordering::Relaxed);
+        self.total_matches
+            .fetch_add(match_count as u64, Ordering::Relaxed);
 
         ScanResult {
             scanned: true,
@@ -1228,7 +1291,9 @@ impl DlpScanner {
             "application/ld+json",
         ];
 
-        text_types.iter().any(|t| ct_lower.starts_with(t) || ct_lower.contains(t))
+        text_types
+            .iter()
+            .any(|t| ct_lower.starts_with(t) || ct_lower.contains(t))
     }
 
     /// Quick check if content type should skip DLP entirely (binary content)
@@ -1238,7 +1303,12 @@ impl DlpScanner {
 
     /// Mask a sensitive value for logging
     fn mask_value(&self, value: &str, data_type: SensitiveDataType) -> String {
-        let mode = self.config.redaction.get(&data_type).copied().unwrap_or_default();
+        let mode = self
+            .config
+            .redaction
+            .get(&data_type)
+            .copied()
+            .unwrap_or_default();
 
         match mode {
             RedactionMode::None => return value.to_string(),
@@ -1310,8 +1380,7 @@ impl DlpScanner {
                 let parts: Vec<&str> = value.split('.').collect();
                 if parts.len() == 4 {
                     format!("{}.***.***.{}", parts[0], parts[3])
-                }
-                else {
+                } else {
                     "***.***.***.***".to_string()
                 }
             }
@@ -1536,7 +1605,10 @@ mod tests {
         let result = scanner.scan(&format!("Token: {}", jwt));
 
         assert!(result.has_matches);
-        let jwt_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Jwt);
+        let jwt_match = result
+            .matches
+            .iter()
+            .find(|m| m.data_type == SensitiveDataType::Jwt);
         assert!(jwt_match.is_some());
     }
 
@@ -1546,7 +1618,10 @@ mod tests {
         let result = scanner.scan("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE");
 
         assert!(result.has_matches);
-        let aws_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::AwsKey);
+        let aws_match = result
+            .matches
+            .iter()
+            .find(|m| m.data_type == SensitiveDataType::AwsKey);
         assert!(aws_match.is_some());
     }
 
@@ -1556,17 +1631,24 @@ mod tests {
         let result = scanner.scan("GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
 
         assert!(result.has_matches);
-        let gh_match = result.matches.iter().find(|m| m.pattern_name == "GitHub Token");
+        let gh_match = result
+            .matches
+            .iter()
+            .find(|m| m.pattern_name == "GitHub Token");
         assert!(gh_match.is_some());
     }
 
     #[test]
     fn test_scan_github_fine_grained_pat() {
         let scanner = DlpScanner::default();
-        let result = scanner.scan("GITHUB_TOKEN=github_pat_11ABCDEFG0xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        let result = scanner
+            .scan("GITHUB_TOKEN=github_pat_11ABCDEFG0xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
 
         assert!(result.has_matches);
-        let gh_match = result.matches.iter().find(|m| m.pattern_name == "GitHub Fine-grained PAT");
+        let gh_match = result
+            .matches
+            .iter()
+            .find(|m| m.pattern_name == "GitHub Fine-grained PAT");
         assert!(gh_match.is_some(), "Should detect GitHub fine-grained PAT");
     }
 
@@ -1590,7 +1672,8 @@ mod tests {
     #[test]
     fn test_scan_private_key() {
         let scanner = DlpScanner::default();
-        let key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+        let key =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
         let result = scanner.scan(key);
 
         assert!(result.has_matches);
@@ -1603,7 +1686,10 @@ mod tests {
         let result = scanner.scan("https://api.example.com/login?password=secret123");
 
         assert!(result.has_matches);
-        let pwd_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Password);
+        let pwd_match = result
+            .matches
+            .iter()
+            .find(|m| m.data_type == SensitiveDataType::Password);
         assert!(pwd_match.is_some());
     }
 
@@ -1613,7 +1699,10 @@ mod tests {
         let result = scanner.scan(r#"{"username": "admin", "password": "secret123"}"#);
 
         assert!(result.has_matches);
-        let pwd_match = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Password);
+        let pwd_match = result
+            .matches
+            .iter()
+            .find(|m| m.data_type == SensitiveDataType::Password);
         assert!(pwd_match.is_some());
     }
 
@@ -1677,12 +1766,12 @@ mod tests {
             ..Default::default()
         };
         let scanner = DlpScanner::new(config);
-        
+
         let result = scanner.scan("Confidential: ProjectX launch date is soon.");
         assert!(result.has_matches);
         assert_eq!(result.match_count, 1);
         assert_eq!(result.matches[0].data_type, SensitiveDataType::Custom);
-        
+
         let result2 = scanner.scan("User ID: InternalID-123");
         assert!(result2.has_matches);
         assert_eq!(result2.matches[0].data_type, SensitiveDataType::Custom);
@@ -1701,16 +1790,24 @@ mod tests {
             ..Default::default()
         };
         let scanner = DlpScanner::new(config);
-        
+
         let result = scanner.scan("Card: 4532015112830366, Email: test@example.com");
-        
+
         // Full redaction for card
-        let card = result.matches.iter().find(|m| m.data_type == SensitiveDataType::CreditCard).unwrap();
+        let card = result
+            .matches
+            .iter()
+            .find(|m| m.data_type == SensitiveDataType::CreditCard)
+            .unwrap();
         assert!(card.masked_value.chars().all(|c| c == '*'));
         assert!(!card.masked_value.contains("0366")); // No partial reveal
-        
+
         // Hash redaction for email
-        let email = result.matches.iter().find(|m| m.data_type == SensitiveDataType::Email).unwrap();
+        let email = result
+            .matches
+            .iter()
+            .find(|m| m.data_type == SensitiveDataType::Email)
+            .unwrap();
         assert!(email.masked_value.starts_with("sha256:"));
         assert!(!email.masked_value.contains("test@example.com"));
     }
@@ -1823,11 +1920,7 @@ mod tests {
         );
 
         // Verify fast mode doesn't find email/phone/IP
-        let fast_types: Vec<_> = fast_result
-            .matches
-            .iter()
-            .map(|m| m.data_type)
-            .collect();
+        let fast_types: Vec<_> = fast_result.matches.iter().map(|m| m.data_type).collect();
         assert!(
             !fast_types.contains(&SensitiveDataType::Email),
             "Fast mode should not detect emails"

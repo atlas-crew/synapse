@@ -10,9 +10,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
 
-use crate::metrics::MetricsRegistry;
 use super::client::TunnelClientHandle;
 use super::types::LegacyTunnelMessage;
+use crate::metrics::MetricsRegistry;
 
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
@@ -233,12 +233,17 @@ impl TunnelShellService {
             .unwrap_or(DEFAULT_ROWS);
 
         if let Some(session) = self.sessions.get(&session_id) {
-            if let Err(err) = session.master.lock().unwrap_or_else(|p| p.into_inner()).resize(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            }) {
+            if let Err(err) = session
+                .master
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+            {
                 self.send_shell_error(&session_id, format!("resize failed: {}", err));
             }
         } else {

@@ -39,7 +39,6 @@ pub enum AnomalySignalType {
     // ========================================================================
     // Header Anomaly Signals (W4.1 HeaderProfiler)
     // ========================================================================
-
     /// Required header (seen in >95% of baseline) is missing
     HeaderMissingRequired,
     /// Unexpected header not seen in baseline
@@ -54,7 +53,6 @@ pub enum AnomalySignalType {
     // ========================================================================
     // Error Rate Anomaly Signals
     // ========================================================================
-
     /// Abnormal error rate detected (5xx errors on usually-stable endpoint)
     AbnormalErrorRate,
 }
@@ -100,13 +98,13 @@ impl AnomalySignalType {
             Self::ParamCountAnomaly => 3,
             // Header anomaly severities (matching spec: missing=10, unexpected=5, value=15, entropy=20)
             // Mapped to 1-10 scale: missing=4, unexpected=2, value=5, entropy=6, length=4
-            Self::HeaderMissingRequired => 4,    // Was: risk 10 -> severity 4
-            Self::HeaderUnexpected => 2,          // Was: risk 5 -> severity 2
-            Self::HeaderValueAnomaly => 5,        // Was: risk 15 -> severity 5
-            Self::HeaderEntropyAnomaly => 6,      // Was: risk 20 -> severity 6
-            Self::HeaderLengthAnomaly => 4,       // Was: risk 10 -> severity 4
+            Self::HeaderMissingRequired => 4, // Was: risk 10 -> severity 4
+            Self::HeaderUnexpected => 2,      // Was: risk 5 -> severity 2
+            Self::HeaderValueAnomaly => 5,    // Was: risk 15 -> severity 5
+            Self::HeaderEntropyAnomaly => 6,  // Was: risk 20 -> severity 6
+            Self::HeaderLengthAnomaly => 4,   // Was: risk 10 -> severity 4
             // Error rate anomaly severity
-            Self::AbnormalErrorRate => 5,         // Medium severity for error rate anomaly
+            Self::AbnormalErrorRate => 5, // Medium severity for error rate anomaly
         }
     }
 
@@ -133,7 +131,7 @@ impl AnomalySignalType {
             Self::HeaderEntropyAnomaly => 20,
             Self::HeaderLengthAnomaly => 10,
             // Error rate anomaly risk
-            Self::AbnormalErrorRate => 15,        // Medium-high risk for error rate anomaly
+            Self::AbnormalErrorRate => 15, // Medium-high risk for error rate anomaly
         }
     }
 }
@@ -262,7 +260,10 @@ mod tests {
 
     #[test]
     fn test_anomaly_signal_type_as_str() {
-        assert_eq!(AnomalySignalType::PayloadSizeHigh.as_str(), "payload_size_high");
+        assert_eq!(
+            AnomalySignalType::PayloadSizeHigh.as_str(),
+            "payload_size_high"
+        );
         assert_eq!(AnomalySignalType::RateBurst.as_str(), "rate_burst");
     }
 
@@ -298,7 +299,11 @@ mod tests {
     #[test]
     fn test_anomaly_result_add() {
         let mut result = AnomalyResult::new();
-        result.add(AnomalySignalType::UnexpectedParam, 3, "New param".to_string());
+        result.add(
+            AnomalySignalType::UnexpectedParam,
+            3,
+            "New param".to_string(),
+        );
         result.add(AnomalySignalType::RateBurst, 6, "High rate".to_string());
 
         assert!(result.has_anomalies());
@@ -399,10 +404,16 @@ mod tests {
 
     #[test]
     fn test_header_anomaly_default_severities() {
-        assert_eq!(AnomalySignalType::HeaderMissingRequired.default_severity(), 4);
+        assert_eq!(
+            AnomalySignalType::HeaderMissingRequired.default_severity(),
+            4
+        );
         assert_eq!(AnomalySignalType::HeaderUnexpected.default_severity(), 2);
         assert_eq!(AnomalySignalType::HeaderValueAnomaly.default_severity(), 5);
-        assert_eq!(AnomalySignalType::HeaderEntropyAnomaly.default_severity(), 6);
+        assert_eq!(
+            AnomalySignalType::HeaderEntropyAnomaly.default_severity(),
+            6
+        );
         assert_eq!(AnomalySignalType::HeaderLengthAnomaly.default_severity(), 4);
     }
 

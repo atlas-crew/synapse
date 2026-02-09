@@ -76,8 +76,7 @@ fn bench_actor_create_lookup(c: &mut Criterion) {
         b.iter(|| {
             let ip = test_ip(idx + 100_000);
             let fp = format!("t13d1516h2_bench_{}", idx % 500);
-            let actor_id =
-                pre_manager.get_or_create_actor(black_box(ip), black_box(Some(&fp)));
+            let actor_id = pre_manager.get_or_create_actor(black_box(ip), black_box(Some(&fp)));
             black_box(actor_id);
             idx += 1;
         });
@@ -254,10 +253,8 @@ fn bench_actor_contention(c: &mut Criterion) {
                             s.spawn(move || {
                                 for i in 0..200u64 {
                                     let ip = test_ip(t as u64 * 1000 + i);
-                                    let actor_id = mgr.get_or_create_actor(
-                                        black_box(ip),
-                                        black_box(None),
-                                    );
+                                    let actor_id =
+                                        mgr.get_or_create_actor(black_box(ip), black_box(None));
                                     match i % 5 {
                                         0 => {
                                             mgr.record_rule_match(

@@ -48,14 +48,12 @@
 //! assert!(detector.is_rotating(&ip));
 //! ```
 
+use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use parking_lot::RwLock;
 use std::time::{Duration, Instant};
 
-use crate::correlation::{
-    CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex,
-};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
 use super::{Detector, DetectorResult};
 
@@ -300,7 +298,8 @@ impl Ja4RotationDetector {
     /// # Returns
     /// Number of unique fingerprints seen within the detection window.
     pub fn unique_count_in_window(&self, ip: &IpAddr) -> usize {
-        self.history.read()
+        self.history
+            .read()
             .get(ip)
             .map(|h| h.unique_count_in_window(self.config.window))
             .unwrap_or(0)
@@ -314,7 +313,8 @@ impl Ja4RotationDetector {
     /// # Returns
     /// List of unique fingerprints seen within the detection window.
     pub fn unique_fingerprints(&self, ip: &IpAddr) -> Vec<String> {
-        self.history.read()
+        self.history
+            .read()
             .get(ip)
             .map(|h| h.unique_fingerprints_in_window(self.config.window))
             .unwrap_or_default()
@@ -390,9 +390,9 @@ impl Ja4RotationDetector {
         let mut ip_first_seen: Vec<(IpAddr, Instant)> = flagged
             .iter()
             .filter_map(|ip| {
-                history.get(ip).and_then(|h| {
-                    h.observations.first().map(|(ts, _)| (*ip, *ts))
-                })
+                history
+                    .get(ip)
+                    .and_then(|h| h.observations.first().map(|(ts, _)| (*ip, *ts)))
             })
             .collect();
 
@@ -480,7 +480,9 @@ impl Detector for Ja4RotationDetector {
                     .sum::<f64>()
                     / ip_count as f64;
 
-                let confidence = ((avg_unique - self.config.min_fingerprints as f64) / self.config.confidence_divisor + self.config.confidence_base)
+                let confidence = ((avg_unique - self.config.min_fingerprints as f64)
+                    / self.config.confidence_divisor
+                    + self.config.confidence_base)
                     .clamp(self.config.confidence_min, self.config.confidence_max);
 
                 CampaignUpdate {

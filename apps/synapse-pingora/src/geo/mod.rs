@@ -49,6 +49,6 @@ pub use haversine::{calculate_speed, haversine_distance, is_valid_coordinates};
 pub use impossible_travel::ImpossibleTravelDetector;
 pub use types::{
     GeoLocation, LoginEvent, Severity, TravelAlert, TravelConfig, TravelStats,
-    EARTH_RADIUS_KM, DEFAULT_MAX_SPEED_KMH, DEFAULT_MIN_DISTANCE_KM,
-    DEFAULT_HISTORY_WINDOW_HOURS, DEFAULT_MAX_HISTORY_PER_USER,
+    DEFAULT_HISTORY_WINDOW_HOURS, DEFAULT_MAX_HISTORY_PER_USER, DEFAULT_MAX_SPEED_KMH,
+    DEFAULT_MIN_DISTANCE_KM, EARTH_RADIUS_KM,
 };

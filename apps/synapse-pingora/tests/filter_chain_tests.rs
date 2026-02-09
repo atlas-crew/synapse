@@ -112,9 +112,10 @@ fn test_dlp_scanner_credit_card_detection() {
 
     // Should detect credit card
     assert!(!result.matches.is_empty());
-    assert!(result.matches.iter().any(|f|
-        matches!(f.data_type, synapse_pingora::SensitiveDataType::CreditCard)
-    ));
+    assert!(result
+        .matches
+        .iter()
+        .any(|f| matches!(f.data_type, synapse_pingora::SensitiveDataType::CreditCard)));
 }
 
 #[test]
@@ -130,9 +131,10 @@ fn test_dlp_scanner_ssn_detection() {
 
     // Should detect SSN
     assert!(!result.matches.is_empty());
-    assert!(result.matches.iter().any(|f|
-        matches!(f.data_type, synapse_pingora::SensitiveDataType::Ssn)
-    ));
+    assert!(result
+        .matches
+        .iter()
+        .any(|f| matches!(f.data_type, synapse_pingora::SensitiveDataType::Ssn)));
 }
 
 #[test]
@@ -157,9 +159,7 @@ fn test_dlp_scanner_multiple_patterns() {
     let scanner = synapse_pingora::DlpScanner::new(config);
 
     // Test with multiple sensitive data types
-    let result = scanner.scan(
-        "Card: 4111111111111111, SSN: 123-45-6789"
-    );
+    let result = scanner.scan("Card: 4111111111111111, SSN: 123-45-6789");
 
     // Should detect multiple findings
     assert!(result.matches.len() >= 2);
@@ -205,8 +205,10 @@ fn test_credit_card_too_short() {
 #[test]
 fn test_credit_card_with_spaces() {
     // Some implementations strip spaces
-    assert!(synapse_pingora::validate_credit_card("4111 1111 1111 1111") ||
-            !synapse_pingora::validate_credit_card("4111 1111 1111 1111"));
+    assert!(
+        synapse_pingora::validate_credit_card("4111 1111 1111 1111")
+            || !synapse_pingora::validate_credit_card("4111 1111 1111 1111")
+    );
 }
 
 // ============================================================================
@@ -409,8 +411,7 @@ fn test_block_log_max_size() {
         || e.client_ip.ends_with("6")
         || e.client_ip.ends_with("7")
         || e.client_ip.ends_with("8")
-        || e.client_ip.ends_with("9")
-    ));
+        || e.client_ip.ends_with("9")));
 }
 
 // ============================================================================
@@ -510,15 +511,12 @@ fn test_access_types_exported() {
 // the decision logic matches what the ProxyHttp hooks implement.
 
 mod filter_chain_integration {
-    use synapse_pingora::{
-        AccessList, AccessListManager,
-        EntityConfig, EntityManager,
-        TarpitConfig,
-        DlpConfig, DlpScanner,
-        BlockLog, BlockEvent,
-    };
     use synapse_pingora::trap::{TrapConfig, TrapMatcher};
-    use synapse_pingora::waf::{Synapse, Request, Header};
+    use synapse_pingora::waf::{Header, Request, Synapse};
+    use synapse_pingora::{
+        AccessList, AccessListManager, BlockEvent, BlockLog, DlpConfig, DlpScanner, EntityConfig,
+        EntityManager, TarpitConfig,
+    };
 
     // ========================================================================
     // WAF + Entity Manager Integration
@@ -545,7 +543,9 @@ mod filter_chain_integration {
 
         // Create WAF engine and load rules
         let mut synapse = Synapse::new();
-        synapse.load_rules(MINIMAL_RULES.as_bytes()).expect("Failed to load rules");
+        synapse
+            .load_rules(MINIMAL_RULES.as_bytes())
+            .expect("Failed to load rules");
 
         // Simulate multiple suspicious requests from same IP
         let client_ip = "10.0.0.50";
@@ -566,7 +566,11 @@ mod filter_chain_integration {
 
         let verdict1 = synapse.analyze(&req1);
         if verdict1.risk_score > 0 {
-            entity_manager.apply_external_risk(client_ip, verdict1.risk_score as f64, "waf_rule_match");
+            entity_manager.apply_external_risk(
+                client_ip,
+                verdict1.risk_score as f64,
+                "waf_rule_match",
+            );
         }
 
         // Second request - XSS attempt
@@ -585,7 +589,11 @@ mod filter_chain_integration {
 
         let verdict2 = synapse.analyze(&req2);
         if verdict2.risk_score > 0 {
-            entity_manager.apply_external_risk(client_ip, verdict2.risk_score as f64, "waf_rule_match");
+            entity_manager.apply_external_risk(
+                client_ip,
+                verdict2.risk_score as f64,
+                "waf_rule_match",
+            );
         }
 
         // Third request - path traversal
@@ -604,14 +612,21 @@ mod filter_chain_integration {
 
         let verdict3 = synapse.analyze(&req3);
         if verdict3.risk_score > 0 {
-            entity_manager.apply_external_risk(client_ip, verdict3.risk_score as f64, "waf_rule_match");
+            entity_manager.apply_external_risk(
+                client_ip,
+                verdict3.risk_score as f64,
+                "waf_rule_match",
+            );
         }
 
         // After multiple attacks, entity should have accumulated significant risk
         let block_decision = entity_manager.check_block(client_ip);
 
         // The accumulated risk from multiple attacks should be tracked
-        assert!(block_decision.risk > 0.0, "Risk should accumulate from WAF matches");
+        assert!(
+            block_decision.risk > 0.0,
+            "Risk should accumulate from WAF matches"
+        );
     }
 
     /// Test that blocked entities remain blocked until risk decays
@@ -690,8 +705,14 @@ mod filter_chain_integration {
         let allowed_ipv6: std::net::IpAddr = "2001:db8:1234::1".parse().unwrap();
         let denied_ipv6: std::net::IpAddr = "2001:db9:1234::1".parse().unwrap();
 
-        assert!(list.is_allowed(&allowed_ipv6), "IPv6 in range should be allowed");
-        assert!(!list.is_allowed(&denied_ipv6), "IPv6 out of range should be denied");
+        assert!(
+            list.is_allowed(&allowed_ipv6),
+            "IPv6 in range should be allowed"
+        );
+        assert!(
+            !list.is_allowed(&denied_ipv6),
+            "IPv6 out of range should be denied"
+        );
     }
 
     // ========================================================================
@@ -752,10 +773,7 @@ mod filter_chain_integration {
     fn test_trap_no_false_positives() {
         let trap_config = TrapConfig {
             enabled: true,
-            paths: vec![
-                "/.env".to_string(),
-                "/wp-admin/*".to_string(),
-            ],
+            paths: vec!["/.env".to_string(), "/wp-admin/*".to_string()],
             ..Default::default()
         };
 
@@ -922,7 +940,9 @@ mod filter_chain_integration {
         });
 
         let mut synapse = Synapse::new();
-        synapse.load_rules(MINIMAL_RULES.as_bytes()).expect("Failed to load rules");
+        synapse
+            .load_rules(MINIMAL_RULES.as_bytes())
+            .expect("Failed to load rules");
         let block_log = BlockLog::new(100);
 
         // Test Case 1: ACL blocks immediately (no further processing)
@@ -1003,9 +1023,18 @@ mod filter_chain_integration {
         let level_0_delay = calculate_tarpit_delay(&config, 0);
         let level_3_delay = calculate_tarpit_delay(&config, 3);
 
-        assert_eq!(level_0_delay, config.base_delay_ms, "Level 0 should be base delay");
-        assert!(level_3_delay > level_0_delay, "Higher level should have longer delay");
-        assert!(level_3_delay <= config.max_delay_ms, "Should not exceed max");
+        assert_eq!(
+            level_0_delay, config.base_delay_ms,
+            "Level 0 should be base delay"
+        );
+        assert!(
+            level_3_delay > level_0_delay,
+            "Higher level should have longer delay"
+        );
+        assert!(
+            level_3_delay <= config.max_delay_ms,
+            "Should not exceed max"
+        );
     }
 
     // Helper function to calculate tarpit delay (mimics filter chain logic)
@@ -1014,7 +1043,8 @@ mod filter_chain_integration {
             return 0;
         }
 
-        let delay = (config.base_delay_ms as f64 * config.progressive_multiplier.powi(offense_level as i32)) as u64;
+        let delay = (config.base_delay_ms as f64
+            * config.progressive_multiplier.powi(offense_level as i32)) as u64;
         delay.min(config.max_delay_ms)
     }
 }

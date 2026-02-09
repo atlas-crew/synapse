@@ -8,11 +8,11 @@
 //! - JA4H generation: <10μs
 //! - Combined fingerprint: <15μs
 
+use http::header::{HeaderName, HeaderValue};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use http::header::{HeaderName, HeaderValue};
 
 // ============================================================================
 // Types
@@ -793,9 +793,7 @@ mod tests {
 
     #[test]
     fn test_generate_ja4h_accept_language() {
-        let headers = vec![
-            header("Accept-Language", "en-US,en;q=0.9,fr;q=0.8"),
-        ];
+        let headers = vec![header("Accept-Language", "en-US,en;q=0.9,fr;q=0.8")];
         let request = HttpHeaders {
             headers: &headers,
             method: "GET",
@@ -808,9 +806,7 @@ mod tests {
 
     #[test]
     fn test_generate_ja4h_french_language() {
-        let headers = vec![
-            header("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.8"),
-        ];
+        let headers = vec![header("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.8")];
         let request = HttpHeaders {
             headers: &headers,
             method: "GET",
@@ -831,7 +827,11 @@ mod tests {
                 http_version: version,
             };
             let result = generate_ja4h(&request);
-            assert_eq!(result.http_version, expected, "Failed for version {}", version);
+            assert_eq!(
+                result.http_version, expected,
+                "Failed for version {}",
+                version
+            );
         }
     }
 
@@ -865,19 +865,15 @@ mod tests {
 
     #[test]
     fn test_extract_client_fingerprint_with_ja4() {
-        let headers = vec![
-            header("Accept", "text/html"),
-        ];
+        let headers = vec![header("Accept", "text/html")];
         let request = HttpHeaders {
             headers: &headers,
             method: "GET",
             http_version: "1.1",
         };
 
-        let result = extract_client_fingerprint(
-            Some("t13d1516h2_8daaf6152771_e5627efa2ab1"),
-            &request,
-        );
+        let result =
+            extract_client_fingerprint(Some("t13d1516h2_8daaf6152771_e5627efa2ab1"), &request);
 
         assert!(result.ja4.is_some());
         assert_eq!(result.combined_hash.len(), 16);
@@ -885,9 +881,7 @@ mod tests {
 
     #[test]
     fn test_extract_client_fingerprint_without_ja4() {
-        let headers = vec![
-            header("Accept", "text/html"),
-        ];
+        let headers = vec![header("Accept", "text/html")];
         let request = HttpHeaders {
             headers: &headers,
             method: "GET",
@@ -937,14 +931,26 @@ mod tests {
     #[test]
     fn test_matches_pattern() {
         // Prefix wildcard
-        assert!(matches_pattern("t13d1516h2_8daaf6152771_e5627efa2ab1", "t13*"));
-        assert!(!matches_pattern("t12d1516h2_8daaf6152771_e5627efa2ab1", "t13*"));
+        assert!(matches_pattern(
+            "t13d1516h2_8daaf6152771_e5627efa2ab1",
+            "t13*"
+        ));
+        assert!(!matches_pattern(
+            "t12d1516h2_8daaf6152771_e5627efa2ab1",
+            "t13*"
+        ));
 
         // Middle wildcard
-        assert!(matches_pattern("t13d1516h2_8daaf6152771_e5627efa2ab1", "*_8daaf6152771_*"));
+        assert!(matches_pattern(
+            "t13d1516h2_8daaf6152771_e5627efa2ab1",
+            "*_8daaf6152771_*"
+        ));
 
         // Suffix wildcard
-        assert!(matches_pattern("t13d1516h2_8daaf6152771_e5627efa2ab1", "*e5627efa2ab1"));
+        assert!(matches_pattern(
+            "t13d1516h2_8daaf6152771_e5627efa2ab1",
+            "*e5627efa2ab1"
+        ));
     }
 
     // ==================== Analysis Tests ====================
@@ -1022,7 +1028,10 @@ mod tests {
         let analysis = analyze_ja4h(&fp);
         assert!(analysis.suspicious);
         assert!(analysis.issues.iter().any(|i| i.contains("HTTP/1.0")));
-        assert!(analysis.issues.iter().any(|i| i.contains("Accept-Language")));
+        assert!(analysis
+            .issues
+            .iter()
+            .any(|i| i.contains("Accept-Language")));
     }
 
     // ==================== Performance Benchmark Hints ====================
@@ -1033,10 +1042,7 @@ mod tests {
         // This test verifies that parsing is fast by running many iterations
         let input = "t13d1516h2_8daaf6152771_e5627efa2ab1";
         let iterations = test_limit_usize("SYNAPSE_TEST_PERF_ITERATIONS", 10_000, 100);
-        eprintln!(
-            "test_ja4_parsing_performance: iterations={}",
-            iterations
-        );
+        eprintln!("test_ja4_parsing_performance: iterations={}", iterations);
         let start = std::time::Instant::now();
 
         for _ in 0..iterations {
@@ -1046,7 +1052,11 @@ mod tests {
         let elapsed = start.elapsed();
         // Should complete 10K parses in under 500ms in debug mode (50μs each)
         // Note: Release builds are ~5x faster, but tests run in debug by default
-        assert!(elapsed.as_millis() < 500, "JA4 parsing too slow: {:?}", elapsed);
+        assert!(
+            elapsed.as_millis() < 500,
+            "JA4 parsing too slow: {:?}",
+            elapsed
+        );
     }
 
     #[test]
@@ -1084,6 +1094,10 @@ mod tests {
         #[cfg(not(debug_assertions))]
         let max_time_ms = 200;
 
-        assert!(elapsed.as_millis() < max_time_ms, "JA4H generation too slow: {:?}", elapsed);
+        assert!(
+            elapsed.as_millis() < max_time_ms,
+            "JA4H generation too slow: {:?}",
+            elapsed
+        );
     }
 }

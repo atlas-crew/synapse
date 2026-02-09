@@ -181,7 +181,8 @@ impl JsChallengeManager {
         };
 
         // Store challenge
-        self.challenges.insert(actor_id.to_string(), challenge.clone());
+        self.challenges
+            .insert(actor_id.to_string(), challenge.clone());
         self.stats.challenges_issued.fetch_add(1, Ordering::Relaxed);
 
         challenge
@@ -216,7 +217,9 @@ impl JsChallengeManager {
         let now = now_ms();
         if challenge.expires_at < now {
             self.challenges.remove(actor_id);
-            self.stats.challenges_expired.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .challenges_expired
+                .fetch_add(1, Ordering::Relaxed);
             return ValidationResult::Expired;
         }
 
@@ -398,10 +401,7 @@ impl JsChallengeManager {
 
     /// Get attempt count for an actor
     pub fn get_attempts(&self, actor_id: &str) -> u32 {
-        self.attempt_counts
-            .get(actor_id)
-            .map(|v| *v)
-            .unwrap_or(0)
+        self.attempt_counts.get(actor_id).map(|v| *v).unwrap_or(0)
     }
 
     /// Check if actor has active challenge
@@ -470,7 +470,11 @@ impl JsChallengeManager {
         });
 
         // Also clean up attempt counts for actors without challenges
-        let actor_ids: Vec<String> = self.attempt_counts.iter().map(|e| e.key().clone()).collect();
+        let actor_ids: Vec<String> = self
+            .attempt_counts
+            .iter()
+            .map(|e| e.key().clone())
+            .collect();
         for actor_id in actor_ids {
             if !self.challenges.contains_key(&actor_id) {
                 self.attempt_counts.remove(&actor_id);

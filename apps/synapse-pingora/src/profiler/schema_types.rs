@@ -481,7 +481,11 @@ impl SchemaViolation {
     }
 
     /// Create a pattern mismatch violation.
-    pub fn pattern_mismatch(field: &str, expected: PatternType, actual: Option<PatternType>) -> Self {
+    pub fn pattern_mismatch(
+        field: &str,
+        expected: PatternType,
+        actual: Option<PatternType>,
+    ) -> Self {
         let v_type = ViolationType::PatternMismatch;
         Self::new(
             field.to_string(),

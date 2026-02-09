@@ -405,7 +405,12 @@ fn bench_payload_manager(c: &mut Criterion) {
         });
         for i in 0..1000 {
             let entity = format!("10.0.{}.{}", (i / 256) % 256, i % 256);
-            mgr.record_request("/api/data", &entity, 512 + (i as u64 % 1024), 2048 + (i as u64 % 4096));
+            mgr.record_request(
+                "/api/data",
+                &entity,
+                512 + (i as u64 % 1024),
+                2048 + (i as u64 % 4096),
+            );
         }
         b.iter(|| black_box(mgr.check_anomalies()))
     });

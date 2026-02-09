@@ -86,7 +86,10 @@ impl TrapMatcher {
         // Build RegexSet for fast O(1) matching on hot path
         let pattern_set = RegexSet::new(&regex_strings)?;
 
-        Ok(Self { pattern_set, config })
+        Ok(Self {
+            pattern_set,
+            config,
+        })
     }
 
     /// Check if a path matches any trap pattern.
@@ -507,10 +510,7 @@ mod tests {
     fn test_nested_trap_patterns() {
         let config = TrapConfig {
             enabled: true,
-            paths: vec![
-                "/deep/**/secret/*".to_string(),
-                "/a/**/b/**/c".to_string(),
-            ],
+            paths: vec!["/deep/**/secret/*".to_string(), "/a/**/b/**/c".to_string()],
             ..Default::default()
         };
         let matcher = TrapMatcher::new(config).unwrap();
@@ -638,7 +638,10 @@ mod tests {
 
         // Returns first matching pattern
         assert_eq!(matcher.matched_pattern("/first/file"), Some("/first/*"));
-        assert_eq!(matcher.matched_pattern("/second/deep/path"), Some("/second/**"));
+        assert_eq!(
+            matcher.matched_pattern("/second/deep/path"),
+            Some("/second/**")
+        );
         assert_eq!(matcher.matched_pattern("/third"), Some("/third"));
         assert_eq!(matcher.matched_pattern("/nonexistent"), None);
     }

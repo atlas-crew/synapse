@@ -548,14 +548,14 @@ impl Default for StuffingConfig {
             distributed_window_ms: 15 * 60 * 1000, // 15 minutes
 
             // Username-targeted attack detection
-            username_targeted_min_ips: 5,           // 5 different IPs
-            username_targeted_min_failures: 10,      // 10 failures total
+            username_targeted_min_ips: 5,       // 5 different IPs
+            username_targeted_min_failures: 10, // 10 failures total
             username_targeted_window_ms: 10 * 60 * 1000, // 10 minutes
 
             // Global velocity detection
-            global_velocity_threshold_rate: 10.0,    // 10 failures/sec
-            global_velocity_window_ms: 60 * 1000,    // 1 minute
-            global_velocity_max_track: 5000,         // Track up to 5000 failures
+            global_velocity_threshold_rate: 10.0, // 10 failures/sec
+            global_velocity_window_ms: 60 * 1000, // 1 minute
+            global_velocity_max_track: 5000,      // Track up to 5000 failures
 
             // Takeover detection
             takeover_window_ms: 5 * 60 * 1000, // 5 minutes
@@ -887,8 +887,13 @@ mod tests {
             TakeoverAlert::new("1.2.3.4".to_string(), "/login".to_string(), 25, 60000, 1000);
         assert_eq!(high_alert.severity, StuffingSeverity::High);
 
-        let critical_alert =
-            TakeoverAlert::new("1.2.3.4".to_string(), "/login".to_string(), 100, 60000, 1000);
+        let critical_alert = TakeoverAlert::new(
+            "1.2.3.4".to_string(),
+            "/login".to_string(),
+            100,
+            60000,
+            1000,
+        );
         assert_eq!(critical_alert.severity, StuffingSeverity::Critical);
     }
 

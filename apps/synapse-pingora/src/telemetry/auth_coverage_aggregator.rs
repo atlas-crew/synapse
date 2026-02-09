@@ -1,8 +1,8 @@
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use parking_lot::RwLock;
 use tokio::time::interval;
 use tracing::warn;
 
@@ -45,16 +45,11 @@ impl AuthCoverageAggregator {
         self.max_endpoints = max_endpoints;
         self
     }
-    
+
     /// Record a request (called from response filter, must be fast)
-    pub fn record(
-        &self,
-        endpoint: &str,
-        response_class: ResponseClass,
-        has_auth_header: bool,
-    ) {
+    pub fn record(&self, endpoint: &str, response_class: ResponseClass, has_auth_header: bool) {
         let mut counts = self.counts.write();
-        
+
         // If at limit and endpoint is new, merge into "OTHER"
         // Account for "OTHER" entry by using saturating_sub(1)
         let target_endpoint = if counts.contains_key(endpoint) {
@@ -67,23 +62,23 @@ impl AuthCoverageAggregator {
         };
 
         let entry = counts.entry(target_endpoint.to_string()).or_default();
-        
+
         entry.total += 1;
-        
+
         match response_class {
             ResponseClass::Success => entry.success += 1,
             ResponseClass::Unauthorized => entry.unauthorized += 1,
             ResponseClass::Forbidden => entry.forbidden += 1,
             _ => entry.other_error += 1,
         }
-        
+
         if has_auth_header {
             entry.with_auth += 1;
         } else {
             entry.without_auth += 1;
         }
     }
-    
+
     /// Start background flush task
     pub fn start_flush_task(self: Arc<Self>) {
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
@@ -94,14 +89,14 @@ impl AuthCoverageAggregator {
 
         handle.spawn(async move {
             let mut ticker = interval(aggregator.flush_interval);
-            
+
             loop {
                 ticker.tick().await;
                 aggregator.flush().await;
             }
         });
     }
-    
+
     /// Flush current counts to Hub and reset
     async fn flush(&self) {
         // Swap out current counts atomically
@@ -109,13 +104,13 @@ impl AuthCoverageAggregator {
             let mut guard = self.counts.write();
             std::mem::take(&mut *guard)
         };
-        
+
         let dropped_endpoints = self.dropped_endpoints.load(Ordering::Relaxed);
-        
+
         if counts.is_empty() && dropped_endpoints == 0 {
             return; // Nothing to send
         }
-        
+
         let summary = AuthCoverageSummary {
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -129,19 +124,20 @@ impl AuthCoverageAggregator {
                 .collect(),
             dropped_endpoints,
         };
-        
+
         if let Ok(payload) = serde_json::to_value(&summary) {
             self.emitter.emit("auth_coverage_summary", payload).await;
-            self.dropped_endpoints.fetch_sub(dropped_endpoints, Ordering::SeqCst);
+            self.dropped_endpoints
+                .fetch_sub(dropped_endpoints, Ordering::SeqCst);
         }
     }
-    
+
     /// Get current endpoint count (for testing/debugging)
     #[cfg(test)]
     pub fn endpoint_count(&self) -> usize {
         self.counts.read().len()
     }
-    
+
     /// Force flush (for testing)
     #[cfg(test)]
     pub async fn force_flush(&self) {
@@ -152,21 +148,21 @@ impl AuthCoverageAggregator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use async_trait::async_trait;
-    
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     // Mock emitter for testing
     struct MockEmitter {
         emit_count: AtomicUsize,
     }
-    
+
     impl MockEmitter {
         fn new() -> Arc<Self> {
             Arc::new(Self {
                 emit_count: AtomicUsize::new(0),
             })
         }
-        
+
         fn count(&self) -> usize {
             self.emit_count.load(Ordering::SeqCst)
         }
@@ -178,52 +174,52 @@ mod tests {
             self.emit_count.fetch_add(1, Ordering::SeqCst);
         }
     }
-    
+
     #[test]
     fn test_record_increments_counts() {
         let emitter = MockEmitter::new();
         let aggregator = AuthCoverageAggregator::new(
             "test-sensor".to_string(),
             None,
-            emitter.clone() as Arc<dyn SignalEmitter>, 
+            emitter.clone() as Arc<dyn SignalEmitter>,
             60,
         );
-        
+
         aggregator.record("GET /api/users/{id}", ResponseClass::Success, true);
         aggregator.record("GET /api/users/{id}", ResponseClass::Success, true);
         aggregator.record("GET /api/users/{id}", ResponseClass::Forbidden, true);
-        
+
         assert_eq!(aggregator.endpoint_count(), 1);
     }
-    
+
     #[tokio::test]
     async fn test_flush_clears_counts() {
         let emitter = MockEmitter::new();
         let aggregator = AuthCoverageAggregator::new(
             "test-sensor".to_string(),
             None,
-            emitter.clone() as Arc<dyn SignalEmitter>, 
+            emitter.clone() as Arc<dyn SignalEmitter>,
             60,
         );
-        
+
         aggregator.record("GET /api/users/{id}", ResponseClass::Success, true);
         assert_eq!(aggregator.endpoint_count(), 1);
-        
+
         aggregator.flush().await;
         assert_eq!(aggregator.endpoint_count(), 0);
         assert_eq!(emitter.count(), 1);
     }
-    
+
     #[tokio::test]
     async fn test_empty_flush_no_emit() {
         let emitter = MockEmitter::new();
         let aggregator = AuthCoverageAggregator::new(
             "test-sensor".to_string(),
             None,
-            emitter.clone() as Arc<dyn SignalEmitter>, 
+            emitter.clone() as Arc<dyn SignalEmitter>,
             60,
         );
-        
+
         aggregator.flush().await;
         assert_eq!(emitter.count(), 0);
     }
@@ -234,16 +230,17 @@ mod tests {
         let aggregator = AuthCoverageAggregator::new(
             "test-sensor".to_string(),
             None,
-            emitter.clone() as Arc<dyn SignalEmitter>, 
+            emitter.clone() as Arc<dyn SignalEmitter>,
             60,
-        ).with_max_endpoints(2);
-        
+        )
+        .with_max_endpoints(2);
+
         aggregator.record("EP1", ResponseClass::Success, true);
         aggregator.record("EP2", ResponseClass::Success, true);
         aggregator.record("EP3", ResponseClass::Success, true);
-        
+
         assert_eq!(aggregator.endpoint_count(), 2);
-        
+
         let counts = aggregator.counts.read();
         assert!(counts.contains_key("EP1"));
         assert!(counts.contains_key("OTHER"));

@@ -91,7 +91,10 @@ impl fmt::Debug for GlobalConfig {
             .field("waf_threshold", &self.waf_threshold)
             .field("waf_enabled", &self.waf_enabled)
             .field("log_level", &self.log_level)
-            .field("admin_api_key", &self.admin_api_key.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "admin_api_key",
+                &self.admin_api_key.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("trap_config", &self.trap_config)
             .field("waf_regex_timeout_ms", &self.waf_regex_timeout_ms)
             .finish()
@@ -275,7 +278,6 @@ pub struct ProfilerConfig {
     // ========================================================================
     // Anomaly Detection Thresholds
     // ========================================================================
-
     /// Z-score threshold for payload size anomaly detection (default: 3.0)
     #[serde(default = "default_payload_z_threshold")]
     pub payload_z_threshold: f64,
@@ -300,7 +302,6 @@ pub struct ProfilerConfig {
     // ========================================================================
     // Security Controls
     // ========================================================================
-
     /// Maximum number of type categories per parameter (prevents memory exhaustion)
     #[serde(default = "default_max_type_counts")]
     pub max_type_counts: usize,
@@ -490,10 +491,7 @@ impl ConfigLoader {
         // Validate
         Self::validate(&config)?;
 
-        info!(
-            "Loaded configuration with {} sites",
-            config.sites.len()
-        );
+        info!("Loaded configuration with {} sites", config.sites.len());
         Ok(config)
     }
 
@@ -545,8 +543,7 @@ impl ConfigLoader {
                         return Err(ConfigError::ValidationError(format!(
                             "site '{}' has invalid WAF threshold {} (must be 1-100); \
                              use waf.enabled: false to disable or set a valid threshold",
-                            site.hostname,
-                            threshold
+                            site.hostname, threshold
                         )));
                     }
                 }
@@ -615,7 +612,7 @@ impl ConfigLoader {
             return Err(ConfigError::ValidationError(
                 "global WAF threshold of 0 effectively disables protection. \
                  Use waf_enabled: false to disable globally, or set waf_threshold between 1-100"
-                    .to_string()
+                    .to_string(),
             ));
         }
         if config.server.waf_threshold > 100 {

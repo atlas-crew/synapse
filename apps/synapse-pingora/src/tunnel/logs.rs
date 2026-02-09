@@ -42,7 +42,11 @@ pub struct LogStreamEntry {
 }
 
 impl LogStreamEntry {
-    fn new(source: impl Into<String>, level: impl Into<String>, message: impl Into<String>) -> Self {
+    fn new(
+        source: impl Into<String>,
+        level: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         let timestamp = chrono::Utc::now();
         Self {
             id: fastrand::u64(..).to_string(),
@@ -108,7 +112,10 @@ impl LogStreamEntry {
         fields.insert("source".to_string(), Value::String(self.source.clone()));
         fields.insert("level".to_string(), Value::String(self.level.clone()));
         fields.insert("message".to_string(), Value::String(self.message.clone()));
-        fields.insert("logTimestamp".to_string(), Value::Number(self.timestamp_ms.into()));
+        fields.insert(
+            "logTimestamp".to_string(),
+            Value::Number(self.timestamp_ms.into()),
+        );
 
         if let Some(request_id) = &self.request_id {
             fields.insert("requestId".to_string(), Value::String(request_id.clone()));
@@ -123,7 +130,10 @@ impl LogStreamEntry {
             fields.insert("path".to_string(), Value::String(path.clone()));
         }
         if let Some(status_code) = self.status_code {
-            fields.insert("statusCode".to_string(), Value::Number((status_code as u64).into()));
+            fields.insert(
+                "statusCode".to_string(),
+                Value::Number((status_code as u64).into()),
+            );
         }
         if let Some(latency_ms) = self.latency_ms {
             fields.insert(
@@ -370,10 +380,13 @@ impl TunnelLogService {
             return;
         };
 
-        let session_id = envelope
-            .session_id
-            .clone()
-            .or_else(|| envelope.raw.get("sessionId").and_then(|v| v.as_str()).map(|v| v.to_string()));
+        let session_id = envelope.session_id.clone().or_else(|| {
+            envelope
+                .raw
+                .get("sessionId")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string())
+        });
 
         match message_type {
             "subscribe" => {
@@ -455,13 +468,8 @@ impl TunnelLogService {
             }
         });
 
-        self.sessions.insert(
-            session_id.clone(),
-            LogSession {
-                filter,
-                task,
-            },
-        );
+        self.sessions
+            .insert(session_id.clone(), LogSession { filter, task });
 
         if backfill_enabled {
             self.send_backfill(&session_id, backfill_lines).await;
@@ -498,7 +506,9 @@ impl TunnelLogService {
             return;
         };
 
-        let filter_guard = filter.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let filter_guard = filter
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let filtered: Vec<Value> = entries
             .into_iter()
             .filter(|entry| filter_guard.matches(entry))
@@ -661,10 +671,10 @@ async fn tail_file(path: String, subsource: &'static str) -> Result<(), String> 
     let file = tokio::fs::File::open(&path)
         .await
         .map_err(|err| format!("open error: {}", err))?;
-    
+
     // Get initial metadata to track rotation
     let mut last_metadata = file.metadata().await.map_err(|e| e.to_string())?;
-    
+
     let mut reader = BufReader::new(file);
     reader
         .seek(std::io::SeekFrom::End(0))
@@ -684,7 +694,9 @@ async fn tail_file(path: String, subsource: &'static str) -> Result<(), String> 
             // Periodically check for rotation (every 5 seconds or when idle)
             if last_rotation_check.elapsed() > Duration::from_secs(5) {
                 if let Ok(current_metadata) = tokio::fs::metadata(&path).await {
-                    let rotated = if let (Some(old_ino), Some(new_ino)) = (get_inode(&last_metadata), get_inode(&current_metadata)) {
+                    let rotated = if let (Some(old_ino), Some(new_ino)) =
+                        (get_inode(&last_metadata), get_inode(&current_metadata))
+                    {
                         old_ino != new_ino
                     } else {
                         // Fallback to size/mtime if inodes not available or comparable

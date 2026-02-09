@@ -13,8 +13,8 @@
 //! - All header values are bounded before processing
 //! - JA4 fingerprint validation prevents spoofing attacks
 
-use std::borrow::Cow;
 use super::ja4::{HttpHeaders, Ja4Fingerprint, Ja4Protocol};
+use std::borrow::Cow;
 
 /// Maximum allowed length for User-Agent header (512 bytes)
 pub const MAX_USER_AGENT_LENGTH: usize = 512;
@@ -80,34 +80,34 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
                 let (truncated, was_truncated) = truncate_header(value_str, MAX_USER_AGENT_LENGTH);
                 ua = truncated;
                 any_truncated |= was_truncated;
-            },
+            }
             "sec-ch-ua" => {
                 let (truncated, was_truncated) = truncate_header(value_str, MAX_SEC_CH_UA_LENGTH);
                 sec_ch_ua = truncated;
                 any_truncated |= was_truncated;
                 result.has_client_hints = true;
-            },
+            }
             "sec-fetch-site" => {
                 let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 sec_fetch_site = truncated;
                 any_truncated |= was_truncated;
                 result.has_fetch_metadata = true;
-            },
+            }
             "sec-fetch-mode" => {
                 let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 sec_fetch_mode = truncated;
                 any_truncated |= was_truncated;
-            },
+            }
             "referer" => {
                 let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 referer = truncated;
                 any_truncated |= was_truncated;
-            },
+            }
             "host" => {
                 let (truncated, was_truncated) = truncate_header(value_str, MAX_HEADER_LENGTH);
                 host = truncated;
                 any_truncated |= was_truncated;
-            },
+            }
             _ => {}
         }
     }
@@ -116,7 +116,9 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
 
     // Oversized headers are suspicious (potential attack or malformed client)
     if any_truncated {
-        result.inconsistencies.push(Cow::Borrowed("Header exceeds maximum allowed length"));
+        result
+            .inconsistencies
+            .push(Cow::Borrowed("Header exceeds maximum allowed length"));
         saturating_add_score(&mut result.suspicion_score, 20);
     }
 
@@ -128,7 +130,9 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
         // but generally modern Chrome should have it.
         // For safety, we only flag if it claims to be a very recent version.
         if ua.contains("Chrome/12") || ua.contains("Chrome/13") {
-            result.inconsistencies.push(Cow::Borrowed("Missing Client Hints for modern Chrome/Edge"));
+            result
+                .inconsistencies
+                .push(Cow::Borrowed("Missing Client Hints for modern Chrome/Edge"));
             saturating_add_score(&mut result.suspicion_score, 30);
         }
     }
@@ -140,7 +144,9 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
             // Firefox typically doesn't send Sec-CH-UA yet (experimental)
             // If it does, it shouldn't claim to be Chromium unless it is.
             if sec_ch_ua.contains("Chromium") {
-                result.inconsistencies.push(Cow::Borrowed("Firefox User-Agent sent Chromium Client Hints"));
+                result.inconsistencies.push(Cow::Borrowed(
+                    "Firefox User-Agent sent Chromium Client Hints",
+                ));
                 saturating_add_score(&mut result.suspicion_score, 50);
             }
         }
@@ -153,7 +159,9 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
             // Simple check: referer should contain host
             // (Note: This is a loose check, proper URL parsing is expensive)
             if !referer.contains(host) && !host.is_empty() {
-                result.inconsistencies.push(Cow::Borrowed("Sec-Fetch-Site: same-origin but Referer mismatch"));
+                result.inconsistencies.push(Cow::Borrowed(
+                    "Sec-Fetch-Site: same-origin but Referer mismatch",
+                ));
                 saturating_add_score(&mut result.suspicion_score, 40);
             }
         }
@@ -162,10 +170,14 @@ pub fn analyze_integrity(request: &HttpHeaders<'_>) -> IntegrityAnalysis {
         if sec_fetch_mode == "navigate"
             && request.headers.iter().any(|(name, value)| {
                 name.as_str() == "sec-fetch-dest"
-                    && value.to_str().ok().map(|v| v != "document").unwrap_or(false)
+                    && value
+                        .to_str()
+                        .ok()
+                        .map(|v| v != "document")
+                        .unwrap_or(false)
             })
         {
-             // Not always true (e.g. frames), but worth noting for correlation
+            // Not always true (e.g. frames), but worth noting for correlation
         }
     }
 
@@ -279,7 +291,9 @@ pub fn analyze_ja4_spoofing(ja4: &Ja4Fingerprint, user_agent: &str) -> Ja4Spoofi
     // Truncate oversized User-Agent
     let (ua, truncated) = truncate_header(user_agent, MAX_USER_AGENT_LENGTH);
     if truncated {
-        result.inconsistencies.push(Cow::Borrowed("User-Agent exceeds maximum length"));
+        result
+            .inconsistencies
+            .push(Cow::Borrowed("User-Agent exceeds maximum length"));
         saturating_add_score(&mut result.spoofing_confidence, 10);
     }
 
@@ -395,7 +409,10 @@ fn validate_against_profile(
     }
 
     // Check ALPN
-    let alpn_matches = profile.expected_alpn.iter().any(|&a| ja4.alpn.contains(a) || a == ja4.alpn);
+    let alpn_matches = profile
+        .expected_alpn
+        .iter()
+        .any(|&a| ja4.alpn.contains(a) || a == ja4.alpn);
     if !alpn_matches && ja4.alpn != "unknown" {
         result.inconsistencies.push(Cow::Owned(format!(
             "ALPN '{}' unexpected for {} (expected {:?})",
@@ -409,7 +426,9 @@ fn validate_against_profile(
         && (browser_name == "chrome" || browser_name == "edge")
         && ja4.alpn != "h3"
     {
-        result.inconsistencies.push(Cow::Borrowed("QUIC connection without H3 ALPN for Chromium browser"));
+        result.inconsistencies.push(Cow::Borrowed(
+            "QUIC connection without H3 ALPN for Chromium browser",
+        ));
         saturating_add_score(&mut result.spoofing_confidence, 20);
     }
 }
@@ -418,12 +437,16 @@ fn validate_against_profile(
 fn validate_generic_client(ja4: &Ja4Fingerprint, result: &mut Ja4SpoofingAnalysis) {
     // Very minimal TLS configuration suggests automated tool
     if ja4.cipher_count < 3 {
-        result.inconsistencies.push(Cow::Borrowed("Extremely low cipher count (<3) indicates minimal TLS client"));
+        result.inconsistencies.push(Cow::Borrowed(
+            "Extremely low cipher count (<3) indicates minimal TLS client",
+        ));
         saturating_add_score(&mut result.spoofing_confidence, 40);
     }
 
     if ja4.ext_count < 3 {
-        result.inconsistencies.push(Cow::Borrowed("Extremely low extension count (<3) indicates minimal TLS client"));
+        result.inconsistencies.push(Cow::Borrowed(
+            "Extremely low extension count (<3) indicates minimal TLS client",
+        ));
         saturating_add_score(&mut result.spoofing_confidence, 40);
     }
 
@@ -494,7 +517,10 @@ pub fn analyze_integrity_with_ja4(
         }
 
         // Add JA4 spoofing score to overall suspicion
-        saturating_add_score(&mut result.suspicion_score, ja4_analysis.spoofing_confidence / 2);
+        saturating_add_score(
+            &mut result.suspicion_score,
+            ja4_analysis.spoofing_confidence / 2,
+        );
 
         // If JA4 analysis shows likely spoofing, ensure high suspicion score
         if ja4_analysis.likely_spoofed {
@@ -532,7 +558,8 @@ mod tests {
 
         let result = analyze_integrity(&req);
         assert!(result.suspicion_score > 0);
-        let all_inconsistencies: String = result.inconsistencies.iter().map(|c| c.as_ref()).collect();
+        let all_inconsistencies: String =
+            result.inconsistencies.iter().map(|c| c.as_ref()).collect();
         assert!(all_inconsistencies.contains("Missing Client Hints"));
     }
 
@@ -560,9 +587,7 @@ mod tests {
     fn test_oversized_user_agent_truncated() {
         // Create a User-Agent longer than MAX_USER_AGENT_LENGTH
         let oversized_ua = "A".repeat(MAX_USER_AGENT_LENGTH + 100);
-        let headers = vec![
-            header("User-Agent", &oversized_ua),
-        ];
+        let headers = vec![header("User-Agent", &oversized_ua)];
         let req = HttpHeaders {
             headers: &headers,
             method: "GET",
@@ -572,7 +597,8 @@ mod tests {
         let result = analyze_integrity(&req);
         assert!(result.input_truncated);
         assert!(result.suspicion_score >= 20);
-        let all_inconsistencies: String = result.inconsistencies.iter().map(|c| c.as_ref()).collect();
+        let all_inconsistencies: String =
+            result.inconsistencies.iter().map(|c| c.as_ref()).collect();
         assert!(all_inconsistencies.contains("exceeds maximum"));
     }
 
@@ -593,13 +619,9 @@ mod tests {
         alpn: &str,
     ) -> Ja4Fingerprint {
         Ja4Fingerprint {
-            raw: format!("t{}d{:02x}{:02x}{}_{}_{}",
-                tls_version,
-                cipher_count,
-                ext_count,
-                alpn,
-                "aabbccddeeff",
-                "112233445566"
+            raw: format!(
+                "t{}d{:02x}{:02x}{}_{}_{}",
+                tls_version, cipher_count, ext_count, alpn, "aabbccddeeff", "112233445566"
             ),
             protocol: Ja4Protocol::TCP,
             tls_version,
@@ -621,9 +643,16 @@ mod tests {
         let result = analyze_ja4_spoofing(&ja4, chrome_ua);
 
         assert!(result.likely_spoofed, "Should detect spoofing");
-        assert!(result.spoofing_confidence >= 50, "Confidence should be >= 50: {}", result.spoofing_confidence);
+        assert!(
+            result.spoofing_confidence >= 50,
+            "Confidence should be >= 50: {}",
+            result.spoofing_confidence
+        );
         assert_eq!(result.claimed_browser, "chrome");
-        assert!(!result.inconsistencies.is_empty(), "Should have inconsistencies");
+        assert!(
+            !result.inconsistencies.is_empty(),
+            "Should have inconsistencies"
+        );
     }
 
     /// SECURITY TEST: Verify legitimate Chrome fingerprint is not flagged
@@ -634,8 +663,16 @@ mod tests {
 
         let result = analyze_ja4_spoofing(&ja4, chrome_ua);
 
-        assert!(!result.likely_spoofed, "Should not flag legitimate Chrome: {:?}", result.inconsistencies);
-        assert!(result.spoofing_confidence < 50, "Confidence should be < 50: {}", result.spoofing_confidence);
+        assert!(
+            !result.likely_spoofed,
+            "Should not flag legitimate Chrome: {:?}",
+            result.inconsistencies
+        );
+        assert!(
+            result.spoofing_confidence < 50,
+            "Confidence should be < 50: {}",
+            result.spoofing_confidence
+        );
         assert_eq!(result.claimed_browser, "chrome");
     }
 
@@ -644,7 +681,8 @@ mod tests {
     fn test_ja4_firefox_with_chromium_fingerprint() {
         // This simulates a bot claiming to be Firefox but using a Chromium TLS stack
         let ja4 = make_test_ja4(13, 20, 22, "h2");
-        let firefox_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0";
+        let firefox_ua =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0";
 
         let result = analyze_ja4_spoofing(&ja4, firefox_ua);
 
@@ -663,8 +701,12 @@ mod tests {
 
         assert!(result.likely_spoofed, "Should detect old TLS as spoofing");
         assert!(
-            result.inconsistencies.iter().any(|i| i.as_ref().contains("too old")),
-            "Should mention old TLS: {:?}", result.inconsistencies
+            result
+                .inconsistencies
+                .iter()
+                .any(|i| i.as_ref().contains("too old")),
+            "Should mention old TLS: {:?}",
+            result.inconsistencies
         );
     }
 
@@ -698,9 +740,18 @@ mod tests {
     /// Test browser detection from User-Agent
     #[test]
     fn test_detect_browser_from_ua() {
-        assert_eq!(detect_browser_from_ua("Mozilla/5.0 Chrome/120.0.0.0"), "chrome");
-        assert_eq!(detect_browser_from_ua("Mozilla/5.0 Firefox/121.0"), "firefox");
-        assert_eq!(detect_browser_from_ua("Mozilla/5.0 Safari/537.36"), "safari");
+        assert_eq!(
+            detect_browser_from_ua("Mozilla/5.0 Chrome/120.0.0.0"),
+            "chrome"
+        );
+        assert_eq!(
+            detect_browser_from_ua("Mozilla/5.0 Firefox/121.0"),
+            "firefox"
+        );
+        assert_eq!(
+            detect_browser_from_ua("Mozilla/5.0 Safari/537.36"),
+            "safari"
+        );
         assert_eq!(detect_browser_from_ua("Mozilla/5.0 Edg/120.0.0.0"), "edge");
         assert_eq!(detect_browser_from_ua("curl/8.4.0"), "cli-tool");
         assert_eq!(detect_browser_from_ua("python-requests/2.31.0"), "python");
@@ -747,11 +798,19 @@ mod tests {
         // Test with legitimate JA4
         let legitimate_ja4 = make_test_ja4(13, 16, 18, "h2");
         let result = analyze_integrity_with_ja4(&req, Some(&legitimate_ja4));
-        assert!(result.suspicion_score < 30, "Legitimate request should have low score: {}", result.suspicion_score);
+        assert!(
+            result.suspicion_score < 30,
+            "Legitimate request should have low score: {}",
+            result.suspicion_score
+        );
 
         // Test with suspicious JA4
         let spoofed_ja4 = make_test_ja4(10, 2, 2, "h1");
         let result = analyze_integrity_with_ja4(&req, Some(&spoofed_ja4));
-        assert!(result.suspicion_score >= 30, "Spoofed request should have high score: {}", result.suspicion_score);
+        assert!(
+            result.suspicion_score >= 30,
+            "Spoofed request should have high score: {}",
+            result.suspicion_score
+        );
     }
 }

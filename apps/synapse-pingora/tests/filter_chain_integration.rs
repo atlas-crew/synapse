@@ -6,11 +6,11 @@ use http::header::{HeaderName, HeaderValue};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
-use pingora_core::protocols::{GetSocketDigest, SocketDigest};
 use pingora_core::protocols::l4::stream::Stream;
-use std::os::unix::io::AsRawFd;
+use pingora_core::protocols::{GetSocketDigest, SocketDigest};
 use pingora_http::ResponseHeader;
 use pingora_proxy::{ProxyHttp, Session};
+use std::os::unix::io::AsRawFd;
 
 #[path = "../src/main.rs"]
 mod synapse_main;
@@ -183,7 +183,8 @@ async fn test_filter_chain_full_flow_sets_headers_and_dlp() {
 async fn test_rate_limit_short_circuits_before_waf() {
     let proxy = build_proxy(0);
 
-    let request = "GET /search?q=1%20UNION%20SELECT%20*%20FROM%20users HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    let request =
+        "GET /search?q=1%20UNION%20SELECT%20*%20FROM%20users HTTP/1.1\r\nHost: example.com\r\n\r\n";
     let (mut session, mut client) = make_session(request).await;
 
     let headers = vec![header_snapshot("host", "example.com")];

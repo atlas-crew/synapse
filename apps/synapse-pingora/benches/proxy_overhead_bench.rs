@@ -9,12 +9,10 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::sync::Arc;
 use std::time::Duration;
 
-use synapse_pingora::{EntityConfig, EntityManager, SiteConfig, VhostMatcher};
-use synapse_pingora::fingerprint::{
-    generate_ja4h, parse_ja4_from_header, HttpHeaders,
-};
-use synapse_pingora::ratelimit::TokenBucket;
 use http::header::{HeaderName, HeaderValue};
+use synapse_pingora::fingerprint::{generate_ja4h, parse_ja4_from_header, HttpHeaders};
+use synapse_pingora::ratelimit::TokenBucket;
+use synapse_pingora::{EntityConfig, EntityManager, SiteConfig, VhostMatcher};
 
 // ============================================================================
 // Helpers
@@ -68,16 +66,12 @@ fn bench_vhost_matching(c: &mut Criterion) {
             },
         );
 
-        group.bench_with_input(
-            BenchmarkId::new("match_miss", count),
-            &count,
-            |b, _| {
-                b.iter(|| {
-                    let result = matcher.match_host(black_box("unknown.example.org"));
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("match_miss", count), &count, |b, _| {
+            b.iter(|| {
+                let result = matcher.match_host(black_box("unknown.example.org"));
+                black_box(result);
+            });
+        });
     }
 
     group.finish();
@@ -142,12 +136,30 @@ fn bench_fingerprint_extraction(c: &mut Criterion) {
     });
 
     let header_pairs: Vec<(HeaderName, HeaderValue)> = vec![
-        (HeaderName::from_static("accept"), HeaderValue::from_static("text/html,application/xhtml+xml")),
-        (HeaderName::from_static("accept-encoding"), HeaderValue::from_static("gzip, deflate, br")),
-        (HeaderName::from_static("accept-language"), HeaderValue::from_static("en-US,en;q=0.9")),
-        (HeaderName::from_static("user-agent"), HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")),
-        (HeaderName::from_static("cookie"), HeaderValue::from_static("session=abc123")),
-        (HeaderName::from_static("referer"), HeaderValue::from_static("https://example.com")),
+        (
+            HeaderName::from_static("accept"),
+            HeaderValue::from_static("text/html,application/xhtml+xml"),
+        ),
+        (
+            HeaderName::from_static("accept-encoding"),
+            HeaderValue::from_static("gzip, deflate, br"),
+        ),
+        (
+            HeaderName::from_static("accept-language"),
+            HeaderValue::from_static("en-US,en;q=0.9"),
+        ),
+        (
+            HeaderName::from_static("user-agent"),
+            HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"),
+        ),
+        (
+            HeaderName::from_static("cookie"),
+            HeaderValue::from_static("session=abc123"),
+        ),
+        (
+            HeaderName::from_static("referer"),
+            HeaderValue::from_static("https://example.com"),
+        ),
     ];
 
     group.bench_function("generate_ja4h", |b| {
@@ -169,7 +181,8 @@ fn bench_fingerprint_extraction(c: &mut Criterion) {
             http_version: "1.1",
         };
         b.iter(|| {
-            let ja4 = parse_ja4_from_header(black_box(Some("t13d1516h2_8daaf6152771_e5627efa2ab1")));
+            let ja4 =
+                parse_ja4_from_header(black_box(Some("t13d1516h2_8daaf6152771_e5627efa2ab1")));
             let ja4h = generate_ja4h(black_box(&headers));
             black_box((ja4, ja4h));
         });

@@ -122,29 +122,19 @@ pub struct HeartbeatPayload {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SensorMessage {
     /// Authentication request
-    Auth {
-        payload: AuthPayload,
-    },
+    Auth { payload: AuthPayload },
     /// Single signal
-    Signal {
-        payload: ThreatSignal,
-    },
+    Signal { payload: ThreatSignal },
     /// Batch of signals
-    SignalBatch {
-        payload: Vec<ThreatSignal>,
-    },
+    SignalBatch { payload: Vec<ThreatSignal> },
     /// Pong response
     Pong,
     /// Request blocklist sync
     BlocklistSync,
     /// Heartbeat
-    Heartbeat {
-        payload: HeartbeatPayload,
-    },
+    Heartbeat { payload: HeartbeatPayload },
     /// Command Acknowledgment
-    CommandAck {
-        payload: CommandAckPayload,
-    },
+    CommandAck { payload: CommandAckPayload },
     /// Tunnel error response (sent when hub requests unsupported tunnel)
     TunnelError {
         #[serde(rename = "tunnelId")]
@@ -223,9 +213,7 @@ pub enum HubMessage {
         protocol_version: Option<String>,
     },
     /// Authentication failed
-    AuthFailed {
-        error: String,
-    },
+    AuthFailed { error: String },
     /// Signal acknowledged
     SignalAck {
         #[serde(rename = "sequenceId")]
@@ -238,9 +226,7 @@ pub enum HubMessage {
         sequence_id: u64,
     },
     /// Ping (requires pong response)
-    Ping {
-        timestamp: i64,
-    },
+    Ping { timestamp: i64 },
     /// Error from hub
     Error {
         error: String,
@@ -412,7 +398,8 @@ mod tests {
 
     #[test]
     fn test_hub_message_deserialization() {
-        let json = r#"{"type":"auth-success","sensorId":"s1","tenantId":"t1","capabilities":["signals"]}"#;
+        let json =
+            r#"{"type":"auth-success","sensorId":"s1","tenantId":"t1","capabilities":["signals"]}"#;
         let msg = HubMessage::from_json(json).unwrap();
 
         match msg {
@@ -488,7 +475,10 @@ mod tests {
         let msg = HubMessage::from_json(json).unwrap();
 
         match msg {
-            HubMessage::PushRules { command_id, payload } => {
+            HubMessage::PushRules {
+                command_id,
+                payload,
+            } => {
                 assert_eq!(command_id, "cmd-1");
                 assert!(payload.get("rules").is_some());
             }
@@ -498,10 +488,15 @@ mod tests {
 
     #[test]
     fn test_tunnel_open_deserialization() {
-        let json = r#"{"type":"tunnel-open","tunnelId":"t1","targetHost":"127.0.0.1","targetPort":8080}"#;
+        let json =
+            r#"{"type":"tunnel-open","tunnelId":"t1","targetHost":"127.0.0.1","targetPort":8080}"#;
         let msg = HubMessage::from_json(json).unwrap();
         match msg {
-            HubMessage::TunnelOpen { tunnel_id, target_host, target_port } => {
+            HubMessage::TunnelOpen {
+                tunnel_id,
+                target_host,
+                target_port,
+            } => {
                 assert_eq!(tunnel_id, "t1");
                 assert_eq!(target_host, "127.0.0.1");
                 assert_eq!(target_port, 8080);
@@ -557,7 +552,11 @@ mod tests {
         let json = msg.to_json().unwrap();
         let parsed: SensorMessage = serde_json::from_str(&json).unwrap();
         match parsed {
-            SensorMessage::TunnelError { tunnel_id, code, message } => {
+            SensorMessage::TunnelError {
+                tunnel_id,
+                code,
+                message,
+            } => {
                 assert_eq!(tunnel_id, "t1");
                 assert_eq!(code, "TUNNEL_UNSUPPORTED");
                 assert_eq!(message, "Not supported");

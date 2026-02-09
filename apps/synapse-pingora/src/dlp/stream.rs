@@ -32,7 +32,11 @@ pub enum StreamingError {
 impl std::fmt::Display for StreamingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BufferOverflow { current, incoming, max } => {
+            Self::BufferOverflow {
+                current,
+                incoming,
+                max,
+            } => {
                 write!(
                     f,
                     "buffer overflow: current {} + incoming {} > max {}",

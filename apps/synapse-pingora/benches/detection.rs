@@ -4,17 +4,17 @@
 //!
 //! These benchmarks verify the sub-10μs detection target.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use once_cell::sync::Lazy;
-use std::time::Duration;
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
-use serde::Deserialize;
+use std::time::Duration;
 // NOTE: The `synapse` (libsynapse) crate was consolidated into synapse_pingora in Phase 10.
 // These types are re-exported from the waf module.
 use synapse_pingora::waf::{
-    Synapse, Request as SynapseRequest, Header as SynapseHeader,
-    Action as SynapseAction, Verdict as SynapseVerdict,
+    Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest, Synapse,
+    Verdict as SynapseVerdict,
 };
 
 // ============================================================================
@@ -111,7 +111,6 @@ static SCENARIOS: Lazy<Vec<ScenarioRequest>> = Lazy::new(|| {
 // Detection Engine (Synapse WAF)
 // ============================================================================
 
-
 // Result struct to match the benchmark's expectations
 #[derive(Debug, Clone)]
 pub struct DetectionResult {
@@ -131,7 +130,7 @@ impl From<SynapseVerdict> for DetectionResult {
 thread_local! {
     static SYNAPSE: std::cell::RefCell<Synapse> = std::cell::RefCell::new({
         let mut synapse = Synapse::new();
-        
+
         // Try to load the real rules
         let rules_path = "data/rules.json";
         if Path::new(rules_path).exists() {
@@ -157,7 +156,12 @@ pub struct DetectionEngine;
 
 impl DetectionEngine {
     #[inline]
-    pub fn analyze(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>) -> DetectionResult {
+    pub fn analyze(
+        method: &str,
+        uri: &str,
+        headers: &[(String, String)],
+        body: Option<&[u8]>,
+    ) -> DetectionResult {
         let synapse_headers: Vec<SynapseHeader> = headers
             .iter()
             .map(|(name, value)| SynapseHeader::new(name, value))
@@ -179,7 +183,9 @@ impl DetectionEngine {
     }
 
     pub fn ensure_init() {
-        SYNAPSE.with(|s| { let _ = s.borrow(); });
+        SYNAPSE.with(|s| {
+            let _ = s.borrow();
+        });
     }
 
     /// Validate engine correctness before benchmarking.
@@ -244,28 +250,24 @@ fn bench_clean_requests(c: &mut Criterion) {
             },
         );
     }
-    
+
     // Keep some simple GETs for baseline
     let clean_uris = vec![
         ("/api/users/123", "simple_get"),
         ("/assets/logo.png", "static_asset"),
     ];
-    
+
     for (uri, name) in clean_uris {
-        group.bench_with_input(
-            BenchmarkId::new("detection", name),
-            &uri,
-            |b, uri| {
-                b.iter(|| {
-                    black_box(DetectionEngine::analyze(
-                        black_box("GET"),
-                        black_box(uri),
-                        black_box(&[]),
-                        black_box(None),
-                    ))
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("detection", name), &uri, |b, uri| {
+            b.iter(|| {
+                black_box(DetectionEngine::analyze(
+                    black_box("GET"),
+                    black_box(uri),
+                    black_box(&[]),
+                    black_box(None),
+                ))
+            })
+        });
     }
 
     // Complex GET with many query parameters
@@ -305,7 +307,10 @@ fn bench_clean_requests(c: &mut Criterion) {
 
     // POST with form data
     let form_body = "username=john_doe&password=s3cur3P%40ss&remember=true&redirect=%2Fdashboard";
-    let form_headers = vec![("content-type".to_string(), "application/x-www-form-urlencoded".to_string())];
+    let form_headers = vec![(
+        "content-type".to_string(),
+        "application/x-www-form-urlencoded".to_string(),
+    )];
     group.bench_with_input(
         BenchmarkId::new("detection", "post_form_data"),
         &form_body,
@@ -338,21 +343,17 @@ fn bench_attack_detection(c: &mut Criterion) {
             // Inject into query param
             let uri = format!("/search?q={}", urlencoding::encode(attack));
             let name = format!("{}_{}", name_prefix, i);
-            
-            group.bench_with_input(
-                BenchmarkId::new("detection", name),
-                &uri,
-                |b, uri| {
-                    b.iter(|| {
-                        black_box(DetectionEngine::analyze(
-                            black_box("GET"),
-                            black_box(uri),
-                            black_box(&[]),
-                            black_box(None),
-                        ))
-                    })
-                },
-            );
+
+            group.bench_with_input(BenchmarkId::new("detection", name), &uri, |b, uri| {
+                b.iter(|| {
+                    black_box(DetectionEngine::analyze(
+                        black_box("GET"),
+                        black_box(uri),
+                        black_box(&[]),
+                        black_box(None),
+                    ))
+                })
+            });
         }
     };
 
@@ -368,10 +369,22 @@ fn bench_with_headers(c: &mut Criterion) {
     DetectionEngine::ensure_init();
 
     let headers = vec![
-        ("user-agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string()),
-        ("cookie".to_string(), "session=abc123; user=john".to_string()),
-        ("referer".to_string(), "https://example.com/page".to_string()),
-        ("x-forwarded-for".to_string(), "192.168.1.1, 10.0.0.1".to_string()),
+        (
+            "user-agent".to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string(),
+        ),
+        (
+            "cookie".to_string(),
+            "session=abc123; user=john".to_string(),
+        ),
+        (
+            "referer".to_string(),
+            "https://example.com/page".to_string(),
+        ),
+        (
+            "x-forwarded-for".to_string(),
+            "192.168.1.1, 10.0.0.1".to_string(),
+        ),
     ];
 
     let mut group = c.benchmark_group("with_headers");
@@ -391,9 +404,10 @@ fn bench_with_headers(c: &mut Criterion) {
     });
 
     // Attack in header
-    let attack_headers = vec![
-        ("user-agent".to_string(), "<script>alert(1)</script>".to_string()),
-    ];
+    let attack_headers = vec![(
+        "user-agent".to_string(),
+        "<script>alert(1)</script>".to_string(),
+    )];
     group.bench_function("xss_in_header", |b| {
         b.iter(|| {
             let result = DetectionEngine::analyze(
@@ -479,7 +493,7 @@ fn bench_sub_10us_verification(c: &mut Criterion) {
 fn bench_heavy_complex(c: &mut Criterion) {
     DetectionEngine::ensure_init();
     let _ = &*HEAVY_PAYLOADS;
-    
+
     let body_bytes = serde_json::to_vec(&HEAVY_PAYLOADS.complex_request.body_json).unwrap();
     let headers = &HEAVY_PAYLOADS.complex_request.headers;
     let uri = &HEAVY_PAYLOADS.complex_request.uri;
@@ -512,7 +526,7 @@ fn bench_realistic_scenarios(c: &mut Criterion) {
 
     for scenario in SCENARIOS.iter() {
         let body_bytes = serde_json::to_vec(&scenario.body_json).unwrap();
-        
+
         group.bench_with_input(
             BenchmarkId::new("scenario", &scenario.name),
             &body_bytes,
@@ -536,7 +550,7 @@ fn bench_realistic_scenarios(c: &mut Criterion) {
 // DLP Body Inspection Benchmarks
 // ============================================================================
 
-use synapse_pingora::dlp::{DlpScanner, DlpConfig};
+use synapse_pingora::dlp::{DlpConfig, DlpScanner};
 
 /// Generate a realistic e-commerce order payload with some sensitive data
 fn generate_order_payload(size_kb: usize) -> String {
@@ -579,7 +593,8 @@ fn generate_order_payload(size_kb: usize) -> String {
 /// Generate a clean payload with no sensitive data
 fn generate_clean_payload(size_kb: usize) -> String {
     let base = r#"{"data": ["#;
-    let item = r#""Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.","#;
+    let item =
+        r#""Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.","#;
 
     let mut payload = base.to_string();
     let target_bytes = size_kb * 1024;
@@ -612,11 +627,7 @@ fn bench_dlp_body_inspection(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("scan", &name),
             &payload_with_pii,
-            |b, payload| {
-                b.iter(|| {
-                    black_box(scanner.scan(black_box(payload)))
-                })
-            },
+            |b, payload| b.iter(|| black_box(scanner.scan(black_box(payload)))),
         );
 
         // Payload WITHOUT sensitive data (clean traffic)
@@ -628,11 +639,7 @@ fn bench_dlp_body_inspection(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("scan", &name),
             &payload_clean,
-            |b, payload| {
-                b.iter(|| {
-                    black_box(scanner.scan(black_box(payload)))
-                })
-            },
+            |b, payload| b.iter(|| black_box(scanner.scan(black_box(payload)))),
         );
     }
 
@@ -659,21 +666,18 @@ fn bench_dlp_content_type_skip(c: &mut Criterion) {
     // Validate correctness once before benchmarking (not inside the hot loop)
     for (ct, should_scan) in &content_types {
         assert_eq!(
-            scanner.is_scannable_content_type(ct), *should_scan,
-            "Content-type {} should_scan={}", ct, should_scan
+            scanner.is_scannable_content_type(ct),
+            *should_scan,
+            "Content-type {} should_scan={}",
+            ct,
+            should_scan
         );
     }
 
     for (ct, _should_scan) in content_types {
-        group.bench_with_input(
-            BenchmarkId::new("is_scannable", ct),
-            &ct,
-            |b, ct| {
-                b.iter(|| {
-                    black_box(scanner.is_scannable_content_type(black_box(ct)))
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("is_scannable", ct), &ct, |b, ct| {
+            b.iter(|| black_box(scanner.is_scannable_content_type(black_box(ct))))
+        });
     }
 
     group.finish();
@@ -705,11 +709,7 @@ fn bench_dlp_truncation_performance(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("scan_32kb_payload", name),
             &large_payload,
-            |b, payload| {
-                b.iter(|| {
-                    scanner.scan(black_box(payload))
-                })
-            },
+            |b, payload| b.iter(|| scanner.scan(black_box(payload))),
         );
     }
 
@@ -734,11 +734,7 @@ fn bench_dlp_fast_mode(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("scan", &name),
             &payload_with_pii,
-            |b, payload| {
-                b.iter(|| {
-                    normal_scanner.scan(black_box(payload))
-                })
-            },
+            |b, payload| b.iter(|| normal_scanner.scan(black_box(payload))),
         );
 
         // Fast mode (skip email, phone, IPv4)
@@ -752,11 +748,7 @@ fn bench_dlp_fast_mode(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("scan", &name),
             &payload_with_pii,
-            |b, payload| {
-                b.iter(|| {
-                    fast_scanner.scan(black_box(payload))
-                })
-            },
+            |b, payload| b.iter(|| fast_scanner.scan(black_box(payload))),
         );
     }
 
@@ -779,7 +771,10 @@ fn bench_combined_waf_dlp(c: &mut Criterion) {
     // Headers for a realistic POST request
     let headers = vec![
         ("content-type".to_string(), "application/json".to_string()),
-        ("user-agent".to_string(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string()),
+        (
+            "user-agent".to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36".to_string(),
+        ),
         ("accept".to_string(), "application/json".to_string()),
         ("x-forwarded-for".to_string(), "203.0.113.42".to_string()),
     ];
@@ -807,15 +802,9 @@ fn bench_combined_waf_dlp(c: &mut Criterion) {
         // Benchmark 2: DLP scanner only (for comparison)
         let dlp_scanner = DlpScanner::new(DlpConfig::default());
         let name = format!("dlp_only_{}kb", size_kb);
-        group.bench_with_input(
-            BenchmarkId::new("analyze", &name),
-            &payload,
-            |b, body| {
-                b.iter(|| {
-                    dlp_scanner.scan(black_box(body))
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("analyze", &name), &payload, |b, body| {
+            b.iter(|| dlp_scanner.scan(black_box(body)))
+        });
 
         // Benchmark 3: Combined WAF + DLP (realistic production path)
         let name = format!("waf_plus_dlp_{}kb", size_kb);
@@ -889,8 +878,8 @@ fn bench_rule_scaling(c: &mut Criterion) {
 
     // Parse rules to get total count, then test with subsets
     // We create separate engines with different rule counts
-    let all_rules: Vec<serde_json::Value> = serde_json::from_slice(&rules_json)
-        .expect("Failed to parse rules.json as array");
+    let all_rules: Vec<serde_json::Value> =
+        serde_json::from_slice(&rules_json).expect("Failed to parse rules.json as array");
     let total = all_rules.len();
 
     let test_request = SynapseRequest {
@@ -925,9 +914,7 @@ fn bench_rule_scaling(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("analyze", &label),
             &synapse,
-            |b, engine| {
-                b.iter(|| black_box(engine.analyze(black_box(&test_request))))
-            },
+            |b, engine| b.iter(|| black_box(engine.analyze(black_box(&test_request)))),
         );
     }
 
@@ -978,17 +965,35 @@ fn bench_evasive_attacks(c: &mut Criterion) {
 
     let evasion_payloads: Vec<(&str, &str)> = vec![
         // Encoded XSS variants
-        ("xss_hex_encoded", "/search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E"),
-        ("xss_double_encoded", "/search?q=%253Cscript%253Ealert(1)%253C%252Fscript%253E"),
-        ("xss_unicode", "/search?q=\u{FF1C}script\u{FF1E}alert(1)\u{FF1C}/script\u{FF1E}"),
+        (
+            "xss_hex_encoded",
+            "/search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
+        ),
+        (
+            "xss_double_encoded",
+            "/search?q=%253Cscript%253Ealert(1)%253C%252Fscript%253E",
+        ),
+        (
+            "xss_unicode",
+            "/search?q=\u{FF1C}script\u{FF1E}alert(1)\u{FF1C}/script\u{FF1E}",
+        ),
         // Obfuscated SQLi
         ("sqli_comment_bypass", "/search?q=1'/**/OR/**/1=1--"),
         ("sqli_case_mixing", "/search?q=1'+uNiOn+SeLeCt+NuLl--"),
         ("sqli_concat", "/search?q=1'+OR+'a'||'b'='ab'--"),
         // Path traversal evasion
-        ("path_traversal_encoded", "/files/..%2F..%2F..%2Fetc%2Fpasswd"),
-        ("path_traversal_double_dot", "/files/....//....//....//etc/passwd"),
-        ("path_traversal_null_byte", "/files/../../../etc/passwd%00.png"),
+        (
+            "path_traversal_encoded",
+            "/files/..%2F..%2F..%2Fetc%2Fpasswd",
+        ),
+        (
+            "path_traversal_double_dot",
+            "/files/....//....//....//etc/passwd",
+        ),
+        (
+            "path_traversal_null_byte",
+            "/files/../../../etc/passwd%00.png",
+        ),
         // Command injection evasion
         ("cmd_inj_newline", "/api/ping?host=127.0.0.1%0als+-la"),
         ("cmd_inj_backtick", "/api/ping?host=`cat /etc/passwd`"),
@@ -997,20 +1002,16 @@ fn bench_evasive_attacks(c: &mut Criterion) {
     ];
 
     for (name, uri) in &evasion_payloads {
-        group.bench_with_input(
-            BenchmarkId::new("detection", *name),
-            uri,
-            |b, uri| {
-                b.iter(|| {
-                    black_box(DetectionEngine::analyze(
-                        black_box("GET"),
-                        black_box(uri),
-                        black_box(&[]),
-                        black_box(None),
-                    ))
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("detection", *name), uri, |b, uri| {
+            b.iter(|| {
+                black_box(DetectionEngine::analyze(
+                    black_box("GET"),
+                    black_box(uri),
+                    black_box(&[]),
+                    black_box(None),
+                ))
+            })
+        });
     }
 
     group.finish();
@@ -1046,7 +1047,10 @@ fn bench_mixed_traffic(c: &mut Criterion) {
         ("GET", "/api/inventory?sku=PROD-001"),
         ("GET", "/favicon.ico"),
         // 1 attack (5%)
-        ("GET", "/api/search?q=1'+UNION+SELECT+username,password+FROM+users--"),
+        (
+            "GET",
+            "/api/search?q=1'+UNION+SELECT+username,password+FROM+users--",
+        ),
     ];
 
     group.throughput(Throughput::Elements(requests.len() as u64));

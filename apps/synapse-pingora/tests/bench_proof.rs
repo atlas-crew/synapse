@@ -14,9 +14,7 @@ use synapse_pingora::dlp::{DlpConfig, DlpScanner};
 use synapse_pingora::horizon::{Severity, SignalType, ThreatSignal};
 use synapse_pingora::ratelimit::TokenBucket;
 use synapse_pingora::tarpit::{TarpitConfig, TarpitManager};
-use synapse_pingora::waf::{
-    Action, Header as SynapseHeader, Request as SynapseRequest, Synapse,
-};
+use synapse_pingora::waf::{Action, Header as SynapseHeader, Request as SynapseRequest, Synapse};
 use synapse_pingora::{EntityConfig, EntityManager};
 
 // ============================================================================
@@ -73,7 +71,11 @@ fn proof_waf_detects_attacks() {
         xss_verdict.matched_rules.len()
     );
     // Engine must at least execute without error — if this changes to detect XSS, even better
-    assert_eq!(xss_verdict.action, Action::Allow, "XSS detection changed — update proof test");
+    assert_eq!(
+        xss_verdict.action,
+        Action::Allow,
+        "XSS detection changed — update proof test"
+    );
 
     // Clean request must NOT be blocked
     let clean_req = SynapseRequest {
@@ -118,9 +120,7 @@ fn proof_waf_rule_scaling_real() {
             method: "GET",
             path: "/search?q=1' OR '1'='1",
             query: None,
-            headers: vec![
-                SynapseHeader::new("user-agent", "Mozilla/5.0"),
-            ],
+            headers: vec![SynapseHeader::new("user-agent", "Mozilla/5.0")],
             body: None,
             client_ip: "192.168.1.100",
             is_static: false,
@@ -144,7 +144,10 @@ fn proof_evasive_attacks_reach_engine() {
     synapse.load_rules(&rules_json).unwrap();
 
     let evasion_uris = [
-        ("xss_hex", "/search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E"),
+        (
+            "xss_hex",
+            "/search?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
+        ),
         ("sqli_comment", "/search?q=1'/**/OR/**/1=1--"),
         ("sqli_case_mix", "/search?q=1'+uNiOn+SeLeCt+NuLl--"),
         ("path_traversal", "/files/..%2F..%2F..%2Fetc%2Fpasswd"),
@@ -226,7 +229,11 @@ fn proof_pipeline_components_do_work() {
         }
     }
     println!("  TokenBucket(5 rps, 5 burst): {}/10 allowed", allowed);
-    assert!(allowed >= 4 && allowed <= 6, "Token bucket not working: {} allowed", allowed);
+    assert!(
+        allowed >= 4 && allowed <= 6,
+        "Token bucket not working: {} allowed",
+        allowed
+    );
 
     // Entity manager: must track state
     let store = EntityManager::new(EntityConfig {
@@ -289,17 +296,31 @@ fn proof_dlp_scanner_finds_pii() {
         "  DLP scan: scanned={}, matches={}, types={:?}",
         result.scanned,
         result.match_count,
-        result.matches.iter().map(|m| m.pattern_name).collect::<Vec<_>>()
+        result
+            .matches
+            .iter()
+            .map(|m| m.pattern_name)
+            .collect::<Vec<_>>()
     );
     assert!(result.scanned, "DLP scanner didn't scan");
-    assert!(result.has_matches, "DLP didn't find PII in known PII string");
-    assert!(result.match_count >= 2, "Expected 2+ matches, got {}", result.match_count);
+    assert!(
+        result.has_matches,
+        "DLP didn't find PII in known PII string"
+    );
+    assert!(
+        result.match_count >= 2,
+        "Expected 2+ matches, got {}",
+        result.match_count
+    );
 
     // Clean content must not match
     let clean = "Hello world, this is a normal sentence with no sensitive data.";
     let clean_result = scanner.scan(clean);
     println!("  DLP clean: matches={}", clean_result.match_count);
-    assert!(!clean_result.has_matches, "DLP false positive on clean content");
+    assert!(
+        !clean_result.has_matches,
+        "DLP false positive on clean content"
+    );
 }
 
 #[test]
@@ -314,7 +335,10 @@ fn proof_horizon_serde_roundtrips() {
     let json = serde_json::to_string(&signal).unwrap();
     println!("  Serialized ({} bytes): {}", json.len(), &json[..80]);
     assert!(json.len() > 50, "Serialized signal suspiciously small");
-    assert!(json.contains("203.0.113.42"), "IP missing from serialized output");
+    assert!(
+        json.contains("203.0.113.42"),
+        "IP missing from serialized output"
+    );
     assert!(json.contains("CAMPAIGN_INDICATOR"), "Signal type missing");
 
     let deserialized: ThreatSignal = serde_json::from_str(&json).unwrap();
@@ -328,9 +352,11 @@ fn proof_horizon_serde_roundtrips() {
 
     // Batch serialization
     let batch: Vec<ThreatSignal> = (0..10)
-        .map(|i| ThreatSignal::new(SignalType::RateAnomaly, Severity::Medium)
-            .with_source_ip(&format!("10.0.0.{}", i))
-            .with_event_count(i as u32 + 1))
+        .map(|i| {
+            ThreatSignal::new(SignalType::RateAnomaly, Severity::Medium)
+                .with_source_ip(&format!("10.0.0.{}", i))
+                .with_event_count(i as u32 + 1)
+        })
         .collect();
     let batch_json = serde_json::to_vec(&batch).unwrap();
     println!("  Batch 10 signals: {} bytes", batch_json.len());
@@ -451,7 +477,14 @@ fn proof_contention_dlp_scanner_real() {
     });
 
     let found = pii_found.load(std::sync::atomic::Ordering::Relaxed);
-    println!("  Concurrent DLP: {} PII detections across 4 threads", found);
+    println!(
+        "  Concurrent DLP: {} PII detections across 4 threads",
+        found
+    );
     // 4 threads × 4 PII strings each = 16 expected
-    assert!(found >= 12, "Expected ~16 PII hits, got {} — scanner broken under contention", found);
+    assert!(
+        found >= 12,
+        "Expected ~16 PII hits, got {} — scanner broken under contention",
+        found
+    );
 }

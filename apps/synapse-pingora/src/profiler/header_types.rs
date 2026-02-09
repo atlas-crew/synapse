@@ -634,9 +634,7 @@ mod tests {
     fn test_header_baseline_is_known() {
         let mut baseline = HeaderBaseline::new("/test".to_string());
 
-        baseline
-            .required_headers
-            .insert("Content-Type".to_string());
+        baseline.required_headers.insert("Content-Type".to_string());
         baseline.optional_headers.insert("X-Request-ID".to_string());
 
         assert!(baseline.is_required("Content-Type"));

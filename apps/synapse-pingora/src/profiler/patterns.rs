@@ -37,9 +37,8 @@ static ISO_DATE_PATTERN: Lazy<Regex> = Lazy::new(|| {
 
 /// URL pattern: HTTP/HTTPS URLs
 /// Matches: http://example.com, https://api.example.com/path?query=1
-static URL_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^https?://[^\s]+$").expect("URL regex compilation failed")
-});
+static URL_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^https?://[^\s]+$").expect("URL regex compilation failed"));
 
 /// IPv4 address pattern
 /// Matches: 192.168.1.1, 10.0.0.255
@@ -63,21 +62,21 @@ static JWT_PATTERN: Lazy<Regex> = Lazy::new(|| {
 
 /// MongoDB ObjectId pattern: 24 hexadecimal characters
 /// Matches: 507f1f77bcf86cd799439011
-static OBJECT_ID_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[0-9a-fA-F]{24}$").expect("ObjectId regex compilation failed")
-});
+static OBJECT_ID_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[0-9a-fA-F]{24}$").expect("ObjectId regex compilation failed"));
 
 /// Generic hex string pattern: 16+ hexadecimal characters
 /// Matches: abcdef1234567890abcdef, 0123456789abcdef0123456789abcdef
-static HEX_STRING_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[0-9a-fA-F]{16,}$").expect("Hex string regex compilation failed")
-});
+static HEX_STRING_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[0-9a-fA-F]{16,}$").expect("Hex string regex compilation failed"));
 
 /// Phone number pattern (various formats)
 /// Matches: +1-555-123-4567, (555) 123-4567, 555.123.4567
 static PHONE_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$")
-        .expect("Phone regex compilation failed")
+    Regex::new(
+        r"^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$",
+    )
+    .expect("Phone regex compilation failed")
 });
 
 /// Credit card pattern (basic format, 13-19 digits with optional separators)
@@ -234,10 +233,7 @@ mod tests {
 
     #[test]
     fn test_email_detection() {
-        assert_eq!(
-            detect_pattern("user@example.com"),
-            Some(PatternType::Email)
-        );
+        assert_eq!(detect_pattern("user@example.com"), Some(PatternType::Email));
         assert_eq!(
             detect_pattern("name.last@sub.domain.org"),
             Some(PatternType::Email)
@@ -266,10 +262,7 @@ mod tests {
 
     #[test]
     fn test_url_detection() {
-        assert_eq!(
-            detect_pattern("http://example.com"),
-            Some(PatternType::Url)
-        );
+        assert_eq!(detect_pattern("http://example.com"), Some(PatternType::Url));
         assert_eq!(
             detect_pattern("https://api.example.com/path?query=1"),
             Some(PatternType::Url)
@@ -283,7 +276,7 @@ mod tests {
         assert_eq!(detect_pattern("192.168.1.1"), Some(PatternType::Ipv4));
         assert_eq!(detect_pattern("10.0.0.255"), Some(PatternType::Ipv4));
         assert_eq!(detect_pattern("256.1.1.1"), Some(PatternType::Ipv4)); // Invalid but matches format
-        // Missing octet - doesn't match IPv4 pattern
+                                                                          // Missing octet - doesn't match IPv4 pattern
         assert!(!matches_pattern("192.168.1", PatternType::Ipv4));
     }
 
@@ -378,7 +371,10 @@ mod tests {
     #[test]
     fn test_credit_card_detection() {
         // Note: These are formatted patterns for detection, not real card numbers
-        assert!(matches_pattern("4111-1111-1111-1111", PatternType::CreditCard));
+        assert!(matches_pattern(
+            "4111-1111-1111-1111",
+            PatternType::CreditCard
+        ));
         assert!(matches_pattern("4111111111111111", PatternType::CreditCard));
     }
 }

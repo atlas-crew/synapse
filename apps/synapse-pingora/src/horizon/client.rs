@@ -5,14 +5,14 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs;
-use std::path::PathBuf;
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sysinfo::System;
-use tokio::sync::{broadcast, mpsc};
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, error, info, warn};
@@ -24,10 +24,10 @@ use super::types::{
     AuthPayload, ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, ThreatSignal,
     PROTOCOL_VERSION,
 };
+use crate::access::{check_ssrf, SsrfCheckResult};
 use crate::config_manager::ConfigManager;
 use crate::utils::circuit_breaker::CircuitBreaker;
 use async_trait::async_trait;
-use crate::access::{check_ssrf, SsrfCheckResult};
 
 /// SignalSink - trait for targets that can receive threat signals.
 #[async_trait]
@@ -584,9 +584,9 @@ async fn validate_hub_url_ssrf(hub_url: &str) -> Result<(), HorizonError> {
 
     // Hostname — resolve to IPs and validate all results.
     let mut any = false;
-    let addrs = tokio::net::lookup_host((host, port))
-        .await
-        .map_err(|e| HorizonError::ConfigError(format!("Failed to resolve hub_url host '{}': {}", host, e)))?;
+    let addrs = tokio::net::lookup_host((host, port)).await.map_err(|e| {
+        HorizonError::ConfigError(format!("Failed to resolve hub_url host '{}': {}", host, e))
+    })?;
 
     for addr in addrs {
         any = true;
@@ -616,10 +616,7 @@ fn stash_pending(pending: &mut VecDeque<ThreatSignal>, batch: &mut Vec<ThreatSig
     }
 }
 
-fn requeue_inflight(
-    pending: &mut VecDeque<ThreatSignal>,
-    inflight: &mut VecDeque<ThreatSignal>,
-) {
+fn requeue_inflight(pending: &mut VecDeque<ThreatSignal>, inflight: &mut VecDeque<ThreatSignal>) {
     if inflight.is_empty() {
         return;
     }
@@ -658,7 +655,9 @@ async fn connect_and_run(
 
     // Optional header auth (the sensor still sends an explicit Auth message after connect).
     if let Ok(value) = http::HeaderValue::from_str(&format!("Bearer {}", config.api_key)) {
-        request.headers_mut().insert(http::header::AUTHORIZATION, value);
+        request
+            .headers_mut()
+            .insert(http::header::AUTHORIZATION, value);
     }
 
     let ws_stream = match tokio_tungstenite::connect_async(request).await {
@@ -744,7 +743,8 @@ async fn connect_and_run(
     let mut heartbeat_interval =
         tokio::time::interval(Duration::from_millis(config.heartbeat_interval_ms));
     let mut signal_batch: Vec<ThreatSignal> = Vec::with_capacity(config.signal_batch_size);
-    let mut batch_timer = tokio::time::interval(Duration::from_millis(config.signal_batch_delay_ms));
+    let mut batch_timer =
+        tokio::time::interval(Duration::from_millis(config.signal_batch_delay_ms));
 
     if !pending_signals.is_empty() {
         signal_batch.extend(pending_signals.drain(..));
@@ -1050,7 +1050,11 @@ fn collect_diagnostics(
     if let Some(manager) = config_manager {
         let config = manager.get_full_config();
         let site_count = config.sites.len();
-        let tls_sites = config.sites.iter().filter(|site| site.tls.is_some()).count();
+        let tls_sites = config
+            .sites
+            .iter()
+            .filter(|site| site.tls.is_some())
+            .count();
         let waf_sites = config
             .sites
             .iter()
@@ -1092,8 +1096,8 @@ fn collect_diagnostics(
         rules_summary.insert("count".to_string(), serde_json::json!(0));
     }
 
-    let stats_value =
-        serde_json::to_value(ClientStats::from(stats.as_ref())).unwrap_or_else(|_| serde_json::json!({}));
+    let stats_value = serde_json::to_value(ClientStats::from(stats.as_ref()))
+        .unwrap_or_else(|_| serde_json::json!({}));
 
     serde_json::json!({
         "generated_at": chrono::Utc::now().to_rfc3339(),
@@ -1184,16 +1188,29 @@ async fn handle_hub_message<S>(
             warn!("Hub error: {} (code: {:?})", error, code);
         }
         HubMessage::ConfigUpdate { config: _, version } => {
-            info!("Received config update (legacy direct) version: {}", version);
+            info!(
+                "Received config update (legacy direct) version: {}",
+                version
+            );
             // ... (legacy handling if needed, but PushConfig handles it better)
         }
-        HubMessage::PushConfig { command_id, payload } => {
-            let version = payload.version.clone().unwrap_or_else(|| "unknown".to_string());
-            info!("Received PushConfig command (id: {}, version: {})", command_id, version);
+        HubMessage::PushConfig {
+            command_id,
+            payload,
+        } => {
+            let version = payload
+                .version
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            info!(
+                "Received PushConfig command (id: {}, version: {})",
+                command_id, version
+            );
 
             let result = if let Some(manager) = config_manager {
                 if let Some(config_value) = payload.config.as_ref() {
-                    match serde_json::from_value::<crate::config::ConfigFile>(config_value.clone()) {
+                    match serde_json::from_value::<crate::config::ConfigFile>(config_value.clone())
+                    {
                         Ok(new_config) => match manager.update_full_config(new_config) {
                             Ok(result) => {
                                 info!("Applied config update v{}", version);
@@ -1229,7 +1246,10 @@ async fn handle_hub_message<S>(
 
             send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::PushRules { command_id, payload } => {
+        HubMessage::PushRules {
+            command_id,
+            payload,
+        } => {
             info!("Received PushRules command (id: {})", command_id);
 
             let result = if let Some(manager) = config_manager {
@@ -1239,7 +1259,8 @@ async fn handle_hub_message<S>(
                     Err("push_rules payload missing rules array".to_string())
                 } else {
                     match serde_json::to_vec(rules_value) {
-                        Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes, rules_hash) {
+                        Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes, rules_hash)
+                        {
                             Ok(count) => {
                                 info!("Applied push_rules: {} rules loaded", count);
                                 Ok(Some(serde_json::json!({ "rules_loaded": count })))
@@ -1262,7 +1283,10 @@ async fn handle_hub_message<S>(
 
             send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::Restart { command_id, payload } => {
+        HubMessage::Restart {
+            command_id,
+            payload,
+        } => {
             info!("Received Restart command (id: {})", command_id);
             let requested_mode = payload
                 .get("mode")
@@ -1284,11 +1308,11 @@ async fn handle_hub_message<S>(
 
             send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::CollectDiagnostics { command_id, payload } => {
-            info!(
-                "Received CollectDiagnostics command (id: {})",
-                command_id
-            );
+        HubMessage::CollectDiagnostics {
+            command_id,
+            payload,
+        } => {
+            info!("Received CollectDiagnostics command (id: {})", command_id);
             let result = Ok(Some(collect_diagnostics(
                 metrics_provider,
                 config_manager,
@@ -1298,14 +1322,20 @@ async fn handle_hub_message<S>(
             )));
             send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::Update { command_id, payload } => {
+        HubMessage::Update {
+            command_id,
+            payload,
+        } => {
             info!("Received Update command (id: {})", command_id);
             let result = stage_update_payload(&command_id, &payload)
                 .map(Some)
                 .map_err(|e| e.to_string());
             send_command_ack(ws_tx, command_id, result).await;
         }
-        HubMessage::SyncBlocklist { command_id, payload: _ } => {
+        HubMessage::SyncBlocklist {
+            command_id,
+            payload: _,
+        } => {
             info!("Received SyncBlocklist command (id: {})", command_id);
             let result = match SensorMessage::BlocklistSync.to_json() {
                 Ok(json) => {
@@ -1327,18 +1357,16 @@ async fn handle_hub_message<S>(
             let result = if let Some(manager) = config_manager {
                 // Convert rules JSON to bytes for the WAF engine
                 match serde_json::to_vec(&rules) {
-                    Ok(rules_bytes) => {
-                        match manager.update_waf_rules(&rules_bytes, None) {
-                            Ok(count) => {
-                                info!("Applied rules update v{}: {} rules loaded", version, count);
-                                Ok(())
-                            }
-                            Err(e) => {
-                                error!("Failed to apply rules update v{}: {}", version, e);
-                                Err(e.to_string())
-                            }
+                    Ok(rules_bytes) => match manager.update_waf_rules(&rules_bytes, None) {
+                        Ok(count) => {
+                            info!("Applied rules update v{}: {} rules loaded", version, count);
+                            Ok(())
                         }
-                    }
+                        Err(e) => {
+                            error!("Failed to apply rules update v{}: {}", version, e);
+                            Err(e.to_string())
+                        }
+                    },
                     Err(e) => {
                         error!("Failed to serialize rules for update v{}: {}", version, e);
                         Err(e.to_string())
@@ -1357,16 +1385,31 @@ async fn handle_hub_message<S>(
             )
             .await;
         }
-        HubMessage::AuthSuccess { tenant_id, sensor_id, capabilities, protocol_version } => {
-            info!("Auth success: tenant={} sensor={} capabilities={:?} protocol={:?}", tenant_id, sensor_id, capabilities, protocol_version);
+        HubMessage::AuthSuccess {
+            tenant_id,
+            sensor_id,
+            capabilities,
+            protocol_version,
+        } => {
+            info!(
+                "Auth success: tenant={} sensor={} capabilities={:?} protocol={:?}",
+                tenant_id, sensor_id, capabilities, protocol_version
+            );
             // Auth is handled in connect_once, this is a redundant message
         }
         HubMessage::AuthFailed { error } => {
             error!("Auth failed (redundant): {}", error);
             // Auth failure is handled in connect_once, this shouldn't happen
         }
-        HubMessage::TunnelOpen { tunnel_id, target_host, target_port } => {
-            warn!("Tunnel open requested (id: {}, target: {}:{}) but tunnels are not supported", tunnel_id, target_host, target_port);
+        HubMessage::TunnelOpen {
+            tunnel_id,
+            target_host,
+            target_port,
+        } => {
+            warn!(
+                "Tunnel open requested (id: {}, target: {}:{}) but tunnels are not supported",
+                tunnel_id, target_host, target_port
+            );
             let error_msg = SensorMessage::TunnelError {
                 tunnel_id,
                 code: "TUNNEL_UNSUPPORTED".to_string(),
@@ -1377,10 +1420,16 @@ async fn handle_hub_message<S>(
             }
         }
         HubMessage::TunnelClose { tunnel_id } => {
-            warn!("Tunnel close requested (id: {}) but tunnels are not supported", tunnel_id);
+            warn!(
+                "Tunnel close requested (id: {}) but tunnels are not supported",
+                tunnel_id
+            );
         }
         HubMessage::TunnelData { tunnel_id, .. } => {
-            warn!("Tunnel data received (id: {}) but tunnels are not supported", tunnel_id);
+            warn!(
+                "Tunnel data received (id: {}) but tunnels are not supported",
+                tunnel_id
+            );
         }
     }
 }
@@ -1428,14 +1477,16 @@ mod tests {
         let client = HorizonClient::new(config);
 
         // Add entries to blocklist directly for testing
-        client.blocklist.add(super::super::blocklist::BlocklistEntry {
-            block_type: super::super::blocklist::BlockType::Ip,
-            indicator: "192.168.1.100".to_string(),
-            expires_at: None,
-            source: "test".to_string(),
-            reason: None,
-            created_at: None,
-        });
+        client
+            .blocklist
+            .add(super::super::blocklist::BlocklistEntry {
+                block_type: super::super::blocklist::BlockType::Ip,
+                indicator: "192.168.1.100".to_string(),
+                expires_at: None,
+                source: "test".to_string(),
+                reason: None,
+                created_at: None,
+            });
 
         assert!(client.is_ip_blocked("192.168.1.100"));
         assert!(!client.is_ip_blocked("192.168.1.101"));

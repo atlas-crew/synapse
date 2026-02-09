@@ -78,7 +78,8 @@ impl ParamStats {
         // Helper to safely increment type count with bounds checking
         let mut increment_type = |type_name: &str| {
             // Only add if already tracked OR under limit
-            if self.type_counts.contains_key(type_name) || self.type_counts.len() < max_type_counts {
+            if self.type_counts.contains_key(type_name) || self.type_counts.len() < max_type_counts
+            {
                 *self.type_counts.entry(type_name.to_string()).or_insert(0) += 1;
             }
         };
@@ -122,7 +123,7 @@ pub fn redact_value(value: &str) -> String {
     let end: String = value.chars().skip(len - visible_chars).collect();
     let mask_len = len.saturating_sub(visible_chars * 2);
 
-    format!("{}{}{}",start,"*".repeat(mask_len.max(1)),end)
+    format!("{}{}{}", start, "*".repeat(mask_len.max(1)), end)
 }
 
 /// Check if a value appears to contain PII.
@@ -136,7 +137,11 @@ pub fn is_likely_pii(value: &str) -> bool {
         return true;
     }
     // Long alphanumeric (tokens, API keys)
-    if value.len() > 20 && value.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if value.len() > 20
+        && value
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return true;
     }
     false
@@ -262,8 +267,13 @@ impl EndpointProfile {
         self.record_status(status_code);
 
         if let Some(ct) = content_type {
-            if self.response_content_types.len() < MAX_CONTENT_TYPES || self.response_content_types.contains_key(ct) {
-                *self.response_content_types.entry(ct.to_string()).or_insert(0) += 1;
+            if self.response_content_types.len() < MAX_CONTENT_TYPES
+                || self.response_content_types.contains_key(ct)
+            {
+                *self
+                    .response_content_types
+                    .entry(ct.to_string())
+                    .or_insert(0) += 1;
             }
         }
 
@@ -394,7 +404,12 @@ mod tests {
     fn test_endpoint_profile_update() {
         let mut profile = EndpointProfile::new("/api/users".to_string(), 1000);
 
-        profile.update(100, &[("name", "alice"), ("email", "a@example.com")], Some("application/json"), 2000);
+        profile.update(
+            100,
+            &[("name", "alice"), ("email", "a@example.com")],
+            Some("application/json"),
+            2000,
+        );
 
         assert_eq!(profile.sample_count, 1);
         assert_eq!(profile.last_updated_ms, 2000);
@@ -448,13 +463,23 @@ mod tests {
 
         // Add MAX_CONTENT_TYPES unique content types
         for i in 0..MAX_CONTENT_TYPES {
-            profile.update(100, &[], Some(&format!("application/type-{}", i)), 1000 + i as u64);
+            profile.update(
+                100,
+                &[],
+                Some(&format!("application/type-{}", i)),
+                1000 + i as u64,
+            );
         }
         assert_eq!(profile.content_types.len(), MAX_CONTENT_TYPES);
 
         // Try to add more unique content types - should be ignored
         for i in 0..10 {
-            profile.update(100, &[], Some(&format!("application/extra-{}", i)), 2000 + i as u64);
+            profile.update(
+                100,
+                &[],
+                Some(&format!("application/extra-{}", i)),
+                2000 + i as u64,
+            );
         }
         // Should still be at MAX_CONTENT_TYPES, not growing
         assert_eq!(profile.content_types.len(), MAX_CONTENT_TYPES);
@@ -536,10 +561,14 @@ mod tests {
     #[test]
     fn test_evict_least_frequent() {
         let mut map: HashMap<String, ParamStats> = HashMap::new();
-        let mut s1 = ParamStats::new(); s1.count = 10;
-        let mut s2 = ParamStats::new(); s2.count = 5;
-        let mut s3 = ParamStats::new(); s3.count = 1;
-        let mut s4 = ParamStats::new(); s4.count = 8;
+        let mut s1 = ParamStats::new();
+        s1.count = 10;
+        let mut s2 = ParamStats::new();
+        s2.count = 5;
+        let mut s3 = ParamStats::new();
+        s3.count = 1;
+        let mut s4 = ParamStats::new();
+        s4.count = 8;
 
         map.insert("a".to_string(), s1);
         map.insert("b".to_string(), s2);
@@ -639,7 +668,10 @@ mod tests {
         assert_eq!(profile.last_updated_ms, 2000);
         assert!((profile.response_size.mean() - 5000.0).abs() < 0.01);
         assert!((profile.status_frequency(200) - 1.0).abs() < 0.01);
-        assert_eq!(profile.dominant_response_content_type(), Some("application/json"));
+        assert_eq!(
+            profile.dominant_response_content_type(),
+            Some("application/json")
+        );
     }
 
     #[test]
@@ -648,7 +680,12 @@ mod tests {
 
         // Add MAX_CONTENT_TYPES unique content types
         for i in 0..MAX_CONTENT_TYPES {
-            profile.update_response(100, 200, Some(&format!("application/type-{}", i)), 1000 + i as u64);
+            profile.update_response(
+                100,
+                200,
+                Some(&format!("application/type-{}", i)),
+                1000 + i as u64,
+            );
         }
         assert_eq!(profile.response_content_types.len(), MAX_CONTENT_TYPES);
 

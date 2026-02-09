@@ -1,6 +1,7 @@
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use serde_json::Value;
+use sha2::Sha256;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -9,24 +10,15 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch, Notify};
 use tokio_tungstenite::{
     accept_async,
-    tungstenite::{
-        Message,
-        protocol::CloseFrame,
-        protocol::frame::coding::CloseCode,
-    },
+    tungstenite::{protocol::frame::coding::CloseCode, protocol::CloseFrame, Message},
 };
-use sha2::Sha256;
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
 
 use synapse_pingora::metrics::MetricsRegistry;
 use synapse_pingora::tunnel::{
-    ConnectionState,
-    TunnelChannel,
-    TunnelClient,
-    TunnelConfig,
-    TunnelError,
+    ConnectionState, TunnelChannel, TunnelClient, TunnelConfig, TunnelError,
 };
 
 const TEST_API_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -91,7 +83,10 @@ impl MockServer {
 
 async fn spawn_mock_server<H, Fut>(mut handler: H) -> (MockServer, mpsc::Receiver<ServerEvent>)
 where
-    H: FnMut(tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, Arc<MockServerState>) -> Fut
+    H: FnMut(
+            tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+            Arc<MockServerState>,
+        ) -> Fut
         + Send
         + 'static,
     Fut: std::future::Future<Output = ()> + Send + 'static,
@@ -290,7 +285,11 @@ async fn auth_success_connects() {
             let json: Value = serde_json::from_str(&text).unwrap();
             let _ = state.events.send(ServerEvent::Auth(json)).await;
             let _ = ws
-                .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+                .send(Message::Text(auth_success_message(
+                    "sensor-123",
+                    "tenant-1",
+                    TEST_API_KEY,
+                )))
                 .await;
         }
         while ws.next().await.is_some() {}
@@ -338,7 +337,11 @@ async fn concurrent_state_watchers_observe_connected() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         while ws.next().await.is_some() {}
     })
@@ -392,7 +395,11 @@ async fn heartbeat_timeout_disconnects() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         tokio::time::sleep(Duration::from_secs(8)).await;
     })
@@ -406,7 +413,9 @@ async fn heartbeat_timeout_disconnects() {
     let mut client = build_client(config);
     client.start().await.unwrap();
 
-    assert!(wait_for_state_with_timeout(&client, ConnectionState::Error, Duration::from_secs(10)).await);
+    assert!(
+        wait_for_state_with_timeout(&client, ConnectionState::Error, Duration::from_secs(10)).await
+    );
     assert!(client.stats().heartbeat_timeouts > 0);
 
     client.stop().await;
@@ -418,7 +427,11 @@ async fn heartbeat_allows_slow_pong() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         while let Some(msg) = ws.next().await {
             match msg {
@@ -456,7 +469,11 @@ async fn routes_channel_message() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         tokio::time::sleep(Duration::from_millis(20)).await;
         let message = serde_json::json!({
@@ -494,7 +511,11 @@ async fn serializes_outbound_messages() {
     let (server, mut events) = spawn_mock_server(|mut ws, state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         if let Some(json) = next_non_heartbeat(&mut ws).await {
             let _ = state.events.send(ServerEvent::ClientMessage(json)).await;
@@ -529,7 +550,11 @@ async fn malformed_json_is_ignored() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         let _ = ws.send(Message::Text("{\"type\":".to_string())).await;
         while ws.next().await.is_some() {}
@@ -555,7 +580,10 @@ async fn send_while_disconnected_errors() {
     let client = build_client(build_config("ws://127.0.0.1:1".to_string()));
     let payload = serde_json::json!({ "type": "shell", "payload": { "cmd": "whoami" }});
 
-    let err = client.send_json(payload).await.expect_err("expected not connected error");
+    let err = client
+        .send_json(payload)
+        .await
+        .expect_err("expected not connected error");
     assert!(matches!(err, TunnelError::NotConnected));
 }
 
@@ -564,7 +592,11 @@ async fn oversized_payload_disconnects() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         if let Some(Ok(Message::Text(text))) = ws.next().await {
             if text.len() > 1024 {
@@ -593,7 +625,9 @@ async fn oversized_payload_disconnects() {
     });
     client.send_json(large_payload).await.unwrap();
 
-    assert!(wait_for_state_with_timeout(&client, ConnectionState::Error, Duration::from_secs(2)).await);
+    assert!(
+        wait_for_state_with_timeout(&client, ConnectionState::Error, Duration::from_secs(2)).await
+    );
 
     client.stop().await;
     server.shutdown().await;
@@ -605,14 +639,19 @@ async fn concurrent_message_send_delivers_all() {
     let (server, mut events) = spawn_mock_server(move |mut ws, state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         let mut received = 0usize;
         while received < expected {
             match ws.next().await {
                 Some(Ok(Message::Text(text))) => {
                     let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-                    let is_heartbeat = json.get("type").and_then(Value::as_str) == Some("heartbeat");
+                    let is_heartbeat =
+                        json.get("type").and_then(Value::as_str) == Some("heartbeat");
                     if is_heartbeat {
                         continue;
                     }
@@ -663,7 +702,11 @@ async fn close_normal_reconnects() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         tokio::time::sleep(Duration::from_millis(50)).await;
         let _ = ws
@@ -682,7 +725,14 @@ async fn close_normal_reconnects() {
     let mut client = build_client(config);
     client.start().await.unwrap();
     assert!(wait_for_state(&client, ConnectionState::Connected).await);
-    assert!(wait_for_state_with_timeout(&client, ConnectionState::Reconnecting, Duration::from_secs(2)).await);
+    assert!(
+        wait_for_state_with_timeout(
+            &client,
+            ConnectionState::Reconnecting,
+            Duration::from_secs(2)
+        )
+        .await
+    );
 
     client.stop().await;
     server.shutdown().await;
@@ -693,7 +743,11 @@ async fn close_abnormal_reconnects() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         tokio::time::sleep(Duration::from_millis(50)).await;
         // Drop connection without close frame (abnormal close)
@@ -707,7 +761,14 @@ async fn close_abnormal_reconnects() {
     let mut client = build_client(config);
     client.start().await.unwrap();
     assert!(wait_for_state(&client, ConnectionState::Connected).await);
-    assert!(wait_for_state_with_timeout(&client, ConnectionState::Reconnecting, Duration::from_secs(2)).await);
+    assert!(
+        wait_for_state_with_timeout(
+            &client,
+            ConnectionState::Reconnecting,
+            Duration::from_secs(2)
+        )
+        .await
+    );
 
     client.stop().await;
     server.shutdown().await;
@@ -719,7 +780,11 @@ async fn large_payload_stress() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         let _ = ws.next().await;
     })
@@ -744,7 +809,11 @@ async fn reconnect_backoff_increases() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         let _ = ws.close(None).await;
     })
@@ -760,10 +829,12 @@ async fn reconnect_backoff_increases() {
     let mut client = build_client(config);
     client.start().await.unwrap();
 
-    assert!(server
-        .state
-        .wait_for_connections(1, Duration::from_millis(200))
-        .await);
+    assert!(
+        server
+            .state
+            .wait_for_connections(1, Duration::from_millis(200))
+            .await
+    );
     assert!(wait_for_state(&client, ConnectionState::Reconnecting).await);
 
     tokio::time::advance(Duration::from_millis(base_delay.saturating_sub(1))).await;
@@ -773,17 +844,21 @@ async fn reconnect_backoff_increases() {
         max_first_delay.saturating_sub(base_delay.saturating_sub(1)),
     ))
     .await;
-    assert!(server
-        .state
-        .wait_for_connections(2, Duration::from_millis(200))
-        .await);
+    assert!(
+        server
+            .state
+            .wait_for_connections(2, Duration::from_millis(200))
+            .await
+    );
     assert!(wait_for_state(&client, ConnectionState::Reconnecting).await);
 
     tokio::time::advance(Duration::from_millis(max_second_delay)).await;
-    assert!(server
-        .state
-        .wait_for_connections(3, Duration::from_millis(200))
-        .await);
+    assert!(
+        server
+            .state
+            .wait_for_connections(3, Duration::from_millis(200))
+            .await
+    );
 
     client.stop().await;
     server.shutdown().await;
@@ -794,7 +869,11 @@ async fn graceful_shutdown_disconnects() {
     let (server, _events) = spawn_mock_server(|mut ws, _state| async move {
         let _ = ws.next().await;
         let _ = ws
-            .send(Message::Text(auth_success_message("sensor-123", "tenant-1", TEST_API_KEY)))
+            .send(Message::Text(auth_success_message(
+                "sensor-123",
+                "tenant-1",
+                TEST_API_KEY,
+            )))
             .await;
         while ws.next().await.is_some() {}
     })

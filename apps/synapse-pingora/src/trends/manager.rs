@@ -12,8 +12,8 @@ use super::correlation::{Correlation, CorrelationEngine, CorrelationQueryOptions
 use super::signal_extractor::SignalExtractor;
 use super::time_store::{TimeStore, TimeStoreStats};
 use super::types::{
-    Anomaly, AnomalyMetadata, AnomalyQueryOptions, AnomalySeverity, AnomalyType, Signal, SignalCategory, SignalTrend,
-    TrendQueryOptions, TrendsSummary,
+    Anomaly, AnomalyMetadata, AnomalyQueryOptions, AnomalySeverity, AnomalyType, Signal,
+    SignalCategory, SignalTrend, TrendQueryOptions, TrendsSummary,
 };
 use crate::geo::{GeoLocation, ImpossibleTravelDetector, LoginEvent, TravelConfig};
 
@@ -65,7 +65,10 @@ impl TrendsManager {
     }
 
     /// Create with dependencies.
-    pub fn with_dependencies(config: TrendsConfig, dependencies: TrendsManagerDependencies) -> Self {
+    pub fn with_dependencies(
+        config: TrendsConfig,
+        dependencies: TrendsManagerDependencies,
+    ) -> Self {
         let mut manager = Self::new(config);
         manager.dependencies = dependencies;
         manager
@@ -291,7 +294,11 @@ impl TrendsManager {
                     detection_method: Some("impossible_travel".to_string()),
                     ..Default::default()
                 },
-                risk_applied: self.config.anomaly_risk.get(&AnomalyType::ImpossibleTravel).copied(),
+                risk_applied: self
+                    .config
+                    .anomaly_risk
+                    .get(&AnomalyType::ImpossibleTravel)
+                    .copied(),
             };
 
             self.handle_anomaly(anomaly);
@@ -347,7 +354,11 @@ impl TrendsManager {
     }
 
     /// Get signals for an entity.
-    pub fn get_signals_for_entity(&self, entity_id: &str, options: TrendQueryOptions) -> Vec<Signal> {
+    pub fn get_signals_for_entity(
+        &self,
+        entity_id: &str,
+        options: TrendQueryOptions,
+    ) -> Vec<Signal> {
         let store = self.store.read();
         store.get_signals_for_entity(entity_id, &options)
     }
@@ -438,7 +449,8 @@ impl TrendsManager {
             ..Default::default()
         });
 
-        self.correlation_engine.find_correlations(&signals, &options)
+        self.correlation_engine
+            .find_correlations(&signals, &options)
     }
 
     /// Get correlations for a specific entity.
@@ -523,7 +535,10 @@ impl TrendsManager {
     // --------------------------------------------------------------------------
 
     fn track_recent_signal(&self, entity_id: &str, signal: Signal) {
-        let mut entry = self.recent_signals.entry(entity_id.to_string()).or_insert_with(Vec::new);
+        let mut entry = self
+            .recent_signals
+            .entry(entity_id.to_string())
+            .or_insert_with(Vec::new);
         entry.push(signal);
 
         // Keep only recent signals
@@ -550,7 +565,11 @@ impl TrendsManager {
             if risk > 0 {
                 if let Some(ref apply_risk) = self.dependencies.apply_risk {
                     for entity_id in &anomaly.entities {
-                        apply_risk(entity_id, risk, &format!("Anomaly: {}", anomaly.anomaly_type));
+                        apply_risk(
+                            entity_id,
+                            risk,
+                            &format!("Anomaly: {}", anomaly.anomaly_type),
+                        );
                     }
                 }
             }
@@ -567,8 +586,8 @@ impl TrendsManager {
     }
 
     fn cleanup_old_anomalies(&self) {
-        let cutoff =
-            chrono::Utc::now().timestamp_millis() - (self.config.retention_hours as i64 * 60 * 60 * 1000);
+        let cutoff = chrono::Utc::now().timestamp_millis()
+            - (self.config.retention_hours as i64 * 60 * 60 * 1000);
 
         self.anomalies.retain(|_, v| v.detected_at >= cutoff);
 
@@ -642,7 +661,16 @@ mod tests {
         assert!(!manager.is_enabled());
 
         // Recording should be no-op
-        let signals = manager.record_request("entity-1", None, None, None, Some("192.168.1.1"), None, None, None);
+        let signals = manager.record_request(
+            "entity-1",
+            None,
+            None,
+            None,
+            Some("192.168.1.1"),
+            None,
+            None,
+            None,
+        );
         assert!(signals.is_empty());
     }
 

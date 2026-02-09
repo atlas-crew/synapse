@@ -32,34 +32,16 @@ mod stream;
 pub use stream::{StreamingError, StreamingScanner};
 
 // Configuration
-pub use scanner::{
-    DlpConfig,
-    DlpConfigError,
-    RedactionConfigBuilder,
-    RedactionMode,
-};
+pub use scanner::{DlpConfig, DlpConfigError, RedactionConfigBuilder, RedactionMode};
 
 // Pattern types
-pub use scanner::{
-    PatternSeverity,
-    SensitiveDataType,
-};
+pub use scanner::{PatternSeverity, SensitiveDataType};
 
 // Match and scan results
-pub use scanner::{
-    DlpMatch,
-    DlpStats,
-    DlpViolation,
-    ScanResult,
-};
+pub use scanner::{DlpMatch, DlpStats, DlpViolation, ScanResult};
 
 // Scanner
 pub use scanner::DlpScanner;
 
 // Validators (for testing and custom validation)
-pub use scanner::{
-    validate_credit_card,
-    validate_iban,
-    validate_phone,
-    validate_ssn,
-};
+pub use scanner::{validate_credit_card, validate_iban, validate_phone, validate_ssn};

@@ -3,15 +3,14 @@
 //! These tests verify the bandwidth API returns correct data after recording
 //! and that the evaluate endpoint callback registration works correctly.
 
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 // Use the library crate name (underscores, not hyphens)
-use synapse_pingora::{MetricsRegistry, ProfilingMetrics};
 use synapse_pingora::admin_server::{
-    register_evaluate_callback, EvaluationResult,
-    register_profiles_getter, register_schemas_getter,
+    register_evaluate_callback, register_profiles_getter, register_schemas_getter, EvaluationResult,
 };
+use synapse_pingora::{MetricsRegistry, ProfilingMetrics};
 
 // =============================================================================
 // Integration Tests - Bandwidth API returns non-zero after recording
@@ -34,8 +33,14 @@ fn test_bandwidth_api_returns_nonzero_after_request_recording() {
 
     // Now values should be non-zero
     let stats_after = registry.get_bandwidth_stats();
-    assert!(stats_after.total_bytes > 0, "total_bytes should be non-zero");
-    assert!(stats_after.total_bytes_in > 0, "total_bytes_in should be non-zero");
+    assert!(
+        stats_after.total_bytes > 0,
+        "total_bytes should be non-zero"
+    );
+    assert!(
+        stats_after.total_bytes_in > 0,
+        "total_bytes_in should be non-zero"
+    );
     assert_eq!(stats_after.total_bytes_in, 3072);
     assert_eq!(stats_after.request_count, 2);
 }
@@ -55,9 +60,15 @@ fn test_bandwidth_api_returns_nonzero_after_response_recording() {
 
     // Now values should be non-zero
     let stats_after = registry.get_bandwidth_stats();
-    assert!(stats_after.total_bytes_out > 0, "total_bytes_out should be non-zero");
+    assert!(
+        stats_after.total_bytes_out > 0,
+        "total_bytes_out should be non-zero"
+    );
     assert_eq!(stats_after.total_bytes_out, 12288);
-    assert!(stats_after.total_bytes > 0, "total_bytes should be non-zero");
+    assert!(
+        stats_after.total_bytes > 0,
+        "total_bytes should be non-zero"
+    );
 }
 
 /// Test that bandwidth stats correctly aggregate request and response data.
@@ -177,7 +188,8 @@ fn test_endpoint_recording_integration() {
     assert_eq!(stats.len(), 3); // 3 unique paths
 
     // Find specific stats
-    let users_stat = stats.iter()
+    let users_stat = stats
+        .iter()
         .find(|(path, _)| path == "/api/users")
         .map(|(_, s)| s);
 
@@ -215,7 +227,11 @@ fn test_evaluate_callback_registration() {
             blocked: is_sqli,
             risk_score: if is_sqli { 85 } else { 10 },
             matched_rules: if is_sqli { vec![942100] } else { vec![] },
-            block_reason: if is_sqli { Some("SQL Injection detected".to_string()) } else { None },
+            block_reason: if is_sqli {
+                Some("SQL Injection detected".to_string())
+            } else {
+                None
+            },
             detection_time_us: 100,
         }
     });
@@ -229,26 +245,26 @@ fn test_evaluate_callback_registration() {
 #[test]
 fn test_evaluate_callback_reregistration() {
     // Register first callback
-    register_evaluate_callback(|_method, _uri, _headers, _body, _client_ip| {
-        EvaluationResult {
+    register_evaluate_callback(
+        |_method, _uri, _headers, _body, _client_ip| EvaluationResult {
             blocked: false,
             risk_score: 0,
             matched_rules: vec![],
             block_reason: None,
             detection_time_us: 50,
-        }
-    });
+        },
+    );
 
     // Register second callback (should replace first)
-    register_evaluate_callback(|_method, _uri, _headers, _body, _client_ip| {
-        EvaluationResult {
+    register_evaluate_callback(
+        |_method, _uri, _headers, _body, _client_ip| EvaluationResult {
             blocked: true,
             risk_score: 100,
             matched_rules: vec![999],
             block_reason: Some("Always block".to_string()),
             detection_time_us: 10,
-        }
-    });
+        },
+    );
 
     // No panic means registration worked
 }
@@ -423,7 +439,8 @@ fn test_anomaly_recording_integration() {
 
     registry.record_profile_metrics(
         10, // active profiles
-        &anomalies.iter()
+        &anomalies
+            .iter()
             .map(|(t, s)| (t.to_string(), *s))
             .collect::<Vec<_>>(),
     );

@@ -58,9 +58,9 @@ pub struct EntityConfig {
 impl Default for EntityConfig {
     fn default() -> Self {
         Self {
-            max_entities: 100_000,  // 100K for production
-            max_entities_per_site: 10_000, // 10% of max - fair share per tenant
-            risk_half_life_minutes: 5.0, // 50% decay every 5 minutes
+            max_entities: 100_000,           // 100K for production
+            max_entities_per_site: 10_000,   // 10% of max - fair share per tenant
+            risk_half_life_minutes: 5.0,     // 50% decay every 5 minutes
             repeat_offender_max_factor: 3.0, // Up to 3x longer half-life for repeat offenders
             block_threshold: 70.0,
             max_rules_per_entity: 50,
@@ -559,7 +559,9 @@ impl EntityManager {
                 history.last_matched_at = now;
                 history.count += 1;
             } else {
-                entity.matches.insert(rule_id, RuleMatchHistory::new(rule_id, now));
+                entity
+                    .matches
+                    .insert(rule_id, RuleMatchHistory::new(rule_id, now));
             }
 
             // Trim rule history if needed
@@ -750,7 +752,9 @@ impl EntityManager {
 
     /// Returns top N entities sorted by risk score (highest first)
     pub fn list_top_risk(&self, limit: usize) -> Vec<EntitySnapshot> {
-        let mut entities: Vec<_> = self.entities.iter()
+        let mut entities: Vec<_> = self
+            .entities
+            .iter()
             .map(|entry| {
                 let state = entry.value();
                 EntitySnapshot {
@@ -764,7 +768,9 @@ impl EntityManager {
             .collect();
 
         entities.sort_by(|a, b| {
-            b.risk.partial_cmp(&a.risk).unwrap_or(std::cmp::Ordering::Equal)
+            b.risk
+                .partial_cmp(&a.risk)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         entities.truncate(limit);
         entities
@@ -865,7 +871,8 @@ impl EntityManager {
 
         // Exponential decay: risk = risk * 0.5^(elapsed / half_life)
         // Using natural log: risk = risk * e^(-ln(2) * elapsed / half_life)
-        let decay_exponent = -0.693147 * elapsed_minutes / effective_half_life_minutes;
+        let decay_exponent =
+            -std::f64::consts::LN_2 * elapsed_minutes / effective_half_life_minutes;
         let decay_factor = decay_exponent.exp();
 
         // Apply decay
@@ -1016,11 +1023,7 @@ impl EntityManager {
         entries.sort_by_key(|(_, h)| h.last_matched_at);
 
         let to_remove = matches.len() - max_rules;
-        let remove_ids: Vec<u32> = entries
-            .iter()
-            .take(to_remove)
-            .map(|(id, _)| **id)
-            .collect();
+        let remove_ids: Vec<u32> = entries.iter().take(to_remove).map(|(id, _)| **id).collect();
 
         for id in remove_ids {
             matches.remove(&id);
@@ -1091,7 +1094,11 @@ impl EntityManager {
         let mut merged = 0;
         for entity in entities {
             let site_id = entity.site_id.clone();
-            if self.entities.insert(entity.entity_id.clone(), entity).is_none() {
+            if self
+                .entities
+                .insert(entity.entity_id.clone(), entity)
+                .is_none()
+            {
                 merged += 1;
                 // Update site count for new entity
                 if let Some(ref site) = site_id {
@@ -1099,7 +1106,8 @@ impl EntityManager {
                 }
             }
         }
-        self.total_created.fetch_add(merged as u64, Ordering::Relaxed);
+        self.total_created
+            .fetch_add(merged as u64, Ordering::Relaxed);
         merged
     }
 
@@ -1149,8 +1157,8 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
     use std::sync::Arc;
+    use std::thread;
 
     #[test]
     fn test_entity_creation() {
@@ -1194,12 +1202,16 @@ mod tests {
         manager.touch_entity("192.168.1.1");
 
         // First match: 1.0x
-        let r1 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        let r1 = manager
+            .apply_rule_risk("192.168.1.1", 100, 10.0, true)
+            .unwrap();
         assert_eq!(r1.multiplier, 1.0);
         assert_eq!(r1.match_count, 1);
 
         // Second match: 1.25x
-        let r2 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        let r2 = manager
+            .apply_rule_risk("192.168.1.1", 100, 10.0, true)
+            .unwrap();
         assert_eq!(r2.multiplier, 1.25);
         assert_eq!(r2.match_count, 2);
 
@@ -1207,14 +1219,18 @@ mod tests {
         for _ in 0..4 {
             manager.apply_rule_risk("192.168.1.1", 100, 10.0, true);
         }
-        let r6 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        let r6 = manager
+            .apply_rule_risk("192.168.1.1", 100, 10.0, true)
+            .unwrap();
         assert_eq!(r6.multiplier, 1.5);
 
         // After 11 matches: 2.0x
         for _ in 0..4 {
             manager.apply_rule_risk("192.168.1.1", 100, 10.0, true);
         }
-        let r11 = manager.apply_rule_risk("192.168.1.1", 100, 10.0, true).unwrap();
+        let r11 = manager
+            .apply_rule_risk("192.168.1.1", 100, 10.0, true)
+            .unwrap();
         assert_eq!(r11.multiplier, 2.0);
     }
 
@@ -1316,12 +1332,16 @@ mod tests {
         assert!(
             after_force < after_loading,
             "Additional touches should trigger more eviction: before={}, after={}",
-            after_loading, after_force
+            after_loading,
+            after_force
         );
 
         println!(
             "LRU eviction test: created={}, evicted={}, after_load={}, after_force={}",
-            metrics.total_created, manager.metrics().total_evicted, after_loading, after_force
+            metrics.total_created,
+            manager.metrics().total_evicted,
+            after_loading,
+            after_force
         );
     }
 
@@ -1492,19 +1512,27 @@ mod tests {
         manager.touch_entity("1.2.3.4");
 
         // First fingerprint
-        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp1", 1000).unwrap();
+        let r1 = manager
+            .check_ja4_reputation("1.2.3.4", "fp1", 1000)
+            .unwrap();
         assert_eq!(r1.change_count, 0);
 
         // Second fingerprint (change)
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp2", 2000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "fp2", 2000)
+            .unwrap();
         assert_eq!(r2.change_count, 1);
 
         // Third fingerprint (change)
-        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp3", 3000).unwrap();
+        let r3 = manager
+            .check_ja4_reputation("1.2.3.4", "fp3", 3000)
+            .unwrap();
         assert_eq!(r3.change_count, 2);
 
         // Fourth fingerprint (change) - should trigger rapid_changes
-        let r4 = manager.check_ja4_reputation("1.2.3.4", "fp4", 4000).unwrap();
+        let r4 = manager
+            .check_ja4_reputation("1.2.3.4", "fp4", 4000)
+            .unwrap();
         assert_eq!(r4.change_count, 3);
         assert!(r4.rapid_changes);
     }
@@ -1578,19 +1606,27 @@ mod tests {
         // Build up to 2 changes within window
         manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
         manager.check_ja4_reputation("1.2.3.4", "fp2", 10_000);
-        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp3", 20_000).unwrap();
+        let r1 = manager
+            .check_ja4_reputation("1.2.3.4", "fp3", 20_000)
+            .unwrap();
         assert_eq!(r1.change_count, 2);
 
         // Long delay - counter should reset
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp4", 100_000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "fp4", 100_000)
+            .unwrap();
         assert_eq!(r2.change_count, 1); // Reset to 1
 
         // Continue from reset - need 2 more changes to trigger
-        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp5", 110_000).unwrap();
+        let r3 = manager
+            .check_ja4_reputation("1.2.3.4", "fp5", 110_000)
+            .unwrap();
         assert_eq!(r3.change_count, 2);
         assert!(!r3.rapid_changes);
 
-        let r4 = manager.check_ja4_reputation("1.2.3.4", "fp6", 120_000).unwrap();
+        let r4 = manager
+            .check_ja4_reputation("1.2.3.4", "fp6", 120_000)
+            .unwrap();
         assert_eq!(r4.change_count, 3);
         assert!(r4.rapid_changes);
     }
@@ -1605,7 +1641,9 @@ mod tests {
         assert!(r1.is_some());
 
         // Change from empty to non-empty
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp1", 2000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "fp1", 2000)
+            .unwrap();
         assert_eq!(r2.change_count, 1);
 
         // Change back to empty
@@ -1638,7 +1676,9 @@ mod tests {
 
         // Different long fingerprint
         let long_fp2 = "b".repeat(10000);
-        let r2 = manager.check_ja4_reputation("1.2.3.4", &long_fp2, 2000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", &long_fp2, 2000)
+            .unwrap();
         assert_eq!(r2.change_count, 1);
     }
 
@@ -1652,11 +1692,15 @@ mod tests {
         assert!(r1.is_some());
 
         // Different unicode
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "中文", 2000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "中文", 2000)
+            .unwrap();
         assert_eq!(r2.change_count, 1);
 
         // Emoji
-        let r3 = manager.check_ja4_reputation("1.2.3.4", "🔒🔑", 3000).unwrap();
+        let r3 = manager
+            .check_ja4_reputation("1.2.3.4", "🔒🔑", 3000)
+            .unwrap();
         assert_eq!(r3.change_count, 2);
     }
 
@@ -1669,11 +1713,15 @@ mod tests {
         manager.check_ja4_reputation("1.2.3.4", "ABC", 1000);
 
         // Different case = different fingerprint
-        let r = manager.check_ja4_reputation("1.2.3.4", "abc", 2000).unwrap();
+        let r = manager
+            .check_ja4_reputation("1.2.3.4", "abc", 2000)
+            .unwrap();
         assert_eq!(r.change_count, 1);
 
         // Back to original case
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "ABC", 3000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "ABC", 3000)
+            .unwrap();
         assert_eq!(r2.change_count, 2);
     }
 
@@ -1717,17 +1765,23 @@ mod tests {
         manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
 
         // 1 change
-        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp2", 1000).unwrap();
+        let r1 = manager
+            .check_ja4_reputation("1.2.3.4", "fp2", 1000)
+            .unwrap();
         assert_eq!(r1.change_count, 1);
         assert!(!r1.rapid_changes);
 
         // 2 changes
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp3", 2000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "fp3", 2000)
+            .unwrap();
         assert_eq!(r2.change_count, 2);
         assert!(!r2.rapid_changes);
 
         // 3 changes - should trigger
-        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp4", 3000).unwrap();
+        let r3 = manager
+            .check_ja4_reputation("1.2.3.4", "fp4", 3000)
+            .unwrap();
         assert_eq!(r3.change_count, 3);
         assert!(r3.rapid_changes);
     }
@@ -1741,15 +1795,21 @@ mod tests {
         manager.check_ja4_reputation("1.2.3.4", "fp1", 0);
         manager.check_ja4_reputation("1.2.3.4", "fp2", 1000);
         manager.check_ja4_reputation("1.2.3.4", "fp3", 2000);
-        let r = manager.check_ja4_reputation("1.2.3.4", "fp4", 3000).unwrap();
+        let r = manager
+            .check_ja4_reputation("1.2.3.4", "fp4", 3000)
+            .unwrap();
         assert!(r.rapid_changes);
 
         // Additional changes should keep triggering
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp5", 4000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "fp5", 4000)
+            .unwrap();
         assert!(r2.rapid_changes);
         assert_eq!(r2.change_count, 4);
 
-        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp6", 5000).unwrap();
+        let r3 = manager
+            .check_ja4_reputation("1.2.3.4", "fp6", 5000)
+            .unwrap();
         assert!(r3.rapid_changes);
         assert_eq!(r3.change_count, 5);
     }
@@ -1764,7 +1824,9 @@ mod tests {
         manager.check_ja4_reputation("1.1.1.1", "fp1", 0);
         manager.check_ja4_reputation("1.1.1.1", "fp2", 1000);
         manager.check_ja4_reputation("1.1.1.1", "fp3", 2000);
-        let r1 = manager.check_ja4_reputation("1.1.1.1", "fp4", 3000).unwrap();
+        let r1 = manager
+            .check_ja4_reputation("1.1.1.1", "fp4", 3000)
+            .unwrap();
         assert!(r1.rapid_changes);
 
         // Entity 2 should be unaffected
@@ -1785,7 +1847,9 @@ mod tests {
 
         // Repeatedly check same fingerprint - should not increment
         for i in 1..10 {
-            let r = manager.check_ja4_reputation("1.2.3.4", "constant_fp", i * 1000).unwrap();
+            let r = manager
+                .check_ja4_reputation("1.2.3.4", "constant_fp", i * 1000)
+                .unwrap();
             assert_eq!(r.change_count, 0);
             assert!(!r.rapid_changes);
         }
@@ -1798,13 +1862,19 @@ mod tests {
 
         // Alternating between two fingerprints should still count as changes
         manager.check_ja4_reputation("1.2.3.4", "fp_a", 0);
-        let r1 = manager.check_ja4_reputation("1.2.3.4", "fp_b", 1000).unwrap();
+        let r1 = manager
+            .check_ja4_reputation("1.2.3.4", "fp_b", 1000)
+            .unwrap();
         assert_eq!(r1.change_count, 1);
 
-        let r2 = manager.check_ja4_reputation("1.2.3.4", "fp_a", 2000).unwrap();
+        let r2 = manager
+            .check_ja4_reputation("1.2.3.4", "fp_a", 2000)
+            .unwrap();
         assert_eq!(r2.change_count, 2);
 
-        let r3 = manager.check_ja4_reputation("1.2.3.4", "fp_b", 3000).unwrap();
+        let r3 = manager
+            .check_ja4_reputation("1.2.3.4", "fp_b", 3000)
+            .unwrap();
         assert_eq!(r3.change_count, 3);
         assert!(r3.rapid_changes);
     }
@@ -1914,7 +1984,7 @@ mod tests {
 
         // Fingerprints with special characters
         let special_fps = [
-            "t13d1516h2_8daaf6152771_02713d6af862",  // Real JA4 format
+            "t13d1516h2_8daaf6152771_02713d6af862", // Real JA4 format
             "fp-with-dashes",
             "fp_with_underscores",
             "fp.with.dots",
@@ -1947,7 +2017,10 @@ mod tests {
         manager.apply_rule_risk("1.2.3.4", 100, 80.0, false);
 
         let initial = manager.get_entity("1.2.3.4").unwrap();
-        assert!((initial.risk - 80.0).abs() < 0.1, "Initial risk should be ~80");
+        assert!(
+            (initial.risk - 80.0).abs() < 0.1,
+            "Initial risk should be ~80"
+        );
 
         // Simulate 5 minutes passing (half-life)
         let five_minutes_ms = 5 * 60 * 1000;
@@ -2011,19 +2084,30 @@ mod tests {
 
         // Verify initial risk is similar
         let first_initial = manager.get_entity("first.offender").unwrap().risk;
-        let repeat_initial = manager.test_get_entity_state("repeat.offender").unwrap().risk;
-        assert!((first_initial - repeat_initial).abs() < 1.0, "Initial risk should be similar");
+        let repeat_initial = manager
+            .test_get_entity_state("repeat.offender")
+            .unwrap()
+            .risk;
+        assert!(
+            (first_initial - repeat_initial).abs() < 1.0,
+            "Initial risk should be similar"
+        );
 
         // Simulate 5 minutes of decay
         let five_minutes_ms = 5 * 60 * 1000;
-        let first_risk_after = manager.test_decay("first.offender", five_minutes_ms).unwrap();
-        let repeat_risk_after = manager.test_decay("repeat.offender", five_minutes_ms).unwrap();
+        let first_risk_after = manager
+            .test_decay("first.offender", five_minutes_ms)
+            .unwrap();
+        let repeat_risk_after = manager
+            .test_decay("repeat.offender", five_minutes_ms)
+            .unwrap();
 
         // Repeat offender should have higher remaining risk (slower decay)
         assert!(
             repeat_risk_after > first_risk_after,
             "Repeat offender should decay slower: first={}, repeat={}",
-            first_risk_after, repeat_risk_after
+            first_risk_after,
+            repeat_risk_after
         );
 
         // First offender: 5 min = 1 half-life → ~50% remaining
@@ -2113,5 +2197,4 @@ mod tests {
             drop_ratio
         );
     }
-
 }

@@ -121,7 +121,7 @@ pub static KNOWN_CRAWLERS: &[CrawlerDefinition] = &[
     CrawlerDefinition {
         name: "ScreamingFrog",
         user_agent_pattern: r"(?i)screaming frog seo spider",
-        reverse_dns_pattern: r".*",  // No DNS verification
+        reverse_dns_pattern: r".*", // No DNS verification
         ip_ranges: None,
         verification_required: false,
     },

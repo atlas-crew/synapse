@@ -51,7 +51,10 @@ mod config {
         let cloned = config.clone();
 
         assert_eq!(config.max_profiles, cloned.max_profiles);
-        assert_eq!(config.min_samples_for_detection, cloned.min_samples_for_detection);
+        assert_eq!(
+            config.min_samples_for_detection,
+            cloned.min_samples_for_detection
+        );
     }
 
     #[test]

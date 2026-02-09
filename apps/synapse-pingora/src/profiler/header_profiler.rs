@@ -112,9 +112,7 @@ impl HeaderProfiler {
     /// multiple request handlers.
     pub fn learn(&self, endpoint: &str, headers: &[(String, String)]) {
         // Check capacity - evict if needed
-        if self.baselines.len() >= self.max_endpoints
-            && !self.baselines.contains_key(endpoint)
-        {
+        if self.baselines.len() >= self.max_endpoints && !self.baselines.contains_key(endpoint) {
             self.evict_oldest();
         }
 
@@ -170,11 +168,7 @@ impl HeaderProfiler {
     ///
     /// # Thread Safety
     /// This method is thread-safe and can be called concurrently.
-    pub fn analyze(
-        &self,
-        endpoint: &str,
-        headers: &[(String, String)],
-    ) -> HeaderAnomalyResult {
+    pub fn analyze(&self, endpoint: &str, headers: &[(String, String)]) -> HeaderAnomalyResult {
         // Get baseline, return empty if not found
         let baseline = match self.baselines.get(endpoint) {
             Some(b) => b,
@@ -507,9 +501,9 @@ mod tests {
         let result = profiler.analyze("/api/secure", &headers);
 
         assert!(result.has_anomalies());
-        let missing = result.anomalies.iter().find(|a| {
-            matches!(a, HeaderAnomaly::MissingRequired { header } if header == "Authorization")
-        });
+        let missing = result.anomalies.iter().find(
+            |a| matches!(a, HeaderAnomaly::MissingRequired { header } if header == "Authorization"),
+        );
         assert!(missing.is_some());
     }
 
@@ -604,10 +598,7 @@ mod tests {
         }
 
         // Request with multiple anomalies
-        let headers = make_headers(&[
-            ("X-Unexpected-1", "value"),
-            ("X-Unexpected-2", "value"),
-        ]);
+        let headers = make_headers(&[("X-Unexpected-1", "value"), ("X-Unexpected-2", "value")]);
         let result = profiler.analyze("/api/risk", &headers);
 
         assert!(result.has_anomalies());
@@ -737,10 +728,7 @@ mod tests {
             );
         }
         for _ in 0..5 {
-            profiler.learn(
-                "/api/immature",
-                &make_headers(&[("X-Token", "test")]),
-            );
+            profiler.learn("/api/immature", &make_headers(&[("X-Token", "test")]));
         }
 
         let stats = profiler.stats();

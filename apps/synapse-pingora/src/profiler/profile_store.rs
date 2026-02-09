@@ -155,7 +155,10 @@ impl ProfileStore {
     /// Get or create a profile for a path.
     ///
     /// Normalizes the path to a template if dynamic segment detection is enabled.
-    pub fn get_or_create(&self, path: &str) -> dashmap::mapref::one::RefMut<'_, String, EndpointProfile> {
+    pub fn get_or_create(
+        &self,
+        path: &str,
+    ) -> dashmap::mapref::one::RefMut<'_, String, EndpointProfile> {
         let template = if self.config.enable_segment_detection {
             self.normalize_path(path)
         } else {
@@ -174,7 +177,10 @@ impl ProfileStore {
     }
 
     /// Get an existing profile (read-only).
-    pub fn get(&self, template: &str) -> Option<dashmap::mapref::one::Ref<'_, String, EndpointProfile>> {
+    pub fn get(
+        &self,
+        template: &str,
+    ) -> Option<dashmap::mapref::one::Ref<'_, String, EndpointProfile>> {
         self.profiles.get(template)
     }
 
@@ -238,11 +244,7 @@ impl ProfileStore {
         }
 
         // UUID format: 8-4-4-4-12 hex
-        if segment.len() == 36
-            && segment
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() || c == '-')
-        {
+        if segment.len() == 36 && segment.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
             return true;
         }
 

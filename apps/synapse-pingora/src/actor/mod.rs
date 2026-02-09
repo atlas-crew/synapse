@@ -46,10 +46,5 @@
 mod manager;
 
 pub use manager::{
-    ActorConfig,
-    ActorManager,
-    ActorState,
-    ActorStats,
-    ActorStatsSnapshot,
-    RuleMatch,
+    ActorConfig, ActorManager, ActorState, ActorStats, ActorStatsSnapshot, RuleMatch,
 };

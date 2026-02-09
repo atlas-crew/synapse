@@ -9,10 +9,8 @@ use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, DashSet};
 
-use crate::correlation::{
-    FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
-};
 use super::{Detector, DetectorResult};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
 /// JWT structure fingerprint
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -119,13 +117,15 @@ impl AuthTokenDetector {
     fn get_correlated_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
         let cutoff = Instant::now() - self.config.window;
 
-        self.token_index.iter()
+        self.token_index
+            .iter()
             .filter(|entry| !self.detected.contains(entry.key()))
             .filter_map(|entry| {
                 let hash = entry.key().clone();
                 let entries = entry.value();
 
-                let recent_ips: HashSet<IpAddr> = entries.iter()
+                let recent_ips: HashSet<IpAddr> = entries
+                    .iter()
                     .filter(|(_, ts)| *ts > cutoff)
                     .map(|(ip, _)| *ip)
                     .collect();
@@ -141,17 +141,23 @@ impl AuthTokenDetector {
 }
 
 impl Detector for AuthTokenDetector {
-    fn name(&self) -> &'static str { "auth_token" }
+    fn name(&self) -> &'static str {
+        "auth_token"
+    }
 
     fn analyze(&self, _index: &FingerprintIndex) -> DetectorResult<Vec<CampaignUpdate>> {
         let groups = self.get_correlated_groups();
         let mut updates = Vec::new();
 
         for (token_hash, ips) in groups {
-            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0)
+                * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
-                campaign_id: Some(format!("auth-token-{}", &token_hash[..8.min(token_hash.len())])),
+                campaign_id: Some(format!(
+                    "auth-token-{}",
+                    &token_hash[..8.min(token_hash.len())]
+                )),
                 status: None,
                 confidence: Some(confidence),
                 attack_types: Some(vec!["credential_stuffing".to_string()]),
@@ -159,7 +165,10 @@ impl Detector for AuthTokenDetector {
                 add_correlation_reason: Some(CorrelationReason::new(
                     CorrelationType::AuthToken,
                     confidence,
-                    format!("{} IPs using tokens with identical structure/issuer", ips.len()),
+                    format!(
+                        "{} IPs using tokens with identical structure/issuer",
+                        ips.len()
+                    ),
                     ips.iter().map(|ip| ip.to_string()).collect(),
                 )),
                 ..Default::default()
@@ -179,7 +188,9 @@ impl Detector for AuthTokenDetector {
         })
     }
 
-    fn scan_interval_ms(&self) -> u64 { 5000 } // 5 seconds
+    fn scan_interval_ms(&self) -> u64 {
+        5000
+    } // 5 seconds
 }
 
 #[cfg(test)]

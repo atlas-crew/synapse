@@ -265,7 +265,11 @@ pub fn get_candidate_rule_indices(
     percent_decode: impl Fn(&str) -> String,
 ) -> Vec<usize> {
     let mut out = Vec::new();
-    let req_method_mask = if method_bit == 0 { None } else { Some(method_bit) };
+    let req_method_mask = if method_bit == 0 {
+        None
+    } else {
+        Some(method_bit)
+    };
 
     let mut uri_lower: Option<String> = None;
     let mut uri_percent_decoded: Option<String> = None;
@@ -447,7 +451,9 @@ fn extract_rule_uri_anchors(rule: &WafRule) -> Vec<UriAnchor> {
 
 fn implied_uri_anchors(condition: &MatchCondition) -> Option<Vec<UriAnchor>> {
     match condition.kind.as_str() {
-        "uri" => uri_anchors_from_uri_match_value(condition.match_value.as_ref(), UriTransform::Raw),
+        "uri" => {
+            uri_anchors_from_uri_match_value(condition.match_value.as_ref(), UriTransform::Raw)
+        }
         "boolean" => {
             let op = condition.op.as_deref().unwrap_or("and");
             let operands = boolean_operands(condition);

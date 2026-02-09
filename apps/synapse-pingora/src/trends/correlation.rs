@@ -82,7 +82,11 @@ impl CorrelationEngine {
     }
 
     /// Create with custom settings.
-    pub fn with_settings(min_cluster_size: usize, temporal_window_ms: i64, min_strength: f64) -> Self {
+    pub fn with_settings(
+        min_cluster_size: usize,
+        temporal_window_ms: i64,
+        min_strength: f64,
+    ) -> Self {
         Self {
             min_cluster_size,
             temporal_window_ms,
@@ -148,7 +152,11 @@ impl CorrelationEngine {
             .collect::<Vec<_>>();
 
         // Sort by strength (strongest first)
-        filtered.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
+        filtered.sort_by(|a, b| {
+            b.strength
+                .partial_cmp(&a.strength)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply limit
         if let Some(limit) = options.limit {
@@ -187,10 +195,7 @@ impl CorrelationEngine {
                         .filter(|s| s.value == value)
                         .cloned()
                         .collect(),
-                    description: format!(
-                        "Entity cluster: {} IPs share signal value",
-                        entity_count
-                    ),
+                    description: format!("Entity cluster: {} IPs share signal value", entity_count),
                     detected_at: chrono::Utc::now().timestamp_millis(),
                     metadata: CorrelationMetadata {
                         shared_value: Some(value[..16.min(value.len())].to_string()),
@@ -242,8 +247,7 @@ impl CorrelationEngine {
                     signals: window.to_vec(),
                     description: format!(
                         "Temporal burst: {} entities active within {}ms",
-                        entity_count,
-                        self.temporal_window_ms
+                        entity_count, self.temporal_window_ms
                     ),
                     detected_at: chrono::Utc::now().timestamp_millis(),
                     metadata: CorrelationMetadata {
@@ -279,7 +283,10 @@ impl CorrelationEngine {
         for fp in &fingerprints {
             if fp.value.len() >= 8 {
                 let prefix = fp.value[..8].to_string();
-                prefix_groups.entry(prefix).or_insert_with(Vec::new).push(fp);
+                prefix_groups
+                    .entry(prefix)
+                    .or_insert_with(Vec::new)
+                    .push(fp);
             }
         }
 
@@ -370,7 +377,10 @@ mod tests {
 
         let correlations = engine.find_entity_clusters(&signals);
         assert!(!correlations.is_empty());
-        assert_eq!(correlations[0].correlation_type, CorrelationType::EntityCluster);
+        assert_eq!(
+            correlations[0].correlation_type,
+            CorrelationType::EntityCluster
+        );
     }
 
     #[test]

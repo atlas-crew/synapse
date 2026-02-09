@@ -3,8 +3,8 @@
 //! This module defines the Detector trait and implements concrete detectors
 //! for identifying coordinated attack campaigns.
 
+use crate::correlation::{CampaignUpdate, FingerprintIndex};
 use std::net::IpAddr;
-use crate::correlation::{FingerprintIndex, CampaignUpdate};
 
 /// Result type for detector operations
 pub type DetectorResult<T> = Result<T, DetectorError>;
@@ -54,22 +54,22 @@ pub trait Detector: Send + Sync {
     }
 }
 
-pub mod common;
-pub mod shared_fingerprint;
-pub mod ja4_rotation;
 pub mod attack_sequence;
 pub mod auth_token;
 pub mod behavioral_similarity;
-pub mod timing_correlation;
-pub mod network_proximity;
+pub mod common;
 pub mod graph;
+pub mod ja4_rotation;
+pub mod network_proximity;
+pub mod shared_fingerprint;
+pub mod timing_correlation;
 
+pub use attack_sequence::{AttackPayload, AttackSequenceConfig, AttackSequenceDetector};
+pub use auth_token::{AuthTokenConfig, AuthTokenDetector, TokenFingerprint};
+pub use behavioral_similarity::{BehaviorPattern, BehavioralConfig, BehavioralSimilarityDetector};
 pub use common::TimeWindowedIndex;
+pub use graph::{GraphConfig, GraphDetector};
+pub use ja4_rotation::{Ja4RotationDetector, Ja4RotationStats, RotationConfig};
+pub use network_proximity::{NetworkProximityConfig, NetworkProximityDetector};
 pub use shared_fingerprint::SharedFingerprintDetector;
-pub use ja4_rotation::{Ja4RotationDetector, RotationConfig, Ja4RotationStats};
-pub use attack_sequence::{AttackSequenceDetector, AttackSequenceConfig, AttackPayload};
-pub use auth_token::{AuthTokenDetector, AuthTokenConfig, TokenFingerprint};
-pub use behavioral_similarity::{BehavioralSimilarityDetector, BehavioralConfig, BehaviorPattern};
-pub use timing_correlation::{TimingCorrelationDetector, TimingConfig};
-pub use network_proximity::{NetworkProximityDetector, NetworkProximityConfig};
-pub use graph::{GraphDetector, GraphConfig};
+pub use timing_correlation::{TimingConfig, TimingCorrelationDetector};

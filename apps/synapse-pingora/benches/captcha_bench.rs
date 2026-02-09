@@ -9,7 +9,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::sync::Arc;
 use std::time::Duration;
 
-use synapse_pingora::interrogator::{CaptchaConfig, CaptchaChallenge, CaptchaManager};
+use synapse_pingora::interrogator::{CaptchaChallenge, CaptchaConfig, CaptchaManager};
 
 // ============================================================================
 // Helpers
@@ -84,30 +84,24 @@ fn bench_captcha_validate(c: &mut Criterion) {
 
     group.bench_function("valid_response", |b| {
         b.iter(|| {
-            let result = manager.validate_response(
-                black_box("validate-actor"),
-                black_box(&valid_response),
-            );
+            let result =
+                manager.validate_response(black_box("validate-actor"), black_box(&valid_response));
             black_box(result);
         });
     });
 
     group.bench_function("invalid_response", |b| {
         b.iter(|| {
-            let result = manager.validate_response(
-                black_box("validate-actor"),
-                black_box("bad-session:9999"),
-            );
+            let result = manager
+                .validate_response(black_box("validate-actor"), black_box("bad-session:9999"));
             black_box(result);
         });
     });
 
     group.bench_function("unknown_actor", |b| {
         b.iter(|| {
-            let result = manager.validate_response(
-                black_box("nonexistent-actor"),
-                black_box("some-session:42"),
-            );
+            let result = manager
+                .validate_response(black_box("nonexistent-actor"), black_box("some-session:42"));
             black_box(result);
         });
     });
@@ -169,8 +163,8 @@ fn bench_captcha_contention(c: &mut Criterion) {
                                     if i % 3 == 0 {
                                         // Validate every 3rd challenge
                                         let resp = solve_challenge(&challenge);
-                                        let result =
-                                            mgr.validate_response(black_box(&actor), black_box(&resp));
+                                        let result = mgr
+                                            .validate_response(black_box(&actor), black_box(&resp));
                                         black_box(result);
                                     }
                                     black_box(challenge);

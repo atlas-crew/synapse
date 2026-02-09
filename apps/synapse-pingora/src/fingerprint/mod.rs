@@ -18,40 +18,36 @@
 //!
 //! @see https://github.com/FoxIO-LLC/ja4
 
-mod ja4;
 mod integrity;
+mod ja4;
 
 pub use ja4::{
-    // Types
-    Ja4Fingerprint,
-    Ja4hFingerprint,
-    ClientFingerprint,
-    Ja4Protocol,
-    Ja4SniType,
-    Ja4Analysis,
-    Ja4hAnalysis,
-    HttpHeaders,
-    // Parsing
-    parse_ja4_from_header,
-    // Generation
-    generate_ja4h,
-    extract_client_fingerprint,
-    // Utilities
-    sha256_first12,
-    is_valid_ja4,
-    is_valid_ja4h,
-    fingerprints_match,
-    matches_pattern,
     // Analysis
     analyze_ja4,
     analyze_ja4h,
+    extract_client_fingerprint,
+    fingerprints_match,
+    // Generation
+    generate_ja4h,
+    is_valid_ja4,
+    is_valid_ja4h,
+    matches_pattern,
+    // Parsing
+    parse_ja4_from_header,
+    // Utilities
+    sha256_first12,
+    ClientFingerprint,
+    HttpHeaders,
+    Ja4Analysis,
+    // Types
+    Ja4Fingerprint,
+    Ja4Protocol,
+    Ja4SniType,
+    Ja4hAnalysis,
+    Ja4hFingerprint,
 };
 
 pub use integrity::{
-    analyze_integrity,
-    analyze_integrity_with_ja4,
-    analyze_ja4_spoofing,
-    IntegrityAnalysis,
-    Ja4SpoofingAnalysis,
-    BrowserJa4Profile,
+    analyze_integrity, analyze_integrity_with_ja4, analyze_ja4_spoofing, BrowserJa4Profile,
+    IntegrityAnalysis, Ja4SpoofingAnalysis,
 };

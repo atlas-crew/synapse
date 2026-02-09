@@ -8,16 +8,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::{
-    Json,
-    Router,
     extract::State,
     http::{HeaderMap, StatusCode},
     routing::post,
+    Json, Router,
 };
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, Notify, oneshot};
+use tokio::sync::{oneshot, Mutex, Notify};
 
 use synapse_pingora::shadow::{MirrorPayload, ShadowMirrorConfig, ShadowMirrorManager};
 
@@ -60,7 +59,10 @@ async fn honeypot_handler(
     }
 
     let mut received = state.received.lock().await;
-    received.push(ReceivedRequest { payload, headers: header_map });
+    received.push(ReceivedRequest {
+        payload,
+        headers: header_map,
+    });
     state.notify.notify_waiters();
 
     StatusCode::OK
@@ -72,7 +74,9 @@ async fn spawn_honeypot(delay: Duration) -> (SocketAddr, oneshot::Sender<()>, Ar
         .route("/mirror", post(honeypot_handler))
         .with_state(state.clone());
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind honeypot");
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind honeypot");
     let addr = listener.local_addr().expect("honeypot addr");
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -87,11 +91,7 @@ async fn spawn_honeypot(delay: Duration) -> (SocketAddr, oneshot::Sender<()>, Ar
     (addr, shutdown_tx, state)
 }
 
-async fn wait_for_received(
-    state: &Arc<HoneypotState>,
-    expected: usize,
-    timeout: Duration,
-) -> bool {
+async fn wait_for_received(state: &Arc<HoneypotState>, expected: usize, timeout: Duration) -> bool {
     let deadline = tokio::time::Instant::now() + timeout;
     loop {
         if state.received.lock().await.len() >= expected {
@@ -104,7 +104,10 @@ async fn wait_for_received(
         }
 
         let remaining = deadline - now;
-        if tokio::time::timeout(remaining, state.notify.notified()).await.is_err() {
+        if tokio::time::timeout(remaining, state.notify.notified())
+            .await
+            .is_err()
+        {
             return false;
         }
     }
@@ -132,8 +135,8 @@ fn base_config(url: String) -> ShadowMirrorConfig {
 }
 
 fn compute_signature(secret: &str, payload: &MirrorPayload) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC can accept any key length");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC can accept any key length");
     let json = payload.to_json_bytes().expect("payload json");
     mac.update(&json);
     hex::encode(mac.finalize().into_bytes())
@@ -143,7 +146,10 @@ fn build_payload(manager: &ShadowMirrorManager, request_id: &str, ip: &str) -> M
     let mut headers = HashMap::new();
     headers.insert("User-Agent".to_string(), "mirror-client".to_string());
     headers.insert("X-Test".to_string(), "present".to_string());
-    headers.insert("Authorization".to_string(), "Bearer should-strip".to_string());
+    headers.insert(
+        "Authorization".to_string(),
+        "Bearer should-strip".to_string(),
+    );
     headers.insert("Cookie".to_string(), "session=secret".to_string());
 
     manager.create_payload(
@@ -169,8 +175,8 @@ async fn test_shadow_mirror_delivers_payload_and_headers() {
 
     let mut config = base_config(url);
     config.hmac_secret = Some("test-secret".to_string());
-    let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
-        .expect("manager creation");
+    let manager =
+        ShadowMirrorManager::new(config, "sensor-01".to_string()).expect("manager creation");
 
     assert!(manager.should_mirror(55.0, "203.0.113.10"));
     let payload = build_payload(&manager, "req-1", "203.0.113.10");
@@ -202,10 +208,22 @@ async fn test_shadow_mirror_delivers_payload_and_headers() {
     assert!(!received.payload.headers.contains_key("Authorization"));
     assert!(!received.payload.headers.contains_key("Cookie"));
 
-    assert_eq!(received.headers.get("x-shadow-mirror"), Some(&"1".to_string()));
-    assert_eq!(received.headers.get("x-request-id"), Some(&"req-1".to_string()));
-    assert_eq!(received.headers.get("x-protocol-version"), Some(&"1.0".to_string()));
-    assert_eq!(received.headers.get("x-signature"), Some(&expected_signature));
+    assert_eq!(
+        received.headers.get("x-shadow-mirror"),
+        Some(&"1".to_string())
+    );
+    assert_eq!(
+        received.headers.get("x-request-id"),
+        Some(&"req-1".to_string())
+    );
+    assert_eq!(
+        received.headers.get("x-protocol-version"),
+        Some(&"1.0".to_string())
+    );
+    assert_eq!(
+        received.headers.get("x-signature"),
+        Some(&expected_signature)
+    );
 
     let _ = shutdown_tx.send(());
 }
@@ -218,8 +236,8 @@ async fn test_shadow_mirror_respects_rate_limit() {
     let mut config = base_config(url);
     config.per_ip_rate_limit = 2;
     config.include_headers.clear();
-    let manager = ShadowMirrorManager::new(config, "sensor-01".to_string())
-        .expect("manager creation");
+    let manager =
+        ShadowMirrorManager::new(config, "sensor-01".to_string()).expect("manager creation");
 
     let ip = "198.51.100.55";
     for idx in 0..3 {
@@ -259,11 +277,8 @@ async fn test_shadow_mirror_backpressure_is_non_blocking() {
     config.per_ip_rate_limit = 100;
     config.include_headers.clear();
     config.include_body = false;
-    let manager = ShadowMirrorManager::with_max_concurrent(
-        config,
-        "sensor-01".to_string(),
-        1,
-    ).expect("manager creation");
+    let manager = ShadowMirrorManager::with_max_concurrent(config, "sensor-01".to_string(), 1)
+        .expect("manager creation");
 
     let payload_a = manager.create_payload(
         "req-a".to_string(),

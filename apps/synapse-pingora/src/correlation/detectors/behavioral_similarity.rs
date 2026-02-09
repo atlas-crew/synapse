@@ -9,10 +9,8 @@ use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, DashSet};
 
-use crate::correlation::{
-    FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
-};
 use super::{Detector, DetectorResult};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
 /// Represents a behavior pattern (sequence of actions)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -123,13 +121,15 @@ impl BehavioralSimilarityDetector {
     fn get_correlated_groups(&self) -> Vec<(String, Vec<IpAddr>)> {
         let cutoff = Instant::now() - self.config.window;
 
-        self.pattern_index.iter()
+        self.pattern_index
+            .iter()
             .filter(|entry| !self.detected.contains(entry.key()))
             .filter_map(|entry| {
                 let hash = entry.key().clone();
                 let entries = entry.value();
 
-                let recent_ips: HashSet<IpAddr> = entries.iter()
+                let recent_ips: HashSet<IpAddr> = entries
+                    .iter()
                     .filter(|(_, ts)| *ts > cutoff)
                     .map(|(ip, _)| *ip)
                     .collect();
@@ -145,17 +145,23 @@ impl BehavioralSimilarityDetector {
 }
 
 impl Detector for BehavioralSimilarityDetector {
-    fn name(&self) -> &'static str { "behavioral_similarity" }
+    fn name(&self) -> &'static str {
+        "behavioral_similarity"
+    }
 
     fn analyze(&self, _index: &FingerprintIndex) -> DetectorResult<Vec<CampaignUpdate>> {
         let groups = self.get_correlated_groups();
         let mut updates = Vec::new();
 
         for (pattern_hash, ips) in groups {
-            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0)
+                * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
-                campaign_id: Some(format!("behavioral-{}", &pattern_hash[..8.min(pattern_hash.len())])),
+                campaign_id: Some(format!(
+                    "behavioral-{}",
+                    &pattern_hash[..8.min(pattern_hash.len())]
+                )),
                 status: None,
                 confidence: Some(confidence),
                 attack_types: Some(vec!["bot_activity".to_string()]),
@@ -176,12 +182,15 @@ impl Detector for BehavioralSimilarityDetector {
     }
 
     fn should_trigger(&self, ip: &IpAddr, _index: &FingerprintIndex) -> bool {
-        self.ip_history.get(ip)
+        self.ip_history
+            .get(ip)
             .map(|h| h.len() >= self.config.min_sequence_length - 1)
             .unwrap_or(false)
     }
 
-    fn scan_interval_ms(&self) -> u64 { 5000 }
+    fn scan_interval_ms(&self) -> u64 {
+        5000
+    }
 }
 
 #[cfg(test)]

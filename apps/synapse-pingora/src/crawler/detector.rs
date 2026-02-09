@@ -12,10 +12,10 @@ use std::borrow::Cow;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::bad_bots::{BadBotSignature, BadBotSeverity, BAD_BOT_SIGNATURES};
+use super::bad_bots::{BadBotSeverity, BadBotSignature, BAD_BOT_SIGNATURES};
 use super::cache::VerificationCache;
 use super::config::{CrawlerConfig, DnsFailurePolicy};
-use super::dns_resolver::{DnsResolver, DnsError};
+use super::dns_resolver::{DnsError, DnsResolver};
 use super::known_crawlers::{CrawlerDefinition, KNOWN_CRAWLERS};
 
 /// Maximum allowed length for User-Agent string (512 bytes)
@@ -47,16 +47,20 @@ pub trait CrawlerDetection: Send + Sync {
 fn get_exclusions(signature_name: &str) -> &'static [&'static str] {
     match signature_name {
         "GenericBot" => &[
-            "googlebot", "bingbot", "yandexbot", "baiduspider",
-            "facebookexternalhit", "twitterbot", "linkedinbot",
-            "applebot", "pinterestbot", "slackbot", "discordbot",
+            "googlebot",
+            "bingbot",
+            "yandexbot",
+            "baiduspider",
+            "facebookexternalhit",
+            "twitterbot",
+            "linkedinbot",
+            "applebot",
+            "pinterestbot",
+            "slackbot",
+            "discordbot",
         ],
-        "GenericCrawler" => &[
-            "googlebot", "bingbot", "yandexbot", "baiduspider", "slurp",
-        ],
-        "GenericSpider" => &[
-            "googlebot", "bingbot", "yandexbot", "baiduspider", "slurp",
-        ],
+        "GenericCrawler" => &["googlebot", "bingbot", "yandexbot", "baiduspider", "slurp"],
+        "GenericSpider" => &["googlebot", "bingbot", "yandexbot", "baiduspider", "slurp"],
         "PythonUrllib" => &["googlebot"],
         _ => &[],
     }
@@ -256,8 +260,11 @@ impl CrawlerDetector {
 
         // Create DNS resolver if verification is enabled (with rate limiting)
         let dns = if config.verify_legitimate_crawlers {
-            Some(DnsResolver::new(config.dns_timeout_ms, config.max_concurrent_dns_lookups).await
-                .map_err(|e| format!("Failed to create DNS resolver: {}", e))?)
+            Some(
+                DnsResolver::new(config.dns_timeout_ms, config.max_concurrent_dns_lookups)
+                    .await
+                    .map_err(|e| format!("Failed to create DNS resolver: {}", e))?,
+            )
         } else {
             None
         };
@@ -298,7 +305,9 @@ impl CrawlerDetector {
     /// - Applies DNS failure policy for fail-secure behavior
     /// - Bounds stats map sizes to prevent memory exhaustion
     pub async fn verify(&self, user_agent: &str, client_ip: IpAddr) -> CrawlerVerificationResult {
-        self.stats.total_verifications.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .total_verifications
+            .fetch_add(1, Ordering::Relaxed);
 
         // Security: Validate input length to prevent ReDoS
         if user_agent.len() > MAX_USER_AGENT_LENGTH {
@@ -337,7 +346,9 @@ impl CrawlerDetector {
             result.bad_bot_severity = Some(bad_bot.severity);
             result.suspicious = true;
             // Note: We don't expose the matched bot name in the result to prevent info disclosure
-            result.suspicion_reasons.push(Cow::Borrowed("Matched known malicious bot signature"));
+            result
+                .suspicion_reasons
+                .push(Cow::Borrowed("Matched known malicious bot signature"));
 
             // Cache and return immediately for bad bots
             self.cache.put_verification(cache_key, result.clone());
@@ -357,7 +368,9 @@ impl CrawlerDetector {
             } else {
                 result.verified = !pattern.definition.verification_required;
                 result.verification_method = VerificationMethod::Unverified;
-                self.stats.unverified_crawlers.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .unverified_crawlers
+                    .fetch_add(1, Ordering::Relaxed);
             }
 
             // Bound stats map size
@@ -372,10 +385,18 @@ impl CrawlerDetector {
     /// Record crawler stat with bounded map size
     fn record_crawler_stat(&self, name: &str) {
         if self.stats.by_crawler_name.len() < self.config.max_stats_entries {
-            *self.stats.by_crawler_name.entry(name.to_string()).or_insert(0) += 1;
+            *self
+                .stats
+                .by_crawler_name
+                .entry(name.to_string())
+                .or_insert(0) += 1;
         } else if self.stats.by_crawler_name.contains_key(name) {
             // Update existing entry even if at capacity
-            *self.stats.by_crawler_name.entry(name.to_string()).or_insert(0) += 1;
+            *self
+                .stats
+                .by_crawler_name
+                .entry(name.to_string())
+                .or_insert(0) += 1;
         }
         // Otherwise drop the stat to prevent unbounded growth
     }
@@ -391,7 +412,9 @@ impl CrawlerDetector {
 
     /// Match user agent against crawler patterns.
     fn match_crawler_ua(&self, user_agent: &str) -> Option<&CompiledCrawlerPattern> {
-        self.crawler_patterns.iter().find(|p| p.ua_regex.is_match(user_agent))
+        self.crawler_patterns
+            .iter()
+            .find(|p| p.ua_regex.is_match(user_agent))
     }
 
     /// Verify a crawler via DNS.
@@ -446,10 +469,12 @@ impl CrawlerDetector {
                             "Crawler verification failed: DNS hostname mismatch"
                         );
                         result.suspicious = true;
-                        result.suspicion_reasons.push(Cow::Borrowed(
-                            "Crawler claim could not be verified via DNS"
-                        ));
-                        self.stats.unverified_crawlers.fetch_add(1, Ordering::Relaxed);
+                        result
+                            .suspicion_reasons
+                            .push(Cow::Borrowed("Crawler claim could not be verified via DNS"));
+                        self.stats
+                            .unverified_crawlers
+                            .fetch_add(1, Ordering::Relaxed);
                     }
                 } else {
                     tracing::warn!(
@@ -459,9 +484,11 @@ impl CrawlerDetector {
                     );
                     result.suspicious = true;
                     result.suspicion_reasons.push(Cow::Borrowed(
-                        "Crawler claim could not be verified: no reverse DNS"
+                        "Crawler claim could not be verified: no reverse DNS",
                     ));
-                    self.stats.unverified_crawlers.fetch_add(1, Ordering::Relaxed);
+                    self.stats
+                        .unverified_crawlers
+                        .fetch_add(1, Ordering::Relaxed);
                 }
             }
             Err(DnsError::RateLimited) => {
@@ -485,28 +512,38 @@ impl CrawlerDetector {
     ///
     /// This is called when DNS verification fails (timeout, rate limited, etc.)
     /// and determines how to handle the request based on configuration.
-    fn apply_dns_failure_policy(&self, result: &mut CrawlerVerificationResult, _crawler_name: &str) {
+    fn apply_dns_failure_policy(
+        &self,
+        result: &mut CrawlerVerificationResult,
+        _crawler_name: &str,
+    ) {
         match self.config.dns_failure_policy {
             DnsFailurePolicy::Allow => {
                 // Fail-open: allow but log
                 tracing::debug!("DNS failure policy: allowing unverified crawler");
-                self.stats.unverified_crawlers.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .unverified_crawlers
+                    .fetch_add(1, Ordering::Relaxed);
             }
             DnsFailurePolicy::ApplyRiskPenalty => {
                 // Fail-cautious: apply risk penalty
                 result.dns_failure_penalty = self.config.dns_failure_risk_penalty;
                 result.suspicion_reasons.push(Cow::Borrowed(
-                    "DNS verification unavailable - temporary penalty applied"
+                    "DNS verification unavailable - temporary penalty applied",
                 ));
-                self.stats.unverified_crawlers.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .unverified_crawlers
+                    .fetch_add(1, Ordering::Relaxed);
             }
             DnsFailurePolicy::Block => {
                 // Fail-secure: mark as suspicious for blocking
                 result.suspicious = true;
-                result.suspicion_reasons.push(Cow::Borrowed(
-                    "DNS verification required but unavailable"
-                ));
-                self.stats.unverified_crawlers.fetch_add(1, Ordering::Relaxed);
+                result
+                    .suspicion_reasons
+                    .push(Cow::Borrowed("DNS verification required but unavailable"));
+                self.stats
+                    .unverified_crawlers
+                    .fetch_add(1, Ordering::Relaxed);
             }
         }
     }
@@ -690,7 +727,11 @@ mod tests {
             if sig.pattern == "^$" {
                 continue;
             }
-            assert!(!regex.is_match(ua), "Normal UA matched bad bot: {}", sig.name);
+            assert!(
+                !regex.is_match(ua),
+                "Normal UA matched bad bot: {}",
+                sig.name
+            );
         }
     }
 }

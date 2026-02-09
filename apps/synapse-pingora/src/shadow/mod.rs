@@ -29,9 +29,9 @@ mod config;
 mod protocol;
 mod rate_limiter;
 
-pub use client::{ShadowMirrorClient, ShadowMirrorError, ShadowClientStats};
-pub use config::{ShadowMirrorConfig, ShadowConfigError};
-pub use protocol::{MirrorPayload, is_sensitive_header};
+pub use client::{ShadowClientStats, ShadowMirrorClient, ShadowMirrorError};
+pub use config::{ShadowConfigError, ShadowMirrorConfig};
+pub use protocol::{is_sensitive_header, MirrorPayload};
 pub use rate_limiter::{RateLimiter, RateLimiterStats};
 
 use std::collections::HashMap;
@@ -279,7 +279,10 @@ impl ShadowMirrorManager {
         let filtered_headers: HashMap<String, String> = headers
             .into_iter()
             .filter(|(k, _)| {
-                self.config.include_headers.iter().any(|h| h.eq_ignore_ascii_case(k))
+                self.config
+                    .include_headers
+                    .iter()
+                    .any(|h| h.eq_ignore_ascii_case(k))
             })
             .collect();
 

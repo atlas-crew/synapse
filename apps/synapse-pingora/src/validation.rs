@@ -39,14 +39,14 @@
 //! assert!(validate_certificate_file("/etc/certs/invalid.txt").is_err()); // Not PEM format
 //! ```
 
-use std::fs;
-use std::path::Path;
-use regex::Regex;
+use idna::domain_to_ascii;
 use once_cell::sync::Lazy;
+use openssl::ec::EcKey;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
-use openssl::ec::EcKey;
-use idna::domain_to_ascii;
+use regex::Regex;
+use std::fs;
+use std::path::Path;
 
 /// RFC 1035 compliant domain name regex pattern.
 /// Allows labels with alphanumeric and hyphens, supports wildcards, max 253 chars.
@@ -127,12 +127,22 @@ impl std::fmt::Display for ValidationError {
             Self::FileNotFound(path) => write!(f, "File not found: {}", path),
             Self::FileNotReadable(path) => write!(f, "File not readable: {}", path),
             Self::InvalidDomain(domain) => write!(f, "Invalid domain name: {}", domain),
-            Self::InvalidCertFormat(path) => write!(f, "Invalid certificate format (must be PEM): {}", path),
+            Self::InvalidCertFormat(path) => {
+                write!(f, "Invalid certificate format (must be PEM): {}", path)
+            }
             Self::InvalidKeyFormat(path) => write!(f, "Invalid key format (must be PEM): {}", path),
             Self::WeakKey(reason) => write!(f, "Weak cryptographic key: {}", reason),
-            Self::SuspiciousPath(path) => write!(f, "Suspicious path (potential traversal): {}", path),
-            Self::DomainTooLong(domain) => write!(f, "Domain name too long (max 253 chars): {}", domain),
-            Self::HomographAttack(domain) => write!(f, "Domain contains suspicious Unicode characters (potential homograph attack): {}", domain),
+            Self::SuspiciousPath(path) => {
+                write!(f, "Suspicious path (potential traversal): {}", path)
+            }
+            Self::DomainTooLong(domain) => {
+                write!(f, "Domain name too long (max 253 chars): {}", domain)
+            }
+            Self::HomographAttack(domain) => write!(
+                f,
+                "Domain contains suspicious Unicode characters (potential homograph attack): {}",
+                domain
+            ),
         }
     }
 }
@@ -167,7 +177,10 @@ pub fn validate_file_path(path: &str, _name: &str) -> ValidationResult<()> {
 
     // Check if it's a regular file
     if !path_obj.is_file() {
-        return Err(ValidationError::FileNotReadable(format!("{} is not a file", path)));
+        return Err(ValidationError::FileNotReadable(format!(
+            "{} is not a file",
+            path
+        )));
     }
 
     // Check if file is readable
@@ -189,8 +202,8 @@ pub fn validate_certificate_file(path: &str) -> ValidationResult<()> {
     validate_file_path(path, "certificate")?;
 
     // Read and validate PEM format
-    let contents = fs::read_to_string(path)
-        .map_err(|_| ValidationError::FileNotReadable(path.to_string()))?;
+    let contents =
+        fs::read_to_string(path).map_err(|_| ValidationError::FileNotReadable(path.to_string()))?;
 
     if !contents.contains("-----BEGIN CERTIFICATE-----") {
         return Err(ValidationError::InvalidCertFormat(path.to_string()));
@@ -230,8 +243,8 @@ pub fn validate_private_key_file(path: &str) -> ValidationResult<()> {
     validate_file_path(path, "private key")?;
 
     // Read and validate PEM format
-    let contents = fs::read_to_string(path)
-        .map_err(|_| ValidationError::FileNotReadable(path.to_string()))?;
+    let contents =
+        fs::read_to_string(path).map_err(|_| ValidationError::FileNotReadable(path.to_string()))?;
 
     // Check for common private key markers
     let valid_key = contents.contains("-----BEGIN RSA PRIVATE KEY-----")
@@ -436,9 +449,10 @@ pub fn validate_domain_name(domain: &str) -> ValidationResult<()> {
     // Additional check: no label should exceed 63 characters
     for label in domain.split('.') {
         if label.len() > 63 {
-            return Err(ValidationError::InvalidDomain(
-                format!("label '{}' exceeds 63 characters", label)
-            ));
+            return Err(ValidationError::InvalidDomain(format!(
+                "label '{}' exceeds 63 characters",
+                label
+            )));
         }
     }
 
@@ -563,8 +577,12 @@ fn is_private_or_internal_ip(ip: &std::net::IpAddr) -> bool {
                 return true;
             }
             // IPv4-mapped addresses (::ffff:x.x.x.x) - check the mapped IPv4
-            if segments[0] == 0 && segments[1] == 0 && segments[2] == 0
-                && segments[3] == 0 && segments[4] == 0 && segments[5] == 0xffff
+            if segments[0] == 0
+                && segments[1] == 0
+                && segments[2] == 0
+                && segments[3] == 0
+                && segments[4] == 0
+                && segments[5] == 0xffff
             {
                 let ipv4 = std::net::Ipv4Addr::new(
                     (segments[6] >> 8) as u8,
@@ -598,7 +616,10 @@ pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
     // Check for port
     let parts: Vec<&str> = upstream.split(':').collect();
     if parts.len() != 2 {
-         return Err(ValidationError::InvalidDomain(format!("upstream must be host:port, got {}", upstream)));
+        return Err(ValidationError::InvalidDomain(format!(
+            "upstream must be host:port, got {}",
+            upstream
+        )));
     }
 
     let host = parts[0];
@@ -614,7 +635,10 @@ pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
             )));
         }
     } else if validate_domain_name(host).is_err() {
-        return Err(ValidationError::InvalidDomain(format!("invalid host in upstream: {}", host)));
+        return Err(ValidationError::InvalidDomain(format!(
+            "invalid host in upstream: {}",
+            host
+        )));
     }
     // Note: For domain names, we don't resolve DNS here to avoid DNS rebinding attacks.
     // The proxy should also enforce IP restrictions at connection time.
@@ -622,7 +646,10 @@ pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
     // Validate port
     match port_str.parse::<u16>() {
         Ok(p) if p > 0 => Ok(()),
-        _ => Err(ValidationError::InvalidDomain(format!("invalid port in upstream: {}", port_str))),
+        _ => Err(ValidationError::InvalidDomain(format!(
+            "invalid port in upstream: {}",
+            port_str
+        ))),
     }
 }
 
@@ -632,35 +659,53 @@ pub fn validate_cidr(cidr: &str) -> ValidationResult<()> {
     // Since we don't want to add more deps if possible, let's do basic parsing
     let parts: Vec<&str> = cidr.split('/').collect();
     if parts.len() != 2 {
-        return Err(ValidationError::InvalidDomain(format!("invalid CIDR format: {}", cidr)));
+        return Err(ValidationError::InvalidDomain(format!(
+            "invalid CIDR format: {}",
+            cidr
+        )));
     }
-    
+
     let ip_str = parts[0];
     let prefix_str = parts[1];
-    
+
     let is_ipv4 = ip_str.contains('.');
     if ip_str.parse::<std::net::IpAddr>().is_err() {
-        return Err(ValidationError::InvalidDomain(format!("invalid IP in CIDR: {}", ip_str)));
+        return Err(ValidationError::InvalidDomain(format!(
+            "invalid IP in CIDR: {}",
+            ip_str
+        )));
     }
-    
+
     match prefix_str.parse::<u8>() {
         Ok(p) => {
             if is_ipv4 && p > 32 {
-                return Err(ValidationError::InvalidDomain(format!("IPv4 prefix too large: {}", p)));
+                return Err(ValidationError::InvalidDomain(format!(
+                    "IPv4 prefix too large: {}",
+                    p
+                )));
             }
             if !is_ipv4 && p > 128 {
-                return Err(ValidationError::InvalidDomain(format!("IPv6 prefix too large: {}", p)));
+                return Err(ValidationError::InvalidDomain(format!(
+                    "IPv6 prefix too large: {}",
+                    p
+                )));
             }
             Ok(())
-        },
-        Err(_) => Err(ValidationError::InvalidDomain(format!("invalid prefix in CIDR: {}", prefix_str))),
+        }
+        Err(_) => Err(ValidationError::InvalidDomain(format!(
+            "invalid prefix in CIDR: {}",
+            prefix_str
+        ))),
     }
 }
 
 /// Validates WAF risk threshold (0-100).
 pub fn validate_waf_threshold(threshold: f64) -> ValidationResult<()> {
     if threshold < 0.0 || threshold > 100.0 {
-        return Err(ValidationError::InvalidDomain(format!("WAF threshold must be 0-100, got {}", threshold)));
+        return Err(ValidationError::InvalidDomain(format!(
+            "WAF threshold must be 0-100, got {}",
+            threshold
+        )));
     }
     Ok(())
 }
@@ -668,10 +713,14 @@ pub fn validate_waf_threshold(threshold: f64) -> ValidationResult<()> {
 /// Validates rate limit configuration.
 pub fn validate_rate_limit(requests: u64, window: u64) -> ValidationResult<()> {
     if requests == 0 {
-        return Err(ValidationError::InvalidDomain("rate limit requests must be > 0".to_string()));
+        return Err(ValidationError::InvalidDomain(
+            "rate limit requests must be > 0".to_string(),
+        ));
     }
     if window == 0 {
-        return Err(ValidationError::InvalidDomain("rate limit window must be > 0".to_string()));
+        return Err(ValidationError::InvalidDomain(
+            "rate limit window must be > 0".to_string(),
+        ));
     }
     Ok(())
 }
@@ -833,8 +882,16 @@ cEH5f0QrKZhC0QIgG3fwBZGa0QF9WKg9sGJQENk9bPJQRDFH3GPVY/4SJfMCIGGq
         assert!(result.is_err(), "Weak RSA key should be rejected");
         match result.unwrap_err() {
             ValidationError::WeakKey(msg) => {
-                assert!(msg.contains("512 bits"), "Error should mention key size: {}", msg);
-                assert!(msg.contains("2048"), "Error should mention minimum: {}", msg);
+                assert!(
+                    msg.contains("512 bits"),
+                    "Error should mention key size: {}",
+                    msg
+                );
+                assert!(
+                    msg.contains("2048"),
+                    "Error should mention minimum: {}",
+                    msg
+                );
             }
             e => panic!("Expected WeakKey error, got {:?}", e),
         }
@@ -890,7 +947,11 @@ N8FvK7L8N3F9T5G8K5lEg3kLvLT7
         let key_path = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server.key");
         if std::path::Path::new(key_path).exists() {
             let result = validate_private_key_file(key_path);
-            assert!(result.is_ok(), "Real 2048-bit key should be accepted: {:?}", result.err());
+            assert!(
+                result.is_ok(),
+                "Real 2048-bit key should be accepted: {:?}",
+                result.err()
+            );
         }
     }
 
@@ -910,7 +971,11 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
         let path = temp_file.path().to_str().unwrap();
         // Encrypted keys should be accepted (can't validate without passphrase)
         let result = validate_private_key_file(path);
-        assert!(result.is_ok(), "Encrypted key should be accepted: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Encrypted key should be accepted: {:?}",
+            result.err()
+        );
     }
 
     #[test]

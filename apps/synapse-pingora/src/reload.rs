@@ -3,17 +3,17 @@
 //! Provides zero-downtime configuration updates by watching for SIGHUP
 //! and reloading configuration files without restarting the service.
 
+use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use parking_lot::RwLock;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
-use crate::config::{ConfigFile, ConfigLoader, ConfigError};
-use crate::vhost::VhostMatcher;
-use crate::tls::TlsManager;
+use crate::config::{ConfigError, ConfigFile, ConfigLoader};
 use crate::site_waf::SiteWafManager;
+use crate::tls::TlsManager;
+use crate::vhost::VhostMatcher;
 
 /// Reload statistics.
 #[derive(Debug, Default)]
@@ -202,7 +202,9 @@ impl ConfigReloader {
             if let Some(waf_config) = &site.waf {
                 let site_waf = crate::site_waf::SiteWafConfig {
                     enabled: waf_config.enabled,
-                    threshold: waf_config.threshold.unwrap_or(new_config.server.waf_threshold),
+                    threshold: waf_config
+                        .threshold
+                        .unwrap_or(new_config.server.waf_threshold),
                     ..Default::default()
                 };
                 new_waf_manager.add_site(&site.hostname, site_waf);
@@ -391,7 +393,11 @@ sites:
         let result = reloader.reload();
 
         assert!(!result.success);
-        assert!(result.error.as_ref().unwrap().contains("already in progress"));
+        assert!(result
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("already in progress"));
     }
 
     #[test]

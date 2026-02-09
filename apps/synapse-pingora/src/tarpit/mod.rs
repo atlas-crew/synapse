@@ -26,11 +26,11 @@ mod manager;
 pub use manager::{
     // Configuration
     TarpitConfig,
+    // Result types
+    TarpitDecision,
+    // Manager
+    TarpitManager,
     // State types
     TarpitState,
     TarpitStats,
-    // Manager
-    TarpitManager,
-    // Result types
-    TarpitDecision,
 };

@@ -251,7 +251,13 @@ fn bench_dlp_scanner_contention(c: &mut Criterion) {
         email john@example.com, phone 212-555-0199";
 
     let contents: Vec<&str> = (0..100)
-        .map(|i| if i % 5 == 0 { pii_content } else { clean_content })
+        .map(|i| {
+            if i % 5 == 0 {
+                pii_content
+            } else {
+                clean_content
+            }
+        })
         .collect();
 
     for thread_count in [1, 2, 4, 8] {

@@ -27,12 +27,12 @@
 //! - [`dlp`] - Data Loss Prevention with 23 sensitive data patterns
 
 // Phase 1: Core Features
-pub mod utils;
 pub mod config;
 pub mod config_manager;
 pub mod health;
 pub mod site_waf;
 pub mod tls;
+pub mod utils;
 pub mod vhost;
 
 // Phase 2: Management Features
@@ -45,21 +45,21 @@ pub mod ratelimit;
 pub mod reload;
 
 // Phase 3: Feature Migration from risk-server
-pub mod fingerprint;
-pub mod entity;
-pub mod tarpit;
 pub mod dlp;
+pub mod entity;
+pub mod fingerprint;
+pub mod tarpit;
 
 // Phase 6: Security Hardening
-pub mod validation;
 pub mod sni_validation;
+pub mod validation;
 
 // Phase 7: Persistence
 pub mod persistence;
 
 // Phase 3: Telemetry (Alerting)
-pub mod telemetry;
 pub mod signals;
+pub mod telemetry;
 
 // Phase 3: Honeypot Trap Detection
 pub mod trap;
@@ -85,14 +85,14 @@ pub mod profiler;
 // Phase 9: Risk-Server Port (Payload, Crawler, Trends, Horizon)
 pub mod crawler;
 pub mod horizon;
-pub mod tunnel;
 pub mod payload;
 pub mod trends;
+pub mod tunnel;
 
 // Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
+pub mod detection;
 pub mod geo;
 pub mod waf;
-pub mod detection;
 
 // Dashboard support
 pub mod block_log;
@@ -114,91 +114,108 @@ pub use tls::{TlsManager, TlsVersion};
 pub use vhost::{SiteConfig, VhostMatcher};
 
 // Re-export commonly used types from Phase 2
-pub use access::{AccessList, AccessListManager, AccessDecision};
+pub use access::{AccessDecision, AccessList, AccessListManager};
 pub use api::{ApiHandler, ApiResponse, EvaluateResult};
-pub use metrics::{MetricsRegistry, BandwidthStats, BandwidthDataPoint, ProfilingMetrics};
-pub use ratelimit::{RateLimitConfig, RateLimitManager, RateLimitDecision};
+pub use metrics::{BandwidthDataPoint, BandwidthStats, MetricsRegistry, ProfilingMetrics};
+pub use ratelimit::{RateLimitConfig, RateLimitDecision, RateLimitManager};
 pub use reload::{ConfigReloader, ReloadResult};
 
 // Re-export commonly used types from Phase 3
-pub use fingerprint::{
-    Ja4Fingerprint, Ja4hFingerprint, ClientFingerprint,
-    Ja4Protocol, Ja4SniType, Ja4Analysis, Ja4hAnalysis,
-    HttpHeaders,
-    parse_ja4_from_header, generate_ja4h, extract_client_fingerprint,
-    analyze_ja4, analyze_ja4h,
+pub use dlp::{
+    validate_credit_card, validate_iban, validate_phone, validate_ssn, DlpConfig, DlpMatch,
+    DlpScanner, DlpStats, PatternSeverity, ScanResult, SensitiveDataType,
 };
 pub use entity::{
-    EntityConfig, EntityState, EntityManager,
-    BlockDecision, RiskApplication, EntitySnapshot, EntityMetrics,
+    BlockDecision, EntityConfig, EntityManager, EntityMetrics, EntitySnapshot, EntityState,
+    RiskApplication,
 };
-pub use tarpit::{
-    TarpitConfig, TarpitState, TarpitStats,
-    TarpitManager, TarpitDecision,
+pub use fingerprint::{
+    analyze_ja4, analyze_ja4h, extract_client_fingerprint, generate_ja4h, parse_ja4_from_header,
+    ClientFingerprint, HttpHeaders, Ja4Analysis, Ja4Fingerprint, Ja4Protocol, Ja4SniType,
+    Ja4hAnalysis, Ja4hFingerprint,
 };
-pub use dlp::{
-    DlpConfig, DlpScanner, DlpMatch, DlpStats, ScanResult,
-    SensitiveDataType, PatternSeverity,
-    validate_credit_card, validate_ssn, validate_phone, validate_iban,
-};
+pub use tarpit::{TarpitConfig, TarpitDecision, TarpitManager, TarpitState, TarpitStats};
 
 // Re-export validation utilities
 pub use validation::{
-    ValidationError, ValidationResult,
-    validate_domain_name, validate_certificate_file, validate_private_key_file,
-    validate_tls_config,
+    validate_certificate_file, validate_domain_name, validate_private_key_file,
+    validate_tls_config, ValidationError, ValidationResult,
 };
 
 // Re-export SNI validation types (domain fronting prevention)
 pub use sni_validation::{
-    SniValidator, SniValidationConfig, SniValidationMode, SniValidationResult,
+    SniValidationConfig, SniValidationMode, SniValidationResult, SniValidator,
 };
 
 // Re-export honeypot trap types
 pub use trap::{TrapConfig, TrapMatcher};
 
 // Re-export dashboard support types
-pub use block_log::{BlockLog, BlockEvent};
+pub use block_log::{BlockEvent, BlockLog};
 
 // Re-export actor management types
 pub use actor::{ActorConfig, ActorManager, ActorState, ActorStats, RuleMatch};
 
 // Re-export session management types
 pub use session::{
-    SessionConfig, SessionManager, SessionState, SessionStats,
-    SessionDecision, HijackAlert, HijackType,
+    HijackAlert, HijackType, SessionConfig, SessionDecision, SessionManager, SessionState,
+    SessionStats,
 };
 
 // Re-export interrogator types
 pub use interrogator::{
-    ChallengeResponse, ValidationResult as ChallengeValidationResult, Interrogator,
-    CookieConfig, CookieManager, CookieChallenge, CookieStats,
-    JsChallengeConfig, JsChallengeManager, JsChallenge, JsChallengeStats,
-    ProgressionConfig, ProgressionManager, ChallengeLevel, ActorChallengeState, ProgressionStats,
+    ActorChallengeState, ChallengeLevel, ChallengeResponse, CookieChallenge, CookieConfig,
+    CookieManager, CookieStats, Interrogator, JsChallenge, JsChallengeConfig, JsChallengeManager,
+    JsChallengeStats, ProgressionConfig, ProgressionManager, ProgressionStats,
+    ValidationResult as ChallengeValidationResult,
 };
 
 // Re-export shadow mirroring types
 pub use shadow::{
-    ShadowMirrorConfig, ShadowMirrorManager, ShadowMirrorStats,
-    ShadowMirrorClient, ShadowMirrorError, ShadowClientStats,
     MirrorPayload, RateLimiter as ShadowRateLimiter, RateLimiterStats as ShadowRateLimiterStats,
+    ShadowClientStats, ShadowMirrorClient, ShadowMirrorConfig, ShadowMirrorError,
+    ShadowMirrorManager, ShadowMirrorStats,
 };
 
 // Re-export profiler types
 pub use profiler::{
-    Profiler, EndpointProfile, ParameterSchema,
-    Distribution, PercentilesTracker, RateTracker,
-    AnomalyResult, AnomalySignal, AnomalySignalType,
-    // Schema learning types (ported from libsynapse)
-    SchemaLearner, SchemaLearnerConfig, SchemaLearnerStats,
-    ProfileStore, ProfileStoreConfig, ProfileStoreMetrics, SegmentCardinality,
-    JsonEndpointSchema, FieldSchema, FieldType, PatternType,
-    SchemaViolation, ViolationSeverity, ViolationType,
-    detect_pattern, matches_pattern,
+    detect_pattern,
+    entropy_z_score,
+    is_entropy_anomaly,
+    matches_pattern,
+    normalized_entropy,
+    shannon_entropy,
+    AnomalyResult,
+    AnomalySignal,
+    AnomalySignalType,
+    Distribution,
+    EndpointProfile,
+    FieldSchema,
+    FieldType,
+    HeaderAnomaly,
+    HeaderAnomalyResult,
+    HeaderBaseline,
     // Header profiling types (W4.1 HeaderProfiler)
-    HeaderProfiler, HeaderProfilerStats,
-    HeaderAnomaly, HeaderAnomalyResult, HeaderBaseline, ValueStats,
-    shannon_entropy, normalized_entropy, is_entropy_anomaly, entropy_z_score,
+    HeaderProfiler,
+    HeaderProfilerStats,
+    JsonEndpointSchema,
+    ParameterSchema,
+    PatternType,
+    PercentilesTracker,
+    ProfileStore,
+    ProfileStoreConfig,
+    ProfileStoreMetrics,
+    Profiler,
+    RateTracker,
+    // Schema learning types (ported from libsynapse)
+    SchemaLearner,
+    SchemaLearnerConfig,
+    SchemaLearnerStats,
+    SchemaViolation,
+    SegmentCardinality,
+    ValueStats,
+    ViolationSeverity,
+    ViolationType,
 };
 
 // Re-export profiler config
@@ -206,74 +223,66 @@ pub use config::ProfilerConfig;
 
 // Re-export crawler detection types
 pub use crawler::{
-    CrawlerDetector, CrawlerConfig, CrawlerDetection, CrawlerVerificationResult,
-    CrawlerStats, CrawlerStatsSnapshot, VerificationMethod, DnsFailurePolicy,
-    CrawlerDefinition, BadBotSignature, BadBotSeverity,
+    BadBotSeverity, BadBotSignature, CrawlerConfig, CrawlerDefinition, CrawlerDetection,
+    CrawlerDetector, CrawlerStats, CrawlerStatsSnapshot, CrawlerVerificationResult,
+    DnsFailurePolicy, VerificationMethod,
 };
 
 // Re-export Signal Horizon integration types
 pub use horizon::{
-    HorizonManager, HorizonConfig, HorizonStats, HorizonStatsSnapshot,
-    HorizonClient, HorizonError, ClientStats,
-    ThreatSignal, SignalType, Severity, ConnectionState,
-    BlocklistCache, BlocklistEntry, BlocklistUpdate, BlockType,
+    BlockType, BlocklistCache, BlocklistEntry, BlocklistUpdate, ClientStats, ConnectionState,
+    HorizonClient, HorizonConfig, HorizonError, HorizonManager, HorizonStats, HorizonStatsSnapshot,
+    Severity, SignalType, ThreatSignal,
 };
 
 // Re-export payload profiling types
 pub use payload::{
-    PayloadManager, PayloadConfig, PayloadSummary, EndpointSortBy,
-    EndpointPayloadStats, EndpointPayloadStatsSnapshot, PayloadWindow, SizeStats,
-    EntityBandwidth, BandwidthBucket,
-    PayloadAnomaly, PayloadAnomalyType, PayloadAnomalySeverity, PayloadAnomalyMetadata,
+    BandwidthBucket, EndpointPayloadStats, EndpointPayloadStatsSnapshot, EndpointSortBy,
+    EntityBandwidth, PayloadAnomaly, PayloadAnomalyMetadata, PayloadAnomalySeverity,
+    PayloadAnomalyType, PayloadConfig, PayloadManager, PayloadSummary, PayloadWindow, SizeStats,
 };
 
 // Re-export trends/signal tracking types
 pub use trends::{
-    TrendsManager, TrendsConfig, TrendsManagerStats, TrendsStats,
-    AnomalyDetector, AnomalyDetectorConfig,
-    SignalExtractor, TimeStore, TimeStoreStats, SignalBucket,
-    CorrelationEngine, Correlation, CorrelationMetadata, CorrelationType,
-    Signal, SignalCategory, SignalMetadata, SignalTrend, SignalType as TrendsSignalType,
-    Anomaly, AnomalyType, AnomalySeverity, AnomalyMetadata, AnomalyQueryOptions,
-    TrendQueryOptions, TrendsSummary, TrendHistogramBucket, BucketSummary, CategorySummary,
+    Anomaly, AnomalyDetector, AnomalyDetectorConfig, AnomalyMetadata, AnomalyQueryOptions,
+    AnomalySeverity, AnomalyType, BucketSummary, CategorySummary, Correlation, CorrelationEngine,
+    CorrelationMetadata, CorrelationType, Signal, SignalBucket, SignalCategory, SignalExtractor,
+    SignalMetadata, SignalTrend, SignalType as TrendsSignalType, TimeStore, TimeStoreStats,
+    TrendHistogramBucket, TrendQueryOptions, TrendsConfig, TrendsManager, TrendsManagerStats,
+    TrendsStats, TrendsSummary,
 };
 
 // Re-export intelligence signal aggregation types
 pub use intelligence::{
-    SignalManager, SignalManagerConfig, SignalQueryOptions,
-    SignalCategory as IntelligenceSignalCategory,
-    Signal as IntelligenceSignal,
-    SignalSummary as IntelligenceSignalSummary,
+    Signal as IntelligenceSignal, SignalCategory as IntelligenceSignalCategory, SignalManager,
+    SignalManagerConfig, SignalQueryOptions, SignalSummary as IntelligenceSignalSummary,
     TopSignalType as IntelligenceTopSignalType,
 };
 
 // Re-export geo/impossible travel types
 pub use geo::{
-    ImpossibleTravelDetector, GeoLocation, LoginEvent, TravelAlert, TravelConfig, TravelStats,
-    Severity as GeoSeverity, haversine_distance, is_valid_coordinates, calculate_speed,
+    calculate_speed, haversine_distance, is_valid_coordinates, GeoLocation,
+    ImpossibleTravelDetector, LoginEvent, Severity as GeoSeverity, TravelAlert, TravelConfig,
+    TravelStats,
 };
 
 // Re-export WAF engine types (Phase 10)
 pub use waf::{
-    Engine as WafEngine, WafError, Synapse,
-    WafRule, MatchCondition, MatchValue, boolean_operands,
-    RuleIndex, IndexedRule, CandidateCache, CandidateCacheKey,
-    build_rule_index, get_candidate_rule_indices, method_to_mask,
-    StateStore, now_ms,
-    Request as WafRequest, Header as WafHeader, Verdict as WafVerdict,
-    Action as WafRuleAction, EvalContext, ArgEntry,
-    RiskContribution as WafRiskContribution,
-    AnomalyType as WafAnomalyType, AnomalySignal as WafAnomalySignal,
-    AnomalySignalType as WafAnomalySignalType,
-    RiskConfig as WafRiskConfig, BlockingMode as WafBlockingMode,
-    AnomalyContribution as WafAnomalyContribution, repeat_multiplier,
+    boolean_operands, build_rule_index, get_candidate_rule_indices, method_to_mask, now_ms,
+    repeat_multiplier, Action as WafRuleAction, AnomalyContribution as WafAnomalyContribution,
+    AnomalySignal as WafAnomalySignal, AnomalySignalType as WafAnomalySignalType,
+    AnomalyType as WafAnomalyType, ArgEntry, BlockingMode as WafBlockingMode, CandidateCache,
+    CandidateCacheKey, Engine as WafEngine, EvalContext, Header as WafHeader, IndexedRule,
+    MatchCondition, MatchValue, Request as WafRequest, RiskConfig as WafRiskConfig,
+    RiskContribution as WafRiskContribution, RuleIndex, StateStore, Synapse, Verdict as WafVerdict,
+    WafError, WafRule,
 };
 
 // Re-export credential stuffing detection types (Phase 10)
 pub use detection::{
-    CredentialStuffingDetector, StuffingStats, StuffingState,
-    AuthAttempt, AuthMetrics, AuthResult, DistributedAttack, EntityEndpointKey,
-    StuffingConfig, StuffingEvent, StuffingSeverity, StuffingVerdict, TakeoverAlert,
+    AuthAttempt, AuthMetrics, AuthResult, CredentialStuffingDetector, DistributedAttack,
+    EntityEndpointKey, StuffingConfig, StuffingEvent, StuffingSeverity, StuffingState,
+    StuffingStats, StuffingVerdict, TakeoverAlert,
 };
 
 // ============================================================================
@@ -475,7 +484,11 @@ mod actor_session_integration_tests {
         actor_manager.record_rule_match(&actor_id, "rule_913001", 10.0, "scanner");
 
         let actor = actor_manager.get_actor(&actor_id).unwrap();
-        let categories: Vec<&str> = actor.rule_matches.iter().map(|m| m.category.as_str()).collect();
+        let categories: Vec<&str> = actor
+            .rule_matches
+            .iter()
+            .map(|m| m.category.as_str())
+            .collect();
         assert!(categories.contains(&"sqli"));
         assert!(categories.contains(&"xss"));
         assert!(categories.contains(&"path_traversal"));
@@ -502,7 +515,10 @@ mod actor_session_integration_tests {
 
         let actor = actor_manager.get_actor(&actor_id).unwrap();
         assert!(actor.is_blocked);
-        assert_eq!(actor.block_reason, Some("High risk score exceeded threshold".to_string()));
+        assert_eq!(
+            actor.block_reason,
+            Some("High risk score exceeded threshold".to_string())
+        );
         assert!(actor.blocked_since.is_some());
     }
 
@@ -635,9 +651,15 @@ mod actor_session_integration_tests {
                 assert_eq!(alert.alert_type, HijackType::Ja4Mismatch);
                 assert_eq!(alert.original_value, original_ja4);
                 assert_eq!(alert.new_value, new_ja4);
-                assert!(alert.confidence >= 0.9, "JA4 mismatch should have high confidence");
+                assert!(
+                    alert.confidence >= 0.9,
+                    "JA4 mismatch should have high confidence"
+                );
             }
-            _ => panic!("Expected Suspicious decision for JA4 mismatch, got {:?}", decision),
+            _ => panic!(
+                "Expected Suspicious decision for JA4 mismatch, got {:?}",
+                decision
+            ),
         }
     }
 

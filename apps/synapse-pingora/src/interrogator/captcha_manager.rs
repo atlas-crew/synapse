@@ -147,7 +147,9 @@ impl CaptchaManager {
     /// Expected response format: "session_id:answer"
     /// Note: session_id format is "{timestamp}:{signature}" so we split from the right
     pub fn validate_response(&self, actor_id: &str, response: &str) -> ValidationResult {
-        self.stats.challenges_validated.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .challenges_validated
+            .fetch_add(1, Ordering::Relaxed);
 
         // Parse response - split from right since session_id contains colon
         let Some(last_colon_idx) = response.rfind(':') else {
@@ -178,7 +180,9 @@ impl CaptchaManager {
         let expiry_ms = self.config.expiry_secs * 1000;
         if now - challenge.created_at > expiry_ms {
             self.challenges.remove(session_id);
-            self.stats.challenges_expired.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .challenges_expired
+                .fetch_add(1, Ordering::Relaxed);
             return ValidationResult::Expired;
         }
 
@@ -226,7 +230,8 @@ impl CaptchaManager {
         }
 
         let expiry_ms = self.config.expiry_secs * 1000;
-        self.challenges.retain(|_, state| now - state.created_at < expiry_ms);
+        self.challenges
+            .retain(|_, state| now - state.created_at < expiry_ms);
     }
 
     fn generate_html(&self, session_id: &str, question: &str) -> String {

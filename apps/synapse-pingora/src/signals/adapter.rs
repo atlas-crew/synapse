@@ -1,5 +1,5 @@
 use crate::admin_server::ApparatusReport;
-use crate::horizon::{SignalType, Severity};
+use crate::horizon::{Severity, SignalType};
 use tracing::warn;
 
 /// SignalAdapter - handles version-aware mapping of external signals to internal types.

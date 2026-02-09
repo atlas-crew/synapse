@@ -16,7 +16,10 @@ pub enum BodyError {
     PayloadTooLarge { size: usize, limit: usize },
 
     #[error("parse error: {message}")]
-    ParseError { message: String, content_type: ContentType },
+    ParseError {
+        message: String,
+        content_type: ContentType,
+    },
 
     #[error("inspection timeout after {elapsed:?}")]
     Timeout { elapsed: Duration, limit: Duration },
@@ -62,7 +65,11 @@ impl ContentType {
         if body.is_empty() {
             return Self::Unknown;
         }
-        let trimmed: Vec<u8> = body.iter().skip_while(|&&b| b.is_ascii_whitespace()).copied().collect();
+        let trimmed: Vec<u8> = body
+            .iter()
+            .skip_while(|&&b| b.is_ascii_whitespace())
+            .copied()
+            .collect();
         if trimmed.is_empty() {
             return Self::Unknown;
         }
@@ -89,7 +96,10 @@ impl ContentType {
     }
 
     pub const fn is_text(&self) -> bool {
-        matches!(self, Self::Json | Self::Xml | Self::FormUrlencoded | Self::PlainText | Self::Html)
+        matches!(
+            self,
+            Self::Json | Self::Xml | Self::FormUrlencoded | Self::PlainText | Self::Html
+        )
     }
 }
 
@@ -139,7 +149,11 @@ pub enum AnomalyType {
 
 impl BodyAnomaly {
     pub fn new(anomaly_type: AnomalyType, severity: f32, description: impl Into<String>) -> Self {
-        Self { anomaly_type, severity: severity.clamp(0.0, 1.0), description: description.into() }
+        Self {
+            anomaly_type,
+            severity: severity.clamp(0.0, 1.0),
+            description: description.into(),
+        }
     }
 }
 
@@ -184,7 +198,11 @@ impl InspectionResult {
     }
 
     pub fn max_severity(&self) -> f32 {
-        self.anomalies.iter().map(|a| a.severity).max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(0.0)
+        self.anomalies
+            .iter()
+            .map(|a| a.severity)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0)
     }
 }
 
@@ -200,10 +218,17 @@ impl BodyInspector {
     }
 
     #[instrument(skip(self, body), fields(body_len = body.len()))]
-    pub fn inspect(&self, body: &[u8], content_type_header: Option<&str>) -> BodyResult<InspectionResult> {
+    pub fn inspect(
+        &self,
+        body: &[u8],
+        content_type_header: Option<&str>,
+    ) -> BodyResult<InspectionResult> {
         let start = Instant::now();
         if body.len() > self.config.max_body_size {
-            return Err(BodyError::PayloadTooLarge { size: body.len(), limit: self.config.max_body_size });
+            return Err(BodyError::PayloadTooLarge {
+                size: body.len(),
+                limit: self.config.max_body_size,
+            });
         }
 
         let declared = content_type_header.map(ContentType::from_header);
@@ -216,7 +241,11 @@ impl BodyInspector {
             self.detect_anomalies(body, content_type, declared, detected, &mut anomalies);
         }
 
-        debug!(?content_type, body_size = body.len(), "body inspection complete");
+        debug!(
+            ?content_type,
+            body_size = body.len(),
+            "body inspection complete"
+        );
         Ok(InspectionResult {
             content_type,
             declared_content_type: declared,
@@ -229,7 +258,11 @@ impl BodyInspector {
         })
     }
 
-    fn parse_body(&self, body: &[u8], content_type: ContentType) -> (Option<ParsedBody>, bool, Option<String>) {
+    fn parse_body(
+        &self,
+        body: &[u8],
+        content_type: ContentType,
+    ) -> (Option<ParsedBody>, bool, Option<String>) {
         if body.is_empty() {
             return (None, true, None);
         }
@@ -257,7 +290,11 @@ impl BodyInspector {
     /// Parse JSON with a maximum nesting depth limit.
     ///
     /// This prevents stack overflow attacks from payloads with extreme nesting depth.
-    fn parse_json_with_depth_limit(&self, text: &str, max_depth: usize) -> Result<serde_json::Value, String> {
+    fn parse_json_with_depth_limit(
+        &self,
+        text: &str,
+        max_depth: usize,
+    ) -> Result<serde_json::Value, String> {
         use serde_json::Value;
 
         let value: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
@@ -272,18 +309,23 @@ impl BodyInspector {
     }
 
     /// Recursively check if JSON depth exceeds the limit.
-    fn check_json_depth(&self, value: &serde_json::Value, current_depth: usize, max_depth: usize) -> bool {
+    fn check_json_depth(
+        &self,
+        value: &serde_json::Value,
+        current_depth: usize,
+        max_depth: usize,
+    ) -> bool {
         if current_depth > max_depth {
             return false;
         }
 
         match value {
-            serde_json::Value::Array(arr) => {
-                arr.iter().all(|v| self.check_json_depth(v, current_depth + 1, max_depth))
-            }
-            serde_json::Value::Object(obj) => {
-                obj.values().all(|v| self.check_json_depth(v, current_depth + 1, max_depth))
-            }
+            serde_json::Value::Array(arr) => arr
+                .iter()
+                .all(|v| self.check_json_depth(v, current_depth + 1, max_depth)),
+            serde_json::Value::Object(obj) => obj
+                .values()
+                .all(|v| self.check_json_depth(v, current_depth + 1, max_depth)),
             _ => true,
         }
     }
@@ -295,12 +337,16 @@ impl BodyInspector {
         };
         let mut form: HashMap<String, Vec<String>> = HashMap::new();
         for pair in text.split('&') {
-            if pair.is_empty() { continue; }
+            if pair.is_empty() {
+                continue;
+            }
             let (key, value) = match pair.split_once('=') {
                 Some((k, v)) => (k, v),
                 None => (pair, ""),
             };
-            form.entry(key.to_string()).or_default().push(value.to_string());
+            form.entry(key.to_string())
+                .or_default()
+                .push(value.to_string());
         }
         (Some(ParsedBody::Form(form)), true, None)
     }
@@ -317,20 +363,42 @@ impl BodyInspector {
         use std::hash::{Hash, Hasher};
         let mut hasher = DefaultHasher::new();
         body.hash(&mut hasher);
-        ParsedBody::Binary { size: body.len(), hash: format!("{:016x}", hasher.finish()) }
+        ParsedBody::Binary {
+            size: body.len(),
+            hash: format!("{:016x}", hasher.finish()),
+        }
     }
 
-    fn detect_anomalies(&self, body: &[u8], content_type: ContentType, declared: Option<ContentType>, detected: ContentType, anomalies: &mut Vec<BodyAnomaly>) {
+    fn detect_anomalies(
+        &self,
+        body: &[u8],
+        content_type: ContentType,
+        declared: Option<ContentType>,
+        detected: ContentType,
+        anomalies: &mut Vec<BodyAnomaly>,
+    ) {
         if body.len() > self.config.large_payload_threshold {
-            anomalies.push(BodyAnomaly::new(AnomalyType::OversizedPayload, 0.3, "large payload"));
+            anomalies.push(BodyAnomaly::new(
+                AnomalyType::OversizedPayload,
+                0.3,
+                "large payload",
+            ));
         }
         if let Some(decl) = declared {
             if decl != detected && detected != ContentType::Unknown {
-                anomalies.push(BodyAnomaly::new(AnomalyType::ContentTypeMismatch, 0.6, "content type mismatch"));
+                anomalies.push(BodyAnomaly::new(
+                    AnomalyType::ContentTypeMismatch,
+                    0.6,
+                    "content type mismatch",
+                ));
             }
         }
         if content_type.is_text() && body.contains(&0u8) {
-            anomalies.push(BodyAnomaly::new(AnomalyType::NullBytesInText, 0.8, "null bytes in text"));
+            anomalies.push(BodyAnomaly::new(
+                AnomalyType::NullBytesInText,
+                0.8,
+                "null bytes in text",
+            ));
         }
     }
 }
@@ -347,9 +415,15 @@ mod tests {
 
     #[test]
     fn test_content_type_detection() {
-        assert_eq!(ContentType::from_header("application/json"), ContentType::Json);
+        assert_eq!(
+            ContentType::from_header("application/json"),
+            ContentType::Json
+        );
         assert_eq!(ContentType::from_header("text/html"), ContentType::Html);
-        assert_eq!(ContentType::detect_from_body(br#"{"key": "value"}"#), ContentType::Json);
+        assert_eq!(
+            ContentType::detect_from_body(br#"{"key": "value"}"#),
+            ContentType::Json
+        );
         assert_eq!(ContentType::detect_from_body(b"<html>"), ContentType::Html);
     }
 

@@ -6,19 +6,19 @@
 //! - Async DNS verification using trust-dns-resolver
 //! - LRU cache with TTL using moka crate
 
-pub mod config;
-pub mod known_crawlers;
 pub mod bad_bots;
-pub mod dns_resolver;
 pub mod cache;
+pub mod config;
 pub mod detector;
+pub mod dns_resolver;
+pub mod known_crawlers;
 
-pub use config::{CrawlerConfig, DnsFailurePolicy};
-pub use known_crawlers::{CrawlerDefinition, KNOWN_CRAWLERS};
-pub use bad_bots::{BadBotSignature, BadBotSeverity, BAD_BOT_SIGNATURES};
-pub use dns_resolver::DnsResolver;
+pub use bad_bots::{BadBotSeverity, BadBotSignature, BAD_BOT_SIGNATURES};
 pub use cache::VerificationCache;
+pub use config::{CrawlerConfig, DnsFailurePolicy};
 pub use detector::{
-    CrawlerDetector, CrawlerDetection, CrawlerVerificationResult,
-    CrawlerStats, CrawlerStatsSnapshot, VerificationMethod,
+    CrawlerDetection, CrawlerDetector, CrawlerStats, CrawlerStatsSnapshot,
+    CrawlerVerificationResult, VerificationMethod,
 };
+pub use dns_resolver::DnsResolver;
+pub use known_crawlers::{CrawlerDefinition, KNOWN_CRAWLERS};

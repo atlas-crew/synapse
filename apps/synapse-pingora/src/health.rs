@@ -2,14 +2,14 @@
 //!
 //! Provides service status reporting compatible with the `/_sensor/status` nginx pattern.
 
+use ahash::RandomState;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use parking_lot::RwLock;
 use tracing::debug;
-use ahash::RandomState;
 
 /// Maximum number of recent responses to track per backend.
 const MAX_RESPONSE_HISTORY: usize = 100;
@@ -126,7 +126,8 @@ impl WafStats {
     /// Records a WAF analysis result.
     pub fn record(&self, blocked: bool, detection_time_us: u64) {
         self.analyzed.fetch_add(1, Ordering::Relaxed);
-        self.total_detection_time_us.fetch_add(detection_time_us, Ordering::Relaxed);
+        self.total_detection_time_us
+            .fetch_add(detection_time_us, Ordering::Relaxed);
 
         if blocked {
             self.blocked.fetch_add(1, Ordering::Relaxed);
@@ -273,7 +274,10 @@ impl HealthChecker {
 
         debug!(
             "Health check: status={:?}, backends={}/{} healthy, waf_block_rate={:.1}%",
-            status, healthy, total, self.waf_stats.block_rate()
+            status,
+            healthy,
+            total,
+            self.waf_stats.block_rate()
         );
 
         HealthResponse {
@@ -362,9 +366,9 @@ mod tests {
     fn test_waf_stats_recording() {
         let stats = WafStats::default();
 
-        stats.record(true, 100);  // blocked
-        stats.record(false, 50);  // allowed
-        stats.record(false, 50);  // allowed
+        stats.record(true, 100); // blocked
+        stats.record(false, 50); // allowed
+        stats.record(false, 50); // allowed
 
         assert_eq!(stats.analyzed.load(Ordering::Relaxed), 3);
         assert_eq!(stats.blocked.load(Ordering::Relaxed), 1);

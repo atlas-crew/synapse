@@ -12,8 +12,8 @@ use std::thread;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 
+use synapse_pingora::tls::{ReloadResult as TlsReloadResult, TlsCertConfig};
 use synapse_pingora::{ConfigReloader, ReloadResult, TlsManager};
-use synapse_pingora::tls::{TlsCertConfig, ReloadResult as TlsReloadResult};
 
 // =============================================================================
 // Test Helpers
@@ -218,12 +218,18 @@ fn test_reload_statistics_tracking() {
     // Successful reload
     let _ = reloader.reload();
     assert_eq!(stats.attempts.load(std::sync::atomic::Ordering::Relaxed), 1);
-    assert_eq!(stats.successes.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(
+        stats.successes.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // Another successful reload
     let _ = reloader.reload();
     assert_eq!(stats.attempts.load(std::sync::atomic::Ordering::Relaxed), 2);
-    assert_eq!(stats.successes.load(std::sync::atomic::Ordering::Relaxed), 2);
+    assert_eq!(
+        stats.successes.load(std::sync::atomic::Ordering::Relaxed),
+        2
+    );
 
     // Failed reload (write invalid config)
     {
@@ -245,13 +251,17 @@ fn test_reload_timestamp_updated() {
     let reloader = ConfigReloader::new(config_file.path()).unwrap();
 
     let stats = reloader.stats();
-    let initial_time = stats.last_reload_time.load(std::sync::atomic::Ordering::Relaxed);
+    let initial_time = stats
+        .last_reload_time
+        .load(std::sync::atomic::Ordering::Relaxed);
     assert_eq!(initial_time, 0); // Not set yet
 
     // Perform reload
     let _ = reloader.reload();
 
-    let after_time = stats.last_reload_time.load(std::sync::atomic::Ordering::Relaxed);
+    let after_time = stats
+        .last_reload_time
+        .load(std::sync::atomic::Ordering::Relaxed);
     assert!(after_time > 0);
 }
 
@@ -272,9 +282,7 @@ fn test_parallel_reload_attempts() {
     let mut handles = Vec::new();
     for _ in 0..5 {
         let r = Arc::clone(&reloader);
-        handles.push(thread::spawn(move || {
-            r.reload()
-        }));
+        handles.push(thread::spawn(move || r.reload()));
     }
 
     // Collect results
@@ -284,7 +292,12 @@ fn test_parallel_reload_attempts() {
     let successes = results.iter().filter(|r| r.success).count();
     let in_progress_failures = results
         .iter()
-        .filter(|r| !r.success && r.error.as_ref().map_or(false, |e| e.contains("already in progress")))
+        .filter(|r| {
+            !r.success
+                && r.error
+                    .as_ref()
+                    .map_or(false, |e| e.contains("already in progress"))
+        })
         .count();
 
     // All reloads either succeed or fail with "already in progress"
@@ -313,12 +326,14 @@ fn test_tls_manager_reload_success() {
     let key_file = create_cert_file(DUMMY_KEY);
 
     let tls_manager = TlsManager::default();
-    tls_manager.load_cert(&TlsCertConfig {
-        domain: "example.com".to_string(),
-        cert_path: cert_file.path().to_string_lossy().to_string(),
-        key_path: key_file.path().to_string_lossy().to_string(),
-        is_wildcard: false,
-    }).unwrap();
+    tls_manager
+        .load_cert(&TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        })
+        .unwrap();
 
     // Reload should succeed
     let result = tls_manager.reload_all();
@@ -336,12 +351,14 @@ fn test_tls_manager_reload_cert_by_domain() {
     let key_file = create_cert_file(DUMMY_KEY);
 
     let tls_manager = TlsManager::default();
-    tls_manager.load_cert(&TlsCertConfig {
-        domain: "example.com".to_string(),
-        cert_path: cert_file.path().to_string_lossy().to_string(),
-        key_path: key_file.path().to_string_lossy().to_string(),
-        is_wildcard: false,
-    }).unwrap();
+    tls_manager
+        .load_cert(&TlsCertConfig {
+            domain: "example.com".to_string(),
+            cert_path: cert_file.path().to_string_lossy().to_string(),
+            key_path: key_file.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        })
+        .unwrap();
 
     // Get initial cert
     let cert_before = tls_manager.get_cert("example.com").unwrap();
@@ -376,18 +393,22 @@ fn test_tls_manager_reload_preserves_other_certs() {
     let tls_manager = TlsManager::default();
 
     // Load two certs
-    tls_manager.load_cert(&TlsCertConfig {
-        domain: "one.com".to_string(),
-        cert_path: cert_file1.path().to_string_lossy().to_string(),
-        key_path: key_file1.path().to_string_lossy().to_string(),
-        is_wildcard: false,
-    }).unwrap();
-    tls_manager.load_cert(&TlsCertConfig {
-        domain: "two.com".to_string(),
-        cert_path: cert_file2.path().to_string_lossy().to_string(),
-        key_path: key_file2.path().to_string_lossy().to_string(),
-        is_wildcard: false,
-    }).unwrap();
+    tls_manager
+        .load_cert(&TlsCertConfig {
+            domain: "one.com".to_string(),
+            cert_path: cert_file1.path().to_string_lossy().to_string(),
+            key_path: key_file1.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        })
+        .unwrap();
+    tls_manager
+        .load_cert(&TlsCertConfig {
+            domain: "two.com".to_string(),
+            cert_path: cert_file2.path().to_string_lossy().to_string(),
+            key_path: key_file2.path().to_string_lossy().to_string(),
+            is_wildcard: false,
+        })
+        .unwrap();
 
     // Update only cert for two.com
     let new_cert = "-----BEGIN CERTIFICATE-----\nTWO_UPDATED\n-----END CERTIFICATE-----";
@@ -462,7 +483,10 @@ fn test_rapid_successive_reloads() {
 
     // All should succeed
     let stats = reloader.stats();
-    assert_eq!(stats.successes.load(std::sync::atomic::Ordering::Relaxed), 10);
+    assert_eq!(
+        stats.successes.load(std::sync::atomic::Ordering::Relaxed),
+        10
+    );
 }
 
 #[test]
@@ -498,7 +522,9 @@ fn test_reload_with_different_site_counts() {
         file.seek(SeekFrom::Start(0)).unwrap();
         file.set_len(0).unwrap();
     }
-    config_file.write_all(SINGLE_SITE_CONFIG.as_bytes()).unwrap();
+    config_file
+        .write_all(SINGLE_SITE_CONFIG.as_bytes())
+        .unwrap();
     config_file.flush().unwrap();
     let result = reloader.reload();
     assert_eq!(result.sites_loaded, 1);

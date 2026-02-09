@@ -47,7 +47,9 @@ pub use injection_tracker::{
     HeadlessIndicators, InjectionRecord, InjectionSummary, InjectionTracker,
     InjectionTrackerConfig, InjectionTrackerStats,
 };
-pub use js_challenge_manager::{JsChallenge, JsChallengeConfig, JsChallengeManager, JsChallengeStats};
+pub use js_challenge_manager::{
+    JsChallenge, JsChallengeConfig, JsChallengeManager, JsChallengeStats,
+};
 pub use progression_manager::{
     ActorChallengeState, ChallengeLevel, ProgressionConfig, ProgressionManager, ProgressionStats,
 };

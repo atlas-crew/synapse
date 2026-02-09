@@ -164,8 +164,7 @@ fn bench_streaming_vs_batch(c: &mut Criterion) {
 
     group.bench_function("streaming_scan_64KB_4KB_chunks", |b| {
         b.iter(|| {
-            let mut streaming =
-                StreamingScanner::with_auto_overlap(Arc::clone(&scanner), &config);
+            let mut streaming = StreamingScanner::with_auto_overlap(Arc::clone(&scanner), &config);
             for chunk in &chunks {
                 let _ = streaming.update(black_box(chunk));
             }

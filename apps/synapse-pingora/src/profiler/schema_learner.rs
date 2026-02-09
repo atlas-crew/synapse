@@ -509,8 +509,10 @@ impl SchemaLearner {
 
         // Insert new schema and track in LRU
         lru.touch(template);
-        self.schemas
-            .insert(template.to_string(), EndpointSchema::new(template.to_string(), now));
+        self.schemas.insert(
+            template.to_string(),
+            EndpointSchema::new(template.to_string(), now),
+        );
     }
 
     /// Update schema fields from JSON value.
@@ -707,9 +709,7 @@ impl SchemaLearner {
 
             // Type mismatch check
             let dominant_type = field_schema.dominant_type();
-            if actual_type != dominant_type
-                && !(val.is_null() && field_schema.nullable)
-            {
+            if actual_type != dominant_type && !(val.is_null() && field_schema.nullable) {
                 result.add(SchemaViolation::type_mismatch(
                     &field_name,
                     dominant_type,
@@ -752,7 +752,11 @@ impl SchemaLearner {
                 !field_name.contains('.')
             } else {
                 field_name.starts_with(prefix)
-                    && field_name[prefix.len()..].chars().filter(|&c| c == '.').count() == 1
+                    && field_name[prefix.len()..]
+                        .chars()
+                        .filter(|&c| c == '.')
+                        .count()
+                        == 1
             };
 
             if expected_prefix && field_schema.seen_count >= threshold {
@@ -785,7 +789,11 @@ impl SchemaLearner {
         if let Some(max) = schema.max_length {
             let allowed_max = (max as f64 * self.config.string_length_tolerance) as u32;
             if len > allowed_max {
-                result.add(SchemaViolation::string_too_long(field_name, allowed_max, len));
+                result.add(SchemaViolation::string_too_long(
+                    field_name,
+                    allowed_max,
+                    len,
+                ));
             }
         }
 
@@ -814,7 +822,11 @@ impl SchemaLearner {
         if let Some(min) = schema.min_value {
             let allowed_min = min * (1.0 / self.config.number_value_tolerance);
             if value < allowed_min {
-                result.add(SchemaViolation::number_too_small(field_name, allowed_min, value));
+                result.add(SchemaViolation::number_too_small(
+                    field_name,
+                    allowed_min,
+                    value,
+                ));
             }
         }
 
@@ -822,7 +834,11 @@ impl SchemaLearner {
         if let Some(max) = schema.max_value {
             let allowed_max = max * self.config.number_value_tolerance;
             if value > allowed_max {
-                result.add(SchemaViolation::number_too_large(field_name, allowed_max, value));
+                result.add(SchemaViolation::number_too_large(
+                    field_name,
+                    allowed_max,
+                    value,
+                ));
             }
         }
     }
@@ -1045,7 +1061,8 @@ mod tests {
         }
 
         // Validate with unexpected field
-        let result = learner.validate_request("/api/users", &json!({"name": "test", "malicious": "value"}));
+        let result =
+            learner.validate_request("/api/users", &json!({"name": "test", "malicious": "value"}));
 
         assert!(!result.is_valid());
         assert!(result

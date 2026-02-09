@@ -3,13 +3,13 @@
 //! This module provides secure TLS configuration loading and hot-reload
 //! capabilities for multi-site certificate management.
 
+use ahash::RandomState;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tracing::{debug, info, warn};
-use ahash::RandomState;
 use zeroize::Zeroize;
 
 /// Maximum certificate file size (1MB).
@@ -68,7 +68,10 @@ impl std::fmt::Debug for CertifiedKey {
         f.debug_struct("CertifiedKey")
             .field("domain", &self.domain)
             .field("cert_pem", &format!("[{} bytes]", self.cert_pem.len()))
-            .field("key_pem", &format!("[REDACTED {} bytes]", self.key_pem.len()))
+            .field(
+                "key_pem",
+                &format!("[REDACTED {} bytes]", self.key_pem.len()),
+            )
             .finish()
     }
 }
@@ -223,18 +226,12 @@ impl TlsManager {
             let base_domain = config.domain.trim_start_matches("*.");
             let mut wildcards = self.wildcard_certs.write();
             wildcards.insert(base_domain.to_lowercase(), certified_key);
-            info!(
-                "Loaded wildcard TLS certificate for *.{}",
-                base_domain
-            );
+            info!("Loaded wildcard TLS certificate for *.{}", base_domain);
             base_domain.to_lowercase()
         } else {
             let mut exact = self.exact_certs.write();
             exact.insert(config.domain.to_lowercase(), certified_key);
-            debug!(
-                "Loaded TLS certificate for {}",
-                config.domain
-            );
+            debug!("Loaded TLS certificate for {}", config.domain);
             config.domain.to_lowercase()
         };
 
@@ -341,9 +338,13 @@ impl TlsManager {
 
         if !path_ref.exists() {
             return Err(if file_type == "certificate" {
-                TlsError::CertNotFound { path: path.to_string() }
+                TlsError::CertNotFound {
+                    path: path.to_string(),
+                }
             } else {
-                TlsError::KeyNotFound { path: path.to_string() }
+                TlsError::KeyNotFound {
+                    path: path.to_string(),
+                }
             });
         }
 
@@ -390,12 +391,13 @@ impl TlsManager {
         // Snapshot current configs to avoid holding lock during reload
         let configs: Vec<(String, TlsCertConfig)> = {
             let configs = self.cert_configs.read();
-            configs.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            configs
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
         };
 
-        let default_config: Option<TlsCertConfig> = {
-            self.default_cert_config.read().clone()
-        };
+        let default_config: Option<TlsCertConfig> = { self.default_cert_config.read().clone() };
 
         if configs.is_empty() && default_config.is_none() {
             info!("No certificates configured for reload");
@@ -438,8 +440,13 @@ impl TlsManager {
                 }
                 Err(e) => {
                     result.failed += 1;
-                    result.errors.push((format!("default:{}", config.domain), e.to_string()));
-                    warn!("Failed to reload default certificate for {}: {}", config.domain, e);
+                    result
+                        .errors
+                        .push((format!("default:{}", config.domain), e.to_string()));
+                    warn!(
+                        "Failed to reload default certificate for {}: {}",
+                        config.domain, e
+                    );
                     None
                 }
             }
@@ -472,10 +479,7 @@ impl TlsManager {
         }
 
         if result.is_success() {
-            info!(
-                "Successfully reloaded {} certificate(s)",
-                result.succeeded
-            );
+            info!("Successfully reloaded {} certificate(s)", result.succeeded);
         } else {
             warn!(
                 "Certificate reload completed: {} succeeded, {} failed",
@@ -788,20 +792,24 @@ mod tests {
         let manager = TlsManager::default();
 
         // Load exact cert
-        manager.load_cert(&TlsCertConfig {
-            domain: "example.com".to_string(),
-            cert_path: cert_file1.path().to_string_lossy().to_string(),
-            key_path: key_file1.path().to_string_lossy().to_string(),
-            is_wildcard: false,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "example.com".to_string(),
+                cert_path: cert_file1.path().to_string_lossy().to_string(),
+                key_path: key_file1.path().to_string_lossy().to_string(),
+                is_wildcard: false,
+            })
+            .unwrap();
 
         // Load wildcard cert
-        manager.load_cert(&TlsCertConfig {
-            domain: "*.other.com".to_string(),
-            cert_path: cert_file2.path().to_string_lossy().to_string(),
-            key_path: key_file2.path().to_string_lossy().to_string(),
-            is_wildcard: true,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "*.other.com".to_string(),
+                cert_path: cert_file2.path().to_string_lossy().to_string(),
+                key_path: key_file2.path().to_string_lossy().to_string(),
+                is_wildcard: true,
+            })
+            .unwrap();
 
         let result = manager.reload_all();
         assert_eq!(result.succeeded, 2);
@@ -822,19 +830,23 @@ mod tests {
 
         let manager = TlsManager::default();
 
-        manager.load_cert(&TlsCertConfig {
-            domain: "example.com".to_string(),
-            cert_path: cert_file.path().to_string_lossy().to_string(),
-            key_path: key_file.path().to_string_lossy().to_string(),
-            is_wildcard: false,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "example.com".to_string(),
+                cert_path: cert_file.path().to_string_lossy().to_string(),
+                key_path: key_file.path().to_string_lossy().to_string(),
+                is_wildcard: false,
+            })
+            .unwrap();
 
-        manager.set_default_cert(&TlsCertConfig {
-            domain: "default.local".to_string(),
-            cert_path: default_cert.path().to_string_lossy().to_string(),
-            key_path: default_key.path().to_string_lossy().to_string(),
-            is_wildcard: false,
-        }).unwrap();
+        manager
+            .set_default_cert(&TlsCertConfig {
+                domain: "default.local".to_string(),
+                cert_path: default_cert.path().to_string_lossy().to_string(),
+                key_path: default_key.path().to_string_lossy().to_string(),
+                is_wildcard: false,
+            })
+            .unwrap();
 
         let result = manager.reload_all();
         assert_eq!(result.succeeded, 2); // 1 exact + 1 default
@@ -849,22 +861,27 @@ mod tests {
         let manager = TlsManager::default();
 
         // Load valid cert
-        manager.load_cert(&TlsCertConfig {
-            domain: "valid.com".to_string(),
-            cert_path: cert_file.path().to_string_lossy().to_string(),
-            key_path: key_file.path().to_string_lossy().to_string(),
-            is_wildcard: false,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "valid.com".to_string(),
+                cert_path: cert_file.path().to_string_lossy().to_string(),
+                key_path: key_file.path().to_string_lossy().to_string(),
+                is_wildcard: false,
+            })
+            .unwrap();
 
         // Manually insert a config with invalid paths (simulating file deletion)
         {
             let mut configs = manager.cert_configs.write();
-            configs.insert("invalid.com".to_string(), TlsCertConfig {
-                domain: "invalid.com".to_string(),
-                cert_path: "/nonexistent/cert.pem".to_string(),
-                key_path: "/nonexistent/key.pem".to_string(),
-                is_wildcard: false,
-            });
+            configs.insert(
+                "invalid.com".to_string(),
+                TlsCertConfig {
+                    domain: "invalid.com".to_string(),
+                    cert_path: "/nonexistent/cert.pem".to_string(),
+                    key_path: "/nonexistent/key.pem".to_string(),
+                    is_wildcard: false,
+                },
+            );
         }
 
         let result = manager.reload_all();
@@ -957,19 +974,23 @@ mod tests {
         let manager = TlsManager::default();
         assert!(manager.configured_domains().is_empty());
 
-        manager.load_cert(&TlsCertConfig {
-            domain: "one.com".to_string(),
-            cert_path: cert_file1.path().to_string_lossy().to_string(),
-            key_path: key_file1.path().to_string_lossy().to_string(),
-            is_wildcard: false,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "one.com".to_string(),
+                cert_path: cert_file1.path().to_string_lossy().to_string(),
+                key_path: key_file1.path().to_string_lossy().to_string(),
+                is_wildcard: false,
+            })
+            .unwrap();
 
-        manager.load_cert(&TlsCertConfig {
-            domain: "*.two.com".to_string(),
-            cert_path: cert_file2.path().to_string_lossy().to_string(),
-            key_path: key_file2.path().to_string_lossy().to_string(),
-            is_wildcard: true,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "*.two.com".to_string(),
+                cert_path: cert_file2.path().to_string_lossy().to_string(),
+                key_path: key_file2.path().to_string_lossy().to_string(),
+                is_wildcard: true,
+            })
+            .unwrap();
 
         let domains = manager.configured_domains();
         assert_eq!(domains.len(), 2);
@@ -985,12 +1006,14 @@ mod tests {
         let manager = TlsManager::default();
         assert!(!manager.has_cert_config("example.com"));
 
-        manager.load_cert(&TlsCertConfig {
-            domain: "example.com".to_string(),
-            cert_path: cert_file.path().to_string_lossy().to_string(),
-            key_path: key_file.path().to_string_lossy().to_string(),
-            is_wildcard: false,
-        }).unwrap();
+        manager
+            .load_cert(&TlsCertConfig {
+                domain: "example.com".to_string(),
+                cert_path: cert_file.path().to_string_lossy().to_string(),
+                key_path: key_file.path().to_string_lossy().to_string(),
+                is_wildcard: false,
+            })
+            .unwrap();
 
         assert!(manager.has_cert_config("example.com"));
         assert!(manager.has_cert_config("EXAMPLE.COM")); // Case insensitive

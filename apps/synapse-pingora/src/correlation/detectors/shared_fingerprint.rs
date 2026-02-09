@@ -31,9 +31,9 @@
 //! assert!(!updates.is_empty());
 //! ```
 
+use parking_lot::RwLock;
 use std::collections::HashSet;
 use std::net::IpAddr;
-use parking_lot::RwLock;
 
 use crate::correlation::{
     Campaign, CampaignUpdate, CorrelationReason, CorrelationType, FingerprintGroup,
@@ -94,7 +94,10 @@ impl SharedFingerprintDetector {
     /// # Panics
     /// Panics if threshold is less than 2 (correlation requires at least 2 IPs).
     pub fn new(threshold: usize) -> Self {
-        assert!(threshold >= 2, "Threshold must be at least 2 for correlation");
+        assert!(
+            threshold >= 2,
+            "Threshold must be at least 2 for correlation"
+        );
         Self {
             config: SharedFingerprintConfig {
                 threshold,
@@ -111,7 +114,10 @@ impl SharedFingerprintDetector {
     /// * `base_confidence` - Confidence score for detections (0.0-1.0)
     /// * `scan_interval_ms` - Milliseconds between full scans
     pub fn with_config(threshold: usize, base_confidence: f64, scan_interval_ms: u64) -> Self {
-        assert!(threshold >= 2, "Threshold must be at least 2 for correlation");
+        assert!(
+            threshold >= 2,
+            "Threshold must be at least 2 for correlation"
+        );
         Self {
             config: SharedFingerprintConfig {
                 threshold,
@@ -125,7 +131,10 @@ impl SharedFingerprintDetector {
 
     /// Create a detector with full configuration.
     pub fn from_config(config: SharedFingerprintConfig) -> Self {
-        assert!(config.threshold >= 2, "Threshold must be at least 2 for correlation");
+        assert!(
+            config.threshold >= 2,
+            "Threshold must be at least 2 for correlation"
+        );
         Self {
             config,
             processed_fingerprints: RwLock::new(HashSet::new()),
@@ -134,14 +143,14 @@ impl SharedFingerprintDetector {
 
     /// Check if a fingerprint has already been processed into a campaign.
     fn is_processed(&self, fingerprint: &str) -> bool {
-        self.processed_fingerprints
-            .read()
-            .contains(fingerprint)
+        self.processed_fingerprints.read().contains(fingerprint)
     }
 
     /// Mark a fingerprint as processed.
     fn mark_processed(&self, fingerprint: &str) {
-        self.processed_fingerprints.write().insert(fingerprint.to_string());
+        self.processed_fingerprints
+            .write()
+            .insert(fingerprint.to_string());
     }
 
     /// Clear processed fingerprints (e.g., when resetting detector state).
@@ -166,7 +175,8 @@ impl SharedFingerprintDetector {
 
         // Size bonus: configurable per IP above threshold, capped at configurable max
         let size_bonus = ((group_size.saturating_sub(self.config.threshold)) as f64
-            * self.config.size_bonus_per_ip).min(self.config.max_size_bonus);
+            * self.config.size_bonus_per_ip)
+            .min(self.config.max_size_bonus);
 
         (self.config.base_confidence + type_bonus + size_bonus).min(1.0)
     }
@@ -188,11 +198,7 @@ impl SharedFingerprintDetector {
         );
 
         // Create a new campaign
-        let campaign = Campaign::new(
-            Campaign::generate_id(),
-            group.ips.clone(),
-            confidence,
-        );
+        let campaign = Campaign::new(Campaign::generate_id(), group.ips.clone(), confidence);
 
         // Build update with correlation reason
         CampaignUpdate {
@@ -329,11 +335,7 @@ mod tests {
 
         // Combined group of 3 IPs
         for i in 0..3 {
-            index.update_entity(
-                &format!("10.0.0.{}", i + 1),
-                None,
-                Some("combined_shared"),
-            );
+            index.update_entity(&format!("10.0.0.{}", i + 1), None, Some("combined_shared"));
         }
 
         // Single IP with unique fingerprint
@@ -622,7 +624,11 @@ mod tests {
 
         // Each IP has unique fingerprint
         for i in 0..10 {
-            index.update_entity(&format!("10.0.0.{}", i), Some(&format!("unique_fp_{}", i)), None);
+            index.update_entity(
+                &format!("10.0.0.{}", i),
+                Some(&format!("unique_fp_{}", i)),
+                None,
+            );
         }
 
         let detector = SharedFingerprintDetector::new(3);

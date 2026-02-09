@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::thread;
 
-use synapse_pingora::{DlpScanner, DlpConfig};
+use synapse_pingora::{DlpConfig, DlpScanner};
 
 // ============================================================================
 // Test Helpers
@@ -49,7 +49,11 @@ fn test_concurrent_scans_no_panic() {
                     _ => CLEAN_CONTENT,
                 };
                 let result = scanner.scan(content);
-                assert!(result.scanned, "Thread {} scan {} should complete", thread_id, i);
+                assert!(
+                    result.scanned,
+                    "Thread {} scan {} should complete",
+                    thread_id, i
+                );
             }
         }));
     }
@@ -61,7 +65,10 @@ fn test_concurrent_scans_no_panic() {
 
     // Verify total scans counted correctly
     let stats = scanner.stats();
-    assert_eq!(stats.total_scans, 1000, "Should have counted 1000 total scans");
+    assert_eq!(
+        stats.total_scans, 1000,
+        "Should have counted 1000 total scans"
+    );
 }
 
 #[test]
@@ -113,7 +120,10 @@ fn test_stats_atomic_updates() {
     }
 
     let stats = scanner.stats();
-    assert_eq!(stats.total_scans, 1000, "Atomic counter should equal exact number of scans");
+    assert_eq!(
+        stats.total_scans, 1000,
+        "Atomic counter should equal exact number of scans"
+    );
 }
 
 #[test]

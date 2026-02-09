@@ -229,8 +229,7 @@ async fn test_weighted_scoring_aggregation() {
     let manager = test_manager();
     let calculated_score = manager.calculate_campaign_score(&campaign);
 
-    let expected_score =
-        (50.0 * 0.95 + 45.0 * 0.90 + 35.0 * 0.85) / 3.0;
+    let expected_score = (50.0 * 0.95 + 45.0 * 0.90 + 35.0 * 0.85) / 3.0;
     let tolerance = 0.01;
 
     assert!(
@@ -449,12 +448,12 @@ async fn test_detector_independence() {
 async fn test_detector_threshold_independence() {
     // Create manager with different thresholds for different detectors
     let config = ManagerConfig {
-        shared_threshold: 3,      // HTTP fingerprint needs 3 IPs
+        shared_threshold: 3,        // HTTP fingerprint needs 3 IPs
         attack_sequence_min_ips: 2, // Attack sequence needs only 2 IPs
-        auth_token_min_ips: 4,    // Auth token needs 4 IPs
-        behavioral_min_ips: 2,    // Behavioral needs 2 IPs
-        timing_min_ips: 5,        // Timing needs 5 IPs
-        network_min_ips: 3,       // Network needs 3 IPs
+        auth_token_min_ips: 4,      // Auth token needs 4 IPs
+        behavioral_min_ips: 2,      // Behavioral needs 2 IPs
+        timing_min_ips: 5,          // Timing needs 5 IPs
+        network_min_ips: 3,         // Network needs 3 IPs
         rotation_threshold: 3,
         rotation_window: Duration::from_secs(60),
         scan_interval: Duration::from_millis(100),
@@ -580,10 +579,7 @@ async fn test_concurrent_multi_detector_access() {
         stats.fingerprints_registered > 0,
         "Should have registered fingerprints"
     );
-    assert!(
-        stats.detections_run > 0,
-        "Should have run detection cycles"
-    );
+    assert!(stats.detections_run > 0, "Should have run detection cycles");
 
     // Verify no panics occurred and data structures are intact
     let campaigns = manager.get_campaigns();
@@ -714,9 +710,14 @@ async fn test_campaign_merging_same_actors() {
     );
 
     // Verify that at least one campaign contains all the IPs
-    let _campaigns_with_all_ips = campaigns_final.iter().filter(|c| {
-        shared_ips.iter().all(|ip| c.actors.contains(&ip.to_string()))
-    }).count();
+    let _campaigns_with_all_ips = campaigns_final
+        .iter()
+        .filter(|c| {
+            shared_ips
+                .iter()
+                .all(|ip| c.actors.contains(&ip.to_string()))
+        })
+        .count();
 
     // At least one campaign should contain our test IPs
     assert!(
@@ -748,8 +749,10 @@ async fn test_detection_stats_accuracy() {
     let initial_stats = manager.stats();
     assert_eq!(initial_stats.detections_run, 0);
     assert_eq!(initial_stats.campaigns_created, 0);
-    assert!(initial_stats.detections_by_type.is_empty() ||
-            initial_stats.detections_by_type.values().all(|&v| v == 0));
+    assert!(
+        initial_stats.detections_by_type.is_empty()
+            || initial_stats.detections_by_type.values().all(|&v| v == 0)
+    );
 
     // Register data to trigger specific detectors
     let test_ips: Vec<IpAddr> = (1..=4).map(ip).collect();
@@ -771,14 +774,23 @@ async fn test_detection_stats_accuracy() {
     manager.run_detection_cycle().await.unwrap();
 
     let stats_after = manager.stats();
-    assert_eq!(stats_after.detections_run, 1, "Should count 1 detection cycle");
-    assert!(stats_after.campaigns_created > 0, "Should have created campaigns");
+    assert_eq!(
+        stats_after.detections_run, 1,
+        "Should count 1 detection cycle"
+    );
+    assert!(
+        stats_after.campaigns_created > 0,
+        "Should have created campaigns"
+    );
 
     // Run another detection cycle
     manager.run_detection_cycle().await.unwrap();
 
     let stats_final = manager.stats();
-    assert_eq!(stats_final.detections_run, 2, "Should count 2 detection cycles");
+    assert_eq!(
+        stats_final.detections_run, 2,
+        "Should count 2 detection cycles"
+    );
 }
 
 // ============================================================================
@@ -795,7 +807,10 @@ async fn test_empty_data_handling() {
     assert_eq!(updates, 0, "Should have no updates with no data");
 
     let campaigns = manager.get_campaigns();
-    assert!(campaigns.is_empty(), "Should have no campaigns with no data");
+    assert!(
+        campaigns.is_empty(),
+        "Should have no campaigns with no data"
+    );
 
     let stats = manager.stats();
     assert_eq!(stats.detections_run, 1, "Detection cycle should be counted");
@@ -824,10 +839,7 @@ async fn test_single_ip_no_detection() {
     let updates = manager.run_detection_cycle().await.unwrap();
 
     // With only 1 IP, no detections should occur (all thresholds are >= 2)
-    assert_eq!(
-        updates, 0,
-        "Single IP should not trigger any detections"
-    );
+    assert_eq!(updates, 0, "Single IP should not trigger any detections");
 }
 
 /// Verifies proper handling of mixed IPv4 and IPv6 addresses
@@ -853,7 +865,10 @@ async fn test_mixed_ip_versions() {
     assert!(updates > 0, "Should detect mixed IP campaign");
 
     let campaigns = manager.get_campaigns();
-    assert!(!campaigns.is_empty(), "Should create campaign with mixed IPs");
+    assert!(
+        !campaigns.is_empty(),
+        "Should create campaign with mixed IPs"
+    );
 
     // Verify campaign contains both address types
     if let Some(campaign) = campaigns.first() {

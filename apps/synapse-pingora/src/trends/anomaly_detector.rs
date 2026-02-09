@@ -50,8 +50,14 @@ impl AnomalyDetector {
     }
 
     /// Create with custom configuration.
-    pub fn with_config(config: AnomalyDetectorConfig, risk_scores: HashMap<AnomalyType, u32>) -> Self {
-        Self { config, risk_scores }
+    pub fn with_config(
+        config: AnomalyDetectorConfig,
+        risk_scores: HashMap<AnomalyType, u32>,
+    ) -> Self {
+        Self {
+            config,
+            risk_scores,
+        }
     }
 
     /// Check a single signal for anomalies against recent history.
@@ -98,16 +104,16 @@ impl AnomalyDetector {
             .collect();
 
         if same_token_signals.len() >= 2 {
-            let entities: HashSet<String> = same_token_signals.iter().map(|s| s.entity_id.clone()).collect();
+            let entities: HashSet<String> = same_token_signals
+                .iter()
+                .map(|s| s.entity_id.clone())
+                .collect();
             let entity_count = entities.len();
             if entity_count >= self.config.session_sharing_min_ips {
                 return Some(self.create_anomaly(
                     AnomalyType::SessionSharing,
                     AnomalySeverity::High,
-                    format!(
-                        "Auth token used from {} different IPs",
-                        entity_count
-                    ),
+                    format!("Auth token used from {} different IPs", entity_count),
                     signal.category,
                     same_token_signals.into_iter().cloned().collect(),
                     entities.into_iter().collect(),
@@ -265,7 +271,10 @@ impl AnomalyDetector {
         }
 
         let current_count = current.summary.total_count;
-        let historical_avg: f64 = historical.iter().map(|b| b.summary.total_count as f64).sum::<f64>()
+        let historical_avg: f64 = historical
+            .iter()
+            .map(|b| b.summary.total_count as f64)
+            .sum::<f64>()
             / historical.len() as f64;
 
         if historical_avg == 0.0 {

@@ -8,7 +8,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use synapse_pingora::horizon::{BlocklistCache, BlocklistEntry, BlockType};
+use synapse_pingora::horizon::{BlockType, BlocklistCache, BlocklistEntry};
 use synapse_pingora::{ActorConfig, ActorManager};
 use synapse_pingora::{EntityConfig, EntityManager};
 
@@ -558,8 +558,7 @@ fn bench_actor_contention(c: &mut Criterion) {
                                     let offset = t * 1000;
                                     for i in 0..1000 {
                                         let ip = pool[(offset + i) % pool.len()];
-                                        let actor_id =
-                                            black_box(am.get_or_create_actor(ip, None));
+                                        let actor_id = black_box(am.get_or_create_actor(ip, None));
                                         black_box(am.touch_actor(&actor_id));
                                     }
                                 })
@@ -600,4 +599,9 @@ criterion_group!(blocklist_benches, bench_blocklist_lookup,);
 
 criterion_group!(contention_benches, bench_actor_contention,);
 
-criterion_main!(risk_benches, actor_benches, blocklist_benches, contention_benches);
+criterion_main!(
+    risk_benches,
+    actor_benches,
+    blocklist_benches,
+    contention_benches
+);

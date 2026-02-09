@@ -40,7 +40,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Notify;
 
-use super::{CaptchaManager, ChallengeResponse, CookieManager, JsChallengeManager, ValidationResult};
+use super::{
+    CaptchaManager, ChallengeResponse, CookieManager, JsChallengeManager, ValidationResult,
+};
 use crate::tarpit::TarpitManager;
 
 /// Challenge levels for progressive escalation
@@ -437,7 +439,10 @@ impl ProgressionManager {
 
     /// List all tracked actors
     pub fn list_all_actors(&self) -> Vec<ActorChallengeState> {
-        self.actor_states.iter().map(|e| e.value().clone()).collect()
+        self.actor_states
+            .iter()
+            .map(|e| e.value().clone())
+            .collect()
     }
 
     /// Start background tasks (de-escalation, cleanup)
@@ -549,15 +554,9 @@ impl ProgressionManager {
         let level = self.get_level(actor_id);
 
         let result = match level {
-            ChallengeLevel::Cookie => {
-                self.cookie_manager.validate_cookie(actor_id, response)
-            }
-            ChallengeLevel::JsChallenge => {
-                self.js_manager.validate_pow(actor_id, response)
-            }
-            ChallengeLevel::Captcha => {
-                self.captcha_manager.validate_response(actor_id, response)
-            }
+            ChallengeLevel::Cookie => self.cookie_manager.validate_cookie(actor_id, response),
+            ChallengeLevel::JsChallenge => self.js_manager.validate_pow(actor_id, response),
+            ChallengeLevel::Captcha => self.captcha_manager.validate_response(actor_id, response),
             _ => ValidationResult::NotFound,
         };
 
@@ -960,16 +959,10 @@ mod tests {
         let manager = ProgressionManager::new(cookie, js, captcha, tarpit, test_config());
 
         // Low risk -> None
-        assert_eq!(
-            manager.determine_initial_level(0.1),
-            ChallengeLevel::None
-        );
+        assert_eq!(manager.determine_initial_level(0.1), ChallengeLevel::None);
 
         // Medium-low risk -> Cookie
-        assert_eq!(
-            manager.determine_initial_level(0.3),
-            ChallengeLevel::Cookie
-        );
+        assert_eq!(manager.determine_initial_level(0.3), ChallengeLevel::Cookie);
 
         // Medium risk -> JS Challenge
         assert_eq!(
@@ -978,16 +971,10 @@ mod tests {
         );
 
         // Medium-high risk -> Tarpit (CAPTCHA disabled by default)
-        assert_eq!(
-            manager.determine_initial_level(0.7),
-            ChallengeLevel::Tarpit
-        );
+        assert_eq!(manager.determine_initial_level(0.7), ChallengeLevel::Tarpit);
 
         // High risk -> Block
-        assert_eq!(
-            manager.determine_initial_level(0.9),
-            ChallengeLevel::Block
-        );
+        assert_eq!(manager.determine_initial_level(0.9), ChallengeLevel::Block);
     }
 
     #[test]

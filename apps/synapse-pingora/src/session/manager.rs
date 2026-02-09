@@ -382,7 +382,9 @@ impl SessionManager {
                     self.stats.active_sessions.fetch_sub(1, Ordering::Relaxed);
                     self.stats.expired_sessions.fetch_add(1, Ordering::Relaxed);
                     if was_suspicious {
-                        self.stats.suspicious_sessions.fetch_sub(1, Ordering::Relaxed);
+                        self.stats
+                            .suspicious_sessions
+                            .fetch_sub(1, Ordering::Relaxed);
                     }
 
                     return SessionDecision::Expired;
@@ -396,7 +398,8 @@ impl SessionManager {
 
                     // Trim alerts if needed
                     if session.hijack_alerts.len() > self.config.max_alerts_per_session {
-                        let excess = session.hijack_alerts.len() - self.config.max_alerts_per_session;
+                        let excess =
+                            session.hijack_alerts.len() - self.config.max_alerts_per_session;
                         session.hijack_alerts.drain(0..excess);
                     }
 
@@ -404,7 +407,9 @@ impl SessionManager {
 
                     // Update suspicious count if first alert
                     if !was_suspicious {
-                        self.stats.suspicious_sessions.fetch_add(1, Ordering::Relaxed);
+                        self.stats
+                            .suspicious_sessions
+                            .fetch_add(1, Ordering::Relaxed);
                     }
 
                     return SessionDecision::Suspicious(alert);
@@ -443,7 +448,8 @@ impl SessionManager {
                 entry.insert(session);
 
                 // Update secondary index
-                self.session_by_id.insert(session_id, token_hash.to_string());
+                self.session_by_id
+                    .insert(session_id, token_hash.to_string());
 
                 // Update stats
                 self.stats.total_sessions.fetch_add(1, Ordering::Relaxed);
@@ -464,12 +470,7 @@ impl SessionManager {
     ///
     /// # Returns
     /// The newly created session state.
-    pub fn create_session(
-        &self,
-        token_hash: &str,
-        ip: IpAddr,
-        ja4: Option<&str>,
-    ) -> SessionState {
+    pub fn create_session(&self, token_hash: &str, ip: IpAddr, ja4: Option<&str>) -> SessionState {
         if !self.config.enabled {
             return SessionState::new(generate_session_id(), token_hash.to_string());
         }
@@ -491,8 +492,10 @@ impl SessionManager {
         }
 
         // Insert into maps
-        self.session_by_id.insert(session_id.clone(), token_hash.to_string());
-        self.sessions.insert(token_hash.to_string(), session.clone());
+        self.session_by_id
+            .insert(session_id.clone(), token_hash.to_string());
+        self.sessions
+            .insert(token_hash.to_string(), session.clone());
 
         // Update stats
         self.stats.total_sessions.fetch_add(1, Ordering::Relaxed);
@@ -504,14 +507,18 @@ impl SessionManager {
 
     /// Get session by token hash.
     pub fn get_session(&self, token_hash: &str) -> Option<SessionState> {
-        self.sessions.get(token_hash).map(|entry| entry.value().clone())
+        self.sessions
+            .get(token_hash)
+            .map(|entry| entry.value().clone())
     }
 
     /// Get session by session ID.
     pub fn get_session_by_id(&self, session_id: &str) -> Option<SessionState> {
-        self.session_by_id
-            .get(session_id)
-            .and_then(|token_hash| self.sessions.get(token_hash.value()).map(|e| e.value().clone()))
+        self.session_by_id.get(session_id).and_then(|token_hash| {
+            self.sessions
+                .get(token_hash.value())
+                .map(|e| e.value().clone())
+        })
     }
 
     /// Touch session to update activity timestamp.
@@ -589,7 +596,12 @@ impl SessionManager {
     /// List sessions for an actor with pagination.
     ///
     /// Results are sorted by last_activity (most recent first).
-    pub fn list_sessions_by_actor(&self, actor_id: &str, limit: usize, offset: usize) -> Vec<SessionState> {
+    pub fn list_sessions_by_actor(
+        &self,
+        actor_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Vec<SessionState> {
         let mut sessions = self.get_actor_sessions(actor_id);
         sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
         sessions.into_iter().skip(offset).take(limit).collect()
@@ -639,7 +651,9 @@ impl SessionManager {
 
                 // Update suspicious count if first alert
                 if !was_suspicious {
-                    self.stats.suspicious_sessions.fetch_add(1, Ordering::Relaxed);
+                    self.stats
+                        .suspicious_sessions
+                        .fetch_add(1, Ordering::Relaxed);
                 }
 
                 true
@@ -685,7 +699,11 @@ impl SessionManager {
     /// List suspicious sessions with pagination.
     ///
     /// Results are sorted by last_activity (most recent first).
-    pub fn list_suspicious_sessions_paginated(&self, limit: usize, offset: usize) -> Vec<SessionState> {
+    pub fn list_suspicious_sessions_paginated(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Vec<SessionState> {
         let mut sessions = self.list_suspicious_sessions();
         sessions.sort_by(|a, b| b.last_activity.cmp(&a.last_activity));
         sessions.into_iter().skip(offset).take(limit).collect()
@@ -929,7 +947,9 @@ impl SessionManager {
             self.stats.active_sessions.fetch_sub(1, Ordering::Relaxed);
 
             if session.is_suspicious {
-                self.stats.suspicious_sessions.fetch_sub(1, Ordering::Relaxed);
+                self.stats
+                    .suspicious_sessions
+                    .fetch_sub(1, Ordering::Relaxed);
             }
 
             return true;
@@ -970,7 +990,9 @@ fn generate_session_id() -> String {
         u16::from_be_bytes([bytes[4], bytes[5]]),
         u16::from_be_bytes([bytes[6], bytes[7]]),
         u16::from_be_bytes([bytes[8], bytes[9]]),
-        u64::from_be_bytes([0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]])
+        u64::from_be_bytes([
+            0, 0, bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+        ])
     )
 }
 
@@ -1578,8 +1600,9 @@ mod tests {
             handles.push(thread::spawn(move || {
                 let actor_id = format!("actor_{}", thread_id);
                 for i in 0..300 {
-                    let ip: IpAddr =
-                        format!("10.{}.{}.{}", thread_id, i / 256, i % 256).parse().unwrap();
+                    let ip: IpAddr = format!("10.{}.{}.{}", thread_id, i / 256, i % 256)
+                        .parse()
+                        .unwrap();
                     let token = format!("token_t{}_{}", thread_id, i);
                     let ja4 = format!("ja4_t{}_{}", thread_id, i % 10);
 

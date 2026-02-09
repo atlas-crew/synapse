@@ -8,32 +8,36 @@
 //! - WAF statistics (`GET /waf/stats`)
 //! - Site-specific configuration (`PUT /sites/:hostname/waf`, etc.)
 
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use parking_lot::RwLock;
 
-use crate::health::{HealthChecker, HealthResponse};
-use crate::metrics::MetricsRegistry;
-use crate::reload::{ConfigReloader, ReloadResult};
-use crate::ratelimit::{RateLimitManager, RateLimitStats};
 use crate::access::AccessListManager;
-use crate::config_manager::{
-    ConfigManager, CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
-    RateLimitRequest, AccessListRequest, MutationResult, SiteDetailResponse,
-};
-use crate::block_log::{BlockLog, BlockEvent};
-use crate::entity::{EntityManager, EntitySnapshot};
-use crate::correlation::CampaignManager;
 use crate::actor::{ActorManager, ActorState, ActorStatsSnapshot};
-use crate::session::{SessionManager, SessionState, SessionStatsSnapshot};
-use crate::payload::{PayloadManager, EndpointSortBy};
-use crate::trends::{TrendsManager, AnomalyQueryOptions, TrendQueryOptions, TopSignalType, TimeRange};
-use crate::intelligence::{SignalManager, SignalQueryOptions, Signal, SignalSummary};
+use crate::block_log::{BlockEvent, BlockLog};
+use crate::config_manager::{
+    AccessListRequest, ConfigManager, CreateSiteRequest, MutationResult, RateLimitRequest,
+    SiteDetailResponse, SiteWafRequest, UpdateSiteRequest,
+};
+use crate::correlation::CampaignManager;
 use crate::crawler::CrawlerDetector;
-use crate::horizon::{HorizonClient, ThreatSignal};
 use crate::dlp::DlpScanner;
-use crate::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader, Action as SynapseAction, TraceSink};
+use crate::entity::{EntityManager, EntitySnapshot};
+use crate::health::{HealthChecker, HealthResponse};
+use crate::horizon::{HorizonClient, ThreatSignal};
+use crate::intelligence::{Signal, SignalManager, SignalQueryOptions, SignalSummary};
+use crate::metrics::MetricsRegistry;
+use crate::payload::{EndpointSortBy, PayloadManager};
+use crate::ratelimit::{RateLimitManager, RateLimitStats};
+use crate::reload::{ConfigReloader, ReloadResult};
+use crate::session::{SessionManager, SessionState, SessionStatsSnapshot};
+use crate::trends::{
+    AnomalyQueryOptions, TimeRange, TopSignalType, TrendQueryOptions, TrendsManager,
+};
+use crate::waf::{
+    Action as SynapseAction, Header as SynapseHeader, Request as SynapseRequest, Synapse, TraceSink,
+};
 
 /// API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,8 +164,8 @@ impl ApiHandler {
         match &self.horizon_client {
             Some(client) => {
                 client.flush_signals().await; // Flush any pending signals first
-                // Blocklist sync is handled automatically by client reconnect/heartbeat
-                // but we can expose it if needed.
+                                              // Blocklist sync is handled automatically by client reconnect/heartbeat
+                                              // but we can expose it if needed.
                 Ok(())
             }
             None => Err("Horizon client not available".to_string()),
@@ -215,7 +219,11 @@ impl ApiHandler {
                 .iter()
                 .map(|s| SiteInfo {
                     hostname: s.hostname.clone(),
-                    upstreams: s.upstreams.iter().map(|u| format!("{}:{}", u.host, u.port)).collect(),
+                    upstreams: s
+                        .upstreams
+                        .iter()
+                        .map(|u| format!("{}:{}", u.host, u.port))
+                        .collect(),
                     tls_enabled: s.tls.is_some(),
                     waf_enabled: s.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
                 })
@@ -311,7 +319,11 @@ impl ApiHandler {
     }
 
     /// Handles PUT /sites/:hostname request - updates site configuration.
-    pub fn handle_update_site(&self, hostname: &str, request: UpdateSiteRequest) -> ApiResponse<MutationResult> {
+    pub fn handle_update_site(
+        &self,
+        hostname: &str,
+        request: UpdateSiteRequest,
+    ) -> ApiResponse<MutationResult> {
         match &self.config_manager {
             Some(manager) => match manager.update_site(hostname, request) {
                 Ok(result) => ApiResponse::ok(result),
@@ -333,7 +345,11 @@ impl ApiHandler {
     }
 
     /// Handles PUT /sites/:hostname/waf request - updates WAF configuration.
-    pub fn handle_update_site_waf(&self, hostname: &str, request: SiteWafRequest) -> ApiResponse<MutationResult> {
+    pub fn handle_update_site_waf(
+        &self,
+        hostname: &str,
+        request: SiteWafRequest,
+    ) -> ApiResponse<MutationResult> {
         match &self.config_manager {
             Some(manager) => match manager.update_site_waf(hostname, request) {
                 Ok(result) => ApiResponse::ok(result),
@@ -344,7 +360,11 @@ impl ApiHandler {
     }
 
     /// Handles PUT /sites/:hostname/rate-limit request - updates rate limit configuration.
-    pub fn handle_update_site_rate_limit(&self, hostname: &str, request: RateLimitRequest) -> ApiResponse<MutationResult> {
+    pub fn handle_update_site_rate_limit(
+        &self,
+        hostname: &str,
+        request: RateLimitRequest,
+    ) -> ApiResponse<MutationResult> {
         match &self.config_manager {
             Some(manager) => match manager.update_site_rate_limit(hostname, request) {
                 Ok(result) => ApiResponse::ok(result),
@@ -355,7 +375,11 @@ impl ApiHandler {
     }
 
     /// Handles PUT /sites/:hostname/access-list request - updates access list.
-    pub fn handle_update_site_access_list(&self, hostname: &str, request: AccessListRequest) -> ApiResponse<MutationResult> {
+    pub fn handle_update_site_access_list(
+        &self,
+        hostname: &str,
+        request: AccessListRequest,
+    ) -> ApiResponse<MutationResult> {
         match &self.config_manager {
             Some(manager) => match manager.update_site_access_list(hostname, request) {
                 Ok(result) => ApiResponse::ok(result),
@@ -374,7 +398,10 @@ impl ApiHandler {
     }
 
     /// Handles POST /config request - updates full configuration.
-    pub fn handle_update_config(&self, config: crate::config::ConfigFile) -> ApiResponse<MutationResult> {
+    pub fn handle_update_config(
+        &self,
+        config: crate::config::ConfigFile,
+    ) -> ApiResponse<MutationResult> {
         match &self.config_manager {
             Some(manager) => match manager.update_full_config(config) {
                 Ok(result) => ApiResponse::ok(result),
@@ -544,7 +571,9 @@ impl ApiHandler {
 
     /// Handles GET /_sensor/actors/stats request - returns actor statistics.
     pub fn handle_actor_stats(&self) -> Option<ActorStatsSnapshot> {
-        self.actor_manager.as_ref().map(|manager| manager.stats().snapshot())
+        self.actor_manager
+            .as_ref()
+            .map(|manager| manager.stats().snapshot())
     }
 
     /// Handles GET /_sensor/sessions request - returns active sessions.
@@ -557,7 +586,9 @@ impl ApiHandler {
 
     /// Handles GET /_sensor/sessions/stats request - returns session statistics.
     pub fn handle_session_stats(&self) -> Option<SessionStatsSnapshot> {
-        self.session_manager.as_ref().map(|manager| manager.stats().snapshot())
+        self.session_manager
+            .as_ref()
+            .map(|manager| manager.stats().snapshot())
     }
 
     /// Handles GET /_sensor/entities request - returns top entities by risk.
@@ -589,7 +620,10 @@ impl ApiHandler {
     }
 
     /// Handles GET /_sensor/payload/endpoints - returns top endpoints by traffic.
-    pub fn handle_payload_endpoints(&self, limit: usize) -> ApiResponse<Vec<EndpointPayloadSummary>> {
+    pub fn handle_payload_endpoints(
+        &self,
+        limit: usize,
+    ) -> ApiResponse<Vec<EndpointPayloadSummary>> {
         match &self.payload_manager {
             Some(manager) => {
                 let endpoints = manager.list_top_endpoints(limit, EndpointSortBy::RequestCount);
@@ -609,7 +643,10 @@ impl ApiHandler {
     }
 
     /// Handles GET /_sensor/payload/anomalies - returns recent payload anomalies.
-    pub fn handle_payload_anomalies(&self, limit: usize) -> ApiResponse<Vec<PayloadAnomalyResponse>> {
+    pub fn handle_payload_anomalies(
+        &self,
+        limit: usize,
+    ) -> ApiResponse<Vec<PayloadAnomalyResponse>> {
         match &self.payload_manager {
             Some(manager) => {
                 let anomalies = manager.get_anomalies(limit);
@@ -749,11 +786,15 @@ impl ApiHandler {
     }
 
     /// Handles GET /_sensor/horizon/blocklist - returns blocklist entries.
-    pub fn handle_horizon_blocklist(&self, limit: usize) -> ApiResponse<Vec<BlocklistEntryResponse>> {
+    pub fn handle_horizon_blocklist(
+        &self,
+        limit: usize,
+    ) -> ApiResponse<Vec<BlocklistEntryResponse>> {
         match &self.horizon_client {
             Some(client) => {
                 let blocklist = client.blocklist();
-                let mut entries: Vec<BlocklistEntryResponse> = blocklist.all_ips()
+                let mut entries: Vec<BlocklistEntryResponse> = blocklist
+                    .all_ips()
                     .into_iter()
                     .chain(blocklist.all_fingerprints().into_iter())
                     .take(limit)
@@ -1028,17 +1069,21 @@ impl ApiHandlerBuilder {
 
     /// Builds the API handler.
     pub fn build(self) -> ApiHandler {
-        let metrics = self.metrics.unwrap_or_else(|| Arc::new(MetricsRegistry::new()));
+        let metrics = self
+            .metrics
+            .unwrap_or_else(|| Arc::new(MetricsRegistry::new()));
         ApiHandler {
-            health: self.health.unwrap_or_else(|| Arc::new(HealthChecker::default())),
+            health: self
+                .health
+                .unwrap_or_else(|| Arc::new(HealthChecker::default())),
             metrics: metrics.clone(),
             reloader: self.reloader,
-            rate_limiter: self.rate_limiter.unwrap_or_else(|| {
-                Arc::new(RwLock::new(RateLimitManager::new()))
-            }),
-            access_lists: self.access_lists.unwrap_or_else(|| {
-                Arc::new(RwLock::new(AccessListManager::new()))
-            }),
+            rate_limiter: self
+                .rate_limiter
+                .unwrap_or_else(|| Arc::new(RwLock::new(RateLimitManager::new()))),
+            access_lists: self
+                .access_lists
+                .unwrap_or_else(|| Arc::new(RwLock::new(AccessListManager::new()))),
             config_manager: self.config_manager,
             auth_token: self.auth_token,
             entity_manager: self.entity_manager,
@@ -1264,9 +1309,7 @@ mod tests {
 
     #[test]
     fn test_api_handler_builder() {
-        let handler = ApiHandler::builder()
-            .auth_token("secret")
-            .build();
+        let handler = ApiHandler::builder().auth_token("secret").build();
 
         assert!(handler.validate_auth(Some("secret")));
         assert!(!handler.validate_auth(Some("wrong")));

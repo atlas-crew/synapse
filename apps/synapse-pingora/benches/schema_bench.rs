@@ -181,10 +181,8 @@ fn bench_schema_validate(c: &mut Criterion) {
 
     group.bench_function("validate_unknown_endpoint", |b| {
         b.iter(|| {
-            let result = learner.validate_request(
-                black_box("/api/never-seen"),
-                black_box(&conforming),
-            );
+            let result =
+                learner.validate_request(black_box("/api/never-seen"), black_box(&conforming));
             black_box(result);
         });
     });
@@ -235,19 +233,15 @@ fn bench_schema_nested(c: &mut Criterion) {
     for depth in [3, 5, 8] {
         let body = nested_json(depth);
 
-        group.bench_with_input(
-            BenchmarkId::new("learn_depth", depth),
-            &body,
-            |b, body| {
-                let learner = SchemaLearner::new();
-                let mut idx = 0u64;
-                b.iter(|| {
-                    let template = format!("/api/nested/{}", idx % 50);
-                    learner.learn_from_request(black_box(&template), black_box(body));
-                    idx += 1;
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("learn_depth", depth), &body, |b, body| {
+            let learner = SchemaLearner::new();
+            let mut idx = 0u64;
+            b.iter(|| {
+                let template = format!("/api/nested/{}", idx % 50);
+                learner.learn_from_request(black_box(&template), black_box(body));
+                idx += 1;
+            });
+        });
     }
 
     group.finish();

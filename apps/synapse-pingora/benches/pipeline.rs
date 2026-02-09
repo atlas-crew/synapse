@@ -10,11 +10,11 @@ use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
 use std::time::Duration;
-use synapse_pingora::ratelimit::TokenBucket;
 use synapse_pingora::access::AccessList;
+use synapse_pingora::ratelimit::TokenBucket;
 use synapse_pingora::tarpit::{TarpitConfig, TarpitManager};
-use synapse_pingora::waf::{Synapse, Request as SynapseRequest, Header as SynapseHeader};
-use synapse_pingora::{EntityManager, EntityConfig};
+use synapse_pingora::waf::{Header as SynapseHeader, Request as SynapseRequest, Synapse};
+use synapse_pingora::{EntityConfig, EntityManager};
 
 // ============================================================================
 // 1. Rate Limiting — Token Bucket
@@ -30,9 +30,7 @@ fn bench_rate_limit_acquire(c: &mut Criterion) {
     let bucket_high = TokenBucket::new(1_000_000, 2_000_000);
 
     group.bench_function("try_acquire_high_rps", |b| {
-        b.iter(|| {
-            black_box(bucket_high.try_acquire())
-        })
+        b.iter(|| black_box(bucket_high.try_acquire()))
     });
 
     // Low-RPS bucket (will exhaust quickly, measuring the "denied" fast-path)
@@ -41,18 +39,14 @@ fn bench_rate_limit_acquire(c: &mut Criterion) {
     bucket_low.try_acquire();
 
     group.bench_function("try_acquire_exhausted", |b| {
-        b.iter(|| {
-            black_box(bucket_low.try_acquire())
-        })
+        b.iter(|| black_box(bucket_low.try_acquire()))
     });
 
     // Production-typical bucket (1000 RPS, 2000 burst)
     let bucket_prod = TokenBucket::new(1000, 2000);
 
     group.bench_function("try_acquire_1000rps", |b| {
-        b.iter(|| {
-            black_box(bucket_prod.try_acquire())
-        })
+        b.iter(|| black_box(bucket_prod.try_acquire()))
     });
 
     group.finish();
@@ -82,21 +76,15 @@ fn bench_access_control(c: &mut Criterion) {
     small_acl.allow("127.0.0.1/32").unwrap();
 
     group.bench_function("small_acl_5_rules_hit_first", |b| {
-        b.iter(|| {
-            black_box(small_acl.check(black_box(&allowed_ip)))
-        })
+        b.iter(|| black_box(small_acl.check(black_box(&allowed_ip))))
     });
 
     group.bench_function("small_acl_5_rules_hit_second", |b| {
-        b.iter(|| {
-            black_box(small_acl.check(black_box(&denied_ip)))
-        })
+        b.iter(|| black_box(small_acl.check(black_box(&denied_ip))))
     });
 
     group.bench_function("small_acl_5_rules_no_match", |b| {
-        b.iter(|| {
-            black_box(small_acl.check(black_box(&nomatch_ip)))
-        })
+        b.iter(|| black_box(small_acl.check(black_box(&nomatch_ip))))
     });
 
     // Large ACL (100 rules) — enterprise config with many CIDR blocks
@@ -113,21 +101,15 @@ fn bench_access_control(c: &mut Criterion) {
 
     group.bench_function("large_acl_100_rules_first_match", |b| {
         let ip: IpAddr = "192.168.0.1".parse().unwrap();
-        b.iter(|| {
-            black_box(large_acl.check(black_box(&ip)))
-        })
+        b.iter(|| black_box(large_acl.check(black_box(&ip))))
     });
 
     group.bench_function("large_acl_100_rules_last_match", |b| {
-        b.iter(|| {
-            black_box(large_acl.check(black_box(&last_match_ip)))
-        })
+        b.iter(|| black_box(large_acl.check(black_box(&last_match_ip))))
     });
 
     group.bench_function("large_acl_100_rules_no_match", |b| {
-        b.iter(|| {
-            black_box(large_acl.check(black_box(&nomatch_ip)))
-        })
+        b.iter(|| black_box(large_acl.check(black_box(&nomatch_ip))))
     });
 
     // IPv6 matching
@@ -140,15 +122,11 @@ fn bench_access_control(c: &mut Criterion) {
     let ipv6_nomatch: IpAddr = "2607:f8b0::1".parse().unwrap();
 
     group.bench_function("ipv6_acl_match", |b| {
-        b.iter(|| {
-            black_box(ipv6_acl.check(black_box(&ipv6_addr)))
-        })
+        b.iter(|| black_box(ipv6_acl.check(black_box(&ipv6_addr))))
     });
 
     group.bench_function("ipv6_acl_no_match", |b| {
-        b.iter(|| {
-            black_box(ipv6_acl.check(black_box(&ipv6_nomatch)))
-        })
+        b.iter(|| black_box(ipv6_acl.check(black_box(&ipv6_nomatch))))
     });
 
     group.finish();
@@ -177,23 +155,17 @@ fn bench_tarpit_calculation(c: &mut Criterion) {
 
     // Read-only delay check for a known entity at high level
     group.bench_function("peek_delay_high_level", |b| {
-        b.iter(|| {
-            black_box(manager.peek_delay(black_box("192.168.1.99")))
-        })
+        b.iter(|| black_box(manager.peek_delay(black_box("192.168.1.99"))))
     });
 
     // Read-only delay check for unknown entity (DashMap miss)
     group.bench_function("peek_delay_unknown", |b| {
-        b.iter(|| {
-            black_box(manager.peek_delay(black_box("203.0.113.1")))
-        })
+        b.iter(|| black_box(manager.peek_delay(black_box("203.0.113.1"))))
     });
 
     // Tarpit call with state mutation (DashMap write + level increment + LRU touch)
     group.bench_function("tarpit_mutating", |b| {
-        b.iter(|| {
-            black_box(manager.tarpit(black_box("10.0.0.1")))
-        })
+        b.iter(|| black_box(manager.tarpit(black_box("10.0.0.1"))))
     });
 
     group.finish();
@@ -272,9 +244,7 @@ fn bench_full_pipeline(c: &mut Criterion) {
         method: "GET",
         path: "/api/search?q=1'+UNION+SELECT+username,password+FROM+users--",
         query: None,
-        headers: vec![
-            SynapseHeader::new("user-agent", "Mozilla/5.0"),
-        ],
+        headers: vec![SynapseHeader::new("user-agent", "Mozilla/5.0")],
         body: None,
         client_ip: test_ip_str,
         is_static: false,
@@ -321,9 +291,7 @@ fn bench_access_control_scaling(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new("check_no_match", rule_count),
             &acl,
-            |b, acl| {
-                b.iter(|| black_box(acl.check(black_box(&test_ip))))
-            },
+            |b, acl| b.iter(|| black_box(acl.check(black_box(&test_ip)))),
         );
     }
 

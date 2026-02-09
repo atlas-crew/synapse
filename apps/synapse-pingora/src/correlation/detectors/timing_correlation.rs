@@ -9,10 +9,8 @@ use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, DashSet};
 
-use crate::correlation::{
-    FingerprintIndex, CampaignUpdate, CorrelationType, CorrelationReason,
-};
 use super::{Detector, DetectorResult};
+use crate::correlation::{CampaignUpdate, CorrelationReason, CorrelationType, FingerprintIndex};
 
 /// Configuration for timing correlation detection
 #[derive(Debug, Clone)]
@@ -85,7 +83,8 @@ impl TimingCorrelationDetector {
     }
 
     fn get_correlated_groups(&self) -> Vec<(u64, Vec<IpAddr>)> {
-        self.timing_buckets.iter()
+        self.timing_buckets
+            .iter()
             .filter(|entry| !self.detected.contains(entry.key()))
             .filter_map(|entry| {
                 let bucket = *entry.key();
@@ -94,7 +93,8 @@ impl TimingCorrelationDetector {
                 let unique_ips: HashSet<IpAddr> = entries.iter().map(|(ip, _)| *ip).collect();
 
                 if unique_ips.len() >= self.config.min_ips
-                   && entries.len() >= self.config.min_bucket_hits {
+                    && entries.len() >= self.config.min_bucket_hits
+                {
                     Some((bucket, unique_ips.into_iter().collect()))
                 } else {
                     None
@@ -105,14 +105,17 @@ impl TimingCorrelationDetector {
 }
 
 impl Detector for TimingCorrelationDetector {
-    fn name(&self) -> &'static str { "timing_correlation" }
+    fn name(&self) -> &'static str {
+        "timing_correlation"
+    }
 
     fn analyze(&self, _index: &FingerprintIndex) -> DetectorResult<Vec<CampaignUpdate>> {
         let groups = self.get_correlated_groups();
         let mut updates = Vec::new();
 
         for (bucket, ips) in groups {
-            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0) * self.config.base_confidence;
+            let confidence = (ips.len() as f64 / self.config.confidence_scale_divisor).min(1.0)
+                * self.config.base_confidence;
 
             updates.push(CampaignUpdate {
                 campaign_id: Some(format!("timing-{}", bucket)),
@@ -140,12 +143,15 @@ impl Detector for TimingCorrelationDetector {
         let now = Instant::now();
         let bucket = self.bucket_id(now);
 
-        self.timing_buckets.get(&bucket)
+        self.timing_buckets
+            .get(&bucket)
             .map(|entries| entries.len() >= self.config.min_bucket_hits - 1)
             .unwrap_or(false)
     }
 
-    fn scan_interval_ms(&self) -> u64 { 2000 } // 2 seconds - timing sensitive
+    fn scan_interval_ms(&self) -> u64 {
+        2000
+    } // 2 seconds - timing sensitive
 }
 
 #[cfg(test)]

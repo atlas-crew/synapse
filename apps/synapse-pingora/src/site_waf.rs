@@ -3,11 +3,11 @@
 //! This module provides granular WAF policy control with per-site settings,
 //! rule overrides, and custom block pages.
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
 use ahash::RandomState;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tracing::{info, warn};
 
 /// Default block page HTML template.
 const DEFAULT_BLOCK_PAGE: &str = r#"<!DOCTYPE html>
@@ -327,7 +327,9 @@ impl SiteWafManager {
     /// Gets the WAF config for a site, falling back to default.
     pub fn get_config(&self, hostname: &str) -> &SiteWafConfig {
         let normalized = hostname.to_lowercase();
-        self.configs.get(&normalized).unwrap_or(&self.default_config)
+        self.configs
+            .get(&normalized)
+            .unwrap_or(&self.default_config)
     }
 
     /// Gets a mutable reference to a site's WAF config.
@@ -497,7 +499,10 @@ mod tests {
         config.custom_block_page = Some("Custom: {{REQUEST_ID}} - {{REASON}}".to_string());
 
         let page = config.render_block_page("xyz789", "<script>alert(1)</script>");
-        assert_eq!(page, "Custom: xyz789 - &lt;script&gt;alert(1)&lt;/script&gt;");
+        assert_eq!(
+            page,
+            "Custom: xyz789 - &lt;script&gt;alert(1)&lt;/script&gt;"
+        );
     }
 
     #[test]
@@ -608,7 +613,9 @@ mod tests {
             threshold: Some(90),
             enabled: false, // Disabled
         };
-        config.rule_overrides.insert("rule-123".to_string(), override_config);
+        config
+            .rule_overrides
+            .insert("rule-123".to_string(), override_config);
 
         // Disabled override should fall back to default
         assert_eq!(config.get_rule_action("rule-123"), WafAction::Block);

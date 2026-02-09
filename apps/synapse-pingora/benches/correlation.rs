@@ -11,8 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use synapse_pingora::correlation::{
-    Campaign, CampaignManager, CorrelationReason,
-    CorrelationType, FingerprintIndex, ManagerConfig,
+    Campaign, CampaignManager, CorrelationReason, CorrelationType, FingerprintIndex, ManagerConfig,
 };
 
 // ============================================================================
@@ -324,11 +323,7 @@ fn bench_campaign_scoring(c: &mut Criterion) {
 
     // Create a campaign manually in the store so we can score it
     let actors: Vec<String> = ip_pool.iter().take(10).cloned().collect();
-    let mut campaign = Campaign::new(
-        Campaign::generate_id(),
-        actors,
-        0.85,
-    );
+    let mut campaign = Campaign::new(Campaign::generate_id(), actors, 0.85);
     // Add multiple correlation reasons for realistic scoring
     campaign.correlation_reasons.push(CorrelationReason::new(
         CorrelationType::TlsFingerprint,
@@ -404,11 +399,7 @@ fn bench_fingerprint_contention(c: &mut Criterion) {
                                         if i % 5 == 0 {
                                             // 20% writes
                                             let fp = &fp_pool[key % fp_pool.len()];
-                                            index.update_entity(
-                                                &ip_pool[key],
-                                                Some(fp),
-                                                None,
-                                            );
+                                            index.update_entity(&ip_pool[key], Some(fp), None);
                                         } else {
                                             // 80% reads
                                             let fp = &fp_pool[key % fp_pool.len()];

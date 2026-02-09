@@ -17,15 +17,18 @@ use crate::access::AccessListManager;
 use crate::config::{AccessControlConfig, ConfigFile};
 use crate::ratelimit::RateLimitManager;
 use crate::site_waf::SiteWafManager;
-use crate::validation::{validate_hostname, validate_upstream, validate_cidr, validate_waf_threshold, validate_rate_limit, ValidationError};
+use crate::validation::{
+    validate_cidr, validate_hostname, validate_rate_limit, validate_upstream,
+    validate_waf_threshold, ValidationError,
+};
 use crate::vhost::{SiteConfig, VhostMatcher};
 use crate::waf::Synapse;
 
 #[path = "rules.rs"]
 mod rules;
 pub use rules::{
-    CustomRuleAction, CustomRuleCondition, CustomRuleInput, CustomRuleUpdate,
-    RuleMetadata, RuleView, StoredRule,
+    CustomRuleAction, CustomRuleCondition, CustomRuleInput, CustomRuleUpdate, RuleMetadata,
+    RuleView, StoredRule,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -269,7 +272,10 @@ impl ConfigManager {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// Creates a new site configuration.
-    pub fn create_site(&self, req: CreateSiteRequest) -> Result<MutationResult, ConfigManagerError> {
+    pub fn create_site(
+        &self,
+        req: CreateSiteRequest,
+    ) -> Result<MutationResult, ConfigManagerError> {
         let mut result = MutationResult::new();
 
         // Validate hostname
@@ -305,7 +311,10 @@ impl ConfigManager {
         // Check for duplicate hostname
         {
             let sites = self.sites.read();
-            if sites.iter().any(|s| s.hostname.to_lowercase() == req.hostname.to_lowercase()) {
+            if sites
+                .iter()
+                .any(|s| s.hostname.to_lowercase() == req.hostname.to_lowercase())
+            {
                 return Err(ConfigManagerError::SiteExists(req.hostname.clone()));
             }
         }
@@ -317,13 +326,19 @@ impl ConfigManager {
             tls_enabled: false,
             tls_cert: None,
             tls_key: None,
-            waf_threshold: req.waf.as_ref().and_then(|w| w.threshold.map(|t| (t * 100.0) as u8)),
+            waf_threshold: req
+                .waf
+                .as_ref()
+                .and_then(|w| w.threshold.map(|t| (t * 100.0) as u8)),
             waf_enabled: req.waf.as_ref().map(|w| w.enabled).unwrap_or(true),
-            access_control: req.access_list.as_ref().map(|access_list| AccessControlConfig {
-                allow: access_list.allow.clone(),
-                deny: access_list.deny.clone(),
-                default_action: "allow".to_string(),
-            }),
+            access_control: req
+                .access_list
+                .as_ref()
+                .map(|access_list| AccessControlConfig {
+                    allow: access_list.allow.clone(),
+                    deny: access_list.deny.clone(),
+                    default_action: "allow".to_string(),
+                }),
             headers: None,
             shadow_mirror: None,
         };
@@ -338,16 +353,24 @@ impl ConfigManager {
             let mut waf = self.waf.write();
 
             if let Some(waf_req) = &req.waf {
-                let rule_overrides = waf_req.rule_overrides.as_ref()
+                let rule_overrides = waf_req
+                    .rule_overrides
+                    .as_ref()
                     .map(|overrides| {
-                        overrides.iter().map(|(rule_id, _enabled)| {
-                            (rule_id.clone(), crate::site_waf::RuleOverride {
-                                rule_id: rule_id.clone(),
-                                action: crate::site_waf::WafAction::Block,
-                                threshold: None,
-                                enabled: *_enabled,
+                        overrides
+                            .iter()
+                            .map(|(rule_id, _enabled)| {
+                                (
+                                    rule_id.clone(),
+                                    crate::site_waf::RuleOverride {
+                                        rule_id: rule_id.clone(),
+                                        action: crate::site_waf::WafAction::Block,
+                                        threshold: None,
+                                        enabled: *_enabled,
+                                    },
+                                )
                             })
-                        }).collect()
+                            .collect()
                     })
                     .unwrap_or_default();
 
@@ -386,7 +409,9 @@ impl ConfigManager {
                     }
                 }
 
-                self.access_lists.write().add_site(&req.hostname, access_list);
+                self.access_lists
+                    .write()
+                    .add_site(&req.hostname, access_list);
             }
 
             info!(hostname = %req.hostname, site_id = site_id, "created new site");
@@ -426,7 +451,9 @@ impl ConfigManager {
         let waf_response = Some(SiteWafResponse {
             enabled: waf_config.enabled,
             threshold: waf_config.threshold,
-            rule_overrides: waf_config.rule_overrides.iter()
+            rule_overrides: waf_config
+                .rule_overrides
+                .iter()
                 .map(|(k, v)| (k.clone(), format!("{:?}", v.action)))
                 .collect(),
         });
@@ -451,16 +478,23 @@ impl ConfigManager {
     /// Returns full site info for all sites (for API response).
     pub fn get_sites_info(&self) -> Vec<crate::api::SiteInfo> {
         let sites = self.sites.read();
-        sites.iter().map(|s| crate::api::SiteInfo {
-            hostname: s.hostname.clone(),
-            upstreams: s.upstreams.clone(),
-            tls_enabled: s.tls_enabled,
-            waf_enabled: s.waf_enabled,
-        }).collect()
+        sites
+            .iter()
+            .map(|s| crate::api::SiteInfo {
+                hostname: s.hostname.clone(),
+                upstreams: s.upstreams.clone(),
+                tls_enabled: s.tls_enabled,
+                waf_enabled: s.waf_enabled,
+            })
+            .collect()
     }
 
     /// Updates an existing site configuration.
-    pub fn update_site(&self, hostname: &str, req: UpdateSiteRequest) -> Result<MutationResult, ConfigManagerError> {
+    pub fn update_site(
+        &self,
+        hostname: &str,
+        req: UpdateSiteRequest,
+    ) -> Result<MutationResult, ConfigManagerError> {
         let mut result = MutationResult::new();
 
         // Validate upstreams if provided
@@ -514,16 +548,24 @@ impl ConfigManager {
                 site.waf_enabled = waf_req.enabled;
                 site.waf_threshold = waf_req.threshold.map(|t| (t * 100.0) as u8);
 
-                let rule_overrides = waf_req.rule_overrides.as_ref()
+                let rule_overrides = waf_req
+                    .rule_overrides
+                    .as_ref()
                     .map(|overrides| {
-                        overrides.iter().map(|(rule_id, _enabled)| {
-                            (rule_id.clone(), crate::site_waf::RuleOverride {
-                                rule_id: rule_id.clone(),
-                                action: crate::site_waf::WafAction::Block,
-                                threshold: None,
-                                enabled: *_enabled,
+                        overrides
+                            .iter()
+                            .map(|(rule_id, _enabled)| {
+                                (
+                                    rule_id.clone(),
+                                    crate::site_waf::RuleOverride {
+                                        rule_id: rule_id.clone(),
+                                        action: crate::site_waf::WafAction::Block,
+                                        threshold: None,
+                                        enabled: *_enabled,
+                                    },
+                                )
                             })
-                        }).collect()
+                            .collect()
                     })
                     .unwrap_or_default();
 
@@ -674,51 +716,63 @@ impl ConfigManager {
     ///
     /// This replaces the entire configuration state and triggers a rebuild
     /// of all dependent components (VHost, WAF, RateLimit, AccessList).
-    pub fn update_full_config(&self, new_config: ConfigFile) -> Result<MutationResult, ConfigManagerError> {
+    pub fn update_full_config(
+        &self,
+        new_config: ConfigFile,
+    ) -> Result<MutationResult, ConfigManagerError> {
         let mut result = MutationResult::new();
 
         // Validate the new configuration comprehensively
         if new_config.sites.is_empty() {
-             // It's allowed to have no sites, but worth a warning
-             result.add_warning("Configuration has no sites defined");
+            // It's allowed to have no sites, but worth a warning
+            result.add_warning("Configuration has no sites defined");
         }
 
         // Validate each site in the configuration
-        let mut seen_hostnames: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut seen_hostnames: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         for (idx, site) in new_config.sites.iter().enumerate() {
             // Validate hostname
             if let Err(e) = validate_hostname(&site.hostname) {
-                return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                    "Site[{}] hostname '{}': {}",
-                    idx, site.hostname, e
-                ))));
+                return Err(ConfigManagerError::Validation(
+                    ValidationError::InvalidDomain(format!(
+                        "Site[{}] hostname '{}': {}",
+                        idx, site.hostname, e
+                    )),
+                ));
             }
 
             // Check for duplicate hostnames
             let normalized = site.hostname.to_lowercase();
             if seen_hostnames.contains(&normalized) {
-                return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                    "Site[{}] hostname '{}' is duplicated",
-                    idx, site.hostname
-                ))));
+                return Err(ConfigManagerError::Validation(
+                    ValidationError::InvalidDomain(format!(
+                        "Site[{}] hostname '{}' is duplicated",
+                        idx, site.hostname
+                    )),
+                ));
             }
             seen_hostnames.insert(normalized);
 
             // Validate upstreams
             if site.upstreams.is_empty() {
-                return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                    "Site[{}] '{}' has no upstreams defined",
-                    idx, site.hostname
-                ))));
+                return Err(ConfigManagerError::Validation(
+                    ValidationError::InvalidDomain(format!(
+                        "Site[{}] '{}' has no upstreams defined",
+                        idx, site.hostname
+                    )),
+                ));
             }
             for (u_idx, upstream) in site.upstreams.iter().enumerate() {
                 // UpstreamConfig has host/port fields - format as host:port for validation
                 let upstream_str = format!("{}:{}", upstream.host, upstream.port);
                 if let Err(e) = validate_upstream(&upstream_str) {
-                    return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                        "Site[{}] '{}' upstream[{}] '{}:{}': {}",
-                        idx, site.hostname, u_idx, upstream.host, upstream.port, e
-                    ))));
+                    return Err(ConfigManagerError::Validation(
+                        ValidationError::InvalidDomain(format!(
+                            "Site[{}] '{}' upstream[{}] '{}:{}': {}",
+                            idx, site.hostname, u_idx, upstream.host, upstream.port, e
+                        )),
+                    ));
                 }
             }
 
@@ -727,10 +781,12 @@ impl ConfigManager {
                 if let Some(threshold) = waf.threshold {
                     // threshold is u8 (0-255), validate_waf_threshold expects f64 (0-100)
                     if let Err(e) = validate_waf_threshold(threshold as f64) {
-                        return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                            "Site[{}] '{}' WAF threshold: {}",
-                            idx, site.hostname, e
-                        ))));
+                        return Err(ConfigManagerError::Validation(
+                            ValidationError::InvalidDomain(format!(
+                                "Site[{}] '{}' WAF threshold: {}",
+                                idx, site.hostname, e
+                            )),
+                        ));
                     }
                 }
             }
@@ -741,10 +797,12 @@ impl ConfigManager {
                 // validate_rate_limit expects (requests: u64, window: u64)
                 let burst = rl.burst.unwrap_or(rl.rps.saturating_mul(2));
                 if let Err(e) = validate_rate_limit(rl.rps as u64, burst as u64) {
-                    return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                        "Site[{}] '{}' rate limit: {}",
-                        idx, site.hostname, e
-                    ))));
+                    return Err(ConfigManagerError::Validation(
+                        ValidationError::InvalidDomain(format!(
+                            "Site[{}] '{}' rate limit: {}",
+                            idx, site.hostname, e
+                        )),
+                    ));
                 }
             }
 
@@ -752,18 +810,22 @@ impl ConfigManager {
             if let Some(ref ac) = site.access_control {
                 for (c_idx, cidr) in ac.allow.iter().enumerate() {
                     if let Err(e) = validate_cidr(cidr) {
-                        return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                            "Site[{}] '{}' access_control.allow[{}] '{}': {}",
-                            idx, site.hostname, c_idx, cidr, e
-                        ))));
+                        return Err(ConfigManagerError::Validation(
+                            ValidationError::InvalidDomain(format!(
+                                "Site[{}] '{}' access_control.allow[{}] '{}': {}",
+                                idx, site.hostname, c_idx, cidr, e
+                            )),
+                        ));
                     }
                 }
                 for (c_idx, cidr) in ac.deny.iter().enumerate() {
                     if let Err(e) = validate_cidr(cidr) {
-                        return Err(ConfigManagerError::Validation(ValidationError::InvalidDomain(format!(
-                            "Site[{}] '{}' access_control.deny[{}] '{}': {}",
-                            idx, site.hostname, c_idx, cidr, e
-                        ))));
+                        return Err(ConfigManagerError::Validation(
+                            ValidationError::InvalidDomain(format!(
+                                "Site[{}] '{}' access_control.deny[{}] '{}': {}",
+                                idx, site.hostname, c_idx, cidr, e
+                            )),
+                        ));
                     }
                 }
             }
@@ -777,7 +839,11 @@ impl ConfigManager {
 
             // 2. Update Sites list (convert SiteYamlConfig -> SiteConfig)
             let mut sites = self.sites.write();
-            *sites = new_config.sites.iter().map(|s| crate::vhost::SiteConfig::from(s.clone())).collect();
+            *sites = new_config
+                .sites
+                .iter()
+                .map(|s| crate::vhost::SiteConfig::from(s.clone()))
+                .collect();
 
             // 3. Update SiteWafManager with full state replacement
             // Build set of new hostnames for efficient lookup
@@ -829,7 +895,7 @@ impl ConfigManager {
             // They are managed separately.
             // This means `update_full_config` mainly updates sites/upstreams/tls/waf-threshold.
             // It might lose RL/AccessList state if not persisted in ConfigFile.
-            
+
             // 5. Update AccessListManager with full state replacement
             let mut access_lists = self.access_lists.write();
 
@@ -861,7 +927,7 @@ impl ConfigManager {
 
             info!("Full configuration updated with {} sites", sites.len());
         }
-        
+
         result = result.with_applied();
 
         // Rebuild VhostMatcher
@@ -887,27 +953,48 @@ impl ConfigManager {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// Updates only the WAF configuration for a site.
-    pub fn update_site_waf(&self, hostname: &str, waf_req: SiteWafRequest) -> Result<MutationResult, ConfigManagerError> {
-        self.update_site(hostname, UpdateSiteRequest {
-            waf: Some(waf_req),
-            ..Default::default()
-        })
+    pub fn update_site_waf(
+        &self,
+        hostname: &str,
+        waf_req: SiteWafRequest,
+    ) -> Result<MutationResult, ConfigManagerError> {
+        self.update_site(
+            hostname,
+            UpdateSiteRequest {
+                waf: Some(waf_req),
+                ..Default::default()
+            },
+        )
     }
 
     /// Updates only the rate limit configuration for a site.
-    pub fn update_site_rate_limit(&self, hostname: &str, rate_limit: RateLimitRequest) -> Result<MutationResult, ConfigManagerError> {
-        self.update_site(hostname, UpdateSiteRequest {
-            rate_limit: Some(rate_limit),
-            ..Default::default()
-        })
+    pub fn update_site_rate_limit(
+        &self,
+        hostname: &str,
+        rate_limit: RateLimitRequest,
+    ) -> Result<MutationResult, ConfigManagerError> {
+        self.update_site(
+            hostname,
+            UpdateSiteRequest {
+                rate_limit: Some(rate_limit),
+                ..Default::default()
+            },
+        )
     }
 
     /// Updates only the access list configuration for a site.
-    pub fn update_site_access_list(&self, hostname: &str, access_list: AccessListRequest) -> Result<MutationResult, ConfigManagerError> {
-        self.update_site(hostname, UpdateSiteRequest {
-            access_list: Some(access_list),
-            ..Default::default()
-        })
+    pub fn update_site_access_list(
+        &self,
+        hostname: &str,
+        access_list: AccessListRequest,
+    ) -> Result<MutationResult, ConfigManagerError> {
+        self.update_site(
+            hostname,
+            UpdateSiteRequest {
+                access_list: Some(access_list),
+                ..Default::default()
+            },
+        )
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -924,7 +1011,10 @@ impl ConfigManager {
         let mut rules = self.rules_store.read().clone();
         let rule_id = rules::rule_identifier(&rule);
 
-        if rules.iter().any(|existing| rules::matches_rule_id(existing, &rule_id)) {
+        if rules
+            .iter()
+            .any(|existing| rules::matches_rule_id(existing, &rule_id))
+        {
             return Err(ConfigManagerError::RuleExists(rule_id));
         }
 
@@ -934,9 +1024,16 @@ impl ConfigManager {
     }
 
     /// Update an existing rule and apply changes to the WAF engine.
-    pub fn update_rule(&self, rule_id: &str, update: CustomRuleUpdate) -> Result<StoredRule, ConfigManagerError> {
+    pub fn update_rule(
+        &self,
+        rule_id: &str,
+        update: CustomRuleUpdate,
+    ) -> Result<StoredRule, ConfigManagerError> {
         let mut rules = self.rules_store.read().clone();
-        let Some(index) = rules.iter().position(|rule| rules::matches_rule_id(rule, rule_id)) else {
+        let Some(index) = rules
+            .iter()
+            .position(|rule| rules::matches_rule_id(rule, rule_id))
+        else {
             return Err(ConfigManagerError::RuleNotFound(rule_id.to_string()));
         };
 
@@ -962,7 +1059,11 @@ impl ConfigManager {
     }
 
     /// Replace all rules with a new set and apply to the WAF engine.
-    pub fn replace_rules(&self, rules: Vec<StoredRule>, hash_override: Option<String>) -> Result<usize, ConfigManagerError> {
+    pub fn replace_rules(
+        &self,
+        rules: Vec<StoredRule>,
+        hash_override: Option<String>,
+    ) -> Result<usize, ConfigManagerError> {
         self.apply_rules(rules, true, hash_override)
     }
 
@@ -979,12 +1080,15 @@ impl ConfigManager {
     /// # Returns
     /// * `Ok(count)` - Number of rules received (including disabled rules)
     /// * `Err` - If rules parsing or application fails
-    pub fn update_waf_rules(&self, rules_json: &[u8], hash_override: Option<&str>) -> Result<usize, ConfigManagerError> {
+    pub fn update_waf_rules(
+        &self,
+        rules_json: &[u8],
+        hash_override: Option<&str>,
+    ) -> Result<usize, ConfigManagerError> {
         let value: serde_json::Value = serde_json::from_slice(rules_json)
             .map_err(|e| ConfigManagerError::Persistence(format!("Invalid rules JSON: {}", e)))?;
 
-        let rules = rules::parse_rules_payload(value)
-            .map_err(ConfigManagerError::Persistence)?;
+        let rules = rules::parse_rules_payload(value).map_err(ConfigManagerError::Persistence)?;
 
         let rule_count = rules.len();
 
@@ -1028,8 +1132,7 @@ impl ConfigManager {
             .map_err(|e| ConfigManagerError::Persistence(format!("failed to read rules: {}", e)))?;
         let value: serde_json::Value = serde_json::from_slice(&rules_json)
             .map_err(|e| ConfigManagerError::Persistence(format!("invalid rules JSON: {}", e)))?;
-        let rules = rules::parse_rules_payload(value)
-            .map_err(ConfigManagerError::Persistence)?;
+        let rules = rules::parse_rules_payload(value).map_err(ConfigManagerError::Persistence)?;
 
         if rules.is_empty() {
             return Ok(0);
@@ -1044,8 +1147,9 @@ impl ConfigManager {
         persist: bool,
         hash_override: Option<String>,
     ) -> Result<usize, ConfigManagerError> {
-        let engine = self.rules_engine.as_ref()
-            .ok_or_else(|| ConfigManagerError::Persistence("rules engine not configured".to_string()))?;
+        let engine = self.rules_engine.as_ref().ok_or_else(|| {
+            ConfigManagerError::Persistence("rules engine not configured".to_string())
+        })?;
 
         let mut active_rules: Vec<&StoredRule> = rules
             .iter()
@@ -1055,16 +1159,19 @@ impl ConfigManager {
         active_rules.sort_by(|a, b| {
             let a_priority = a.meta.priority.unwrap_or(100);
             let b_priority = b.meta.priority.unwrap_or(100);
-            a_priority.cmp(&b_priority).then_with(|| a.rule.id.cmp(&b.rule.id))
+            a_priority
+                .cmp(&b_priority)
+                .then_with(|| a.rule.id.cmp(&b.rule.id))
         });
 
         let waf_rules: Vec<_> = active_rules.iter().map(|rule| rule.rule.clone()).collect();
-        let waf_json = serde_json::to_vec(&waf_rules)
-            .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize waf rules: {}", e)))?;
+        let waf_json = serde_json::to_vec(&waf_rules).map_err(|e| {
+            ConfigManagerError::Persistence(format!("failed to serialize waf rules: {}", e))
+        })?;
 
-        let applied = engine.write()
-            .load_rules(&waf_json)
-            .map_err(|e| ConfigManagerError::Persistence(format!("failed to load waf rules: {}", e)))?;
+        let applied = engine.write().load_rules(&waf_json).map_err(|e| {
+            ConfigManagerError::Persistence(format!("failed to load waf rules: {}", e))
+        })?;
 
         *self.rules_store.write() = rules.clone();
 
@@ -1091,18 +1198,23 @@ impl ConfigManager {
             }
         }
 
-        let payload = serde_json::to_vec_pretty(rules)
-            .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize rules: {}", e)))?;
+        let payload = serde_json::to_vec_pretty(rules).map_err(|e| {
+            ConfigManagerError::Persistence(format!("failed to serialize rules: {}", e))
+        })?;
 
         let wal_path = path.with_extension("wal");
-        append_wal_entry(&wal_path, serde_json::json!({
-            "timestamp_ms": current_timestamp_ms(),
-            "type": "rules_update",
-            "rules": rules,
-        }))?;
+        append_wal_entry(
+            &wal_path,
+            serde_json::json!({
+                "timestamp_ms": current_timestamp_ms(),
+                "type": "rules_update",
+                "rules": rules,
+            }),
+        )?;
 
-        write_file_with_fsync(&path, &payload)
-            .map_err(|e| ConfigManagerError::Persistence(format!("failed to write rules: {}", e)))?;
+        write_file_with_fsync(&path, &payload).map_err(|e| {
+            ConfigManagerError::Persistence(format!("failed to write rules: {}", e))
+        })?;
 
         clear_wal(&wal_path)?;
 
@@ -1129,15 +1241,18 @@ impl ConfigManager {
     }
 
     fn persist_config(&self) -> Result<(), ConfigManagerError> {
-        let path = self.config_path.as_ref()
-            .ok_or_else(|| ConfigManagerError::Persistence("no config path configured".to_string()))?;
+        let path = self.config_path.as_ref().ok_or_else(|| {
+            ConfigManagerError::Persistence("no config path configured".to_string())
+        })?;
 
         let config = self.config.read();
-        let yaml = serde_yaml::to_string(&*config)
-            .map_err(|e| ConfigManagerError::Persistence(format!("failed to serialize config: {}", e)))?;
+        let yaml = serde_yaml::to_string(&*config).map_err(|e| {
+            ConfigManagerError::Persistence(format!("failed to serialize config: {}", e))
+        })?;
 
-        write_file_with_fsync(path, yaml.as_bytes())
-            .map_err(|e| ConfigManagerError::Persistence(format!("failed to write config: {}", e)))?;
+        write_file_with_fsync(path, yaml.as_bytes()).map_err(|e| {
+            ConfigManagerError::Persistence(format!("failed to write config: {}", e))
+        })?;
 
         info!(path = %path.display(), "persisted configuration");
         Ok(())
@@ -1159,11 +1274,9 @@ fn recover_rules_from_wal(path: &std::path::Path) -> Result<bool, ConfigManagerE
         return Ok(false);
     }
 
-    let contents = fs::read_to_string(&wal_path)
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to read WAL file: {}",
-            err
-        )))?;
+    let contents = fs::read_to_string(&wal_path).map_err(|err| {
+        ConfigManagerError::Persistence(format!("failed to read WAL file: {}", err))
+    })?;
     if contents.trim().is_empty() {
         return Ok(false);
     }
@@ -1180,7 +1293,10 @@ fn recover_rules_from_wal(path: &std::path::Path) -> Result<bool, ConfigManagerE
         if value.get("type").and_then(|t| t.as_str()) != Some("rules_update") {
             continue;
         }
-        let rules_value = value.get("rules").cloned().unwrap_or(serde_json::Value::Null);
+        let rules_value = value
+            .get("rules")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
         match serde_json::from_value::<Vec<StoredRule>>(rules_value) {
             Ok(rules) if !rules.is_empty() => {
                 last_rules = Some(rules);
@@ -1205,17 +1321,13 @@ fn recover_rules_from_wal(path: &std::path::Path) -> Result<bool, ConfigManagerE
         }
     }
 
-    let payload = serde_json::to_vec_pretty(&rules)
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to serialize WAL rules: {}",
-            err
-        )))?;
+    let payload = serde_json::to_vec_pretty(&rules).map_err(|err| {
+        ConfigManagerError::Persistence(format!("failed to serialize WAL rules: {}", err))
+    })?;
 
-    write_file_with_fsync(path, &payload)
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to apply WAL rules: {}",
-            err
-        )))?;
+    write_file_with_fsync(path, &payload).map_err(|err| {
+        ConfigManagerError::Persistence(format!("failed to apply WAL rules: {}", err))
+    })?;
     clear_wal(&wal_path)?;
     info!(path = %path.display(), "recovered rules from WAL");
     Ok(true)
@@ -1227,7 +1339,9 @@ fn append_wal_entry(
 ) -> Result<(), ConfigManagerError> {
     use std::io::Write;
     let Some(parent) = path.parent() else {
-        return Err(ConfigManagerError::Persistence("invalid WAL path".to_string()));
+        return Err(ConfigManagerError::Persistence(
+            "invalid WAL path".to_string(),
+        ));
     };
 
     if let Err(err) = fs::create_dir_all(parent) {
@@ -1241,23 +1355,19 @@ fn append_wal_entry(
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to open WAL file: {}",
-            err
-        )))?;
+        .map_err(|err| {
+            ConfigManagerError::Persistence(format!("failed to open WAL file: {}", err))
+        })?;
 
-    let payload = serde_json::to_vec(&entry)
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to serialize WAL entry: {}",
-            err
-        )))?;
+    let payload = serde_json::to_vec(&entry).map_err(|err| {
+        ConfigManagerError::Persistence(format!("failed to serialize WAL entry: {}", err))
+    })?;
     file.write_all(&payload)
         .and_then(|_| file.write_all(b"\n"))
         .and_then(|_| file.sync_all())
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to persist WAL entry: {}",
-            err
-        )))?;
+        .map_err(|err| {
+            ConfigManagerError::Persistence(format!("failed to persist WAL entry: {}", err))
+        })?;
 
     Ok(())
 }
@@ -1283,16 +1393,14 @@ fn clear_wal(path: &std::path::Path) -> Result<(), ConfigManagerError> {
         .truncate(true)
         .write(true)
         .open(path)
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to open WAL file: {}",
-            err
-        )))?;
+        .map_err(|err| {
+            ConfigManagerError::Persistence(format!("failed to open WAL file: {}", err))
+        })?;
     file.write_all(b"")
         .and_then(|_| file.sync_all())
-        .map_err(|err| ConfigManagerError::Persistence(format!(
-            "failed to clear WAL file: {}",
-            err
-        )))?;
+        .map_err(|err| {
+            ConfigManagerError::Persistence(format!("failed to clear WAL file: {}", err))
+        })?;
     Ok(())
 }
 
@@ -1303,9 +1411,7 @@ mod tests {
 
     #[test]
     fn test_mutation_result_builder() {
-        let result = MutationResult::new()
-            .with_applied()
-            .with_rebuild();
+        let result = MutationResult::new().with_applied().with_rebuild();
 
         assert!(result.applied);
         assert!(result.rebuild_required);

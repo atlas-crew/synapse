@@ -6,11 +6,6 @@
 pub mod signal_manager;
 
 pub use signal_manager::{
-    SignalManager,
-    SignalManagerConfig,
-    SignalQueryOptions,
-    SignalCategory,
-    Signal,
-    SignalSummary,
+    Signal, SignalCategory, SignalManager, SignalManagerConfig, SignalQueryOptions, SignalSummary,
     TopSignalType,
 };

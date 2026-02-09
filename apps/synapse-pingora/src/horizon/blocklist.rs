@@ -115,7 +115,9 @@ impl BlocklistCache {
 
     /// Get a fingerprint block entry.
     pub fn get_fingerprint(&self, fingerprint: &str) -> Option<BlocklistEntry> {
-        self.fingerprints.get(fingerprint).map(|r| r.value().clone())
+        self.fingerprints
+            .get(fingerprint)
+            .map(|r| r.value().clone())
     }
 
     /// Add a blocklist entry.
@@ -213,7 +215,10 @@ impl BlocklistCache {
 
     /// Get all fingerprint entries.
     pub fn all_fingerprints(&self) -> Vec<BlocklistEntry> {
-        self.fingerprints.iter().map(|r| r.value().clone()).collect()
+        self.fingerprints
+            .iter()
+            .map(|r| r.value().clone())
+            .collect()
     }
 }
 

@@ -147,7 +147,11 @@ pub fn apply_request_headers(header: &mut RequestHeader, ops: &CompiledHeaderOps
         } else {
             // SECURITY: Redact sensitive header values in logs
             let value = header_value_for_log(&entry.value);
-            debug!("Set request header: {} = {}", name, redact_for_log(name, value));
+            debug!(
+                "Set request header: {} = {}",
+                name,
+                redact_for_log(name, value)
+            );
         }
     }
 
@@ -159,7 +163,11 @@ pub fn apply_request_headers(header: &mut RequestHeader, ops: &CompiledHeaderOps
         } else {
             // SECURITY: Redact sensitive header values in logs
             let value = header_value_for_log(&entry.value);
-            debug!("Added request header: {} = {}", name, redact_for_log(name, value));
+            debug!(
+                "Added request header: {} = {}",
+                name,
+                redact_for_log(name, value)
+            );
         }
     }
 }
@@ -181,7 +189,11 @@ pub fn apply_response_headers(header: &mut ResponseHeader, ops: &CompiledHeaderO
         } else {
             // SECURITY: Redact sensitive header values in logs
             let value = header_value_for_log(&entry.value);
-            debug!("Set response header: {} = {}", name, redact_for_log(name, value));
+            debug!(
+                "Set response header: {} = {}",
+                name,
+                redact_for_log(name, value)
+            );
         }
     }
 
@@ -193,7 +205,11 @@ pub fn apply_response_headers(header: &mut ResponseHeader, ops: &CompiledHeaderO
         } else {
             // SECURITY: Redact sensitive header values in logs
             let value = header_value_for_log(&entry.value);
-            debug!("Added response header: {} = {}", name, redact_for_log(name, value));
+            debug!(
+                "Added response header: {} = {}",
+                name,
+                redact_for_log(name, value)
+            );
         }
     }
 }
@@ -226,11 +242,7 @@ pub fn apply_security_response_headers(header: &mut ResponseHeader, is_https: bo
 
     ensure_response_header(header, "x-content-type-options", "nosniff");
     ensure_response_header(header, "x-frame-options", "DENY");
-    ensure_response_header(
-        header,
-        "referrer-policy",
-        "strict-origin-when-cross-origin",
-    );
+    ensure_response_header(header, "referrer-policy", "strict-origin-when-cross-origin");
     ensure_response_header(
         header,
         "permissions-policy",
@@ -246,18 +258,30 @@ mod tests {
     #[test]
     fn test_redact_sensitive_headers() {
         // Sensitive headers should be fully redacted
-        assert_eq!(redact_for_log("Authorization", "Bearer secret-token"), "[REDACTED]");
-        assert_eq!(redact_for_log("authorization", "Basic dXNlcjpwYXNz"), "[REDACTED]");
+        assert_eq!(
+            redact_for_log("Authorization", "Bearer secret-token"),
+            "[REDACTED]"
+        );
+        assert_eq!(
+            redact_for_log("authorization", "Basic dXNlcjpwYXNz"),
+            "[REDACTED]"
+        );
         assert_eq!(redact_for_log("Cookie", "session=abc123"), "[REDACTED]");
         assert_eq!(redact_for_log("X-Api-Key", "sk-live-12345"), "[REDACTED]");
-        assert_eq!(redact_for_log("X-Auth-Token", "auth-token-value"), "[REDACTED]");
+        assert_eq!(
+            redact_for_log("X-Auth-Token", "auth-token-value"),
+            "[REDACTED]"
+        );
         assert_eq!(redact_for_log("X-CSRF-Token", "csrf123"), "[REDACTED]");
     }
 
     #[test]
     fn test_redact_non_sensitive_headers() {
         // Non-sensitive headers should show full value
-        assert_eq!(redact_for_log("Content-Type", "application/json"), "application/json");
+        assert_eq!(
+            redact_for_log("Content-Type", "application/json"),
+            "application/json"
+        );
         assert_eq!(redact_for_log("Accept", "text/html"), "text/html");
         assert_eq!(redact_for_log("User-Agent", "Mozilla/5.0"), "Mozilla/5.0");
         assert_eq!(redact_for_log("X-Request-Id", "req-123"), "req-123");
@@ -280,8 +304,7 @@ mod tests {
         let mut ops = HeaderOps::default();
         ops.add
             .insert("Bad Header".to_string(), "value".to_string());
-        ops.set
-            .insert("X-Good".to_string(), "ok".to_string());
+        ops.set.insert("X-Good".to_string(), "ok".to_string());
         ops.remove.push("Another Bad Header".to_string());
 
         let compiled = ops.compile();
@@ -294,10 +317,8 @@ mod tests {
     #[test]
     fn test_apply_compiled_request_headers() {
         let mut ops = HeaderOps::default();
-        ops.add
-            .insert("X-Added".to_string(), "value".to_string());
-        ops.set
-            .insert("X-Set".to_string(), "set-value".to_string());
+        ops.add.insert("X-Added".to_string(), "value".to_string());
+        ops.set.insert("X-Set".to_string(), "set-value".to_string());
         ops.remove.push("X-Remove".to_string());
 
         let compiled = ops.compile();
@@ -324,15 +345,27 @@ mod tests {
         apply_security_response_headers(&mut resp, false);
         assert!(resp.headers.get("strict-transport-security").is_none());
         assert_eq!(
-            resp.headers.get("x-content-type-options").unwrap().to_str().unwrap(),
+            resp.headers
+                .get("x-content-type-options")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "nosniff"
         );
         assert_eq!(
-            resp.headers.get("x-frame-options").unwrap().to_str().unwrap(),
+            resp.headers
+                .get("x-frame-options")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "DENY"
         );
         assert_eq!(
-            resp.headers.get("referrer-policy").unwrap().to_str().unwrap(),
+            resp.headers
+                .get("referrer-policy")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "strict-origin-when-cross-origin"
         );
         assert!(resp.headers.get("permissions-policy").is_some());
@@ -341,7 +374,11 @@ mod tests {
         resp.insert_header("x-frame-options", "SAMEORIGIN").unwrap();
         apply_security_response_headers(&mut resp, true);
         assert_eq!(
-            resp.headers.get("x-frame-options").unwrap().to_str().unwrap(),
+            resp.headers
+                .get("x-frame-options")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "SAMEORIGIN"
         );
         assert!(resp.headers.get("strict-transport-security").is_some());

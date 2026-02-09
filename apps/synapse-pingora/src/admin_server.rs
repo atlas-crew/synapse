@@ -13,18 +13,18 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Instant;
-use std::num::NonZeroU32;
 
-use governor::{Quota, RateLimiter, state::keyed::DefaultKeyedStateStore};
-use once_cell::sync::Lazy;
-use parking_lot::RwLock;
-use sysinfo::{System, Networks, Disks};
 use crate::intelligence::{SignalCategory, SignalQueryOptions};
 use crate::signals::adapter::SignalAdapter;
+use governor::{state::keyed::DefaultKeyedStateStore, Quota, RateLimiter};
+use once_cell::sync::Lazy;
+use parking_lot::RwLock;
+use sysinfo::{Disks, Networks, System};
 
 // Type aliases for profile/schema data accessors
 // These are callbacks that the binary (main.rs) can set to provide real data
@@ -57,7 +57,9 @@ pub struct EvaluationResult {
 }
 
 /// Type alias for WAF evaluation callback
-type EvaluateCallback = Box<dyn Fn(&str, &str, &[(String, String)], Option<&[u8]>, &str) -> EvaluationResult + Send + Sync>;
+type EvaluateCallback = Box<
+    dyn Fn(&str, &str, &[(String, String)], Option<&[u8]>, &str) -> EvaluationResult + Send + Sync,
+>;
 
 /// Global accessor for endpoint profiles (set by binary at startup)
 static PROFILES_GETTER: Lazy<RwLock<Option<ProfilesGetter>>> = Lazy::new(|| RwLock::new(None));
@@ -66,8 +68,10 @@ static PROFILES_GETTER: Lazy<RwLock<Option<ProfilesGetter>>> = Lazy::new(|| RwLo
 static SCHEMAS_GETTER: Lazy<RwLock<Option<SchemasGetter>>> = Lazy::new(|| RwLock::new(None));
 
 /// Global accessors for integrations (set by binary at startup)
-static INTEGRATIONS_GETTER: Lazy<RwLock<Option<IntegrationsGetter>>> = Lazy::new(|| RwLock::new(None));
-static INTEGRATIONS_SETTER: Lazy<RwLock<Option<IntegrationsSetter>>> = Lazy::new(|| RwLock::new(None));
+static INTEGRATIONS_GETTER: Lazy<RwLock<Option<IntegrationsGetter>>> =
+    Lazy::new(|| RwLock::new(None));
+static INTEGRATIONS_SETTER: Lazy<RwLock<Option<IntegrationsSetter>>> =
+    Lazy::new(|| RwLock::new(None));
 
 /// Global accessor for WAF evaluation (set by binary at startup)
 static EVALUATE_CALLBACK: Lazy<RwLock<Option<EvaluateCallback>>> = Lazy::new(|| RwLock::new(None));
@@ -105,14 +109,23 @@ where
 /// Called by the binary (main.rs) during startup.
 pub fn register_evaluate_callback<F>(callback: F)
 where
-    F: Fn(&str, &str, &[(String, String)], Option<&[u8]>, &str) -> EvaluationResult + Send + Sync + 'static,
+    F: Fn(&str, &str, &[(String, String)], Option<&[u8]>, &str) -> EvaluationResult
+        + Send
+        + Sync
+        + 'static,
 {
     *EVALUATE_CALLBACK.write() = Some(Box::new(callback));
 }
 
 /// Run WAF evaluation using the registered callback.
 #[allow(dead_code)]
-fn run_evaluate(method: &str, uri: &str, headers: &[(String, String)], body: Option<&[u8]>, client_ip: &str) -> Option<EvaluationResult> {
+fn run_evaluate(
+    method: &str,
+    uri: &str,
+    headers: &[(String, String)],
+    body: Option<&[u8]>,
+    client_ip: &str,
+) -> Option<EvaluationResult> {
     EVALUATE_CALLBACK
         .read()
         .as_ref()
@@ -146,9 +159,8 @@ struct MetricsPoint {
 }
 
 /// Global metrics history buffer (last 60 samples = ~60 minutes at 1/min)
-static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> = Lazy::new(|| {
-    RwLock::new(VecDeque::with_capacity(60))
-});
+static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> =
+    Lazy::new(|| RwLock::new(VecDeque::with_capacity(60)));
 
 static ADMIN_CONSOLE_TEMPLATE: &str = include_str!("../assets/admin_console.html");
 const ADMIN_CONSOLE_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self'";
@@ -318,7 +330,11 @@ fn record_metrics_sample() {
     let cpu = sys.global_cpu_usage();
     let total_mem = sys.total_memory() as f64;
     let used_mem = sys.used_memory() as f64;
-    let memory = if total_mem > 0.0 { (used_mem / total_mem) * 100.0 } else { 0.0 };
+    let memory = if total_mem > 0.0 {
+        (used_mem / total_mem) * 100.0
+    } else {
+        0.0
+    };
 
     let point = MetricsPoint {
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -364,9 +380,8 @@ impl LogSource {
 }
 
 /// Global log buffer (last 200 entries)
-static LOG_BUFFER: Lazy<RwLock<VecDeque<LogEntry>>> = Lazy::new(|| {
-    RwLock::new(VecDeque::with_capacity(200))
-});
+static LOG_BUFFER: Lazy<RwLock<VecDeque<LogEntry>>> =
+    Lazy::new(|| RwLock::new(VecDeque::with_capacity(200)));
 
 /// Record a log entry with source
 pub fn record_log_with_source(level: &str, source: LogSource, message: String) {
@@ -400,8 +415,8 @@ pub fn record_log(level: &str, message: String) {
 
 use axum::{
     body::Body,
-    extract::{Path, Query, Request, State},
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::{Path, Query, Request, State},
     http::{header, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -411,10 +426,10 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
-use subtle::ConstantTimeEq;
 
 #[cfg(test)]
 use std::cell::Cell;
@@ -495,10 +510,7 @@ impl ProblemDetails {
     fn new(status: StatusCode, detail: impl Into<String>) -> Self {
         Self {
             type_url: "about:blank".to_string(),
-            title: status
-                .canonical_reason()
-                .unwrap_or("Error")
-                .to_string(),
+            title: status.canonical_reason().unwrap_or("Error").to_string(),
             status: status.as_u16(),
             detail: detail.into(),
             instance: None,
@@ -608,9 +620,9 @@ fn service_unavailable(service_name: &str) -> Response {
 }
 
 use crate::config_manager::{
-    CreateSiteRequest, UpdateSiteRequest, SiteWafRequest,
-    RateLimitRequest, AccessListRequest,
-    ConfigManagerError, CustomRuleAction, CustomRuleCondition, CustomRuleInput, CustomRuleUpdate, RuleView, StoredRule,
+    AccessListRequest, ConfigManagerError, CreateSiteRequest, CustomRuleAction,
+    CustomRuleCondition, CustomRuleInput, CustomRuleUpdate, RateLimitRequest, RuleView,
+    SiteWafRequest, StoredRule, UpdateSiteRequest,
 };
 
 /// GET /config - Retrieve full configuration
@@ -629,8 +641,10 @@ async fn update_config_handler(
 }
 
 /// Per-IP rate limiter type using governor
-type IpRateLimiter = RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, governor::clock::DefaultClock>;
-type StringRateLimiter = RateLimiter<String, DefaultKeyedStateStore<String>, governor::clock::DefaultClock>;
+type IpRateLimiter =
+    RateLimiter<IpAddr, DefaultKeyedStateStore<IpAddr>, governor::clock::DefaultClock>;
+type StringRateLimiter =
+    RateLimiter<String, DefaultKeyedStateStore<String>, governor::clock::DefaultClock>;
 
 /// Admin server state shared across handlers.
 #[derive(Clone)]
@@ -730,10 +744,7 @@ async fn require_auth(
 ///
 /// SECURITY: Returns 429 Too Many Requests if the client has exceeded the
 /// allowed number of authentication failures (5 per minute by default).
-fn record_auth_failure(
-    state: &AdminState,
-    client_ip: IpAddr,
-) -> Result<(), std::time::Duration> {
+fn record_auth_failure(state: &AdminState, client_ip: IpAddr) -> Result<(), std::time::Duration> {
     match state.auth_failure_limiter.check_key(&client_ip) {
         Ok(_) => Ok(()), // Within rate limit
         Err(not_until) => {
@@ -794,10 +805,8 @@ fn validate_admin_key(
         None => match record_auth_failure(state, client_ip) {
             Ok(()) => {
                 warn!(client_ip = %client_ip, "Admin auth failed: missing X-Admin-Key header");
-                let mut problem = ProblemDetails::new(
-                    StatusCode::UNAUTHORIZED,
-                    "Missing X-Admin-Key header",
-                );
+                let mut problem =
+                    ProblemDetails::new(StatusCode::UNAUTHORIZED, "Missing X-Admin-Key header");
                 problem.code = Some(error_codes::UNAUTHORIZED.to_string());
                 Err((StatusCode::UNAUTHORIZED, Json(problem)).into_response())
             }
@@ -956,7 +965,11 @@ async fn check_scope(
         return Ok(next.run(request).await);
     }
     // Check if the required scope is granted (or wildcard "*" grants all)
-    if state.admin_scopes.iter().any(|s| s == required_scope || s == "*") {
+    if state
+        .admin_scopes
+        .iter()
+        .any(|s| s == required_scope || s == "*")
+    {
         Ok(next.run(request).await)
     } else {
         warn!(
@@ -1049,7 +1062,10 @@ async fn audit_log(request: Request, next: Next) -> Response {
 
     let response = next.run(request).await;
 
-    if matches!(method, Method::POST | Method::PUT | Method::DELETE | Method::PATCH) {
+    if matches!(
+        method,
+        Method::POST | Method::PUT | Method::DELETE | Method::PATCH
+    ) {
         let status = response.status();
         let duration_ms = start.elapsed().as_millis();
         let actor = client_ip.to_string();
@@ -1085,10 +1101,7 @@ async fn audit_log(request: Request, next: Next) -> Response {
 
 /// Security headers middleware for all API responses.
 /// Adds defense-in-depth headers to prevent common web vulnerabilities.
-async fn security_headers(
-    request: Request,
-    next: Next,
-) -> Response {
+async fn security_headers(request: Request, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
 
@@ -1099,10 +1112,7 @@ async fn security_headers(
     );
 
     // Prevent clickjacking - API should never be framed
-    headers.insert(
-        header::X_FRAME_OPTIONS,
-        HeaderValue::from_static("DENY"),
-    );
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
 
     // Control referrer information leakage
     headers.insert(
@@ -1151,7 +1161,9 @@ fn build_response(
     if let Some(disposition) = disposition {
         match HeaderValue::from_str(&disposition) {
             Ok(value) => {
-                response.headers_mut().insert(header::CONTENT_DISPOSITION, value);
+                response
+                    .headers_mut()
+                    .insert(header::CONTENT_DISPOSITION, value);
             }
             Err(err) => {
                 warn!("Invalid Content-Disposition header value: {}", err);
@@ -1216,19 +1228,38 @@ pub async fn start_admin_server(
     }
 
     // Add startup log entries
-    record_log("info", format!("Synapse-Pingora admin server starting on {}", addr));
-    record_log("info", "WAF engine initialized with 237 detection rules".to_string());
-    record_log("info", format!("Platform: {} {}", std::env::consts::OS, std::env::consts::ARCH));
+    record_log(
+        "info",
+        format!("Synapse-Pingora admin server starting on {}", addr),
+    );
+    record_log(
+        "info",
+        "WAF engine initialized with 237 detection rules".to_string(),
+    );
+    record_log(
+        "info",
+        format!(
+            "Platform: {} {}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ),
+    );
 
     // CORS configuration for dashboard access
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([
-            header::CONTENT_TYPE, 
-            header::ACCEPT, 
+            header::CONTENT_TYPE,
+            header::ACCEPT,
             header::AUTHORIZATION,
-            header::HeaderName::from_static("x-admin-key")
+            header::HeaderName::from_static("x-admin-key"),
         ]);
 
     // Routes requiring admin:write scope (reload, test)
@@ -1236,84 +1267,171 @@ pub async fn start_admin_server(
         .route("/reload", post(reload_handler))
         .route("/test", post(test_handler))
         .route("/config", post(update_config_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_write,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     // Routes requiring config:write scope (site management)
     let config_write_routes = Router::new()
         .route("/sites", post(create_site_handler))
-        .route("/sites/{hostname}", put(update_site_handler).delete(delete_site_handler))
+        .route(
+            "/sites/{hostname}",
+            put(update_site_handler).delete(delete_site_handler),
+        )
         .route("/sites/{hostname}/waf", put(update_site_waf_handler))
-        .route("/sites/{hostname}/rate-limit", put(update_site_rate_limit_handler))
-        .route("/sites/{hostname}/access-list", put(update_site_access_list_handler))
+        .route(
+            "/sites/{hostname}/rate-limit",
+            put(update_site_rate_limit_handler),
+        )
+        .route(
+            "/sites/{hostname}/access-list",
+            put(update_site_access_list_handler),
+        )
         .route("/sites/{hostname}/shadow", put(update_site_shadow_handler))
         .route("/debug/profiles/save", post(save_profiles_handler))
         // Read config is technically read-only but sensitive, so guard with config scope
         .route("/config", get(config_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_config_write))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_config_write,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     // Routes requiring service:manage scope (restart, reset operations)
     let service_manage_routes = Router::new()
         .route("/restart", post(restart_handler))
         .route("/api/profiles/reset", post(api_profiles_reset_handler))
         .route("/api/schemas/reset", post(api_schemas_reset_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_service_manage))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_service_manage,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     // Routes requiring sensor:read scope (sensitive sensor data - P0 security fix)
     // These endpoints expose correlation graphs, DLP violations, and attack attribution data
     let sensor_read_routes = Router::new()
-        .route("/_sensor/campaigns/:id/graph", get(sensor_campaign_graph_handler))
-        .route("/_sensor/campaigns/:id/actors", get(sensor_campaign_actors_handler))
-        .route("/_sensor/campaigns/:id/timeline", get(sensor_campaign_timeline_handler))
+        .route(
+            "/_sensor/campaigns/:id/graph",
+            get(sensor_campaign_graph_handler),
+        )
+        .route(
+            "/_sensor/campaigns/:id/actors",
+            get(sensor_campaign_actors_handler),
+        )
+        .route(
+            "/_sensor/campaigns/:id/timeline",
+            get(sensor_campaign_timeline_handler),
+        )
         .route("/_sensor/dlp/stats", get(sensor_dlp_stats_handler))
-        .route("/_sensor/dlp/violations", get(sensor_dlp_violations_handler))
-        .route("/_sensor/actors/:actor_id", get(sensor_actor_detail_handler))
-        .route("/_sensor/actors/:actor_id/timeline", get(sensor_actor_timeline_handler))
-        .route("/_sensor/sessions/:session_id", get(sensor_session_detail_handler))
+        .route(
+            "/_sensor/dlp/violations",
+            get(sensor_dlp_violations_handler),
+        )
+        .route(
+            "/_sensor/actors/:actor_id",
+            get(sensor_actor_detail_handler),
+        )
+        .route(
+            "/_sensor/actors/:actor_id/timeline",
+            get(sensor_actor_timeline_handler),
+        )
+        .route(
+            "/_sensor/sessions/:session_id",
+            get(sensor_session_detail_handler),
+        )
         .route("/_sensor/entities", get(sensor_entities_handler))
         .route("/_sensor/status", get(sensor_status_handler))
         .route("/_sensor/config", get(sensor_config_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_read))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_sensor_read,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     // Routes requiring sensor:write scope (ingestion)
     let sensor_write_routes = Router::new()
         .route("/_sensor/report", post(sensor_report_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_write))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_sensor_write,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     // Rules endpoints (defense-in-depth RBAC)
     let rules_read_routes = Router::new()
         .route("/_sensor/rules", get(sensor_rules_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_read,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     let rules_write_routes = Router::new()
         .route("/_sensor/rules", post(sensor_rules_create_handler))
-        .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+        .route(
+            "/_sensor/rules/:rule_id",
+            put(sensor_rules_update_handler).delete(sensor_rules_delete_handler),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_write,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     let kernel_config_read_routes = Router::new()
         .route("/_sensor/config/kernel", get(config_kernel_get_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_read,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     let kernel_config_write_routes = Router::new()
         .route("/_sensor/config/kernel", put(config_kernel_put_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_write,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_admin,
+        ));
 
     // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
@@ -1321,26 +1439,47 @@ pub async fn start_admin_server(
         .route("/_sensor/system/logs", get(sensor_system_logs_handler))
         .route("/_sensor/logs", get(logs_handler))
         .route("/_sensor/logs/:source", get(logs_by_source_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_read,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_public,
+        ));
 
     // Routes that are safe to expose without authentication (health check only).
     let public_routes = Router::new()
         .route("/health", get(health_handler))
         // Demo mode control (public for easier demoability)
         .route("/_sensor/demo", get(sensor_demo_get_handler))
-        .route("/_sensor/demo/toggle", post(sensor_demo_toggle_handler).get(sensor_demo_toggle_handler))
+        .route(
+            "/_sensor/demo/toggle",
+            post(sensor_demo_toggle_handler).get(sensor_demo_toggle_handler),
+        )
         .route("/_sensor/access-lists", get(sensor_access_lists_handler))
         .route("/_sensor/certificates", get(sensor_certificates_handler))
-        .route("/_sensor/bot-indicators", get(sensor_bot_indicators_handler))
-        .route("/_sensor/header-profiles", get(sensor_header_profiles_handler));
+        .route(
+            "/_sensor/bot-indicators",
+            get(sensor_bot_indicators_handler),
+        )
+        .route(
+            "/_sensor/header-profiles",
+            get(sensor_header_profiles_handler),
+        );
 
     // WebSocket debugger routes with query/header auth support.
     let debugger_routes = Router::new()
         .route("/_sensor/debugger/ws", get(waf_debugger_ws_handler))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_ws_auth))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_ws_auth,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_public,
+        ));
 
     // All remaining admin API routes require authentication.
     let authenticated_routes = Router::new()
@@ -1352,15 +1491,24 @@ pub async fn start_admin_server(
         .route("/debug/profiles", get(profiles_handler))
         // Dashboard compatibility routes (/_sensor/ prefix)
         .route("/_sensor/health", get(health_handler))
-        .route("/_sensor/entities/release-all", post(sensor_release_all_handler))
-        .route("/_sensor/entities/:ip", delete(sensor_release_entity_handler))
+        .route(
+            "/_sensor/entities/release-all",
+            post(sensor_release_all_handler),
+        )
+        .route(
+            "/_sensor/entities/:ip",
+            delete(sensor_release_entity_handler),
+        )
         .route("/_sensor/metrics/reset", post(sensor_metrics_reset_handler))
         .route("/_sensor/blocks", get(sensor_blocks_handler))
         .route("/_sensor/trends", get(sensor_trends_handler))
         .route("/_sensor/signals", get(sensor_signals_handler))
         .route("/_sensor/anomalies", get(sensor_anomalies_handler))
         .route("/_sensor/campaigns", get(sensor_campaigns_handler))
-        .route("/_sensor/campaigns/:id", get(sensor_campaign_detail_handler))
+        .route(
+            "/_sensor/campaigns/:id",
+            get(sensor_campaign_detail_handler),
+        )
         // Note: campaigns/:id/actors, /graph, /timeline moved to sensor_read_routes (require auth)
         .route("/_sensor/payload/bandwidth", get(sensor_bandwidth_handler))
         .route("/_sensor/actors", get(sensor_actors_handler))
@@ -1369,17 +1517,41 @@ pub async fn start_admin_server(
         // Note: sessions/:session_id moved to sensor_read_routes (require auth)
         .route("/_sensor/stuffing", get(sensor_stuffing_handler))
         .route("/_sensor/system/config", get(sensor_system_config_handler))
-        .route("/_sensor/system/overview", get(sensor_system_overview_handler))
-        .route("/_sensor/system/performance", get(sensor_system_performance_handler))
-        .route("/_sensor/system/network", get(sensor_system_network_handler))
-        .route("/_sensor/system/processes", get(sensor_system_processes_handler))
+        .route(
+            "/_sensor/system/overview",
+            get(sensor_system_overview_handler),
+        )
+        .route(
+            "/_sensor/system/performance",
+            get(sensor_system_performance_handler),
+        )
+        .route(
+            "/_sensor/system/network",
+            get(sensor_system_network_handler),
+        )
+        .route(
+            "/_sensor/system/processes",
+            get(sensor_system_processes_handler),
+        )
         // Note: DLP endpoints moved to sensor_read_routes (require auth)
         // API Profiling endpoints for API Catalog
-        .route("/_sensor/profiling/templates", get(profiling_templates_handler))
-        .route("/_sensor/profiling/baselines", get(profiling_baselines_handler))
+        .route(
+            "/_sensor/profiling/templates",
+            get(profiling_templates_handler),
+        )
+        .route(
+            "/_sensor/profiling/baselines",
+            get(profiling_baselines_handler),
+        )
         .route("/_sensor/profiling/schemas", get(profiling_schemas_handler))
-        .route("/_sensor/profiling/schema/discovery", get(profiling_discovery_handler))
-        .route("/_sensor/profiling/anomalies", get(profiling_anomalies_handler))
+        .route(
+            "/_sensor/profiling/schema/discovery",
+            get(profiling_discovery_handler),
+        )
+        .route(
+            "/_sensor/profiling/anomalies",
+            get(profiling_anomalies_handler),
+        )
         // New profiler API endpoints (Phase 8)
         .route("/api/profiles", get(api_profiles_list_handler))
         .route("/api/profiles/:template", get(api_profiles_detail_handler))
@@ -1391,13 +1563,34 @@ pub async fn start_admin_server(
         // Dry-run WAF evaluation endpoint (Phase 2: Lab View)
         .route("/_sensor/evaluate", post(sensor_evaluate_handler))
         // Configuration endpoints for admin console
-        .route("/_sensor/config/dlp", get(config_dlp_get_handler).put(config_dlp_put_handler))
-        .route("/_sensor/config/block-page", get(config_block_page_get_handler).put(config_block_page_put_handler))
-        .route("/_sensor/config/crawler", get(config_crawler_get_handler).put(config_crawler_put_handler))
-        .route("/_sensor/config/tarpit", get(config_tarpit_get_handler).put(config_tarpit_put_handler))
-        .route("/_sensor/config/travel", get(config_travel_get_handler).put(config_travel_put_handler))
-        .route("/_sensor/config/entity", get(config_entity_get_handler).put(config_entity_put_handler))
-        .route("/_sensor/config/integrations", get(config_integrations_get_handler).put(config_integrations_put_handler))
+        .route(
+            "/_sensor/config/dlp",
+            get(config_dlp_get_handler).put(config_dlp_put_handler),
+        )
+        .route(
+            "/_sensor/config/block-page",
+            get(config_block_page_get_handler).put(config_block_page_put_handler),
+        )
+        .route(
+            "/_sensor/config/crawler",
+            get(config_crawler_get_handler).put(config_crawler_put_handler),
+        )
+        .route(
+            "/_sensor/config/tarpit",
+            get(config_tarpit_get_handler).put(config_tarpit_put_handler),
+        )
+        .route(
+            "/_sensor/config/travel",
+            get(config_travel_get_handler).put(config_travel_put_handler),
+        )
+        .route(
+            "/_sensor/config/entity",
+            get(config_entity_get_handler).put(config_entity_put_handler),
+        )
+        .route(
+            "/_sensor/config/integrations",
+            get(config_integrations_get_handler).put(config_integrations_put_handler),
+        )
         // Log viewer endpoints moved to admin_read_routes (require admin:read)
         // Diagnostic bundle export
         .route("/_sensor/diagnostic-bundle", get(diagnostic_bundle_handler))
@@ -1407,7 +1600,10 @@ pub async fn start_admin_server(
         .route("/", get(root_handler))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
         // Rate limit authenticated endpoints (1000 req/min per IP)
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_public,
+        ));
 
     let app = Router::new()
         .merge(admin_write_routes)
@@ -1462,7 +1658,10 @@ async fn admin_console_handler() -> impl IntoResponse {
         match std::fs::read_to_string("assets/admin_console.html") {
             Ok(content) => content,
             Err(e) => {
-                tracing::warn!("Failed to read admin console from disk: {}, falling back to embedded", e);
+                tracing::warn!(
+                    "Failed to read admin console from disk: {}, falling back to embedded",
+                    e
+                );
                 ADMIN_CONSOLE_TEMPLATE.to_string()
             }
         }
@@ -1592,7 +1791,9 @@ async fn update_site_rate_limit_handler(
     Path(hostname): Path<String>,
     Json(request): Json<RateLimitRequest>,
 ) -> impl IntoResponse {
-    let response = state.handler.handle_update_site_rate_limit(&hostname, request);
+    let response = state
+        .handler
+        .handle_update_site_rate_limit(&hostname, request);
     wrap_response(response)
 }
 
@@ -1602,7 +1803,9 @@ async fn update_site_access_list_handler(
     Path(hostname): Path<String>,
     Json(request): Json<AccessListRequest>,
 ) -> impl IntoResponse {
-    let response = state.handler.handle_update_site_access_list(&hostname, request);
+    let response = state
+        .handler
+        .handle_update_site_access_list(&hostname, request);
     wrap_response(response)
 }
 
@@ -1639,13 +1842,17 @@ async fn sensor_shadow_status_handler(State(state): State<AdminState>) -> impl I
     // Get count of sites with shadow mirroring enabled
     let sites_with_shadow = if let Some(ref config_mgr) = state.handler.config_manager() {
         let hostnames = config_mgr.list_sites();
-        hostnames.iter().filter(|hostname| {
-            config_mgr.get_site(hostname)
-                .ok()
-                .and_then(|site| site.shadow_mirror)
-                .map(|sm| sm.enabled)
-                .unwrap_or(false)
-        }).count()
+        hostnames
+            .iter()
+            .filter(|hostname| {
+                config_mgr
+                    .get_site(hostname)
+                    .ok()
+                    .and_then(|site| site.shadow_mirror)
+                    .map(|sm| sm.enabled)
+                    .unwrap_or(false)
+            })
+            .count()
     } else {
         0
     };
@@ -1664,7 +1871,7 @@ async fn sensor_shadow_status_handler(State(state): State<AdminState>) -> impl I
         Json(serde_json::json!({
             "success": true,
             "data": response
-        }))
+        })),
     )
 }
 
@@ -1685,8 +1892,9 @@ async fn get_site_shadow_handler(
                             "hostname": hostname,
                             "shadow_mirror": shadow_config
                         }
-                    }))
-                ).into_response();
+                    })),
+                )
+                    .into_response();
             }
             Err(_) => {}
         }
@@ -1770,8 +1978,9 @@ async fn update_site_shadow_handler(
                     "hostname": hostname,
                     "shadow_mirror": shadow_config
                 }
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // SECURITY: Use generic service unavailable message
@@ -1797,7 +2006,10 @@ async fn waf_stats_handler(State(state): State<AdminState>) -> impl IntoResponse
 /// GET /_sensor/demo - Get demo mode status
 async fn sensor_demo_get_handler() -> impl IntoResponse {
     let is_demo = is_demo_mode();
-    (StatusCode::OK, Json(serde_json::json!({ "success": true, "demo_mode": is_demo })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "demo_mode": is_demo })),
+    )
 }
 
 /// POST /_sensor/demo/toggle - Toggle demo mode at runtime
@@ -1810,18 +2022,21 @@ async fn sensor_demo_toggle_handler() -> impl IntoResponse {
     }
     let new_mode = is_demo_mode();
     info!("Demo mode toggled to: {}", new_mode);
-    (StatusCode::OK, Json(serde_json::json!({ "success": true, "demo_mode": new_mode })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "demo_mode": new_mode })),
+    )
 }
 
 /// GET /_sensor/access-lists - Returns configured CIDR allow/deny lists
 async fn sensor_access_lists_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let access_lists = state.handler.access_lists();
     let lock = access_lists.read();
-    let global = lock.global_list();
-    
+    let _global = lock.global_list();
+
     let mut allow = Vec::new();
     let mut deny = Vec::new();
-    
+
     // This is a bit simplified, ideally we'd iterate rules and map to strings
     // but AccessList doesn't expose an easy iterator for strings yet.
     // For now, return empty or mock if in demo mode.
@@ -1830,11 +2045,14 @@ async fn sensor_access_lists_handler(State(state): State<AdminState>) -> impl In
         deny.push("10.0.0.0/8".to_string());
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "allow": allow,
-        "deny": deny
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "allow": allow,
+            "deny": deny
+        })),
+    )
 }
 
 /// GET /_sensor/certificates - Returns installed TLS certificates
@@ -1850,7 +2068,10 @@ async fn sensor_certificates_handler() -> impl IntoResponse {
             "keyPath": "/etc/ssl/acme.key"
         }));
     }
-    (StatusCode::OK, Json(serde_json::json!({ "success": true, "certificates": certs })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "certificates": certs })),
+    )
 }
 
 /// GET /_sensor/bot-indicators - Returns bot detection metrics
@@ -1866,7 +2087,10 @@ async fn sensor_bot_indicators_handler() -> impl IntoResponse {
         "automatedBehavior": 156,
         "sessionAnomaly": 8
     });
-    (StatusCode::OK, Json(serde_json::json!({ "success": true, "indicators": indicators })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "indicators": indicators })),
+    )
 }
 
 /// GET /_sensor/header-profiles - Returns API header anomaly stats
@@ -1882,7 +2106,10 @@ async fn sensor_header_profiles_handler() -> impl IntoResponse {
             "length_anomaly": 2
         }
     });
-    (StatusCode::OK, Json(serde_json::json!({ "success": true, "data": stats })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "data": stats })),
+    )
 }
 
 /// GET /_sensor/status - Dashboard status endpoint
@@ -1979,7 +2206,10 @@ async fn sensor_entities_handler(
 
     let limit = params.limit.unwrap_or(100);
     let entities = state.handler.handle_list_entities(limit);
-    (StatusCode::OK, Json(serde_json::json!({ "entities": entities })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "entities": entities })),
+    )
 }
 
 /// DELETE /_sensor/entities/{ip} - Release (unblock) a specific entity
@@ -1991,10 +2221,14 @@ async fn sensor_release_entity_handler(
         let released = entity_manager.release_entity(&ip);
         if released {
             info!("Released entity: {}", ip);
-            (StatusCode::OK, Json(serde_json::json!({
-                "success": true,
-                "message": format!("Entity {} released", ip)
-            }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": format!("Entity {} released", ip)
+                })),
+            )
+                .into_response()
         } else {
             not_found_error("Entity", &ip)
         }
@@ -2004,33 +2238,36 @@ async fn sensor_release_entity_handler(
 }
 
 /// POST /_sensor/entities/release-all - Release (unblock) all entities
-async fn sensor_release_all_handler(
-    State(state): State<AdminState>,
-) -> impl IntoResponse {
+async fn sensor_release_all_handler(State(state): State<AdminState>) -> impl IntoResponse {
     if let Some(entity_manager) = state.handler.entity_manager() {
         let count = entity_manager.release_all();
         info!("Released {} entities", count);
-        (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "released": count,
-            "message": format!("Released {} entities", count)
-        }))).into_response()
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "released": count,
+                "message": format!("Released {} entities", count)
+            })),
+        )
+            .into_response()
     } else {
         service_unavailable("Entity tracking")
     }
 }
 
 /// POST /_sensor/metrics/reset - Reset all metrics (for demo/testing)
-async fn sensor_metrics_reset_handler(
-    State(state): State<AdminState>,
-) -> impl IntoResponse {
+async fn sensor_metrics_reset_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let metrics = state.handler.metrics();
     metrics.reset();
     info!("Metrics reset");
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "All metrics reset to zero"
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "All metrics reset to zero"
+        })),
+    )
 }
 
 /// Query parameters for blocks endpoint
@@ -2101,7 +2338,10 @@ async fn sensor_blocks_handler(
 ) -> impl IntoResponse {
     let limit = params.limit.unwrap_or(100);
     let blocks = state.handler.handle_list_blocks(limit);
-    (StatusCode::OK, Json(serde_json::json!({ "blocks": blocks })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "blocks": blocks })),
+    )
 }
 
 /// GET /_sensor/rules - Returns active rules with optional filtering
@@ -2129,10 +2369,13 @@ async fn sensor_rules_handler(
     let limit = params.limit.unwrap_or(100);
     let rules_page: Vec<RuleView> = views.into_iter().skip(offset).take(limit).collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "rules": rules_page,
-        "total": total
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "rules": rules_page,
+            "total": total
+        })),
+    )
         .into_response()
 }
 
@@ -2213,10 +2456,14 @@ async fn sensor_rules_delete_handler(
     };
 
     match config_mgr.delete_rule(&rule_id) {
-        Ok(()) => (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "message": "Rule deleted"
-        }))).into_response(),
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Rule deleted"
+            })),
+        )
+            .into_response(),
         Err(ConfigManagerError::RuleNotFound(_)) => not_found_error("Rule", &rule_id),
         Err(err) => internal_error("Failed to delete rule", Some(&err)),
     }
@@ -2227,24 +2474,30 @@ async fn sensor_trends_handler(State(state): State<AdminState>) -> impl IntoResp
     let response = state.handler.handle_trends_summary();
     if response.success {
         if let Some(data) = response.data {
-            return (StatusCode::OK, Json(serde_json::json!({
-                "signalCounts": data.signal_counts,
-                "totalSignals": data.total_signals,
-                "topSignals": data.top_signal_types,
-                "timeRange": data.time_range,
-                "anomalyCount": data.anomaly_count
-            })));
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "signalCounts": data.signal_counts,
+                    "totalSignals": data.total_signals,
+                    "topSignals": data.top_signal_types,
+                    "timeRange": data.time_range,
+                    "anomalyCount": data.anomaly_count
+                })),
+            );
         }
     }
     // Fallback to empty data if TrendsManager not available
     if let Some(err) = response.error {
         log::warn!("TrendsManager not available: {}", err);
     }
-    (StatusCode::OK, Json(serde_json::json!({
-        "signalCounts": {},
-        "timeline": [],
-        "topSignals": []
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "signalCounts": {},
+            "timeline": [],
+            "topSignals": []
+        })),
+    )
 }
 
 /// GET /_sensor/signals - Returns intelligence signals from SignalManager
@@ -2254,15 +2507,16 @@ async fn sensor_signals_handler(
 ) -> impl IntoResponse {
     let limit = params.limit.unwrap_or(100).min(500);
 
-    let category = params.category.as_deref().and_then(|raw| {
-        match raw.to_lowercase().as_str() {
+    let category = params
+        .category
+        .as_deref()
+        .and_then(|raw| match raw.to_lowercase().as_str() {
             "attack" => Some(SignalCategory::Attack),
             "anomaly" => Some(SignalCategory::Anomaly),
             "behavior" => Some(SignalCategory::Behavior),
             "intelligence" => Some(SignalCategory::Intelligence),
             _ => None,
-        }
-    });
+        });
 
     let response = state.handler.handle_signals(SignalQueryOptions {
         category,
@@ -2272,10 +2526,13 @@ async fn sensor_signals_handler(
 
     if response.success {
         if let Some(data) = response.data {
-            return (StatusCode::OK, Json(serde_json::json!({
-                "signals": data.signals,
-                "summary": data.summary
-            })));
+            return (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "signals": data.signals,
+                    "summary": data.summary
+                })),
+            );
         }
     }
 
@@ -2283,14 +2540,17 @@ async fn sensor_signals_handler(
         log::warn!("SignalManager not available: {}", err);
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "signals": [],
-        "summary": {
-            "total_signals": 0,
-            "by_category": {},
-            "top_signal_types": []
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "signals": [],
+            "summary": {
+                "total_signals": 0,
+                "by_category": {},
+                "top_signal_types": []
+            }
+        })),
+    )
 }
 
 /// External threat report format from Apparatus/Cutlass sensors.
@@ -2356,7 +2616,11 @@ impl ApparatusReport {
         if self.sensor_id.is_empty() || self.sensor_id.len() > 64 {
             return Err("Invalid sensorId length".to_string());
         }
-        if !self.sensor_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if !self
+            .sensor_id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             return Err("Invalid characters in sensorId".to_string());
         }
 
@@ -2411,7 +2675,11 @@ impl ApparatusSignal {
         if self.signal_type.is_empty() || self.signal_type.len() > 64 {
             return Err("Invalid signal type length".to_string());
         }
-        if !self.signal_type.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        if !self
+            .signal_type
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
             return Err("Invalid characters in signal type".to_string());
         }
 
@@ -2424,7 +2692,8 @@ impl ApparatusSignal {
         // Details is a serde_json::Value, check if it's too large or deeply nested
         // Simple size check: serialize and check length
         let serialized = serde_json::to_string(&self.details).unwrap_or_default();
-        if serialized.len() > 1024 * 10 { // 10KB limit for details
+        if serialized.len() > 1024 * 10 {
+            // 10KB limit for details
             return Err("Details payload too large".to_string());
         }
 
@@ -2564,23 +2833,27 @@ async fn sensor_report_handler(
         )
         .await
     {
-        Ok(_) => {
-            (StatusCode::OK, Json(serde_json::json!({
+        Ok(_) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
                 "success": true,
                 "id": uuid::Uuid::new_v4().to_string()
-            })))
-                .into_response()
-        }
+            })),
+        )
+            .into_response(),
         Err(err) => {
             warn!(
                 sensor_id = %report.sensor_id,
                 error = %err,
                 "Signal dispatch failed"
             );
-            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-                "success": false,
-                "error": err
-            })))
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "success": false,
+                    "error": err
+                })),
+            )
                 .into_response()
         }
     }
@@ -2593,17 +2866,19 @@ async fn sensor_anomalies_handler(State(state): State<AdminState>) -> impl IntoR
         if let Some(anomalies) = response.data {
             let data: Vec<serde_json::Value> = anomalies
                 .into_iter()
-                .map(|a| serde_json::json!({
-                    "id": format!("anom-{}", &a.detected_at_ms.to_string()[..6]),
-                    "type": a.anomaly_type.to_lowercase().replace("_", "-"),
-                    "severity": a.severity.to_lowercase(),
-                    "description": a.description,
-                    "entityId": a.entities.first().unwrap_or(&"unknown".to_string()),
-                    "riskApplied": 0, // Not stored in TrendsAnomalyResponse
-                    "timestamp": chrono::DateTime::from_timestamp_millis(a.detected_at_ms)
-                        .map(|dt| dt.to_rfc3339())
-                        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339())
-                }))
+                .map(|a| {
+                    serde_json::json!({
+                        "id": format!("anom-{}", &a.detected_at_ms.to_string()[..6]),
+                        "type": a.anomaly_type.to_lowercase().replace("_", "-"),
+                        "severity": a.severity.to_lowercase(),
+                        "description": a.description,
+                        "entityId": a.entities.first().unwrap_or(&"unknown".to_string()),
+                        "riskApplied": 0, // Not stored in TrendsAnomalyResponse
+                        "timestamp": chrono::DateTime::from_timestamp_millis(a.detected_at_ms)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339())
+                    })
+                })
                 .collect();
             return (StatusCode::OK, Json(serde_json::json!({ "data": data })));
         }
@@ -2623,10 +2898,11 @@ async fn sensor_campaigns_handler(State(state): State<AdminState>) -> impl IntoR
     }
 
     let campaigns = match state.handler.campaign_manager() {
-        Some(manager) => {
-            manager.get_campaigns()
-                .into_iter()
-                .map(|c| serde_json::json!({
+        Some(manager) => manager
+            .get_campaigns()
+            .into_iter()
+            .map(|c| {
+                serde_json::json!({
                     "id": c.id,
                     "status": format!("{:?}", c.status).to_lowercase(),
                     "actorCount": c.actor_count,
@@ -2640,51 +2916,52 @@ async fn sensor_campaigns_handler(State(state): State<AdminState>) -> impl IntoR
                     "blockedRequests": c.blocked_requests,
                     "rulesTriggered": c.rules_triggered,
                     "riskScore": c.risk_score as u8
-                }))
-                .collect::<Vec<_>>()
-        }
-        None => vec![]
+                })
+            })
+            .collect::<Vec<_>>(),
+        None => vec![],
     };
 
-    (StatusCode::OK, Json(serde_json::json!({ "data": campaigns })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "data": campaigns })),
+    )
 }
 
 /// GET /_sensor/campaigns/:id - Campaign detail
 async fn sensor_campaign_detail_handler(
     State(state): State<AdminState>,
-    Path(id): Path<String>
+    Path(id): Path<String>,
 ) -> impl IntoResponse {
     match state.handler.campaign_manager() {
-        Some(manager) => {
-            match manager.get_campaign(&id) {
-                Some(c) => {
-                    let data = serde_json::json!({
-                        "id": c.id,
-                        "status": format!("{:?}", c.status).to_lowercase(),
-                        "actorCount": c.actor_count,
-                        "confidence": (c.confidence * 100.0) as u8,
-                        "attackTypes": c.correlation_reasons.iter()
-                            .map(|r| format!("{:?}", r.correlation_type).to_lowercase())
-                            .collect::<Vec<_>>(),
-                        "firstSeen": c.first_seen.to_rfc3339(),
-                        "lastActivity": c.last_activity.to_rfc3339(),
-                        "totalRequests": c.total_requests,
-                        "blockedRequests": c.blocked_requests,
-                        "rulesTriggered": c.rules_triggered,
-                        "riskScore": c.risk_score as u8,
-                        "correlationReasons": c.correlation_reasons.iter().map(|r| {
-                            serde_json::json!({
-                                "type": format!("{:?}", r.correlation_type).to_lowercase(),
-                                "confidence": (r.confidence * 100.0) as u8,
-                                "description": r.description
-                            })
-                        }).collect::<Vec<_>>()
-                    });
-                    (StatusCode::OK, Json(serde_json::json!({ "data": data }))).into_response()
-                }
-                None => not_found_error("Campaign", &id),
+        Some(manager) => match manager.get_campaign(&id) {
+            Some(c) => {
+                let data = serde_json::json!({
+                    "id": c.id,
+                    "status": format!("{:?}", c.status).to_lowercase(),
+                    "actorCount": c.actor_count,
+                    "confidence": (c.confidence * 100.0) as u8,
+                    "attackTypes": c.correlation_reasons.iter()
+                        .map(|r| format!("{:?}", r.correlation_type).to_lowercase())
+                        .collect::<Vec<_>>(),
+                    "firstSeen": c.first_seen.to_rfc3339(),
+                    "lastActivity": c.last_activity.to_rfc3339(),
+                    "totalRequests": c.total_requests,
+                    "blockedRequests": c.blocked_requests,
+                    "rulesTriggered": c.rules_triggered,
+                    "riskScore": c.risk_score as u8,
+                    "correlationReasons": c.correlation_reasons.iter().map(|r| {
+                        serde_json::json!({
+                            "type": format!("{:?}", r.correlation_type).to_lowercase(),
+                            "confidence": (r.confidence * 100.0) as u8,
+                            "description": r.description
+                        })
+                    }).collect::<Vec<_>>()
+                });
+                (StatusCode::OK, Json(serde_json::json!({ "data": data }))).into_response()
             }
-        }
+            None => not_found_error("Campaign", &id),
+        },
         None => service_unavailable("Campaign correlation"),
     }
 }
@@ -2818,30 +3095,36 @@ async fn _sensor_campaign_detail_handler_mock(Path(id): Path<String>) -> impl In
 /// GET /_sensor/campaigns/:id/actors - Campaign actors
 async fn sensor_campaign_actors_handler(
     State(state): State<AdminState>,
-    Path(id): Path<String>
+    Path(id): Path<String>,
 ) -> impl IntoResponse {
     match state.handler.campaign_manager() {
         Some(manager) => {
             let actors = manager.get_campaign_actors(&id);
-            let actor_data: Vec<serde_json::Value> = actors.into_iter().map(|ip| {
-                serde_json::json!({
-                    "ip": ip.to_string(),
-                    "risk": 50,  // Would come from EntityManager in full integration
-                    "sessionCount": 1,
-                    "fingerprintCount": 1,
-                    "jsExecuted": false,
-                    "suspicious": true,
-                    "lastActivity": chrono::Utc::now().to_rfc3339(),
-                    "joinedAt": chrono::Utc::now().to_rfc3339(),
-                    "role": "member",
-                    "requestsInCampaign": 0,
-                    "blockedInCampaign": 0
+            let actor_data: Vec<serde_json::Value> = actors
+                .into_iter()
+                .map(|ip| {
+                    serde_json::json!({
+                        "ip": ip.to_string(),
+                        "risk": 50,  // Would come from EntityManager in full integration
+                        "sessionCount": 1,
+                        "fingerprintCount": 1,
+                        "jsExecuted": false,
+                        "suspicious": true,
+                        "lastActivity": chrono::Utc::now().to_rfc3339(),
+                        "joinedAt": chrono::Utc::now().to_rfc3339(),
+                        "role": "member",
+                        "requestsInCampaign": 0,
+                        "blockedInCampaign": 0
+                    })
                 })
-            }).collect();
+                .collect();
 
-            (StatusCode::OK, Json(serde_json::json!({ "actors": actor_data })))
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "actors": actor_data })),
+            )
         }
-        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [] })))
+        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [] }))),
     }
 }
 
@@ -2859,8 +3142,12 @@ struct GraphQuery {
     hash_identifiers: bool,
 }
 
-fn default_graph_limit() -> usize { 500 }
-fn default_hash_identifiers() -> bool { true }
+fn default_graph_limit() -> usize {
+    500
+}
+fn default_hash_identifiers() -> bool {
+    true
+}
 
 /// GET /_sensor/campaigns/:id/graph - Returns correlation graph data for a campaign
 /// P1 fix: Adds pagination and identifier hashing
@@ -2877,19 +3164,23 @@ async fn sensor_campaign_graph_handler(
                 Some(query.offset),
                 query.hash_identifiers,
             );
-            (StatusCode::OK, Json(serde_json::json!({
-                "data": {
-                    "nodes": graph.nodes,
-                    "edges": graph.edges
-                },
-                "pagination": {
-                    "total": graph.total_nodes,
-                    "limit": query.limit,
-                    "offset": query.offset,
-                    "hasMore": graph.has_more
-                },
-                "snapshotVersion": graph.snapshot_version
-            }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "data": {
+                        "nodes": graph.nodes,
+                        "edges": graph.edges
+                    },
+                    "pagination": {
+                        "total": graph.total_nodes,
+                        "limit": query.limit,
+                        "offset": query.offset,
+                        "hasMore": graph.has_more
+                    },
+                    "snapshotVersion": graph.snapshot_version
+                })),
+            )
+                .into_response()
         }
         None => service_unavailable("Campaign correlation"),
     }
@@ -2995,33 +3286,38 @@ async fn sensor_campaign_timeline_handler(Path(id): Path<String>) -> impl IntoRe
 }
 
 /// GET /_sensor/payload/bandwidth - Returns bandwidth statistics from profiler
-async fn sensor_bandwidth_handler(
-    State(state): State<AdminState>,
-) -> impl IntoResponse {
+async fn sensor_bandwidth_handler(State(state): State<AdminState>) -> impl IntoResponse {
     let metrics = state.handler.metrics();
     let stats = metrics.get_bandwidth_stats();
 
     // Convert timeline to JSON-friendly format
-    let timeline: Vec<serde_json::Value> = stats.timeline.iter()
+    let timeline: Vec<serde_json::Value> = stats
+        .timeline
+        .iter()
         .filter(|p| p.timestamp > 0)
-        .map(|p| serde_json::json!({
-            "timestamp": p.timestamp,
-            "bytesIn": p.bytes_in,
-            "bytesOut": p.bytes_out,
-            "requestCount": p.request_count
-        }))
+        .map(|p| {
+            serde_json::json!({
+                "timestamp": p.timestamp,
+                "bytesIn": p.bytes_in,
+                "bytesOut": p.bytes_out,
+                "requestCount": p.request_count
+            })
+        })
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "totalBytes": stats.total_bytes,
-        "totalBytesIn": stats.total_bytes_in,
-        "totalBytesOut": stats.total_bytes_out,
-        "avgBytesPerRequest": stats.avg_bytes_per_request,
-        "maxRequestSize": stats.max_request_size,
-        "maxResponseSize": stats.max_response_size,
-        "requestCount": stats.request_count,
-        "timeline": timeline
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "totalBytes": stats.total_bytes,
+            "totalBytesIn": stats.total_bytes_in,
+            "totalBytesOut": stats.total_bytes_out,
+            "avgBytesPerRequest": stats.avg_bytes_per_request,
+            "maxRequestSize": stats.max_request_size,
+            "maxResponseSize": stats.max_response_size,
+            "requestCount": stats.request_count,
+            "timeline": timeline
+        })),
+    )
 }
 
 /// Query parameters for actors endpoint
@@ -3068,7 +3364,10 @@ fn actor_to_json(actor: &crate::actor::ActorState) -> serde_json::Value {
     })
 }
 
-fn session_to_json(session: &crate::session::SessionState, full_token_hash: bool) -> serde_json::Value {
+fn session_to_json(
+    session: &crate::session::SessionState,
+    full_token_hash: bool,
+) -> serde_json::Value {
     let token_hash = if full_token_hash {
         session.token_hash.clone()
     } else {
@@ -3140,7 +3439,11 @@ async fn sensor_actors_handler(
                 }
             }))).into_response()
         }
-        None => (StatusCode::OK, Json(serde_json::json!({ "actors": [], "stats": null }))).into_response()
+        None => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "actors": [], "stats": null })),
+        )
+            .into_response(),
     }
 }
 
@@ -3151,7 +3454,11 @@ async fn sensor_actor_detail_handler(
 ) -> impl IntoResponse {
     match state.handler.actor_manager() {
         Some(manager) => match manager.get_actor(&actor_id) {
-            Some(actor) => (StatusCode::OK, Json(serde_json::json!({ "actor": actor_to_json(&actor) }))).into_response(),
+            Some(actor) => (
+                StatusCode::OK,
+                Json(serde_json::json!({ "actor": actor_to_json(&actor) })),
+            )
+                .into_response(),
             None => not_found_error("Actor", &actor_id),
         },
         None => service_unavailable("Actor tracking"),
@@ -3259,10 +3566,14 @@ async fn sensor_actor_timeline_handler(
         events.truncate(limit);
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "actorId": actor_id,
-        "events": events
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "actorId": actor_id,
+            "events": events
+        })),
+    )
+        .into_response()
 }
 
 /// Query parameters for sessions endpoint
@@ -3306,21 +3617,27 @@ async fn sensor_sessions_handler(
 
             // Also include stats if available
             let stats = manager.stats();
-            (StatusCode::OK, Json(serde_json::json!({
-                "sessions": session_data,
-                "stats": {
-                    "totalSessions": stats.total_sessions.load(std::sync::atomic::Ordering::Relaxed),
-                    "activeSessions": stats.active_sessions.load(std::sync::atomic::Ordering::Relaxed),
-                    "suspiciousSessions": stats.suspicious_sessions.load(std::sync::atomic::Ordering::Relaxed),
-                    "expiredSessions": stats.expired_sessions.load(std::sync::atomic::Ordering::Relaxed),
-                    "hijackAlerts": stats.hijack_alerts.load(std::sync::atomic::Ordering::Relaxed),
-                    "evictions": stats.evictions.load(std::sync::atomic::Ordering::Relaxed),
-                    "totalCreated": stats.total_created.load(std::sync::atomic::Ordering::Relaxed),
-                    "totalInvalidated": stats.total_invalidated.load(std::sync::atomic::Ordering::Relaxed)
-                }
-            })))
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "sessions": session_data,
+                    "stats": {
+                        "totalSessions": stats.total_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                        "activeSessions": stats.active_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                        "suspiciousSessions": stats.suspicious_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                        "expiredSessions": stats.expired_sessions.load(std::sync::atomic::Ordering::Relaxed),
+                        "hijackAlerts": stats.hijack_alerts.load(std::sync::atomic::Ordering::Relaxed),
+                        "evictions": stats.evictions.load(std::sync::atomic::Ordering::Relaxed),
+                        "totalCreated": stats.total_created.load(std::sync::atomic::Ordering::Relaxed),
+                        "totalInvalidated": stats.total_invalidated.load(std::sync::atomic::Ordering::Relaxed)
+                    }
+                })),
+            )
         }
-        None => (StatusCode::OK, Json(serde_json::json!({ "sessions": [], "stats": null })))
+        None => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "sessions": [], "stats": null })),
+        ),
     }
 }
 
@@ -3334,7 +3651,8 @@ async fn sensor_session_detail_handler(
             Some(session) => (
                 StatusCode::OK,
                 Json(serde_json::json!({ "session": session_to_json(&session, true) })),
-            ).into_response(),
+            )
+                .into_response(),
             None => not_found_error("Session", &session_id),
         },
         None => service_unavailable("Session tracking"),
@@ -3431,11 +3749,14 @@ async fn sensor_stuffing_handler() -> impl IntoResponse {
         }),
     ];
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "stats": stats,
-        "takeoverAlerts": takeover_alerts,
-        "distributedAttacks": distributed_attacks
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "stats": stats,
+            "takeoverAlerts": takeover_alerts,
+            "distributedAttacks": distributed_attacks
+        })),
+    )
 }
 
 /// GET /_sensor/system/config - Returns system configuration
@@ -3455,144 +3776,147 @@ async fn sensor_system_config_handler(State(state): State<AdminState>) -> impl I
         }
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "general": {
-                "port": 6190,
-                "sensorId": "synapse-pingora",
-                "sensorMode": "proxy",
-                "demoMode": false
-            },
-            "waf": {
-                "enabled": true,
-                "allowIpSpoofing": false,
-                "trustedIpHeaders": ["X-Forwarded-For", "X-Real-IP"],
-                "trustPrivateProxyRanges": true,
-                "trustedProxyCidrs": []
-            },
-            "features": {
-                "atlasCrewMode": false,
-                "waf": true,
-                "rateLimit": true,
-                "accessLists": true,
-                "campaigns": false,
-                "actors": false,
-                "anomalies": false
-            },
-            "kernel": {
-                "parameters": kernel_params,
-                "errors": kernel_errors
-            },
-            "runtimeConfig": {
-                "risk": {
-                    "autoblockThreshold": 80,
-                    "riskDecayPerMinute": 5.0,
-                    "maxRiskHistory": 100
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "general": {
+                    "port": 6190,
+                    "sensorId": "synapse-pingora",
+                    "sensorMode": "proxy",
+                    "demoMode": false
                 },
-                "state": {
-                    "maxBlockHistory": 500,
-                    "maxIpsTracked": 10000,
-                    "maxKeysPerIp": 50,
-                    "maxValuesPerKey": 500,
-                    "cleanupWindowMs": 300000
-                },
-                "session": {
+                "waf": {
                     "enabled": true,
-                    "maxSessions": 10000,
-                    "expirationMs": 1800000,
-                    "cookieName": "synapse_session",
-                    "headerName": "X-Session-Id",
-                    "cleanupIntervalMs": 60000
+                    "allowIpSpoofing": false,
+                    "trustedIpHeaders": ["X-Forwarded-For", "X-Real-IP"],
+                    "trustPrivateProxyRanges": true,
+                    "trustedProxyCidrs": []
                 },
-                "trends": {
-                    "enabled": true,
-                    "bucketSizeMs": 60000,
-                    "retentionHours": 24,
-                    "maxSignalsPerBucket": 5000,
-                    "anomalyCheckIntervalMs": 30000
+                "features": {
+                    "atlasCrewMode": false,
+                    "waf": true,
+                    "rateLimit": true,
+                    "accessLists": true,
+                    "campaigns": false,
+                    "actors": false,
+                    "anomalies": false
                 },
-                "anomalyRisk": {
-                    "fingerprintChange": 25,
-                    "sessionSharing": 30,
-                    "tokenReuse": 20,
-                    "velocitySpike": 35,
-                    "rotationPattern": 40,
-                    "timingAnomaly": 15,
-                    "impossibleTravel": 50,
-                    "oversizedRequest": 20,
-                    "oversizedResponse": 25,
-                    "bandwidthSpike": 30,
-                    "exfiltrationPattern": 45,
-                    "uploadPattern": 35
+                "kernel": {
+                    "parameters": kernel_params,
+                    "errors": kernel_errors
                 },
-                "payload": {
-                    "enabled": true,
-                    "windowSizeMs": 60000,
-                    "retentionWindows": 60,
-                    "maxEndpoints": 1000,
-                    "maxEntities": 10000,
-                    "oversizeThreshold": 3.0,
-                    "spikeThreshold": 5.0,
-                    "warmupRequests": 50,
-                    "exfiltrationRatio": 100,
-                    "uploadRatio": 50,
-                    "minLargePayload": 100000
+                "runtimeConfig": {
+                    "risk": {
+                        "autoblockThreshold": 80,
+                        "riskDecayPerMinute": 5.0,
+                        "maxRiskHistory": 100
+                    },
+                    "state": {
+                        "maxBlockHistory": 500,
+                        "maxIpsTracked": 10000,
+                        "maxKeysPerIp": 50,
+                        "maxValuesPerKey": 500,
+                        "cleanupWindowMs": 300000
+                    },
+                    "session": {
+                        "enabled": true,
+                        "maxSessions": 10000,
+                        "expirationMs": 1800000,
+                        "cookieName": "synapse_session",
+                        "headerName": "X-Session-Id",
+                        "cleanupIntervalMs": 60000
+                    },
+                    "trends": {
+                        "enabled": true,
+                        "bucketSizeMs": 60000,
+                        "retentionHours": 24,
+                        "maxSignalsPerBucket": 5000,
+                        "anomalyCheckIntervalMs": 30000
+                    },
+                    "anomalyRisk": {
+                        "fingerprintChange": 25,
+                        "sessionSharing": 30,
+                        "tokenReuse": 20,
+                        "velocitySpike": 35,
+                        "rotationPattern": 40,
+                        "timingAnomaly": 15,
+                        "impossibleTravel": 50,
+                        "oversizedRequest": 20,
+                        "oversizedResponse": 25,
+                        "bandwidthSpike": 30,
+                        "exfiltrationPattern": 45,
+                        "uploadPattern": 35
+                    },
+                    "payload": {
+                        "enabled": true,
+                        "windowSizeMs": 60000,
+                        "retentionWindows": 60,
+                        "maxEndpoints": 1000,
+                        "maxEntities": 10000,
+                        "oversizeThreshold": 3.0,
+                        "spikeThreshold": 5.0,
+                        "warmupRequests": 50,
+                        "exfiltrationRatio": 100,
+                        "uploadRatio": 50,
+                        "minLargePayload": 100000
+                    },
+                    "credentialStuffing": {
+                        "enabled": true,
+                        "failureWindowMs": 300000,
+                        "failureThresholdSuspicious": 5,
+                        "failureThresholdHigh": 10,
+                        "failureThresholdBlock": 20,
+                        "distributedMinIps": 3,
+                        "distributedWindowMs": 600000,
+                        "takeoverWindowMs": 300000,
+                        "takeoverMinFailures": 3,
+                        "lowSlowMinHours": 6,
+                        "lowSlowMinPerHour": 2,
+                        "maxEntities": 10000,
+                        "broadcastIntervalMs": 5000
+                    },
+                    "ha": {
+                        "sensorMode": "standalone",
+                        "peerUrl": null,
+                        "syncIntervalMs": 100,
+                        "heartbeatIntervalMs": 5000,
+                        "reconnectBaseDelayMs": 1000,
+                        "reconnectMaxDelayMs": 30000,
+                        "maxQueueSize": 10000,
+                        "maxClockDriftMs": 300000,
+                        "maxMessageSize": 1000000,
+                        "messageRateLimit": 1000,
+                        "enableSplitBrainDetection": true,
+                        "heartbeatTimeoutMs": 15000,
+                        "primaryElectionMode": "manual"
+                    },
+                    "dashboard": {
+                        "pollIntervalMs": 1000,
+                        "wsHeartbeatIntervalMs": 30000,
+                        "wsMaxClients": 50
+                    },
+                    "nginx": {
+                        "listenPort": 6190,
+                        "statusPort": 6191,
+                        "statusAllow": ["127.0.0.1", "::1"],
+                        "proxyReadTimeoutMs": 60000,
+                        "proxySendTimeoutMs": 60000,
+                        "clientBodyBufferSizeKb": 128,
+                        "clientMaxBodySizeMb": 10,
+                        "gzipEnabled": true,
+                        "sslEnabled": false,
+                        "certificateId": null,
+                        "accessListId": null,
+                        "customDirectives": null
+                    }
                 },
-                "credentialStuffing": {
-                    "enabled": true,
-                    "failureWindowMs": 300000,
-                    "failureThresholdSuspicious": 5,
-                    "failureThresholdHigh": 10,
-                    "failureThresholdBlock": 20,
-                    "distributedMinIps": 3,
-                    "distributedWindowMs": 600000,
-                    "takeoverWindowMs": 300000,
-                    "takeoverMinFailures": 3,
-                    "lowSlowMinHours": 6,
-                    "lowSlowMinPerHour": 2,
-                    "maxEntities": 10000,
-                    "broadcastIntervalMs": 5000
-                },
-                "ha": {
-                    "sensorMode": "standalone",
-                    "peerUrl": null,
-                    "syncIntervalMs": 100,
-                    "heartbeatIntervalMs": 5000,
-                    "reconnectBaseDelayMs": 1000,
-                    "reconnectMaxDelayMs": 30000,
-                    "maxQueueSize": 10000,
-                    "maxClockDriftMs": 300000,
-                    "maxMessageSize": 1000000,
-                    "messageRateLimit": 1000,
-                    "enableSplitBrainDetection": true,
-                    "heartbeatTimeoutMs": 15000,
-                    "primaryElectionMode": "manual"
-                },
-                "dashboard": {
-                    "pollIntervalMs": 1000,
-                    "wsHeartbeatIntervalMs": 30000,
-                    "wsMaxClients": 50
-                },
-                "nginx": {
-                    "listenPort": 6190,
-                    "statusPort": 6191,
-                    "statusAllow": ["127.0.0.1", "::1"],
-                    "proxyReadTimeoutMs": 60000,
-                    "proxySendTimeoutMs": 60000,
-                    "clientBodyBufferSizeKb": 128,
-                    "clientMaxBodySizeMb": 10,
-                    "gzipEnabled": true,
-                    "sslEnabled": false,
-                    "certificateId": null,
-                    "accessListId": null,
-                    "customDirectives": null
-                }
-            },
-            "startupFlags": [],
-            "sites": sites.data.map(|s| s.sites).unwrap_or_default()
-        }
-    })))
+                "startupFlags": [],
+                "sites": sites.data.map(|s| s.sites).unwrap_or_default()
+            }
+        })),
+    )
 }
 
 /// GET /_sensor/system/overview - System overview metrics
@@ -3610,7 +3934,10 @@ async fn sensor_system_overview_handler(State(state): State<AdminState>) -> impl
     let load_avg = System::load_average();
 
     // Get per-core CPU usage
-    let per_core: Vec<_> = sys.cpus().iter().enumerate()
+    let per_core: Vec<_> = sys
+        .cpus()
+        .iter()
+        .enumerate()
         .map(|(i, cpu)| serde_json::json!({ "id": i, "usage": cpu.cpu_usage() }))
         .collect();
 
@@ -3618,7 +3945,11 @@ async fn sensor_system_overview_handler(State(state): State<AdminState>) -> impl
     let total_mem = sys.total_memory();
     let used_mem = sys.used_memory();
     let free_mem = sys.free_memory();
-    let mem_percent = if total_mem > 0 { (used_mem as f64 / total_mem as f64) * 100.0 } else { 0.0 };
+    let mem_percent = if total_mem > 0 {
+        (used_mem as f64 / total_mem as f64) * 100.0
+    } else {
+        0.0
+    };
 
     // Disk stats
     let disks = Disks::new_with_refreshed_list();
@@ -3626,7 +3957,11 @@ async fn sensor_system_overview_handler(State(state): State<AdminState>) -> impl
         let total = d.total_space();
         let free = d.available_space();
         let used = total.saturating_sub(free);
-        let percent = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
+        let percent = if total > 0 {
+            (used as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
         serde_json::json!({
             "total": total,
             "used": used,
@@ -3637,63 +3972,70 @@ async fn sensor_system_overview_handler(State(state): State<AdminState>) -> impl
 
     // Network interfaces
     let networks = Networks::new_with_refreshed_list();
-    let interfaces: Vec<_> = networks.iter()
-        .map(|(name, data)| serde_json::json!({
-            "name": name,
-            "ip": "0.0.0.0",
-            "mac": data.mac_address().to_string(),
-            "family": "IPv4",
-            "internal": name == "lo" || name == "lo0"
-        }))
+    let interfaces: Vec<_> = networks
+        .iter()
+        .map(|(name, data)| {
+            serde_json::json!({
+                "name": name,
+                "ip": "0.0.0.0",
+                "mac": data.mac_address().to_string(),
+                "family": "IPv4",
+                "internal": name == "lo" || name == "lo0"
+            })
+        })
         .collect();
 
     // Current process info
     let pid = std::process::id();
-    let process_mem = sys.process(sysinfo::Pid::from_u32(pid))
+    let process_mem = sys
+        .process(sysinfo::Pid::from_u32(pid))
         .map(|p| p.memory())
         .unwrap_or(0);
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "system": {
-                "hostname": System::host_name().unwrap_or_else(|| "synapse-pingora".to_string()),
-                "platform": std::env::consts::OS,
-                "arch": std::env::consts::ARCH,
-                "release": System::os_version().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
-                "uptime": uptime_secs,
-                "loadAvg": [load_avg.one, load_avg.five, load_avg.fifteen]
-            },
-            "resources": {
-                "cpu": {
-                    "model": sys.cpus().first().map(|c| c.brand()).unwrap_or("Unknown"),
-                    "cores": cpu_cores,
-                    "usage": global_cpu,
-                    "perCore": per_core
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "system": {
+                    "hostname": System::host_name().unwrap_or_else(|| "synapse-pingora".to_string()),
+                    "platform": std::env::consts::OS,
+                    "arch": std::env::consts::ARCH,
+                    "release": System::os_version().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
+                    "uptime": uptime_secs,
+                    "loadAvg": [load_avg.one, load_avg.five, load_avg.fifteen]
                 },
-                "memory": {
-                    "total": total_mem,
-                    "used": used_mem,
-                    "free": free_mem,
-                    "usagePercent": mem_percent
+                "resources": {
+                    "cpu": {
+                        "model": sys.cpus().first().map(|c| c.brand()).unwrap_or("Unknown"),
+                        "cores": cpu_cores,
+                        "usage": global_cpu,
+                        "perCore": per_core
+                    },
+                    "memory": {
+                        "total": total_mem,
+                        "used": used_mem,
+                        "free": free_mem,
+                        "usagePercent": mem_percent
+                    },
+                    "disk": disk_info
                 },
-                "disk": disk_info
-            },
-            "network": {
-                "interfaces": interfaces,
-                "primaryIp": "127.0.0.1"
-            },
-            "process": {
-                "pid": pid,
-                "uptime": uptime_secs,
-                "memoryUsage": {
-                    "rss": process_mem,
-                    "heapTotal": 0,
-                    "heapUsed": 0
+                "network": {
+                    "interfaces": interfaces,
+                    "primaryIp": "127.0.0.1"
+                },
+                "process": {
+                    "pid": pid,
+                    "uptime": uptime_secs,
+                    "memoryUsage": {
+                        "rss": process_mem,
+                        "heapTotal": 0,
+                        "heapUsed": 0
+                    }
                 }
             }
-        }
-    })))
+        })),
+    )
 }
 
 /// GET /_sensor/system/performance - Performance metrics
@@ -3706,7 +4048,10 @@ async fn sensor_system_performance_handler(State(_state): State<AdminState>) -> 
     let global_cpu = sys.global_cpu_usage();
 
     // Per-core CPU usage
-    let per_core: Vec<_> = sys.cpus().iter().enumerate()
+    let per_core: Vec<_> = sys
+        .cpus()
+        .iter()
+        .enumerate()
         .map(|(i, cpu)| serde_json::json!({ "id": i, "usage": cpu.cpu_usage() }))
         .collect();
 
@@ -3714,7 +4059,11 @@ async fn sensor_system_performance_handler(State(_state): State<AdminState>) -> 
     let total_mem = sys.total_memory();
     let used_mem = sys.used_memory();
     let free_mem = sys.free_memory();
-    let mem_percent = if total_mem > 0 { (used_mem as f64 / total_mem as f64) * 100.0 } else { 0.0 };
+    let mem_percent = if total_mem > 0 {
+        (used_mem as f64 / total_mem as f64) * 100.0
+    } else {
+        0.0
+    };
 
     // Disk stats
     let disks = Disks::new_with_refreshed_list();
@@ -3722,7 +4071,11 @@ async fn sensor_system_performance_handler(State(_state): State<AdminState>) -> 
         let total = d.total_space();
         let free = d.available_space();
         let used = total.saturating_sub(free);
-        let percent = if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 };
+        let percent = if total > 0 {
+            (used as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
         serde_json::json!({
             "total": total,
             "used": used,
@@ -3737,27 +4090,30 @@ async fn sensor_system_performance_handler(State(_state): State<AdminState>) -> 
     // Get history for charts
     let history: Vec<_> = METRICS_HISTORY.read().iter().cloned().collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "current": {
-                "cpu": {
-                    "usage": global_cpu,
-                    "perCore": per_core,
-                    "model": sys.cpus().first().map(|c| c.brand()).unwrap_or("Unknown"),
-                    "cores": cpu_cores
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "current": {
+                    "cpu": {
+                        "usage": global_cpu,
+                        "perCore": per_core,
+                        "model": sys.cpus().first().map(|c| c.brand()).unwrap_or("Unknown"),
+                        "cores": cpu_cores
+                    },
+                    "memory": {
+                        "total": total_mem,
+                        "used": used_mem,
+                        "free": free_mem,
+                        "usagePercent": mem_percent
+                    },
+                    "disk": disk_info
                 },
-                "memory": {
-                    "total": total_mem,
-                    "used": used_mem,
-                    "free": free_mem,
-                    "usagePercent": mem_percent
-                },
-                "disk": disk_info
-            },
-            "history": history
-        }
-    })))
+                "history": history
+            }
+        })),
+    )
 }
 
 /// GET /_sensor/system/network - Network statistics
@@ -3766,38 +4122,44 @@ async fn sensor_system_network_handler() -> impl IntoResponse {
     let networks = Networks::new_with_refreshed_list();
 
     // Network interfaces with traffic stats
-    let interfaces: Vec<_> = networks.iter()
-        .map(|(name, data)| serde_json::json!({
-            "name": name,
-            "ip": "0.0.0.0",
-            "mac": data.mac_address().to_string(),
-            "family": "IPv4",
-            "internal": name == "lo" || name == "lo0",
-            "rxBytes": data.total_received(),
-            "txBytes": data.total_transmitted(),
-            "rxPackets": data.total_packets_received(),
-            "txPackets": data.total_packets_transmitted()
-        }))
+    let interfaces: Vec<_> = networks
+        .iter()
+        .map(|(name, data)| {
+            serde_json::json!({
+                "name": name,
+                "ip": "0.0.0.0",
+                "mac": data.mac_address().to_string(),
+                "family": "IPv4",
+                "internal": name == "lo" || name == "lo0",
+                "rxBytes": data.total_received(),
+                "txBytes": data.total_transmitted(),
+                "rxPackets": data.total_packets_received(),
+                "txPackets": data.total_packets_transmitted()
+            })
+        })
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "interfaces": interfaces,
-            "connections": [],
-            "summary": {
-                "total": 0,
-                "established": 0,
-                "listening": 1,
-                "timeWait": 0,
-                "closeWait": 0
-            },
-            "dns": {
-                "servers": ["8.8.8.8", "8.8.4.4"],
-                "search": []
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "interfaces": interfaces,
+                "connections": [],
+                "summary": {
+                    "total": 0,
+                    "established": 0,
+                    "listening": 1,
+                    "timeWait": 0,
+                    "closeWait": 0
+                },
+                "dns": {
+                    "servers": ["8.8.8.8", "8.8.4.4"],
+                    "search": []
+                }
             }
-        }
-    })))
+        })),
+    )
 }
 
 /// GET /_sensor/system/processes - Process information
@@ -3829,22 +4191,30 @@ async fn sensor_system_processes_handler() -> impl IntoResponse {
     processes.sort_by(|a, b| {
         let cpu_a = a.get("cpu").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let cpu_b = b.get("cpu").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        cpu_b.partial_cmp(&cpu_a).unwrap_or(std::cmp::Ordering::Equal)
+        cpu_b
+            .partial_cmp(&cpu_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     processes.truncate(20);
 
     // Find synapse-pingora process for Atlas Crew services
     let synapse_proc = sys.process(sysinfo::Pid::from_u32(current_pid));
-    let atlascrew_services: Vec<_> = synapse_proc.map(|p| {
-        let mem_percent = if total_mem > 0.0 { (p.memory() as f64 / total_mem) * 100.0 } else { 0.0 };
-        vec![serde_json::json!({
-            "name": "synapse-pingora",
-            "status": "running",
-            "pid": current_pid,
-            "cpu": p.cpu_usage(),
-            "memory": mem_percent
-        })]
-    }).unwrap_or_default();
+    let atlascrew_services: Vec<_> = synapse_proc
+        .map(|p| {
+            let mem_percent = if total_mem > 0.0 {
+                (p.memory() as f64 / total_mem) * 100.0
+            } else {
+                0.0
+            };
+            vec![serde_json::json!({
+                "name": "synapse-pingora",
+                "status": "running",
+                "pid": current_pid,
+                "cpu": p.cpu_usage(),
+                "memory": mem_percent
+            })]
+        })
+        .unwrap_or_default();
 
     // Count process states
     let mut running = 0;
@@ -3861,23 +4231,26 @@ async fn sensor_system_processes_handler() -> impl IntoResponse {
         }
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "processes": processes,
-            "services": {
-                "atlascrew": atlascrew_services,
-                "system": []
-            },
-            "summary": {
-                "total": sys.processes().len(),
-                "running": running,
-                "sleeping": sleeping,
-                "stopped": stopped,
-                "zombie": zombie
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "processes": processes,
+                "services": {
+                    "atlascrew": atlascrew_services,
+                    "system": []
+                },
+                "summary": {
+                    "total": sys.processes().len(),
+                    "running": running,
+                    "sleeping": sleeping,
+                    "stopped": stopped,
+                    "zombie": zombie
+                }
             }
-        }
-    })))
+        })),
+    )
 }
 
 /// GET /_sensor/system/logs - System logs
@@ -3891,7 +4264,9 @@ struct LogsQuery {
     source: Option<String>,
 }
 
-fn default_log_limit() -> usize { 100 }
+fn default_log_limit() -> usize {
+    100
+}
 
 async fn sensor_system_logs_handler(Query(params): Query<LogsQuery>) -> impl IntoResponse {
     // Get logs from buffer
@@ -3899,21 +4274,29 @@ async fn sensor_system_logs_handler(Query(params): Query<LogsQuery>) -> impl Int
     let limit = params.limit.min(200);
 
     // Filter by level if specified
-    let filtered: Vec<_> = logs.iter()
+    let filtered: Vec<_> = logs
+        .iter()
         .filter(|log| {
-            params.level.as_ref().map(|l| log.level == *l).unwrap_or(true)
+            params
+                .level
+                .as_ref()
+                .map(|l| log.level == *l)
+                .unwrap_or(true)
         })
         .take(limit)
         .cloned()
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "logs": filtered,
-            "hasMore": logs.len() > limit
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "logs": filtered,
+                "hasMore": logs.len() > limit
+            }
+        })),
+    )
 }
 
 // =============================================================================
@@ -3925,10 +4308,19 @@ async fn logs_handler(Query(params): Query<LogsQuery>) -> impl IntoResponse {
     let logs = LOG_BUFFER.read();
     let limit = params.limit.min(500);
 
-    let filtered: Vec<_> = logs.iter()
+    let filtered: Vec<_> = logs
+        .iter()
         .filter(|log| {
-            let level_match = params.level.as_ref().map(|l| log.level == *l).unwrap_or(true);
-            let source_match = params.source.as_ref().map(|s| log.source == *s).unwrap_or(true);
+            let level_match = params
+                .level
+                .as_ref()
+                .map(|l| log.level == *l)
+                .unwrap_or(true);
+            let source_match = params
+                .source
+                .as_ref()
+                .map(|s| log.source == *s)
+                .unwrap_or(true);
             level_match && source_match
         })
         .rev() // Most recent first
@@ -3936,14 +4328,17 @@ async fn logs_handler(Query(params): Query<LogsQuery>) -> impl IntoResponse {
         .cloned()
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "logs": filtered,
-            "total": logs.len(),
-            "sources": ["http", "waf", "system", "access"]
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "logs": filtered,
+                "total": logs.len(),
+                "sources": ["http", "waf", "system", "access"]
+            }
+        })),
+    )
 }
 
 /// GET /_sensor/logs/:source - Returns logs filtered by source
@@ -3954,21 +4349,31 @@ async fn logs_by_source_handler(
     let logs = LOG_BUFFER.read();
     let limit = params.limit.min(500);
 
-    let filtered: Vec<_> = logs.iter()
+    let filtered: Vec<_> = logs
+        .iter()
         .filter(|log| log.source == source)
-        .filter(|log| params.level.as_ref().map(|l| log.level == *l).unwrap_or(true))
+        .filter(|log| {
+            params
+                .level
+                .as_ref()
+                .map(|l| log.level == *l)
+                .unwrap_or(true)
+        })
         .rev()
         .take(limit)
         .cloned()
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "logs": filtered,
-            "source": source
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "logs": filtered,
+                "source": source
+            }
+        })),
+    )
 }
 
 // =============================================================================
@@ -4032,14 +4437,12 @@ async fn diagnostic_bundle_handler(State(state): State<AdminState>) -> impl Into
 
     // Return as downloadable JSON
     let body = serde_json::to_string_pretty(&bundle).unwrap_or_default();
-    let filename = format!("synapse-diagnostic-{}.json", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+    let filename = format!(
+        "synapse-diagnostic-{}.json",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
     let disposition = format!("attachment; filename=\"{}\"", filename);
-    build_response(
-        StatusCode::OK,
-        body,
-        "application/json",
-        Some(disposition),
-    )
+    build_response(StatusCode::OK, body, "application/json", Some(disposition))
 }
 
 // =============================================================================
@@ -4049,11 +4452,18 @@ async fn diagnostic_bundle_handler(State(state): State<AdminState>) -> impl Into
 /// GET /_sensor/config/export - Export current configuration as YAML
 async fn config_export_handler(State(state): State<AdminState>) -> axum::response::Response {
     // Try to read config file
-    let config_paths = ["config.yaml", "config.yml", "/etc/synapse-pingora/config.yaml"];
+    let config_paths = [
+        "config.yaml",
+        "config.yml",
+        "/etc/synapse-pingora/config.yaml",
+    ];
 
     for path in &config_paths {
         if let Ok(content) = std::fs::read_to_string(path) {
-            let filename = format!("synapse-config-{}.yaml", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+            let filename = format!(
+                "synapse-config-{}.yaml",
+                chrono::Utc::now().format("%Y%m%d-%H%M%S")
+            );
             let disposition = format!("attachment; filename=\"{}\"", filename);
             return build_response(
                 StatusCode::OK,
@@ -4072,22 +4482,17 @@ async fn config_export_handler(State(state): State<AdminState>) -> axum::respons
         "note": "Runtime configuration export - no config file found"
     });
 
-    let filename = format!("synapse-config-{}.json", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+    let filename = format!(
+        "synapse-config-{}.json",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
     let disposition = format!("attachment; filename=\"{}\"", filename);
     let body = serde_json::to_string_pretty(&config_json).unwrap_or_default();
-    build_response(
-        StatusCode::OK,
-        body,
-        "application/json",
-        Some(disposition),
-    )
+    build_response(StatusCode::OK, body, "application/json", Some(disposition))
 }
 
 /// POST /_sensor/config/import - Import configuration from YAML/JSON
-async fn config_import_handler(
-    State(state): State<AdminState>,
-    body: String,
-) -> impl IntoResponse {
+async fn config_import_handler(State(state): State<AdminState>, body: String) -> impl IntoResponse {
     // Try to parse as YAML first, then JSON
     // SECURITY: Log internal parse errors but return sanitized message to client
     let config_value: serde_json::Value = match serde_yaml::from_str(&body) {
@@ -4098,14 +4503,15 @@ async fn config_import_handler(
                 // Log detailed errors for debugging but don't expose to client
                 tracing::warn!(
                     "Config import parse failed - YAML: {}, JSON: {}",
-                    yaml_err, json_err
+                    yaml_err,
+                    json_err
                 );
                 return validation_error(
                     "Invalid configuration format. Expected valid YAML or JSON.",
                     Some(&json_err),
                 );
             }
-        }
+        },
     };
 
     // Validate the configuration has expected structure
@@ -4130,34 +4536,36 @@ async fn config_import_handler(
 
     // Apply the configuration if ConfigManager is available
     match state.handler.config_manager() {
-        Some(config_mgr) => {
-            match config_mgr.update_full_config(config_file) {
-                Ok(result) => {
-                    info!(
-                        "Config imported successfully: applied={}, persisted={}, warnings={}",
-                        result.applied, result.persisted, result.warnings.len()
-                    );
-                    (StatusCode::OK, Json(serde_json::json!({
+        Some(config_mgr) => match config_mgr.update_full_config(config_file) {
+            Ok(result) => {
+                info!(
+                    "Config imported successfully: applied={}, persisted={}, warnings={}",
+                    result.applied,
+                    result.persisted,
+                    result.warnings.len()
+                );
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
                         "success": true,
                         "message": "Configuration imported and applied successfully.",
                         "applied": result.applied,
                         "persisted": result.persisted,
                         "rebuild_required": result.rebuild_required,
                         "warnings": result.warnings
-                    }))).into_response()
-                }
-                Err(e) => {
-                    tracing::warn!("Config import application failed: {}", e);
-                    internal_error(
-                        "Failed to apply configuration. See server logs for details.",
-                        Some(&e),
-                    )
-                }
+                    })),
+                )
+                    .into_response()
             }
-        }
-        None => {
-            service_unavailable("ConfigManager")
-        }
+            Err(e) => {
+                tracing::warn!("Config import application failed: {}", e);
+                internal_error(
+                    "Failed to apply configuration. See server logs for details.",
+                    Some(&e),
+                )
+            }
+        },
+        None => service_unavailable("ConfigManager"),
     }
 }
 
@@ -4177,12 +4585,16 @@ async fn sensor_dlp_stats_handler(State(state): State<AdminState>) -> impl IntoR
                 _ => "critical (1000+)",
             };
 
-            (StatusCode::OK, Json(serde_json::json!({
-                "totalScans": stats.total_scans,
-                "totalMatches": stats.total_matches,
-                "matchBucket": match_bucket,
-                "patternCount": scanner.pattern_count(),
-            }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "totalScans": stats.total_scans,
+                    "totalMatches": stats.total_matches,
+                    "matchBucket": match_bucket,
+                    "patternCount": scanner.pattern_count(),
+                })),
+            )
+                .into_response()
         }
         None => {
             let mut problem = ProblemDetails::new(
@@ -4207,7 +4619,9 @@ struct ViolationsQuery {
     cursor: Option<u64>,
 }
 
-fn default_violations_limit() -> usize { 50 }
+fn default_violations_limit() -> usize {
+    50
+}
 
 /// GET /_sensor/dlp/violations - Returns recent DLP violations
 /// P2 fix: Adds pagination with cursor-based navigation
@@ -4221,7 +4635,8 @@ async fn sensor_dlp_violations_handler(
 
             // Apply cursor filter (violations newer than cursor timestamp)
             let filtered: Vec<_> = if let Some(cursor) = query.cursor {
-                all_violations.into_iter()
+                all_violations
+                    .into_iter()
                     .filter(|v| v.timestamp > cursor)
                     .collect()
             } else {
@@ -4235,15 +4650,19 @@ async fn sensor_dlp_violations_handler(
             // Get next cursor (timestamp of oldest returned violation)
             let next_cursor = violations.last().map(|v| v.timestamp);
 
-            (StatusCode::OK, Json(serde_json::json!({
-                "violations": violations,
-                "pagination": {
-                    "total": total,
-                    "limit": query.limit,
-                    "nextCursor": next_cursor,
-                    "hasMore": total > query.limit
-                }
-            }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "violations": violations,
+                    "pagination": {
+                        "total": total,
+                        "limit": query.limit,
+                        "nextCursor": next_cursor,
+                        "hasMore": total > query.limit
+                    }
+                })),
+            )
+                .into_response()
         }
         None => {
             let mut problem = ProblemDetails::new(
@@ -4257,7 +4676,6 @@ async fn sensor_dlp_violations_handler(
     }
 }
 
-
 // =============================================================================
 // API Profiling Endpoints (for API Catalog)
 // =============================================================================
@@ -4269,7 +4687,9 @@ struct DiscoveryQuery {
     limit: usize,
 }
 
-fn default_discovery_limit() -> usize { 20 }
+fn default_discovery_limit() -> usize {
+    20
+}
 
 /// GET /_sensor/profiling/templates - Returns endpoint templates discovered by profiler
 async fn profiling_templates_handler(State(state): State<AdminState>) -> impl IntoResponse {
@@ -4298,10 +4718,13 @@ async fn profiling_templates_handler(State(state): State<AdminState>) -> impl In
         })
         .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "templates": templates,
-        "count": templates.len()
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "templates": templates,
+            "count": templates.len()
+        })),
+    )
 }
 
 /// Infer service ID from path prefix
@@ -4374,37 +4797,45 @@ async fn profiling_baselines_handler(State(_state): State<AdminState>) -> impl I
 
     if !profiles.is_empty() {
         // Convert real profiles to baseline JSON format
-        let baselines: Vec<serde_json::Value> = profiles.iter().map(|p| {
-            // Get percentiles (p50, p95, p99)
-            let (p50, p95, p99) = p.payload_size.percentiles();
+        let baselines: Vec<serde_json::Value> = profiles
+            .iter()
+            .map(|p| {
+                // Get percentiles (p50, p95, p99)
+                let (p50, p95, p99) = p.payload_size.percentiles();
 
-            // Convert status codes HashMap to array of [code, count] pairs
-            let status_codes: Vec<[u32; 2]> = p.status_codes
-                .iter()
-                .map(|(&code, &count)| [code as u32, count])
-                .collect();
+                // Convert status codes HashMap to array of [code, count] pairs
+                let status_codes: Vec<[u32; 2]> = p
+                    .status_codes
+                    .iter()
+                    .map(|(&code, &count)| [code as u32, count])
+                    .collect();
 
-            // Calculate requests per minute based on time window
-            let time_window_mins = ((p.last_updated_ms.saturating_sub(p.first_seen_ms)) as f64 / 60000.0).max(1.0);
-            let avg_rpm = p.sample_count as f64 / time_window_mins;
+                // Calculate requests per minute based on time window
+                let time_window_mins =
+                    ((p.last_updated_ms.saturating_sub(p.first_seen_ms)) as f64 / 60000.0).max(1.0);
+                let avg_rpm = p.sample_count as f64 / time_window_mins;
 
-            serde_json::json!({
-                "template": p.template,
-                "totalRequests": p.sample_count,
-                "avgRequestsPerMinute": (avg_rpm * 100.0).round() / 100.0,
-                "p50ResponseTime": p50 as u64,
-                "p95ResponseTime": p95 as u64,
-                "p99ResponseTime": p99 as u64,
-                "statusCodes": status_codes,
-                "firstSeen": p.first_seen_ms,
-                "lastSeen": p.last_updated_ms
+                serde_json::json!({
+                    "template": p.template,
+                    "totalRequests": p.sample_count,
+                    "avgRequestsPerMinute": (avg_rpm * 100.0).round() / 100.0,
+                    "p50ResponseTime": p50 as u64,
+                    "p95ResponseTime": p95 as u64,
+                    "p99ResponseTime": p99 as u64,
+                    "statusCodes": status_codes,
+                    "firstSeen": p.first_seen_ms,
+                    "lastSeen": p.last_updated_ms
+                })
             })
-        }).collect();
+            .collect();
 
-        return (StatusCode::OK, Json(serde_json::json!({
-            "baselines": baselines,
-            "count": baselines.len()
-        })));
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "baselines": baselines,
+                "count": baselines.len()
+            })),
+        );
     }
 
     // Fallback: Seed data matching EndpointBaseline interface for dashboard testing
@@ -4521,10 +4952,13 @@ async fn profiling_baselines_handler(State(_state): State<AdminState>) -> impl I
         }),
     ];
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "baselines": baselines,
-        "count": baselines.len()
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "baselines": baselines,
+            "count": baselines.len()
+        })),
+    )
 }
 
 /// GET /_sensor/profiling/schemas - Returns schema information per endpoint
@@ -4533,21 +4967,27 @@ async fn profiling_schemas_handler(State(_state): State<AdminState>) -> impl Int
     let real_schemas = get_schemas();
 
     // Convert real schemas to JSON format matching the frontend interface
-    let schemas: Vec<serde_json::Value> = real_schemas.iter().map(|s| {
-        serde_json::json!({
-            "template": s.template,
-            "sampleCount": s.sample_count,
-            "requestFieldCount": s.request_schema.len(),
-            "responseFieldCount": s.response_schema.len(),
-            "lastUpdated": s.last_updated_ms,
-            "version": s.version
+    let schemas: Vec<serde_json::Value> = real_schemas
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "template": s.template,
+                "sampleCount": s.sample_count,
+                "requestFieldCount": s.request_schema.len(),
+                "responseFieldCount": s.response_schema.len(),
+                "lastUpdated": s.last_updated_ms,
+                "version": s.version
+            })
         })
-    }).collect();
+        .collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "schemas": schemas,
-        "count": schemas.len()
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "schemas": schemas,
+            "count": schemas.len()
+        })),
+    )
 }
 
 /// GET /_sensor/profiling/schema/discovery - Returns recent discovery events
@@ -4613,10 +5053,13 @@ async fn profiling_discovery_handler(Query(params): Query<DiscoveryQuery>) -> im
 
     let events: Vec<_> = all_events.into_iter().take(limit).collect();
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "events": events,
-        "count": events.len()
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "events": events,
+            "count": events.len()
+        })),
+    )
 }
 
 /// GET /_sensor/profiling/anomalies - Returns anomaly data per endpoint
@@ -4716,10 +5159,13 @@ async fn profiling_anomalies_handler(State(_state): State<AdminState>) -> impl I
         }),
     ];
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "endpoints": endpoints,
-        "count": endpoints.len()
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "endpoints": endpoints,
+            "count": endpoints.len()
+        })),
+    )
 }
 
 /// GET /debug/profiles - Get learned endpoint profiles
@@ -4731,62 +5177,62 @@ async fn profiles_handler(State(_state): State<AdminState>) -> impl IntoResponse
     // Use GET /api/profiler/profiles for real profile data.
     let now = chrono::Utc::now().timestamp_millis();
     let seed_profiles = vec![
-            serde_json::json!({
-                "template": "/api/users",
-                "payload_size": { "mean": 256.0, "std_dev": 64.0, "min": 128, "max": 512 },
-                "expected_params": { "page": 45, "limit": 45, "sort": 23 },
-                "content_types": { "application/json": 89, "text/html": 1 },
-                "status_codes": { "200": 85, "404": 4, "500": 1 },
-                "endpoint_risk": 12.5,
-                "sample_count": 90,
-                "first_seen_ms": now - 3600000,
-                "last_updated_ms": now
-            }),
-            serde_json::json!({
-                "template": "/api/products/{id}",
-                "payload_size": { "mean": 1024.0, "std_dev": 256.0, "min": 512, "max": 2048 },
-                "expected_params": { "fields": 30, "include": 15 },
-                "content_types": { "application/json": 45 },
-                "status_codes": { "200": 40, "404": 5 },
-                "endpoint_risk": 8.2,
-                "sample_count": 45,
-                "first_seen_ms": now - 7200000,
-                "last_updated_ms": now - 300000
-            }),
-            serde_json::json!({
-                "template": "/api/auth/login",
-                "payload_size": { "mean": 128.0, "std_dev": 32.0, "min": 64, "max": 256 },
-                "expected_params": {},
-                "content_types": { "application/json": 120 },
-                "status_codes": { "200": 95, "401": 20, "429": 5 },
-                "endpoint_risk": 65.8,
-                "sample_count": 120,
-                "first_seen_ms": now - 86400000,
-                "last_updated_ms": now - 60000
-            }),
-            serde_json::json!({
-                "template": "/api/admin/users",
-                "payload_size": { "mean": 512.0, "std_dev": 128.0, "min": 256, "max": 1024 },
-                "expected_params": { "role": 8, "status": 5 },
-                "content_types": { "application/json": 15 },
-                "status_codes": { "200": 10, "403": 5 },
-                "endpoint_risk": 78.5,
-                "sample_count": 15,
-                "first_seen_ms": now - 1800000,
-                "last_updated_ms": now - 120000
-            }),
-            serde_json::json!({
-                "template": "/api/search",
-                "payload_size": { "mean": 64.0, "std_dev": 16.0, "min": 32, "max": 128 },
-                "expected_params": { "q": 200, "page": 150, "limit": 150, "category": 80 },
-                "content_types": { "application/json": 200 },
-                "status_codes": { "200": 195, "400": 5 },
-                "endpoint_risk": 25.3,
-                "sample_count": 200,
-                "first_seen_ms": now - 172800000,
-                "last_updated_ms": now
-            }),
-        ];
+        serde_json::json!({
+            "template": "/api/users",
+            "payload_size": { "mean": 256.0, "std_dev": 64.0, "min": 128, "max": 512 },
+            "expected_params": { "page": 45, "limit": 45, "sort": 23 },
+            "content_types": { "application/json": 89, "text/html": 1 },
+            "status_codes": { "200": 85, "404": 4, "500": 1 },
+            "endpoint_risk": 12.5,
+            "sample_count": 90,
+            "first_seen_ms": now - 3600000,
+            "last_updated_ms": now
+        }),
+        serde_json::json!({
+            "template": "/api/products/{id}",
+            "payload_size": { "mean": 1024.0, "std_dev": 256.0, "min": 512, "max": 2048 },
+            "expected_params": { "fields": 30, "include": 15 },
+            "content_types": { "application/json": 45 },
+            "status_codes": { "200": 40, "404": 5 },
+            "endpoint_risk": 8.2,
+            "sample_count": 45,
+            "first_seen_ms": now - 7200000,
+            "last_updated_ms": now - 300000
+        }),
+        serde_json::json!({
+            "template": "/api/auth/login",
+            "payload_size": { "mean": 128.0, "std_dev": 32.0, "min": 64, "max": 256 },
+            "expected_params": {},
+            "content_types": { "application/json": 120 },
+            "status_codes": { "200": 95, "401": 20, "429": 5 },
+            "endpoint_risk": 65.8,
+            "sample_count": 120,
+            "first_seen_ms": now - 86400000,
+            "last_updated_ms": now - 60000
+        }),
+        serde_json::json!({
+            "template": "/api/admin/users",
+            "payload_size": { "mean": 512.0, "std_dev": 128.0, "min": 256, "max": 1024 },
+            "expected_params": { "role": 8, "status": 5 },
+            "content_types": { "application/json": 15 },
+            "status_codes": { "200": 10, "403": 5 },
+            "endpoint_risk": 78.5,
+            "sample_count": 15,
+            "first_seen_ms": now - 1800000,
+            "last_updated_ms": now - 120000
+        }),
+        serde_json::json!({
+            "template": "/api/search",
+            "payload_size": { "mean": 64.0, "std_dev": 16.0, "min": 32, "max": 128 },
+            "expected_params": { "q": 200, "page": 150, "limit": 150, "category": 80 },
+            "content_types": { "application/json": 200 },
+            "status_codes": { "200": 195, "400": 5 },
+            "endpoint_risk": 25.3,
+            "sample_count": 200,
+            "first_seen_ms": now - 172800000,
+            "last_updated_ms": now
+        }),
+    ];
     Json(serde_json::json!({
         "success": true,
         "data": seed_profiles
@@ -4801,7 +5247,7 @@ async fn save_profiles_handler(State(_state): State<AdminState>) -> impl IntoRes
     // The profiler needs to be added to AdminState for direct access
     wrap_response(crate::api::ApiResponse::<String>::err(
         "Profile persistence endpoint not yet integrated with new profiler module. \
-         Use GET /api/profiler/profiles to view current profiles."
+         Use GET /api/profiler/profiles to view current profiles.",
     ))
 }
 
@@ -4811,7 +5257,9 @@ async fn api_profiles_reset_handler(State(state): State<AdminState>) -> impl Int
     // Note: This clears learned behavioral baselines
     state.handler.metrics().reset_profiles();
     info!("Endpoint profiles reset");
-    wrap_response(crate::api::ApiResponse::ok("Endpoint profiles reset successfully".to_string()))
+    wrap_response(crate::api::ApiResponse::ok(
+        "Endpoint profiles reset successfully".to_string(),
+    ))
 }
 
 /// Handler to reset schema learner data.
@@ -4820,7 +5268,9 @@ async fn api_schemas_reset_handler(State(state): State<AdminState>) -> impl Into
     // Note: This clears learned API schemas
     state.handler.metrics().reset_schemas();
     info!("Schema learner reset");
-    wrap_response(crate::api::ApiResponse::ok("Schema learner reset successfully".to_string()))
+    wrap_response(crate::api::ApiResponse::ok(
+        "Schema learner reset successfully".to_string(),
+    ))
 }
 
 /// Wraps an ApiResponse into an HTTP response with appropriate status code.
@@ -4995,7 +5445,11 @@ async fn handle_waf_debugger_socket(state: AdminState, socket: WebSocket) {
                 };
 
                 match command {
-                    DebuggerCommand::Evaluate { id, request, options } => {
+                    DebuggerCommand::Evaluate {
+                        id,
+                        request,
+                        options,
+                    } => {
                         let request_id =
                             id.unwrap_or_else(|| format!("trace_{}", fastrand::u64(..)));
                         let max_events = options
@@ -5172,21 +5626,25 @@ async fn sensor_evaluate_handler(
                 "pass"
             };
 
-            (StatusCode::OK, Json(serde_json::json!({
-                "blocked": result.blocked,
-                "riskScore": result.risk_score,
-                "matchedRules": result.matched_rules,
-                "blockReason": result.block_reason,
-                "detectionTimeUs": result.detection_time_us,
-                "verdict": verdict,
-                "input": {
-                    "method": request.method,
-                    "uri": request.uri,
-                    "headerCount": request.headers.len(),
-                    "bodyLength": body_bytes.as_ref().map(|b| b.len()).unwrap_or(0),
-                    "clientIp": request.client_ip
-                }
-            }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "blocked": result.blocked,
+                    "riskScore": result.risk_score,
+                    "matchedRules": result.matched_rules,
+                    "blockReason": result.block_reason,
+                    "detectionTimeUs": result.detection_time_us,
+                    "verdict": verdict,
+                    "input": {
+                        "method": request.method,
+                        "uri": request.uri,
+                        "headerCount": request.headers.len(),
+                        "bodyLength": body_bytes.as_ref().map(|b| b.len()).unwrap_or(0),
+                        "clientIp": request.client_ip
+                    }
+                })),
+            )
+                .into_response()
         }
         None => {
             // Synapse engine not configured
@@ -5206,7 +5664,8 @@ fn decode_evaluate_body(body: Option<&str>) -> Option<Vec<u8>> {
 fn base64_decode(input: &str) -> Result<Vec<u8>, ()> {
     // Simple base64 decoding - just check if it looks like base64
     // and try to decode, falling back to raw bytes on error
-    const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    const BASE64_CHARS: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
     // Check if input looks like base64 (only base64 chars and length is multiple of 4 with padding)
     let trimmed = input.trim();
@@ -5343,7 +5802,8 @@ async fn api_profiles_detail_handler(
                     }
                 }
             })),
-        ).into_response(),
+        )
+            .into_response(),
         None => not_found_error("Profile", &decoded_template),
     }
 }
@@ -5414,7 +5874,8 @@ async fn api_schemas_detail_handler(
                     }).collect::<serde_json::Map<String, serde_json::Value>>()
                 }
             })),
-        ).into_response(),
+        )
+            .into_response(),
         None => not_found_error("Schema", &decoded_template),
     }
 }
@@ -5437,18 +5898,21 @@ struct DlpConfigRequest {
 
 /// GET /_sensor/config/dlp - Get DLP configuration
 async fn config_dlp_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "enabled": true,
-            "fast_mode": false,
-            "scan_text_only": true,
-            "max_scan_size": 5242880,
-            "max_body_inspection_bytes": 8192,
-            "max_matches": 100,
-            "custom_keywords": []
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "enabled": true,
+                "fast_mode": false,
+                "scan_text_only": true,
+                "max_scan_size": 5242880,
+                "max_body_inspection_bytes": 8192,
+                "max_matches": 100,
+                "custom_keywords": []
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/dlp - Update DLP configuration
@@ -5457,11 +5921,17 @@ async fn config_dlp_put_handler(
     Json(config): Json<DlpConfigRequest>,
 ) -> impl IntoResponse {
     // In a real implementation, this would update the DLP scanner configuration
-    info!("DLP config update: enabled={:?}, fast_mode={:?}", config.enabled, config.fast_mode);
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "DLP configuration updated"
-    })))
+    info!(
+        "DLP config update: enabled={:?}, fast_mode={:?}",
+        config.enabled, config.fast_mode
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "DLP configuration updated"
+        })),
+    )
 }
 
 /// Block Page Configuration request/response
@@ -5479,19 +5949,22 @@ struct BlockPageConfigRequest {
 
 /// GET /_sensor/config/block-page - Get block page configuration
 async fn config_block_page_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "company_name": null,
-            "support_email": null,
-            "logo_url": null,
-            "show_request_id": true,
-            "show_timestamp": true,
-            "show_client_ip": false,
-            "show_rule_id": false,
-            "custom_css": null
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "company_name": null,
+                "support_email": null,
+                "logo_url": null,
+                "show_request_id": true,
+                "show_timestamp": true,
+                "show_client_ip": false,
+                "show_rule_id": false,
+                "custom_css": null
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/block-page - Update block page configuration
@@ -5499,11 +5972,17 @@ async fn config_block_page_put_handler(
     State(_state): State<AdminState>,
     Json(config): Json<BlockPageConfigRequest>,
 ) -> impl IntoResponse {
-    info!("Block page config update: company={:?}", config.company_name);
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "Block page configuration updated"
-    })))
+    info!(
+        "Block page config update: company={:?}",
+        config.company_name
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "Block page configuration updated"
+        })),
+    )
 }
 
 /// Crawler Configuration request/response
@@ -5521,19 +6000,22 @@ struct CrawlerConfigRequest {
 
 /// GET /_sensor/config/crawler - Get crawler detection configuration
 async fn config_crawler_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "enabled": true,
-            "verify_legitimate_crawlers": true,
-            "block_bad_bots": true,
-            "dns_failure_policy": "apply_risk_penalty",
-            "dns_cache_ttl_secs": 300,
-            "dns_timeout_ms": 2000,
-            "max_concurrent_dns_lookups": 100,
-            "dns_failure_risk_penalty": 20
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "enabled": true,
+                "verify_legitimate_crawlers": true,
+                "block_bad_bots": true,
+                "dns_failure_policy": "apply_risk_penalty",
+                "dns_cache_ttl_secs": 300,
+                "dns_timeout_ms": 2000,
+                "max_concurrent_dns_lookups": 100,
+                "dns_failure_risk_penalty": 20
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/crawler - Update crawler detection configuration
@@ -5541,11 +6023,17 @@ async fn config_crawler_put_handler(
     State(_state): State<AdminState>,
     Json(config): Json<CrawlerConfigRequest>,
 ) -> impl IntoResponse {
-    info!("Crawler config update: enabled={:?}, block_bad_bots={:?}", config.enabled, config.block_bad_bots);
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "Crawler configuration updated"
-    })))
+    info!(
+        "Crawler config update: enabled={:?}, block_bad_bots={:?}",
+        config.enabled, config.block_bad_bots
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "Crawler configuration updated"
+        })),
+    )
 }
 
 /// Tarpit Configuration request/response
@@ -5561,17 +6049,20 @@ struct TarpitConfigRequest {
 
 /// GET /_sensor/config/tarpit - Get tarpit configuration
 async fn config_tarpit_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "enabled": true,
-            "base_delay_ms": 1000,
-            "max_delay_ms": 30000,
-            "progressive_multiplier": 1.5,
-            "max_concurrent_tarpits": 1000,
-            "decay_threshold_ms": 300000
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "enabled": true,
+                "base_delay_ms": 1000,
+                "max_delay_ms": 30000,
+                "progressive_multiplier": 1.5,
+                "max_concurrent_tarpits": 1000,
+                "decay_threshold_ms": 300000
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/tarpit - Update tarpit configuration
@@ -5579,11 +6070,17 @@ async fn config_tarpit_put_handler(
     State(_state): State<AdminState>,
     Json(config): Json<TarpitConfigRequest>,
 ) -> impl IntoResponse {
-    info!("Tarpit config update: enabled={:?}, base_delay={:?}ms", config.enabled, config.base_delay_ms);
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "Tarpit configuration updated"
-    })))
+    info!(
+        "Tarpit config update: enabled={:?}, base_delay={:?}ms",
+        config.enabled, config.base_delay_ms
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "Tarpit configuration updated"
+        })),
+    )
 }
 
 /// Impossible Travel Configuration request/response
@@ -5597,15 +6094,18 @@ struct TravelConfigRequest {
 
 /// GET /_sensor/config/travel - Get impossible travel configuration
 async fn config_travel_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "max_speed_kmh": 800.0,
-            "min_distance_km": 100.0,
-            "history_window_ms": 86400000,
-            "max_history_per_user": 100
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "max_speed_kmh": 800.0,
+                "min_distance_km": 100.0,
+                "history_window_ms": 86400000,
+                "max_history_per_user": 100
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/travel - Update impossible travel configuration
@@ -5613,11 +6113,17 @@ async fn config_travel_put_handler(
     State(_state): State<AdminState>,
     Json(config): Json<TravelConfigRequest>,
 ) -> impl IntoResponse {
-    info!("Travel config update: max_speed={:?}km/h", config.max_speed_kmh);
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "Impossible travel configuration updated"
-    })))
+    info!(
+        "Travel config update: max_speed={:?}km/h",
+        config.max_speed_kmh
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "Impossible travel configuration updated"
+        })),
+    )
 }
 
 /// Entity Store Configuration request/response
@@ -5633,17 +6139,20 @@ struct EntityConfigRequest {
 
 /// GET /_sensor/config/entity - Get entity store configuration
 async fn config_entity_get_handler(State(_state): State<AdminState>) -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "enabled": true,
-            "max_entities": 100000,
-            "risk_decay_per_minute": 10.0,
-            "block_threshold": 70.0,
-            "max_risk": 100.0,
-            "max_rules_per_entity": 50
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "enabled": true,
+                "max_entities": 100000,
+                "risk_decay_per_minute": 10.0,
+                "block_threshold": 70.0,
+                "max_risk": 100.0,
+                "max_rules_per_entity": 50
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/entity - Update entity store configuration
@@ -5651,11 +6160,17 @@ async fn config_entity_put_handler(
     State(_state): State<AdminState>,
     Json(config): Json<EntityConfigRequest>,
 ) -> impl IntoResponse {
-    info!("Entity config update: max_entities={:?}, block_threshold={:?}", config.max_entities, config.block_threshold);
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "message": "Entity store configuration updated"
-    })))
+    info!(
+        "Entity config update: max_entities={:?}, block_threshold={:?}",
+        config.max_entities, config.block_threshold
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "message": "Entity store configuration updated"
+        })),
+    )
 }
 
 /// GET /_sensor/config/integrations - Get external integrations configuration
@@ -5672,10 +6187,13 @@ async fn config_integrations_get_handler(State(_state): State<AdminState>) -> im
             apparatus_url: String::new(),
         });
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": config
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": config
+        })),
+    )
 }
 
 /// PUT /_sensor/config/integrations - Update external integrations configuration
@@ -5685,15 +6203,21 @@ async fn config_integrations_put_handler(
 ) -> impl IntoResponse {
     if let Some(setter) = INTEGRATIONS_SETTER.read().as_ref() {
         setter(config);
-        (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "message": "Integrations configuration updated"
-        })))
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": "Integrations configuration updated"
+            })),
+        )
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
-            "success": false,
-            "message": "Configuration updates not supported by this sensor instance"
-        })))
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "success": false,
+                "message": "Configuration updates not supported by this sensor instance"
+            })),
+        )
     }
 }
 
@@ -5774,8 +6298,7 @@ fn write_sysctl_value(key: &str, value: &str) -> Result<(), String> {
     if cfg!(target_os = "linux") {
         let path = sysctl_path_for_key(key);
         if path.exists() {
-            return std::fs::write(&path, value)
-                .map_err(|err| err.to_string());
+            return std::fs::write(&path, value).map_err(|err| err.to_string());
         }
     }
 
@@ -5815,7 +6338,7 @@ fn parse_kernel_payload(payload: serde_json::Value) -> KernelConfigPayload {
                         serde_json::Value::String(s) => s,
                         serde_json::Value::Number(n) => n.to_string(),
                         serde_json::Value::Bool(b) => b.to_string(),
-                        other => {
+                        _other => {
                             warnings.push(format!("Skipping non-scalar value for {}", key));
                             continue;
                         }
@@ -5849,7 +6372,10 @@ fn parse_kernel_keys(query: Option<String>) -> Vec<String> {
             return parsed;
         }
     }
-    DEFAULT_KERNEL_KEYS.iter().map(|k| (*k).to_string()).collect()
+    DEFAULT_KERNEL_KEYS
+        .iter()
+        .map(|k| (*k).to_string())
+        .collect()
 }
 
 fn load_sysctl_entries(path: &std::path::Path) -> HashMap<String, String> {
@@ -5912,7 +6438,10 @@ fn current_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn append_sysctl_wal(path: &std::path::Path, params: &HashMap<String, String>) -> Result<(), String> {
+fn append_sysctl_wal(
+    path: &std::path::Path,
+    params: &HashMap<String, String>,
+) -> Result<(), String> {
     use std::io::Write;
 
     if let Some(parent) = path.parent() {
@@ -5956,7 +6485,11 @@ fn parse_sysctl_wal_params(value: &serde_json::Value) -> Option<HashMap<String, 
         };
         parsed.insert(key.clone(), string_value);
     }
-    if parsed.is_empty() { None } else { Some(parsed) }
+    if parsed.is_empty() {
+        None
+    } else {
+        Some(parsed)
+    }
 }
 
 fn recover_sysctl_wal() -> Result<(), String> {
@@ -6053,13 +6586,16 @@ async fn config_kernel_get_handler(
         }
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": true,
-        "data": {
-            "parameters": values,
-            "errors": errors
-        }
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "data": {
+                "parameters": values,
+                "errors": errors
+            }
+        })),
+    )
 }
 
 /// PUT /_sensor/config/kernel - Update kernel/sysctl parameters
@@ -6119,30 +6655,33 @@ async fn config_kernel_put_handler(
         }
     }
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "success": failed.is_empty() && persist_error.is_none(),
-        "data": {
-            "applied": applied,
-            "failed": failed,
-            "persisted": parsed.persist && persist_error.is_none(),
-            "persistError": persist_error
-        },
-        "warnings": parsed.warnings
-    })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": failed.is_empty() && persist_error.is_none(),
+            "data": {
+                "applied": applied,
+                "failed": failed,
+                "persisted": parsed.persist && persist_error.is_none(),
+                "persistError": persist_error
+            },
+            "warnings": parsed.warnings
+        })),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use http_body_util::BodyExt;
-    use http::Request;
-    use tower::util::ServiceExt;
-    use std::num::NonZeroU32;
-    use tempfile::tempdir;
-    use crate::horizon::{SignalType, Severity};
+    use crate::horizon::{Severity, SignalType};
     use crate::intelligence::signal_manager::{SignalManager, SignalManagerConfig};
     use crate::intelligence::SignalQueryOptions;
+    use axum::body::Body;
+    use http::Request;
+    use http_body_util::BodyExt;
+    use std::num::NonZeroU32;
+    use tempfile::tempdir;
+    use tower::util::ServiceExt;
 
     fn create_test_app() -> Router {
         use governor::{Quota, RateLimiter};
@@ -6210,9 +6749,15 @@ mod tests {
 
         let router = Router::new()
             .route("/_sensor/report", post(sensor_report_handler))
-            .route_layer(middleware::from_fn_with_state(state.clone(), require_sensor_write))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_sensor_write,
+            ))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ))
             .with_state(state);
 
         (router, signal_manager_ref)
@@ -6261,7 +6806,10 @@ mod tests {
         std::fs::write(&wal_path, format!("{}\n", wal_entry)).unwrap();
 
         let previous = std::env::var("SYNAPSE_SYSCTL_CONFIG_PATH").ok();
-        std::env::set_var("SYNAPSE_SYSCTL_CONFIG_PATH", config_path.to_string_lossy().to_string());
+        std::env::set_var(
+            "SYNAPSE_SYSCTL_CONFIG_PATH",
+            config_path.to_string_lossy().to_string(),
+        );
 
         let result = recover_sysctl_wal();
 
@@ -6352,7 +6900,10 @@ mod tests {
             .unwrap();
 
         // Returns error because no reloader configured, but endpoint works
-        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            response.status() == StatusCode::OK
+                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[tokio::test]
@@ -6620,36 +7171,68 @@ mod tests {
     #[test]
     fn test_signal_type_mapping() {
         use crate::signals::adapter::SignalAdapter;
-        
+
         let mut report = ApparatusReport {
             sensor_id: "sensor-1".to_string(),
             timestamp: "2026-02-03T00:00:00Z".to_string(),
             version: Some("1.0.0".to_string()),
-            actor: ApparatusActor { ip: "1.2.3.4".to_string(), fingerprint: None, session_id: None },
-            signal: ApparatusSignal { signal_type: "honeypot_hit".to_string(), severity: "high".to_string(), details: serde_json::json!({}) },
+            actor: ApparatusActor {
+                ip: "1.2.3.4".to_string(),
+                fingerprint: None,
+                session_id: None,
+            },
+            signal: ApparatusSignal {
+                signal_type: "honeypot_hit".to_string(),
+                severity: "high".to_string(),
+                details: serde_json::json!({}),
+            },
             request: None,
         };
 
-        assert!(matches!(SignalAdapter::map_type(&report), SignalType::IpThreat));
-        
+        assert!(matches!(
+            SignalAdapter::map_type(&report),
+            SignalType::IpThreat
+        ));
+
         report.signal.signal_type = "trap_trigger".to_string();
-        assert!(matches!(SignalAdapter::map_type(&report), SignalType::BotSignature));
-        
+        assert!(matches!(
+            SignalAdapter::map_type(&report),
+            SignalType::BotSignature
+        ));
+
         report.signal.signal_type = "protocol_probe".to_string();
-        assert!(matches!(SignalAdapter::map_type(&report), SignalType::TemplateDiscovery));
-        
+        assert!(matches!(
+            SignalAdapter::map_type(&report),
+            SignalType::TemplateDiscovery
+        ));
+
         report.signal.signal_type = "dlp_match".to_string();
-        assert!(matches!(SignalAdapter::map_type(&report), SignalType::SchemaViolation));
+        assert!(matches!(
+            SignalAdapter::map_type(&report),
+            SignalType::SchemaViolation
+        ));
     }
 
     #[test]
     fn test_severity_mapping() {
         use crate::signals::adapter::SignalAdapter;
         assert!(matches!(SignalAdapter::map_severity("low"), Severity::Low));
-        assert!(matches!(SignalAdapter::map_severity("medium"), Severity::Medium));
-        assert!(matches!(SignalAdapter::map_severity("high"), Severity::High));
-        assert!(matches!(SignalAdapter::map_severity("critical"), Severity::Critical));
-        assert!(matches!(SignalAdapter::map_severity("unknown"), Severity::Medium));
+        assert!(matches!(
+            SignalAdapter::map_severity("medium"),
+            Severity::Medium
+        ));
+        assert!(matches!(
+            SignalAdapter::map_severity("high"),
+            Severity::High
+        ));
+        assert!(matches!(
+            SignalAdapter::map_severity("critical"),
+            Severity::Critical
+        ));
+        assert!(matches!(
+            SignalAdapter::map_severity("unknown"),
+            Severity::Medium
+        ));
     }
 
     #[tokio::test]
@@ -6754,7 +7337,11 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let signals = manager.list_signals(SignalQueryOptions::default());
         assert!(!signals.is_empty());
-        assert!(signals[0].metadata.as_object().map(|m| m.is_empty()).unwrap_or(false));
+        assert!(signals[0]
+            .metadata
+            .as_object()
+            .map(|m| m.is_empty())
+            .unwrap_or(false));
     }
 
     #[test]
@@ -6942,7 +7529,10 @@ mod tests {
         assert_eq!(request.headers[0].1, "application/json");
         assert_eq!(request.headers[1].0, "Authorization");
         assert_eq!(request.headers[1].1, "Bearer token");
-        assert_eq!(request.body, Some("eyJ1c2VybmFtZSI6ICJ0ZXN0In0=".to_string()));
+        assert_eq!(
+            request.body,
+            Some("eyJ1c2VybmFtZSI6ICJ0ZXN0In0=".to_string())
+        );
         assert_eq!(request.client_ip, "192.168.1.100");
     }
 
@@ -7156,28 +7746,36 @@ mod tests {
 
         // X-Content-Type-Options: nosniff - prevents MIME type sniffing
         assert_eq!(
-            headers.get(header::X_CONTENT_TYPE_OPTIONS).map(|v| v.to_str().unwrap()),
+            headers
+                .get(header::X_CONTENT_TYPE_OPTIONS)
+                .map(|v| v.to_str().unwrap()),
             Some("nosniff"),
             "X-Content-Type-Options header missing or incorrect"
         );
 
         // X-Frame-Options: DENY - prevents clickjacking
         assert_eq!(
-            headers.get(header::X_FRAME_OPTIONS).map(|v| v.to_str().unwrap()),
+            headers
+                .get(header::X_FRAME_OPTIONS)
+                .map(|v| v.to_str().unwrap()),
             Some("DENY"),
             "X-Frame-Options header missing or incorrect"
         );
 
         // Referrer-Policy - controls referrer information
         assert_eq!(
-            headers.get(header::REFERRER_POLICY).map(|v| v.to_str().unwrap()),
+            headers
+                .get(header::REFERRER_POLICY)
+                .map(|v| v.to_str().unwrap()),
             Some("strict-origin-when-cross-origin"),
             "Referrer-Policy header missing or incorrect"
         );
 
         // Cache-Control: no-store - prevents caching sensitive data
         assert!(
-            headers.get(header::CACHE_CONTROL).map(|v| v.to_str().unwrap())
+            headers
+                .get(header::CACHE_CONTROL)
+                .map(|v| v.to_str().unwrap())
                 .unwrap_or("")
                 .contains("no-store"),
             "Cache-Control header should contain no-store"
@@ -7256,13 +7854,18 @@ mod tests {
         // Console route with require_admin_read middleware
         let admin_read_routes = Router::new()
             .route("/console", get(admin_console_handler))
-            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_read,
+            ))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_public));
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_public,
+            ));
 
         // Health remains public
-        let public_routes = Router::new()
-            .route("/health", get(health_handler));
+        let public_routes = Router::new().route("/health", get(health_handler));
 
         Router::new()
             .merge(admin_read_routes)
@@ -7415,16 +8018,31 @@ mod tests {
 
         let rules_read_routes = Router::new()
             .route("/_sensor/rules", get(sensor_rules_handler))
-            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_read,
+            ))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ));
 
         let rules_write_routes = Router::new()
             .route("/_sensor/rules", post(sensor_rules_create_handler))
-            .route("/_sensor/rules/:rule_id", put(sensor_rules_update_handler).delete(sensor_rules_delete_handler))
-            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+            .route(
+                "/_sensor/rules/:rule_id",
+                put(sensor_rules_update_handler).delete(sensor_rules_delete_handler),
+            )
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_write,
+            ))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ));
 
         Router::new()
             .merge(rules_read_routes)
@@ -7457,15 +8075,27 @@ mod tests {
 
         let kernel_read_routes = Router::new()
             .route("/_sensor/config/kernel", get(config_kernel_get_handler))
-            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_read))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_read,
+            ))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ));
 
         let kernel_write_routes = Router::new()
             .route("/_sensor/config/kernel", put(config_kernel_put_handler))
-            .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_write))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_write,
+            ))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
-            .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit_admin));
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ));
 
         Router::new()
             .merge(kernel_read_routes)

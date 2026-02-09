@@ -222,11 +222,7 @@ impl SniValidator {
         if let Some(ref host) = host_lower {
             if self.is_excluded(host) {
                 debug!("Skipping SNI validation for excluded domain: {}", host);
-                return SniValidationResult::pass(
-                    sni_lower,
-                    host_lower,
-                    mode,
-                );
+                return SniValidationResult::pass(sni_lower, host_lower, mode);
             }
         }
 
@@ -302,9 +298,9 @@ impl SniValidator {
     /// Check if a domain is in the exclusion list
     fn is_excluded(&self, domain: &str) -> bool {
         let domain_lower = domain.to_lowercase();
-        self.excluded_domains_lower
-            .iter()
-            .any(|excluded| domain_lower == *excluded || domain_lower.ends_with(&format!(".{}", excluded)))
+        self.excluded_domains_lower.iter().any(|excluded| {
+            domain_lower == *excluded || domain_lower.ends_with(&format!(".{}", excluded))
+        })
     }
 
     /// Get the current configuration
@@ -367,12 +363,9 @@ fn extract_base_domain(hostname: &str) -> String {
 
     // Handle common two-part TLDs (co.uk, com.au, etc.)
     let two_part_tlds = [
-        "co.uk", "co.nz", "co.jp", "co.kr", "co.za", "co.in",
-        "com.au", "com.br", "com.cn", "com.mx", "com.sg",
-        "net.au", "net.nz",
-        "org.uk", "org.au",
-        "gov.uk", "gov.au",
-        "ac.uk", "ac.jp",
+        "co.uk", "co.nz", "co.jp", "co.kr", "co.za", "co.in", "com.au", "com.br", "com.cn",
+        "com.mx", "com.sg", "net.au", "net.nz", "org.uk", "org.au", "gov.uk", "gov.au", "ac.uk",
+        "ac.jp",
     ];
 
     let suffix = format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1]);
@@ -583,9 +576,7 @@ mod tests {
     fn test_extract_sni_case_insensitive() {
         let validator = default_validator();
 
-        let headers = vec![
-            ("X-TLS-SNI".to_string(), "sni.example.com".to_string()),
-        ];
+        let headers = vec![("X-TLS-SNI".to_string(), "sni.example.com".to_string())];
 
         let sni = validator.extract_sni_from_headers(&headers);
         assert_eq!(sni, Some("sni.example.com".to_string()));

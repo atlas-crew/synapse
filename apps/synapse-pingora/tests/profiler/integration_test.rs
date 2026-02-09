@@ -140,7 +140,9 @@ mod e2e_workflow {
         }
 
         assert!(result.has_anomalies());
-        assert!(result.signal_types().contains(&AnomalySignalType::ContentTypeMismatch));
+        assert!(result
+            .signal_types()
+            .contains(&AnomalySignalType::ContentTypeMismatch));
     }
 }
 
@@ -236,7 +238,11 @@ mod rate_detection {
         // baseline = 60 / (5 min) = 12 req/min
         // current_rate should be ~30 (burst in last 60s window) or higher
         let is_burst = current_rate > baseline * 2.0;
-        assert!(is_burst, "Current: {}, Baseline: {}", current_rate, baseline);
+        assert!(
+            is_burst,
+            "Current: {}, Baseline: {}",
+            current_rate, baseline
+        );
     }
 
     #[test]
@@ -402,11 +408,19 @@ mod concurrent_profiling {
                 // Check for anomaly
                 let z_score = profile.payload_size.z_score(50000.0);
                 if z_score > 3.0 {
-                    result.add(AnomalySignalType::PayloadSizeHigh, 5, "Large payload".to_string());
+                    result.add(
+                        AnomalySignalType::PayloadSizeHigh,
+                        5,
+                        "Large payload".to_string(),
+                    );
                 }
 
                 if !profile.expected_params.contains_key("attack_param") {
-                    result.add(AnomalySignalType::UnexpectedParam, 3, "Unexpected".to_string());
+                    result.add(
+                        AnomalySignalType::UnexpectedParam,
+                        3,
+                        "Unexpected".to_string(),
+                    );
                 }
 
                 result
@@ -526,7 +540,12 @@ mod scenarios {
         // Normal login patterns: sparse, mixed success/failure
         for i in 0..50 {
             let mut profile = store.get_or_create("/api/login");
-            profile.update(100, &[("username", "user1"), ("password", "pass")], Some("application/json"), i * 10000);
+            profile.update(
+                100,
+                &[("username", "user1"), ("password", "pass")],
+                Some("application/json"),
+                i * 10000,
+            );
             // Mix of success and failure
             profile.record_status(if i % 3 == 0 { 401 } else { 200 });
         }
@@ -535,7 +554,12 @@ mod scenarios {
         {
             let mut profile = store.get_or_create("/api/login");
             for i in 0..100 {
-                profile.update(100, &[("username", "attacker"), ("password", "guess")], Some("application/json"), 500_000 + i * 10);
+                profile.update(
+                    100,
+                    &[("username", "attacker"), ("password", "guess")],
+                    Some("application/json"),
+                    500_000 + i * 10,
+                );
                 profile.record_status(401); // All failures
             }
         }
@@ -549,7 +573,11 @@ mod scenarios {
         let current_rate = profile.request_rate.current_rate(501_000);
         let baseline = profile.baseline_rate(501_000);
         if current_rate > baseline * 5.0 {
-            result.add(AnomalySignalType::RateBurst, 7, "Rate spike detected".to_string());
+            result.add(
+                AnomalySignalType::RateBurst,
+                7,
+                "Rate spike detected".to_string(),
+            );
         }
 
         // Check error rate
@@ -574,7 +602,12 @@ mod scenarios {
         // Normal file access
         for i in 0..20 {
             let mut profile = store.get_or_create(&format!("/api/files/{}", i));
-            profile.update(1000, &[("filename", "file.txt")], Some("application/octet-stream"), i * 100);
+            profile.update(
+                1000,
+                &[("filename", "file.txt")],
+                Some("application/octet-stream"),
+                i * 100,
+            );
         }
 
         // Path traversal attempts should be normalized but detectable

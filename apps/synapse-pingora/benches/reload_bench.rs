@@ -21,8 +21,7 @@ const FIXTURE_PATH: &str = "benches/fixtures/bench_config.yaml";
 
 /// Create a temporary config file by copying the fixture.
 fn create_temp_config() -> tempfile::NamedTempFile {
-    let fixture_content =
-        std::fs::read_to_string(FIXTURE_PATH).expect("fixture config must exist");
+    let fixture_content = std::fs::read_to_string(FIXTURE_PATH).expect("fixture config must exist");
     let mut tmp = tempfile::NamedTempFile::new().expect("create temp file");
     tmp.write_all(fixture_content.as_bytes())
         .expect("write temp config");
@@ -119,16 +118,12 @@ fn bench_vhost_matcher_rebuild(c: &mut Criterion) {
     for count in [10, 50, 200] {
         let sites = make_sites(count);
 
-        group.bench_with_input(
-            BenchmarkId::new("build", count),
-            &sites,
-            |b, sites| {
-                b.iter(|| {
-                    let matcher = VhostMatcher::new(black_box(sites.clone()));
-                    black_box(matcher);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("build", count), &sites, |b, sites| {
+            b.iter(|| {
+                let matcher = VhostMatcher::new(black_box(sites.clone()));
+                black_box(matcher);
+            });
+        });
     }
 
     group.finish();

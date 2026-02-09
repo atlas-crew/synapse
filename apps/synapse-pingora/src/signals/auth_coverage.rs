@@ -21,7 +21,7 @@ impl ResponseClass {
             _ => ResponseClass::ServerError,
         }
     }
-    
+
     pub fn is_auth_denial(&self) -> bool {
         matches!(self, ResponseClass::Unauthorized | ResponseClass::Forbidden)
     }
@@ -61,7 +61,7 @@ pub struct AuthCoverageSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_response_class_from_status() {
         assert_eq!(ResponseClass::from_status(200), ResponseClass::Success);
@@ -71,7 +71,7 @@ mod tests {
         assert_eq!(ResponseClass::from_status(404), ResponseClass::ClientError);
         assert_eq!(ResponseClass::from_status(500), ResponseClass::ServerError);
     }
-    
+
     #[test]
     fn test_is_auth_denial() {
         assert!(ResponseClass::Unauthorized.is_auth_denial());
@@ -79,28 +79,26 @@ mod tests {
         assert!(!ResponseClass::Success.is_auth_denial());
         assert!(!ResponseClass::ClientError.is_auth_denial());
     }
-    
+
     #[test]
     fn test_summary_serialization() {
         let summary = AuthCoverageSummary {
             timestamp: 1234567890,
             sensor_id: "sensor-1".to_string(),
             tenant_id: Some("tenant-abc".to_string()),
-            endpoints: vec![
-                EndpointSummary {
-                    endpoint: "GET /api/users/{id}".to_string(),
-                    counts: EndpointCounts {
-                        total: 100,
-                        success: 95,
-                        unauthorized: 3,
-                        forbidden: 2,
-                        ..Default::default()
-                    },
+            endpoints: vec![EndpointSummary {
+                endpoint: "GET /api/users/{id}".to_string(),
+                counts: EndpointCounts {
+                    total: 100,
+                    success: 95,
+                    unauthorized: 3,
+                    forbidden: 2,
+                    ..Default::default()
                 },
-            ],
+            }],
             dropped_endpoints: 0,
         };
-        
+
         let json = serde_json::to_string(&summary).unwrap();
         assert!(json.contains("sensor-1"));
         assert!(json.contains("tenant-abc"));

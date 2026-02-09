@@ -1445,10 +1445,10 @@ mod tests {
         let index = FingerprintIndex::new();
 
         let total_entities = test_limit_usize("SYNAPSE_TEST_MAX_ENTITIES", 10_000, 100);
-        let ja4_groups = test_limit_usize("SYNAPSE_TEST_MAX_JA4_GROUPS", 100, 1)
-            .min(total_entities);
-        let combined_groups = test_limit_usize("SYNAPSE_TEST_MAX_COMBINED_GROUPS", 50, 1)
-            .min(total_entities);
+        let ja4_groups =
+            test_limit_usize("SYNAPSE_TEST_MAX_JA4_GROUPS", 100, 1).min(total_entities);
+        let combined_groups =
+            test_limit_usize("SYNAPSE_TEST_MAX_COMBINED_GROUPS", 50, 1).min(total_entities);
         eprintln!(
             "test_large_scale_operations: total_entities={}, ja4_groups={}, combined_groups={}",
             total_entities, ja4_groups, combined_groups
@@ -1475,8 +1475,7 @@ mod tests {
         assert_eq!(stats.combined_fingerprints, combined_groups);
 
         let expected_largest_ja4 = (total_entities + ja4_groups - 1) / ja4_groups;
-        let expected_largest_combined =
-            (total_entities + combined_groups - 1) / combined_groups;
+        let expected_largest_combined = (total_entities + combined_groups - 1) / combined_groups;
         assert_eq!(stats.largest_ja4_group, expected_largest_ja4);
         assert_eq!(stats.largest_combined_group, expected_largest_combined);
 
@@ -1485,8 +1484,7 @@ mod tests {
         assert_eq!(groups.len(), ja4_groups);
 
         let combined_threshold = (expected_largest_combined / 2).max(1);
-        let combined_groups_above =
-            index.get_combined_groups_above_threshold(combined_threshold);
+        let combined_groups_above = index.get_combined_groups_above_threshold(combined_threshold);
         assert_eq!(combined_groups_above.len(), combined_groups);
     }
 

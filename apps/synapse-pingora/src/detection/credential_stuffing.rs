@@ -15,16 +15,16 @@ use crate::detection::{
     TakeoverAlert, UsernameTargetedAttack,
 };
 use crossbeam_channel::{bounded, Receiver, Sender};
-use serde::{Deserialize, Serialize};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use regex::Regex;
-use tracing::warn;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::warn;
 
 /// Get current time in milliseconds since Unix epoch.
 #[inline]
@@ -80,17 +80,15 @@ impl CredentialStuffingDetector {
         let auth_patterns: Vec<Regex> = config
             .auth_path_patterns
             .iter()
-            .filter_map(|p| {
-                match Regex::new(p) {
-                    Ok(re) => Some(re),
-                    Err(e) => {
-                        warn!(
-                            pattern = %p,
-                            error = %e,
-                            "Invalid auth_path_pattern in StuffingConfig - pattern will be skipped"
-                        );
-                        None
-                    }
+            .filter_map(|p| match Regex::new(p) {
+                Ok(re) => Some(re),
+                Err(e) => {
+                    warn!(
+                        pattern = %p,
+                        error = %e,
+                        "Invalid auth_path_pattern in StuffingConfig - pattern will be skipped"
+                    );
+                    None
                 }
             })
             .collect();
@@ -186,7 +184,8 @@ impl CredentialStuffingDetector {
 
                     // Clean expired username-targeted attacks
                     let username_threshold = now.saturating_sub(username_window_ms);
-                    username_targeted.retain(|_, attack| attack.last_activity >= username_threshold);
+                    username_targeted
+                        .retain(|_, attack| attack.last_activity >= username_threshold);
                 }
             }
         }
@@ -206,10 +205,9 @@ impl CredentialStuffingDetector {
         let key = EntityEndpointKey::new(&attempt.entity_id, &attempt.endpoint);
 
         // Get or create metrics
-        let mut metrics = self
-            .entity_auth
-            .entry(key.clone())
-            .or_insert_with(|| AuthMetrics::new(attempt.entity_id.clone(), attempt.endpoint.clone(), now));
+        let mut metrics = self.entity_auth.entry(key.clone()).or_insert_with(|| {
+            AuthMetrics::new(attempt.entity_id.clone(), attempt.endpoint.clone(), now)
+        });
 
         // Check if window has expired and reset
         if now.saturating_sub(metrics.window_start) > self.config.failure_window_ms {
@@ -229,7 +227,12 @@ impl CredentialStuffingDetector {
 
         // Track username-targeted attack if username provided
         if let Some(ref username) = attempt.username {
-            self.track_username_targeted_attempt(username, &attempt.endpoint, &attempt.entity_id, now);
+            self.track_username_targeted_attempt(
+                username,
+                &attempt.endpoint,
+                &attempt.entity_id,
+                now,
+            );
         }
 
         // Evaluate verdict based on failure history
@@ -277,7 +280,8 @@ impl CredentialStuffingDetector {
 
             // Check for username-targeted attack
             if let Some(ref username) = attempt.username {
-                if let Some(verdict) = self.check_username_targeted_attack(username, &attempt.endpoint)
+                if let Some(verdict) =
+                    self.check_username_targeted_attack(username, &attempt.endpoint)
                 {
                     return verdict;
                 }
@@ -793,9 +797,9 @@ mod tests {
         let config = StuffingConfig {
             auth_path_patterns: vec![
                 r"(?i)/valid-login".to_string(),
-                r"[invalid(regex".to_string(),   // Invalid: unclosed bracket
+                r"[invalid(regex".to_string(), // Invalid: unclosed bracket
                 r"(?i)/another-valid".to_string(),
-                r"*invalid*".to_string(),         // Invalid: nothing to repeat
+                r"*invalid*".to_string(), // Invalid: nothing to repeat
             ],
             ..Default::default()
         };
@@ -894,13 +898,13 @@ mod tests {
         // 3 different IPs with same fingerprint
         let ips = ["1.1.1.1", "2.2.2.2", "3.3.3.3"];
         for ip in &ips {
-            let attempt =
-                AuthAttempt::new(*ip, "/login", now).with_fingerprint("same-fingerprint");
+            let attempt = AuthAttempt::new(*ip, "/login", now).with_fingerprint("same-fingerprint");
             detector.record_attempt(&attempt);
         }
 
         // Fourth IP should trigger distributed attack detection
-        let attempt = AuthAttempt::new("4.4.4.4", "/login", now).with_fingerprint("same-fingerprint");
+        let attempt =
+            AuthAttempt::new("4.4.4.4", "/login", now).with_fingerprint("same-fingerprint");
         let verdict = detector.record_attempt(&attempt);
 
         // Should be suspicious due to distributed attack
@@ -1049,8 +1053,8 @@ mod tests {
         let ips = ["1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4", "5.5.5.5"];
         for (i, ip) in ips.iter().enumerate() {
             // Record attempt to track the IP
-            let attempt = AuthAttempt::new(*ip, "/login", now + i as u64 * 100)
-                .with_username("admin");
+            let attempt =
+                AuthAttempt::new(*ip, "/login", now + i as u64 * 100).with_username("admin");
             detector.record_attempt(&attempt);
 
             // Record failure to increment failure count
@@ -1060,8 +1064,7 @@ mod tests {
         }
 
         // Next attempt from a 6th IP should detect username-targeted attack
-        let attempt = AuthAttempt::new("6.6.6.6", "/login", now + 1000)
-            .with_username("admin");
+        let attempt = AuthAttempt::new("6.6.6.6", "/login", now + 1000).with_username("admin");
         let verdict = detector.record_attempt(&attempt);
 
         // Should be suspicious due to username-targeted attack
@@ -1073,7 +1076,10 @@ mod tests {
         let has_username_targeted = events.iter().any(|e| {
             matches!(e, StuffingEvent::UsernameTargetedAttack { username, .. } if username == "admin")
         });
-        assert!(has_username_targeted, "Expected UsernameTargetedAttack event");
+        assert!(
+            has_username_targeted,
+            "Expected UsernameTargetedAttack event"
+        );
     }
 
     #[test]
@@ -1086,8 +1092,8 @@ mod tests {
 
         // 2 IPs targeting "admin" - not enough
         for (i, ip) in ["1.1.1.1", "2.2.2.2"].iter().enumerate() {
-            let attempt = AuthAttempt::new(*ip, "/login", now + i as u64 * 100)
-                .with_username("admin");
+            let attempt =
+                AuthAttempt::new(*ip, "/login", now + i as u64 * 100).with_username("admin");
             detector.record_attempt(&attempt);
             let result = AuthResult::new(*ip, "/login", false, now + i as u64 * 100 + 50)
                 .with_username("admin");
@@ -1096,8 +1102,8 @@ mod tests {
 
         // 2 IPs targeting "user" - not enough
         for (i, ip) in ["3.3.3.3", "4.4.4.4"].iter().enumerate() {
-            let attempt = AuthAttempt::new(*ip, "/login", now + i as u64 * 100)
-                .with_username("user");
+            let attempt =
+                AuthAttempt::new(*ip, "/login", now + i as u64 * 100).with_username("user");
             detector.record_attempt(&attempt);
             let result = AuthResult::new(*ip, "/login", false, now + i as u64 * 100 + 50)
                 .with_username("user");
@@ -1105,17 +1111,19 @@ mod tests {
         }
 
         // Neither username should trigger detection
-        let attempt = AuthAttempt::new("5.5.5.5", "/login", now + 1000)
-            .with_username("admin");
+        let attempt = AuthAttempt::new("5.5.5.5", "/login", now + 1000).with_username("admin");
         let verdict = detector.record_attempt(&attempt);
-        assert!(verdict.is_allow(), "Should not detect attack with only 3 IPs");
+        assert!(
+            verdict.is_allow(),
+            "Should not detect attack with only 3 IPs"
+        );
     }
 
     #[test]
     fn test_global_velocity_spike_detection() {
         let mut config = test_config();
         config.global_velocity_threshold_rate = 5.0; // 5 failures/sec
-        config.global_velocity_window_ms = 1000;     // 1 second window
+        config.global_velocity_window_ms = 1000; // 1 second window
         config.global_velocity_max_track = 100;
         let detector = CredentialStuffingDetector::new(config);
         let now = now_ms();
@@ -1141,9 +1149,9 @@ mod tests {
 
         // Check event was emitted
         let events = detector.drain_events();
-        let has_velocity_spike = events.iter().any(|e| {
-            matches!(e, StuffingEvent::GlobalVelocitySpike { .. })
-        });
+        let has_velocity_spike = events
+            .iter()
+            .any(|e| matches!(e, StuffingEvent::GlobalVelocitySpike { .. }));
         assert!(has_velocity_spike, "Expected GlobalVelocitySpike event");
     }
 
@@ -1157,7 +1165,12 @@ mod tests {
 
         // Record a few failures
         for i in 0..3 {
-            let result = AuthResult::new(format!("10.0.0.{}", i), "/login", false, now + i as u64 * 100);
+            let result = AuthResult::new(
+                format!("10.0.0.{}", i),
+                "/login",
+                false,
+                now + i as u64 * 100,
+            );
             detector.record_result(&result);
         }
 
@@ -1200,7 +1213,11 @@ mod tests {
         assert!(!verdict.is_allow());
         // Distributed gives +30, username-targeted gives +35
         // If distributed is checked first, we get +30
-        assert_eq!(verdict.risk_delta(), 30, "Fingerprint-based detection should take priority");
+        assert_eq!(
+            verdict.risk_delta(),
+            30,
+            "Fingerprint-based detection should take priority"
+        );
     }
 
     #[test]
@@ -1212,34 +1229,29 @@ mod tests {
         let now = now_ms();
 
         // Two IPs, but need 3 failures
-        let attempt1 = AuthAttempt::new("1.1.1.1", "/login", now)
-            .with_username("victim");
+        let attempt1 = AuthAttempt::new("1.1.1.1", "/login", now).with_username("victim");
         detector.record_attempt(&attempt1);
-        let result1 = AuthResult::new("1.1.1.1", "/login", false, now + 10)
-            .with_username("victim");
+        let result1 = AuthResult::new("1.1.1.1", "/login", false, now + 10).with_username("victim");
         detector.record_result(&result1);
 
-        let attempt2 = AuthAttempt::new("2.2.2.2", "/login", now + 100)
-            .with_username("victim");
+        let attempt2 = AuthAttempt::new("2.2.2.2", "/login", now + 100).with_username("victim");
         detector.record_attempt(&attempt2);
-        let result2 = AuthResult::new("2.2.2.2", "/login", false, now + 110)
-            .with_username("victim");
+        let result2 =
+            AuthResult::new("2.2.2.2", "/login", false, now + 110).with_username("victim");
         detector.record_result(&result2);
 
         // 2 IPs, 2 failures - not enough failures yet
-        let attempt3 = AuthAttempt::new("3.3.3.3", "/login", now + 200)
-            .with_username("victim");
+        let attempt3 = AuthAttempt::new("3.3.3.3", "/login", now + 200).with_username("victim");
         let verdict = detector.record_attempt(&attempt3);
         assert!(verdict.is_allow(), "2 failures should not trigger (need 3)");
 
         // Third failure pushes over threshold
-        let result3 = AuthResult::new("3.3.3.3", "/login", false, now + 210)
-            .with_username("victim");
+        let result3 =
+            AuthResult::new("3.3.3.3", "/login", false, now + 210).with_username("victim");
         detector.record_result(&result3);
 
         // Now should detect
-        let attempt4 = AuthAttempt::new("4.4.4.4", "/login", now + 300)
-            .with_username("victim");
+        let attempt4 = AuthAttempt::new("4.4.4.4", "/login", now + 300).with_username("victim");
         let verdict = detector.record_attempt(&attempt4);
         assert!(!verdict.is_allow(), "3 IPs and 3 failures should trigger");
     }

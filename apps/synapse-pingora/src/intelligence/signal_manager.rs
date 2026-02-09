@@ -13,8 +13,8 @@ use std::collections::{HashMap, VecDeque};
 
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use tracing::warn;
+use uuid::Uuid;
 
 // ============================================================================
 // Types
@@ -443,17 +443,44 @@ mod tests {
     fn test_record_different_categories() {
         let manager = SignalManager::new(test_config());
 
-        manager.record_event(SignalCategory::Attack, "sqli", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Anomaly, "rate_spike", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Behavior, "crawler", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Intelligence, "blocklist_hit", None, None, serde_json::json!({}));
+        manager.record_event(
+            SignalCategory::Attack,
+            "sqli",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Anomaly,
+            "rate_spike",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Behavior,
+            "crawler",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Intelligence,
+            "blocklist_hit",
+            None,
+            None,
+            serde_json::json!({}),
+        );
 
         let summary = manager.summary();
         assert_eq!(summary.total_signals, 4);
         assert_eq!(summary.by_category.get(&SignalCategory::Attack), Some(&1));
         assert_eq!(summary.by_category.get(&SignalCategory::Anomaly), Some(&1));
         assert_eq!(summary.by_category.get(&SignalCategory::Behavior), Some(&1));
-        assert_eq!(summary.by_category.get(&SignalCategory::Intelligence), Some(&1));
+        assert_eq!(
+            summary.by_category.get(&SignalCategory::Intelligence),
+            Some(&1)
+        );
     }
 
     // ========================================================================
@@ -464,9 +491,27 @@ mod tests {
     fn test_list_signals_filter_by_category() {
         let manager = SignalManager::new(test_config());
 
-        manager.record_event(SignalCategory::Attack, "sqli", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Attack, "xss", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Anomaly, "rate_spike", None, None, serde_json::json!({}));
+        manager.record_event(
+            SignalCategory::Attack,
+            "sqli",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Attack,
+            "xss",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Anomaly,
+            "rate_spike",
+            None,
+            None,
+            serde_json::json!({}),
+        );
 
         let attacks = manager.list_signals(SignalQueryOptions {
             category: Some(SignalCategory::Attack),
@@ -532,9 +577,27 @@ mod tests {
     fn test_list_signals_returns_most_recent_first() {
         let manager = SignalManager::new(test_config());
 
-        manager.record_event(SignalCategory::Attack, "first", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Attack, "second", None, None, serde_json::json!({}));
-        manager.record_event(SignalCategory::Attack, "third", None, None, serde_json::json!({}));
+        manager.record_event(
+            SignalCategory::Attack,
+            "first",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Attack,
+            "second",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        manager.record_event(
+            SignalCategory::Attack,
+            "third",
+            None,
+            None,
+            serde_json::json!({}),
+        );
 
         let signals = manager.list_signals(SignalQueryOptions::default());
         assert_eq!(signals[0].signal_type, "third");
@@ -561,10 +624,22 @@ mod tests {
         let manager = SignalManager::new(test_config());
 
         for _ in 0..3 {
-            manager.record_event(SignalCategory::Attack, "sqli", None, None, serde_json::json!({}));
+            manager.record_event(
+                SignalCategory::Attack,
+                "sqli",
+                None,
+                None,
+                serde_json::json!({}),
+            );
         }
         for _ in 0..2 {
-            manager.record_event(SignalCategory::Anomaly, "rate", None, None, serde_json::json!({}));
+            manager.record_event(
+                SignalCategory::Anomaly,
+                "rate",
+                None,
+                None,
+                serde_json::json!({}),
+            );
         }
 
         let summary = manager.summary();
@@ -578,13 +653,31 @@ mod tests {
         let manager = SignalManager::new(test_config());
 
         for _ in 0..5 {
-            manager.record_event(SignalCategory::Attack, "sqli", None, None, serde_json::json!({}));
+            manager.record_event(
+                SignalCategory::Attack,
+                "sqli",
+                None,
+                None,
+                serde_json::json!({}),
+            );
         }
         for _ in 0..3 {
-            manager.record_event(SignalCategory::Attack, "xss", None, None, serde_json::json!({}));
+            manager.record_event(
+                SignalCategory::Attack,
+                "xss",
+                None,
+                None,
+                serde_json::json!({}),
+            );
         }
         for _ in 0..1 {
-            manager.record_event(SignalCategory::Attack, "rce", None, None, serde_json::json!({}));
+            manager.record_event(
+                SignalCategory::Attack,
+                "rce",
+                None,
+                None,
+                serde_json::json!({}),
+            );
         }
 
         let summary = manager.summary();
@@ -747,7 +840,13 @@ mod tests {
     fn test_filter_nonexistent_category() {
         let manager = SignalManager::new(test_config());
 
-        manager.record_event(SignalCategory::Attack, "test", None, None, serde_json::json!({}));
+        manager.record_event(
+            SignalCategory::Attack,
+            "test",
+            None,
+            None,
+            serde_json::json!({}),
+        );
 
         let signals = manager.list_signals(SignalQueryOptions {
             category: Some(SignalCategory::Anomaly),

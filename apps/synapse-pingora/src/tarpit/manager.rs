@@ -2,13 +2,13 @@
 //!
 //! Implements progressive delay calculation and state tracking for slow-drip defense.
 
+use parking_lot::Mutex;
+use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use serde::Deserialize;
 use tokio::sync::Semaphore;
-use parking_lot::Mutex;
 
 use dashmap::DashMap;
 
@@ -113,9 +113,9 @@ fn default_max_concurrent() -> usize {
 impl Default for TarpitConfig {
     fn default() -> Self {
         Self {
-            base_delay_ms: 1000,           // 1 second base
-            max_delay_ms: 30000,           // 30 seconds max
-            progressive_multiplier: 1.5,   // 1.5x per level
+            base_delay_ms: 1000,         // 1 second base
+            max_delay_ms: 30000,         // 30 seconds max
+            progressive_multiplier: 1.5, // 1.5x per level
             enabled: true,
             max_states: 10_000,
             decay_threshold_ms: 5 * 60 * 1000,    // 5 minutes
@@ -424,11 +424,11 @@ impl TarpitManager {
     /// Spawns a background task that periodically runs maintenance.
     pub fn start_background_tasks(self: Arc<Self>) {
         let manager = self.clone();
-        
+
         tokio::spawn(async move {
             // Run decay every minute
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
-            
+
             loop {
                 interval.tick().await;
                 manager.decay_all().await;
@@ -443,7 +443,7 @@ impl TarpitManager {
         let now = now_ms();
         let decay_threshold = self.config.decay_threshold_ms;
         let cleanup_threshold = self.config.cleanup_threshold_ms;
-        
+
         // Collect actions to perform to avoid holding locks during long iteration.
         // (IP, should_remove)
         let mut actions = Vec::new();
@@ -602,9 +602,9 @@ mod tests {
         // First tarpit: level 1 delay, then level increases to 2
         let d1 = manager.tarpit("192.168.1.1");
         assert_eq!(d1.delay_ms, 1000); // Level 1 delay
-        assert_eq!(d1.level, 2);       // Level increased to 2
+        assert_eq!(d1.level, 2); // Level increased to 2
         assert_eq!(d1.hit_count, 1);
-        assert!(d1.is_tarpitted);      // Now tarpitted (level > 1)
+        assert!(d1.is_tarpitted); // Now tarpitted (level > 1)
 
         // Second tarpit: level 2 delay, then level increases to 3
         let d2 = manager.tarpit("192.168.1.1");
@@ -744,8 +744,14 @@ mod tests {
         assert_eq!(manager.len(), 3);
 
         // First IP should be evicted (oldest by timestamp)
-        assert!(manager.get_state("1.1.1.1").is_none(), "1.1.1.1 should have been evicted as oldest");
-        assert!(manager.get_state("4.4.4.4").is_some(), "4.4.4.4 should exist");
+        assert!(
+            manager.get_state("1.1.1.1").is_none(),
+            "1.1.1.1 should have been evicted as oldest"
+        );
+        assert!(
+            manager.get_state("4.4.4.4").is_some(),
+            "4.4.4.4 should exist"
+        );
     }
 
     #[test]
