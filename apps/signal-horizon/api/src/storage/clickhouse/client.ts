@@ -5,6 +5,7 @@
 
 import { createClient, ClickHouseClient } from '@clickhouse/client';
 import type { Logger } from 'pino';
+import { AsyncSemaphore } from '../../lib/async-semaphore.js';
 import { metrics } from '../../services/metrics.js';
 
 // =============================================================================
@@ -19,8 +20,12 @@ export interface ClickHouseConfig {
   password: string;
   compression: boolean;
   maxOpenConnections: number;
+  /** Maximum number of in-flight queries (defaults to maxOpenConnections). */
+  maxInFlightQueries?: number;
   /** Query timeout in seconds (default: 30) */
   queryTimeoutSec?: number;
+  /** Max time to wait for a query permit before failing (default: queryTimeoutSec). */
+  queueTimeoutSec?: number;
   /** Maximum rows to return from a single query (default: 100000) */
   maxRowsLimit?: number;
 }
@@ -138,15 +143,20 @@ export class ClickHouseService {
   private logger: Logger;
   private enabled: boolean;
   private queryTimeoutSec: number;
+  private queueTimeoutMs: number;
   private maxRowsLimit: number;
+  private queryLimiter: AsyncSemaphore | null = null;
 
   constructor(config: ClickHouseConfig, logger: Logger, enabled = true) {
     this.logger = logger.child({ service: 'clickhouse' });
     this.enabled = enabled;
     this.queryTimeoutSec = config.queryTimeoutSec ?? 30;
+    this.queueTimeoutMs = ((config.queueTimeoutSec ?? this.queryTimeoutSec) * 1000);
     this.maxRowsLimit = config.maxRowsLimit ?? 100000;
+    const maxInFlightQueries = config.maxInFlightQueries ?? config.maxOpenConnections;
 
     if (enabled) {
+      this.queryLimiter = new AsyncSemaphore(Math.max(1, maxInFlightQueries));
       this.client = createClient({
         url: `http://${config.host}:${config.port}`,
         database: config.database,
@@ -175,12 +185,64 @@ export class ClickHouseService {
           port: config.port,
           database: config.database,
           queryTimeoutSec: this.queryTimeoutSec,
+          queueTimeoutMs: this.queueTimeoutMs,
           maxRowsLimit: this.maxRowsLimit,
+          maxOpenConnections: config.maxOpenConnections,
+          maxInFlightQueries,
         },
         'ClickHouse client created'
       );
     } else {
       this.logger.info('ClickHouse disabled (demo mode)');
+    }
+  }
+
+  private async acquireQueryPermit(op: string): Promise<(() => void) | null> {
+    if (!this.queryLimiter) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.queueTimeoutMs);
+
+    try {
+      const release = await this.queryLimiter.acquire({ signal: controller.signal });
+      metrics.clickhouseQueriesInFlight.inc({ op });
+
+      return () => {
+        metrics.clickhouseQueriesInFlight.dec({ op });
+        release();
+      };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`ClickHouse query permit wait timed out after ${this.queueTimeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async withQueryTelemetry<T>(op: string, fn: () => Promise<T>): Promise<T> {
+    const endWaitTimer = metrics.clickhouseQueryWaitDuration.startTimer({ op });
+    let release: (() => void) | null = null;
+
+    try {
+      release = await this.acquireQueryPermit(op);
+    } catch (error) {
+      metrics.clickhouseQueryErrors.inc({ op });
+      throw error;
+    } finally {
+      endWaitTimer();
+    }
+
+    const endExecTimer = metrics.clickhouseQueryDuration.startTimer({ op });
+    try {
+      return await fn();
+    } catch (error) {
+      metrics.clickhouseQueryErrors.inc({ op });
+      throw error;
+    } finally {
+      if (release) release();
+      endExecTimer();
     }
   }
 
@@ -351,17 +413,29 @@ export class ClickHouseService {
       throw new Error('ClickHouse is not enabled');
     }
 
-    try {
-      const resultSet = await this.client.query({
-        query: sql,
-        format: 'JSONEachRow',
-      });
-      const rows = await resultSet.json<T>();
-      return rows;
-    } catch (error) {
-      this.logger.error({ error, sql: sql.substring(0, 100) }, 'Query failed');
-      throw error;
-    }
+    return this.withQueryTelemetry('query', async () => {
+      const client = this.client;
+      if (!client) {
+        throw new Error('ClickHouse client is not available (closed)');
+      }
+
+      try {
+        const resultSet = await client.query({
+          query: sql,
+          format: 'JSONEachRow',
+          clickhouse_settings: {
+            max_execution_time: this.queryTimeoutSec,
+            max_result_rows: String(this.maxRowsLimit),
+            result_overflow_mode: 'throw',
+          },
+        });
+        const rows = await resultSet.json<T>();
+        return rows;
+      } catch (error) {
+        this.logger.error({ error, sql: sql.substring(0, 100) }, 'Query failed');
+        throw error;
+      }
+    });
   }
 
   /**
@@ -388,18 +462,30 @@ export class ClickHouseService {
       throw new Error('ClickHouse is not enabled');
     }
 
-    try {
-      const resultSet = await this.client.query({
-        query: sql,
-        query_params: params,
-        format: 'JSONEachRow',
-      });
-      const rows = await resultSet.json<T>();
-      return rows;
-    } catch (error) {
-      this.logger.error({ error, sql: sql.substring(0, 100) }, 'Parameterized query failed');
-      throw error;
-    }
+    return this.withQueryTelemetry('queryWithParams', async () => {
+      const client = this.client;
+      if (!client) {
+        throw new Error('ClickHouse client is not available (closed)');
+      }
+
+      try {
+        const resultSet = await client.query({
+          query: sql,
+          query_params: params,
+          format: 'JSONEachRow',
+          clickhouse_settings: {
+            max_execution_time: this.queryTimeoutSec,
+            max_result_rows: String(this.maxRowsLimit),
+            result_overflow_mode: 'throw',
+          },
+        });
+        const rows = await resultSet.json<T>();
+        return rows;
+      } catch (error) {
+        this.logger.error({ error, sql: sql.substring(0, 100) }, 'Parameterized query failed');
+        throw error;
+      }
+    });
   }
 
   /**
@@ -436,42 +522,57 @@ export class ClickHouseService {
       throw new Error('ClickHouse is not enabled');
     }
 
-    try {
-      const resultSet = await this.client.query({
-        query: sql,
-        format: 'JSONEachRow',
-      });
+    return this.withQueryTelemetry('queryStream', async () => {
+      // NOTE: We intentionally hold a query permit for the full streaming + onBatch duration,
+      // since the underlying HTTP stream keeps a ClickHouse connection open.
+      // Keep onBatch fast; for heavy processing, enqueue work and return quickly.
+      const client = this.client;
+      if (!client) {
+        throw new Error('ClickHouse client is not available (closed)');
+      }
 
-      let batch: T[] = [];
-      let totalRows = 0;
+      try {
+        const resultSet = await client.query({
+          query: sql,
+          format: 'JSONEachRow',
+          clickhouse_settings: {
+            max_execution_time: this.queryTimeoutSec,
+            max_result_rows: String(this.maxRowsLimit),
+            result_overflow_mode: 'throw',
+          },
+        });
 
-      // Stream rows and process in batches
-      for await (const rows of resultSet.stream()) {
-        // Parse each row from the stream
-        for (const row of rows) {
-          const parsed = row.json<T>();
-          batch.push(parsed);
+        let batch: T[] = [];
+        let totalRows = 0;
 
-          if (batch.length >= batchSize) {
-            await onBatch(batch);
-            totalRows += batch.length;
-            batch = [];
+        // Stream rows and process in batches
+        for await (const rows of resultSet.stream()) {
+          // Parse each row from the stream
+          for (const row of rows) {
+            const parsed = row.json<T>();
+            batch.push(parsed);
+
+            if (batch.length >= batchSize) {
+              await onBatch(batch);
+              totalRows += batch.length;
+              batch = [];
+            }
           }
         }
-      }
 
-      // Process remaining rows
-      if (batch.length > 0) {
-        await onBatch(batch);
-        totalRows += batch.length;
-      }
+        // Process remaining rows
+        if (batch.length > 0) {
+          await onBatch(batch);
+          totalRows += batch.length;
+        }
 
-      this.logger.debug({ totalRows, sql: sql.substring(0, 100) }, 'Stream query completed');
-      return totalRows;
-    } catch (error) {
-      this.logger.error({ error, sql: sql.substring(0, 100) }, 'Stream query failed');
-      throw error;
-    }
+        this.logger.debug({ totalRows, sql: sql.substring(0, 100) }, 'Stream query completed');
+        return totalRows;
+      } catch (error) {
+        this.logger.error({ error, sql: sql.substring(0, 100) }, 'Stream query failed');
+        throw error;
+      }
+    });
   }
 
   /**

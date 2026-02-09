@@ -35,6 +35,18 @@ const positiveIntString = (min: number, max: number) =>
     });
 
 /**
+ * Helper to parse an optional string to positive integer with range validation
+ */
+const optionalPositiveIntString = (min: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform((val) => (val === undefined ? undefined : parseInt(val, 10)))
+    .refine((val) => val === undefined || (!isNaN(val) && val >= min && val <= max), {
+      message: `Must be an integer between ${min} and ${max}`,
+    });
+
+/**
  * Helper to parse port number
  */
 const portString = z.string()
@@ -113,6 +125,10 @@ const envSchema = z.object({
   CLICKHOUSE_PASSWORD: z.string().default('clickhouse'),
   CLICKHOUSE_COMPRESSION: booleanString('true'),
   CLICKHOUSE_MAX_CONNECTIONS: positiveIntString(1, 200).catch(25),
+  CLICKHOUSE_QUERY_TIMEOUT_SECONDS: positiveIntString(1, 600).catch(30),
+  CLICKHOUSE_QUERY_QUEUE_TIMEOUT_SECONDS: optionalPositiveIntString(1, 600),
+  CLICKHOUSE_MAX_RESULT_ROWS: positiveIntString(1, 1000000).catch(100000),
+  CLICKHOUSE_MAX_INFLIGHT_QUERIES: optionalPositiveIntString(1, 500),
 }).refine((data) => {
   // Production-only security checks (labs-mmft.6, labs-msll)
   if (data.NODE_ENV === 'production') {
@@ -263,6 +279,10 @@ function loadConfig() {
       password: env.CLICKHOUSE_PASSWORD,
       compression: env.CLICKHOUSE_COMPRESSION,
       maxOpenConnections: env.CLICKHOUSE_MAX_CONNECTIONS, // Already parsed
+      queryTimeoutSec: env.CLICKHOUSE_QUERY_TIMEOUT_SECONDS, // Already parsed
+      queueTimeoutSec: env.CLICKHOUSE_QUERY_QUEUE_TIMEOUT_SECONDS ?? env.CLICKHOUSE_QUERY_TIMEOUT_SECONDS,
+      maxRowsLimit: env.CLICKHOUSE_MAX_RESULT_ROWS, // Already parsed
+      maxInFlightQueries: env.CLICKHOUSE_MAX_INFLIGHT_QUERIES ?? env.CLICKHOUSE_MAX_CONNECTIONS,
     },
   } as const;
 

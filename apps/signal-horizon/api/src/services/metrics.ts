@@ -26,6 +26,10 @@ export class MetricsService {
   public clickhouseInsertSuccess: client.Counter;
   public clickhouseInsertFailed: client.Counter;
   public clickhouseRetryBufferCount: client.Gauge;
+  public clickhouseQueryWaitDuration: client.Histogram;
+  public clickhouseQueryDuration: client.Histogram;
+  public clickhouseQueryErrors: client.Counter;
+  public clickhouseQueriesInFlight: client.Gauge;
   // Backpressure Metrics
   public signalsDroppedTotal: client.Counter;
   public nonceStoreEvictionsTotal: client.Counter;
@@ -114,6 +118,36 @@ export class MetricsService {
       name: 'horizon_clickhouse_retry_buffer_items',
       help: 'Number of items currently in the ClickHouse retry buffer',
       labelNames: ['type'],
+      registers: [this.register],
+    });
+
+    this.clickhouseQueryWaitDuration = new client.Histogram({
+      name: 'horizon_clickhouse_query_wait_seconds',
+      help: 'Time spent waiting for a ClickHouse query permit (backpressure)',
+      labelNames: ['op'],
+      buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+      registers: [this.register],
+    });
+
+    this.clickhouseQueryDuration = new client.Histogram({
+      name: 'horizon_clickhouse_query_duration_seconds',
+      help: 'Duration of ClickHouse queries',
+      labelNames: ['op'],
+      buckets: [0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+      registers: [this.register],
+    });
+
+    this.clickhouseQueryErrors = new client.Counter({
+      name: 'horizon_clickhouse_query_errors_total',
+      help: 'Total number of ClickHouse query errors',
+      labelNames: ['op'],
+      registers: [this.register],
+    });
+
+    this.clickhouseQueriesInFlight = new client.Gauge({
+      name: 'horizon_clickhouse_queries_in_flight',
+      help: 'Number of ClickHouse queries currently in flight (after limiter)',
+      labelNames: ['op'],
       registers: [this.register],
     });
 
