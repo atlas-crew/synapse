@@ -161,6 +161,10 @@ function stripSingleQuotedLiterals(sql: string): string {
 
 function hasBalancedSingleQuotes(sql: string): boolean {
   // ClickHouse escapes a single quote inside a string as ''.
+  //
+  // NOTE: This intentionally does NOT implement backslash-escape semantics (e.g. `\'`).
+  // We defensively reject obvious injection via downstream forbidden-fragment checks after
+  // stripping single-quoted literals, and we treat unbalanced quotes as invalid input.
   let inQuote = false;
   for (let i = 0; i < sql.length; i += 1) {
     const ch = sql[i]!;
