@@ -26,6 +26,7 @@ export class MetricsService {
   public clickhouseInsertSuccess: client.Counter;
   public clickhouseInsertFailed: client.Counter;
   public clickhouseRetryBufferCount: client.Gauge;
+  public clickhouseQueryQueueDepth: client.Gauge;
   public clickhouseQueryWaitDuration: client.Histogram;
   public clickhouseQueryDuration: client.Histogram;
   public clickhouseQueryErrors: client.Counter;
@@ -118,6 +119,13 @@ export class MetricsService {
       name: 'horizon_clickhouse_retry_buffer_items',
       help: 'Number of items currently in the ClickHouse retry buffer',
       labelNames: ['type'],
+      registers: [this.register],
+    });
+
+    this.clickhouseQueryQueueDepth = new client.Gauge({
+      name: 'horizon_clickhouse_query_queue_depth',
+      help: 'Number of ClickHouse queries currently waiting for a permit',
+      labelNames: ['op'],
       registers: [this.register],
     });
 

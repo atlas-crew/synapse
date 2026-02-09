@@ -26,6 +26,7 @@ const createTestService = (overrides: Partial<Record<string, unknown>> = {}) => 
       compression: false,
       maxOpenConnections: 1,
       maxInFlightQueries: 1,
+      maxInFlightStreamQueries: 1,
       queryTimeoutSec: 30,
       queueTimeoutSec: 1,
       maxRowsLimit: 1000,
@@ -38,6 +39,7 @@ const createTestService = (overrides: Partial<Record<string, unknown>> = {}) => 
   // Enable and install a deterministic limiter without creating a real ClickHouse client.
   (svc as any).enabled = true;
   (svc as any).queryLimiter = new AsyncSemaphore(1);
+  (svc as any).streamLimiter = new AsyncSemaphore(1);
   (svc as any).queueTimeoutMs = 1000;
 
   return svc;
@@ -176,5 +178,53 @@ describe('ClickHouseService query telemetry/backpressure', () => {
     const err = await p2Caught;
     expect(err).toBeInstanceOf(Error);
     expect(String((err as Error).message)).toMatch(/not available|closed/i);
+  });
+
+  it('applies a separate stream limiter for queryStream', async () => {
+    const execTimerSpy = vi.spyOn(metrics.clickhouseQueryDuration, 'startTimer');
+
+    let resolveQuery1: ((value: any) => void) | undefined;
+
+    const fakeClient = {
+      query: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveQuery1 = resolve;
+            })
+        )
+        .mockResolvedValueOnce({
+          stream: async function* () {
+            yield [];
+          },
+        }),
+    };
+
+    const svc = createTestService({ maxInFlightQueries: 2, maxInFlightStreamQueries: 1 });
+    (svc as any).queryLimiter = new AsyncSemaphore(2);
+    (svc as any).streamLimiter = new AsyncSemaphore(1);
+    (svc as any).client = fakeClient;
+
+    const p1 = svc.queryStream('SELECT 1', 100, async () => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const p2 = svc.queryStream('SELECT 2', 100, async () => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Second stream call should be blocked on stream limiter; only one exec timer started so far.
+    expect(execTimerSpy).toHaveBeenCalledTimes(1);
+
+    resolveQuery1?.({
+      stream: async function* () {
+        yield [];
+      },
+    });
+
+    await p1;
+    await p2;
+    expect(execTimerSpy).toHaveBeenCalledTimes(2);
   });
 });

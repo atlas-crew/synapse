@@ -6,6 +6,14 @@ export class AsyncSemaphore {
     this.available = capacity;
   }
 
+  getAvailable(): number {
+    return this.available;
+  }
+
+  getQueueDepth(): number {
+    return this.waiters.length;
+  }
+
   async acquire(options?: { signal?: AbortSignal }): Promise<() => void> {
     if (this.available > 0) {
       this.available -= 1;
@@ -67,4 +75,3 @@ export class AsyncSemaphore {
     };
   }
 }
-

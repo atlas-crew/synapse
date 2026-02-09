@@ -22,6 +22,8 @@ export interface ClickHouseConfig {
   maxOpenConnections: number;
   /** Maximum number of in-flight queries (defaults to maxOpenConnections). */
   maxInFlightQueries?: number;
+  /** Maximum number of in-flight streaming queries (defaults to min(2, maxInFlightQueries)). */
+  maxInFlightStreamQueries?: number;
   /** Query timeout in seconds (default: 30) */
   queryTimeoutSec?: number;
   /** Max time to wait for a query permit before failing (default: queryTimeoutSec). */
@@ -146,6 +148,7 @@ export class ClickHouseService {
   private queueTimeoutMs: number;
   private maxRowsLimit: number;
   private queryLimiter: AsyncSemaphore | null = null;
+  private streamLimiter: AsyncSemaphore | null = null;
 
   constructor(config: ClickHouseConfig, logger: Logger, enabled = true) {
     this.logger = logger.child({ service: 'clickhouse' });
@@ -154,9 +157,17 @@ export class ClickHouseService {
     this.queueTimeoutMs = ((config.queueTimeoutSec ?? this.queryTimeoutSec) * 1000);
     this.maxRowsLimit = config.maxRowsLimit ?? 100000;
     const maxInFlightQueries = config.maxInFlightQueries ?? config.maxOpenConnections;
+    const maxInFlightStreamQueries = Math.max(
+      1,
+      Math.min(
+        config.maxInFlightStreamQueries ?? Math.min(2, maxInFlightQueries),
+        maxInFlightQueries
+      )
+    );
 
     if (enabled) {
       this.queryLimiter = new AsyncSemaphore(Math.max(1, maxInFlightQueries));
+      this.streamLimiter = new AsyncSemaphore(maxInFlightStreamQueries);
       this.client = createClient({
         url: `http://${config.host}:${config.port}`,
         database: config.database,
@@ -189,6 +200,7 @@ export class ClickHouseService {
           maxRowsLimit: this.maxRowsLimit,
           maxOpenConnections: config.maxOpenConnections,
           maxInFlightQueries,
+          maxInFlightStreamQueries,
         },
         'ClickHouse client created'
       );
@@ -198,13 +210,22 @@ export class ClickHouseService {
   }
 
   private async acquireQueryPermit(op: string): Promise<(() => void) | null> {
-    if (!this.queryLimiter) return null;
+    const limiter = this.queryLimiter;
+    if (!limiter) return null;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.queueTimeoutMs);
+    const willQueue = limiter.getAvailable() <= 0;
+
+    if (willQueue) {
+      metrics.clickhouseQueryQueueDepth.inc({ op });
+    }
 
     try {
-      const release = await this.queryLimiter.acquire({ signal: controller.signal });
+      const release = await limiter.acquire({ signal: controller.signal });
+      if (willQueue) {
+        metrics.clickhouseQueryQueueDepth.dec({ op });
+      }
       metrics.clickhouseQueriesInFlight.inc({ op });
 
       return () => {
@@ -212,6 +233,9 @@ export class ClickHouseService {
         release();
       };
     } catch (error) {
+      if (willQueue) {
+        metrics.clickhouseQueryQueueDepth.dec({ op });
+      }
       if (controller.signal.aborted) {
         throw new Error(`ClickHouse query permit wait timed out after ${this.queueTimeoutMs}ms`);
       }
@@ -221,14 +245,58 @@ export class ClickHouseService {
     }
   }
 
-  private async withQueryTelemetry<T>(op: string, fn: () => Promise<T>): Promise<T> {
-    const endWaitTimer = metrics.clickhouseQueryWaitDuration.startTimer({ op });
-    let release: (() => void) | null = null;
+  private async acquireStreamPermit(op: string): Promise<(() => void) | null> {
+    const limiter = this.streamLimiter;
+    if (!limiter) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.queueTimeoutMs);
+    const willQueue = limiter.getAvailable() <= 0;
+
+    if (willQueue) {
+      metrics.clickhouseQueryQueueDepth.inc({ op });
+    }
 
     try {
-      release = await this.acquireQueryPermit(op);
+      const release = await limiter.acquire({ signal: controller.signal });
+      if (willQueue) {
+        metrics.clickhouseQueryQueueDepth.dec({ op });
+      }
+      return () => release();
+    } catch (error) {
+      if (willQueue) {
+        metrics.clickhouseQueryQueueDepth.dec({ op });
+      }
+      if (controller.signal.aborted) {
+        throw new Error(`ClickHouse stream permit wait timed out after ${this.queueTimeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async withQueryTelemetry<T>(
+    op: string,
+    fn: () => Promise<T>,
+    options?: { acquireExtraPermit?: () => Promise<(() => void) | null> }
+  ): Promise<T> {
+    const endWaitTimer = metrics.clickhouseQueryWaitDuration.startTimer({ op });
+    const releases: Array<() => void> = [];
+
+    try {
+      const release = await this.acquireQueryPermit(op);
+      if (release) releases.push(release);
+
+      if (options?.acquireExtraPermit) {
+        const extraRelease = await options.acquireExtraPermit();
+        if (extraRelease) releases.push(extraRelease);
+      }
     } catch (error) {
       metrics.clickhouseQueryErrors.inc({ op });
+      for (const release of releases.reverse()) {
+        release();
+      }
       throw error;
     } finally {
       endWaitTimer();
@@ -241,7 +309,9 @@ export class ClickHouseService {
       metrics.clickhouseQueryErrors.inc({ op });
       throw error;
     } finally {
-      if (release) release();
+      for (const release of releases.reverse()) {
+        release();
+      }
       endExecTimer();
     }
   }
@@ -522,7 +592,9 @@ export class ClickHouseService {
       throw new Error('ClickHouse is not enabled');
     }
 
-    return this.withQueryTelemetry('queryStream', async () => {
+    return this.withQueryTelemetry(
+      'queryStream',
+      async () => {
       // NOTE: We intentionally hold a query permit for the full streaming + onBatch duration,
       // since the underlying HTTP stream keeps a ClickHouse connection open.
       // Keep onBatch fast; for heavy processing, enqueue work and return quickly.
@@ -572,7 +644,9 @@ export class ClickHouseService {
         this.logger.error({ error, sql: sql.substring(0, 100) }, 'Stream query failed');
         throw error;
       }
-    });
+      },
+      { acquireExtraPermit: () => this.acquireStreamPermit('queryStream') }
+    );
   }
 
   /**

@@ -129,6 +129,7 @@ const envSchema = z.object({
   CLICKHOUSE_QUERY_QUEUE_TIMEOUT_SECONDS: optionalPositiveIntString(1, 600),
   CLICKHOUSE_MAX_RESULT_ROWS: positiveIntString(1, 1000000).catch(100000),
   CLICKHOUSE_MAX_INFLIGHT_QUERIES: optionalPositiveIntString(1, 500),
+  CLICKHOUSE_MAX_INFLIGHT_STREAM_QUERIES: optionalPositiveIntString(1, 200),
 }).refine((data) => {
   // Production-only security checks (labs-mmft.6, labs-msll)
   if (data.NODE_ENV === 'production') {
@@ -283,6 +284,9 @@ function loadConfig() {
       queueTimeoutSec: env.CLICKHOUSE_QUERY_QUEUE_TIMEOUT_SECONDS ?? env.CLICKHOUSE_QUERY_TIMEOUT_SECONDS,
       maxRowsLimit: env.CLICKHOUSE_MAX_RESULT_ROWS, // Already parsed
       maxInFlightQueries: env.CLICKHOUSE_MAX_INFLIGHT_QUERIES ?? env.CLICKHOUSE_MAX_CONNECTIONS,
+      maxInFlightStreamQueries:
+        env.CLICKHOUSE_MAX_INFLIGHT_STREAM_QUERIES ??
+        Math.min(2, env.CLICKHOUSE_MAX_INFLIGHT_QUERIES ?? env.CLICKHOUSE_MAX_CONNECTIONS),
     },
   } as const;
 

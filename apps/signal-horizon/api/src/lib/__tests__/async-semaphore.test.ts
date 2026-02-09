@@ -4,8 +4,11 @@ import { AsyncSemaphore } from '../async-semaphore.js';
 describe('AsyncSemaphore', () => {
   it('acquires immediately up to capacity and blocks beyond it', async () => {
     const sem = new AsyncSemaphore(1);
+    expect(sem.getAvailable()).toBe(1);
+    expect(sem.getQueueDepth()).toBe(0);
 
     const release1 = await sem.acquire();
+    expect(sem.getAvailable()).toBe(0);
 
     let acquired2 = false;
     const p2 = sem.acquire().then((release2) => {
@@ -16,10 +19,12 @@ describe('AsyncSemaphore', () => {
     // Give the queued acquire a chance to run; it should still be blocked.
     await Promise.resolve();
     expect(acquired2).toBe(false);
+    expect(sem.getQueueDepth()).toBe(1);
 
     release1();
     await p2;
     expect(acquired2).toBe(true);
+    expect(sem.getQueueDepth()).toBe(0);
   });
 
   it('releases in FIFO order', async () => {
@@ -60,4 +65,3 @@ describe('AsyncSemaphore', () => {
     release3();
   });
 });
-
