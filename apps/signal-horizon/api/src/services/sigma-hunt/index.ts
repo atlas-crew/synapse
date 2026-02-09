@@ -159,6 +159,36 @@ function stripSingleQuotedLiterals(sql: string): string {
   return sql.replace(/'(?:''|[^'])*'/g, "''");
 }
 
+function hasBalancedSingleQuotes(sql: string): boolean {
+  // ClickHouse escapes a single quote inside a string as ''.
+  let inQuote = false;
+  for (let i = 0; i < sql.length; i += 1) {
+    const ch = sql[i]!;
+    if (ch !== "'") continue;
+
+    if (!inQuote) {
+      inQuote = true;
+      continue;
+    }
+
+    const next = sql[i + 1];
+    if (next === "'") {
+      // Escaped quote inside a string literal.
+      i += 1;
+      continue;
+    }
+
+    inQuote = false;
+  }
+  return !inQuote;
+}
+
+function hasDangerousControlChars(sql: string): boolean {
+  // Reject ASCII control characters that can cause parser ambiguity.
+  // Allow tab/newline/carriage return as they normalize via whitespace collapsing.
+  return /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(sql);
+}
+
 export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string {
   const trimmed = stripLeadingComments(sqlTemplate);
   if (trimmed.length === 0) throw new SigmaValidationError('Sigma SQL template is empty');
@@ -176,9 +206,18 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
   const whereClause = (match[1] ?? '').trim();
   if (!whereClause) throw new SigmaValidationError('Sigma SQL template WHERE clause is empty');
   if (whereClause.length > 20_000) throw new SigmaValidationError('Sigma WHERE clause too large');
+  if (!hasBalancedSingleQuotes(whereClause)) {
+    throw new SigmaValidationError('Sigma WHERE clause contains unbalanced single quotes');
+  }
+  if (hasDangerousControlChars(whereClause)) {
+    throw new SigmaValidationError('Sigma WHERE clause contains forbidden control characters');
+  }
 
   // Reject obvious injection vectors outside string literals.
   // Normalize whitespace so tabs/newlines can't bypass fragment checks.
+  //
+  // NOTE: We must validate balanced quotes *before* stripping literals. The literal-stripping regex
+  // only understands ClickHouse `''` escaping and would become unsafe if used on unbalanced input.
   const stripped = stripSingleQuotedLiterals(whereClause).replace(/\s+/g, ' ').toLowerCase();
 
   const forbiddenFragments = [
@@ -186,36 +225,54 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
     '--',
     '/*',
     '*/',
-    ' format ',
-    ' into outfile ',
-    ' select ',
-    ' insert ',
-    ' update ',
-    ' delete ',
-    ' drop ',
-    ' alter ',
-    ' create ',
-    ' attach ',
-    ' detach ',
-    ' system ',
-    ' union ',
+  ];
+
+  const forbiddenKeywords: Array<{ label: string; re: RegExp }> = [
+    { label: 'format', re: /\bformat\b/ },
+    { label: 'into outfile', re: /\binto\s+outfile\b/ },
+    { label: 'select', re: /\bselect\b/ },
+    { label: 'insert', re: /\binsert\b/ },
+    { label: 'update', re: /\bupdate\b/ },
+    { label: 'delete', re: /\bdelete\b/ },
+    { label: 'drop', re: /\bdrop\b/ },
+    { label: 'alter', re: /\balter\b/ },
+    { label: 'create', re: /\bcreate\b/ },
+    { label: 'attach', re: /\battach\b/ },
+    { label: 'detach', re: /\bdetach\b/ },
+    { label: 'system', re: /\bsystem\b/ },
+    // ClickHouse statement-level keywords we never expect in a Sigma WHERE clause.
+    { label: 'explain', re: /\bexplain\b/ },
+    { label: 'show', re: /\bshow\b/ },
+    { label: 'set', re: /\bset\b/ },
+    { label: 'describe', re: /\bdescribe\b/ },
+    { label: 'truncate', re: /\btruncate\b/ },
+    { label: 'rename', re: /\brename\b/ },
+    { label: 'grant', re: /\bgrant\b/ },
+    { label: 'revoke', re: /\brevoke\b/ },
+    { label: 'kill', re: /\bkill\b/ },
+    { label: 'optimize', re: /\boptimize\b/ },
+    { label: 'exchange', re: /\bexchange\b/ },
+    { label: 'union', re: /\bunion\b/ },
   ];
 
   // ClickHouse table functions / external data sources (SSRF/exfiltration risk).
   // Use regex so whitespace like `remote (` can't bypass checks.
-  const forbiddenCalls = [
-    'remote',
-    'cluster',
-    'clusterallreplicas',
-    'url',
-    'file',
-    's3',
-    'hdfs',
-    'jdbc',
-    'mysql',
-    'postgresql',
-    'input',
-    'odbc',
+  const forbiddenCalls: Array<{ label: string; re: RegExp }> = [
+    { label: 'remote(', re: /\bremote\s*\(/ },
+    { label: 'remotesecure(', re: /\bremotesecure\s*\(/ },
+    { label: 'cluster(', re: /\bcluster\s*\(/ },
+    { label: 'clusterallreplicas(', re: /\bclusterallreplicas\s*\(/ },
+    { label: 'url(', re: /\burl\s*\(/ },
+    { label: 'file(', re: /\bfile\s*\(/ },
+    { label: 's3(', re: /\bs3\s*\(/ },
+    { label: 'hdfs(', re: /\bhdfs\s*\(/ },
+    { label: 'jdbc(', re: /\bjdbc\s*\(/ },
+    { label: 'mysql(', re: /\bmysql\s*\(/ },
+    { label: 'postgresql(', re: /\bpostgresql\s*\(/ },
+    { label: 'input(', re: /\binput\s*\(/ },
+    { label: 'odbc(', re: /\bodbc\s*\(/ },
+    { label: 'dictionary(', re: /\bdictionary\s*\(/ },
+    { label: 'merge(', re: /\bmerge\s*\(/ },
   ];
 
   for (const frag of forbiddenFragments) {
@@ -223,14 +280,22 @@ export function extractAndValidateSigmaWhereClause(sqlTemplate: string): string 
       throw new SigmaValidationError(`Sigma WHERE clause contains forbidden fragment: ${frag.trim()}`);
     }
   }
+  for (const k of forbiddenKeywords) {
+    if (k.re.test(stripped)) {
+      throw new SigmaValidationError(`Sigma WHERE clause contains forbidden fragment: ${k.label}`);
+    }
+  }
   for (const call of forbiddenCalls) {
-    const re = new RegExp(`\\b${call}\\s*\\(`, 'i');
-    if (re.test(stripped)) throw new SigmaValidationError(`Sigma WHERE clause contains forbidden fragment: ${call}(`);
+    if (call.re.test(stripped)) {
+      throw new SigmaValidationError(`Sigma WHERE clause contains forbidden fragment: ${call.label}`);
+    }
   }
 
   // Basic sanity: must reference only known table columns and safe functions.
   // We keep this loose to avoid breaking legitimate Sigma rules, but disallow backticks.
   if (stripped.includes('`')) throw new SigmaValidationError('Sigma WHERE clause contains forbidden character: `');
+  // Double quotes can be used for identifiers in ClickHouse; we disallow to reduce bypass surface.
+  if (stripped.includes('"')) throw new SigmaValidationError('Sigma WHERE clause contains forbidden character: "');
 
   return whereClause;
 }
@@ -317,11 +382,25 @@ export class SigmaHuntService {
     const existing = jsonDecode<SigmaRule>(raw, { maxBytes: 200_000 });
     if (existing.tenantId !== tenantId) return null;
 
+    if (input.name !== undefined) {
+      if (!input.name || input.name.length > 120) throw new SigmaValidationError('name is required (max 120 chars)');
+    }
+    if (input.description !== undefined) {
+      if (input.description && input.description.length > 2000) {
+        throw new SigmaValidationError('description too long (max 2000 chars)');
+      }
+    }
+
+    // Explicitly pick properties to avoid accidental mass-assignment if stored data is ever corrupted.
     const next: SigmaRule = {
-      ...existing,
+      id: existing.id,
+      tenantId: existing.tenantId,
       name: input.name ?? existing.name,
       description: input.description ?? existing.description,
       enabled: input.enabled ?? existing.enabled,
+      sqlTemplate: existing.sqlTemplate,
+      whereClause: existing.whereClause,
+      createdAt: existing.createdAt,
       updatedAt: new Date().toISOString(),
     };
 
