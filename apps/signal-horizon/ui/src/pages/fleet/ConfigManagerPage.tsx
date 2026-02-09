@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
 import { SynapseConfigEditor, getDefaultConfigYaml } from '../../components/fleet/SynapseConfigEditor';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
+import { useSensors } from '../../hooks/fleet';
+import { useToast } from '../../components/ui/Toast';
 
 interface ConfigTemplate {
   id: string;
@@ -62,6 +64,7 @@ async function pushConfig(templateId: string, sensorIds: string[]): Promise<void
 export function ConfigManagerPage() {
   const queryClient = useQueryClient();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
+  const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   
@@ -70,6 +73,13 @@ export function ConfigManagerPage() {
   const [newEnv, setNewEnv] = useState('production');
   const [newDesc, setNewDesc] = useState('');
   const [newConfig, setNewConfig] = useState(getDefaultConfigYaml);
+
+  // Pingora upstream preset: Apparatus echo
+  const { data: sensors = [] } = useSensors();
+  const [echoHost, setEchoHost] = useState('demo.site');
+  const [echoPort, setEchoPort] = useState(80);
+  const [selectedEchoSensors, setSelectedEchoSensors] = useState<Set<string>>(new Set());
+  const echoSelectedIds = useMemo(() => Array.from(selectedEchoSensors), [selectedEchoSensors]);
 
   const { data: templates = [], isLoading: templatesLoading } = useQuery({
     queryKey: ['fleet', 'config', 'templates', isDemoMode ? scenario : 'live'],
@@ -108,6 +118,26 @@ export function ConfigManagerPage() {
       pushConfig(templateId, sensorIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'config'] });
+    },
+  });
+
+  const echoPresetMutation = useMutation({
+    mutationFn: async () => {
+      const host = echoHost.trim();
+      const port = Number(echoPort);
+      return apiFetch('/fleet/pingora/presets/apparatus-echo', {
+        method: 'POST',
+        body: { sensorIds: echoSelectedIds, host, port },
+      });
+    },
+    onSuccess: (data: any) => {
+      const ok = (data?.results || []).filter((r: any) => r?.ok).length;
+      const total = (data?.results || []).length;
+      toast.success(`Preset pushed: ${ok}/${total} sensors`);
+      queryClient.invalidateQueries({ queryKey: ['fleet', 'sensors'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to push upstream preset');
     },
   });
 
@@ -184,6 +214,152 @@ export function ConfigManagerPage() {
           </div>
         </div>
       )}
+
+      {/* Pingora Presets */}
+      <div className="card">
+        <div className="px-6 py-4 border-b border-border-subtle">
+          <h2 className="text-lg font-medium text-ink-primary">Pingora Upstream Presets</h2>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Deploy upstream rewrites to existing sensor configs (pushes immediately).
+          </p>
+        </div>
+
+        <div className="p-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-1 space-y-3">
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
+              Apparatus Echo Target
+            </div>
+            <div className="text-sm text-ink-secondary">
+              Local stack: <span className="font-mono">just dev-waf-echo</span> exposes{' '}
+              <span className="font-mono">demo.site</span>.
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
+                  Host
+                </label>
+                <input
+                  value={echoHost}
+                  onChange={(e) => setEchoHost(e.target.value)}
+                  className="h-10 w-full bg-surface-subtle border border-border-subtle px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
+                  Port
+                </label>
+                <input
+                  type="number"
+                  value={echoPort}
+                  onChange={(e) => setEchoPort(Number(e.target.value))}
+                  className="h-10 w-full bg-surface-subtle border border-border-subtle px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={isDemoMode || echoSelectedIds.length === 0 || echoPresetMutation.isPending}
+              onClick={() => {
+                const host = echoHost.trim();
+                const port = Number(echoPort);
+                if (!host) {
+                  toast.error('Host is required');
+                  return;
+                }
+                if (!Number.isFinite(port) || port < 1 || port > 65535) {
+                  toast.error('Port must be 1-65535');
+                  return;
+                }
+                echoPresetMutation.mutate();
+              }}
+              className="h-11 w-full px-4 text-xs font-bold uppercase tracking-[0.2em] border-2 border-ac-magenta text-ac-magenta hover:bg-ac-magenta hover:text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+            >
+              {echoPresetMutation.isPending ? 'Pushing...' : `Push To Selected (${echoSelectedIds.length})`}
+            </button>
+
+            {isDemoMode && <div className="text-xs text-ink-muted">Disabled in demo mode.</div>}
+          </div>
+
+          <div className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
+                Target Sensors
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedEchoSensors(new Set(sensors.map((s: any) => s.id)))}
+                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedEchoSensors(new Set())}
+                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div className="border border-border-subtle bg-surface-base max-h-[320px] overflow-auto">
+              <table className="min-w-full divide-y divide-border-subtle">
+                <thead className="bg-surface-subtle">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
+                      Select
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
+                      Sensor
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {sensors.map((sensor: any) => (
+                    <tr key={sensor.id} className="hover:bg-surface-subtle">
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedEchoSensors.has(sensor.id)}
+                          onChange={() => {
+                            setSelectedEchoSensors((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(sensor.id)) next.delete(sensor.id);
+                              else next.add(sensor.id);
+                              return next;
+                            });
+                          }}
+                          className="w-4 h-4 text-ac-blue border-border-subtle"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="font-medium text-ink-primary">{sensor.name}</div>
+                        <div className="text-xs text-ink-muted font-mono">{sensor.id}</div>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-ink-secondary">
+                        {sensor.connectionState || 'UNKNOWN'}
+                      </td>
+                    </tr>
+                  ))}
+                  {sensors.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-ink-muted" colSpan={3}>
+                        No sensors available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Templates */}
       <div className="card">

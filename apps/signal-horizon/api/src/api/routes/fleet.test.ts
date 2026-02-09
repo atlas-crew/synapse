@@ -14,6 +14,7 @@ import type { ConfigManager } from '../../services/fleet/config-manager.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
 import type { ConfigTemplate } from '../../services/fleet/types.js';
 import type { Logger } from 'pino';
+import type { SecurityAuditService } from '../../services/audit/security-audit.js';
 
 // Mock the auth middleware module
 vi.mock('../middleware/auth.js', async (importOriginal) => {
@@ -100,8 +101,19 @@ const createMockSensor = (overrides: Partial<Sensor> = {}): Sensor => ({
 describe('Fleet Routes', () => {
   let app: Express;
   let mockPrisma: Partial<PrismaClient>;
+  let mockFleetCommander: Partial<FleetCommander>;
+  let mockAuditService: Partial<SecurityAuditService>;
 
   beforeEach(() => {
+    mockFleetCommander = {
+      sendCommand: vi.fn().mockResolvedValue('cmd-1'),
+    };
+    mockAuditService = {
+      logConfigCreated: vi.fn(),
+      logConfigUpdated: vi.fn(),
+      logConfigDeleted: vi.fn(),
+    } as any;
+
     mockPrisma = {
       sensor: {
         findMany: vi.fn(),
@@ -112,6 +124,10 @@ describe('Fleet Routes', () => {
       signal: {
         findMany: vi.fn(),
       } as unknown as PrismaClient['signal'],
+      sensorPingoraConfig: {
+        findUnique: vi.fn(),
+        upsert: vi.fn(),
+      } as unknown as PrismaClient['sensorPingoraConfig'],
       fleetCommand: {
         findMany: vi.fn(),
         findFirst: vi.fn(),
@@ -124,7 +140,13 @@ describe('Fleet Routes', () => {
     app = express();
     app.use(express.json());
     app.use(injectAuth('tenant-1', ['fleet:read', 'fleet:write']));
-    app.use('/fleet', createFleetRoutes(mockPrisma as PrismaClient, mockLogger, {}));
+    app.use(
+      '/fleet',
+      createFleetRoutes(mockPrisma as PrismaClient, mockLogger, {
+        fleetCommander: mockFleetCommander as FleetCommander,
+        securityAuditService: mockAuditService as SecurityAuditService,
+      })
+    );
   });
 
   afterEach(() => {
@@ -526,6 +548,58 @@ describe('Fleet Routes', () => {
         .expect(500);
 
       expect(res.body).toHaveProperty('error');
+    });
+  });
+
+  describe('POST /fleet/pingora/presets/apparatus-echo', () => {
+    it('should apply upstream preset and push config for sensors', async () => {
+      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue([
+        { id: 'sensor-1' } as any,
+        { id: 'sensor-2' } as any,
+      ]);
+
+      // getConfig ownership check: select tenantId
+      vi.mocked(mockPrisma.sensor!.findUnique).mockImplementation(async (args: any) => {
+        if (args?.where?.id === 'sensor-1' || args?.where?.id === 'sensor-2') {
+          if (args.select?.tenantId) return { tenantId: 'tenant-1' } as any;
+          if (args.include?.pingoraConfig) {
+            return { tenantId: 'tenant-1', pingoraConfig: { version: 1, fullConfig: {} } } as any;
+          }
+        }
+        return null as any;
+      });
+
+      vi.mocked(mockPrisma.sensorPingoraConfig!.findUnique).mockResolvedValue({
+        sensorId: 'sensor-1',
+        version: 1,
+        fullConfig: {
+          server: { http_addr: '0.0.0.0:8080', https_addr: '0.0.0.0:8443' },
+          sites: [{ hostname: 'example.com', upstreams: [{ host: 'old', port: 80, weight: 1 }] }],
+          rate_limit: { enabled: false, rps: 100 },
+        },
+      } as any);
+
+      vi.mocked(mockPrisma.sensorPingoraConfig!.upsert).mockResolvedValue({} as any);
+
+      const res = await request(app)
+        .post('/fleet/pingora/presets/apparatus-echo')
+        .send({ sensorIds: ['sensor-1', 'sensor-2'], host: 'demo.site', port: 80 })
+        .expect(202);
+
+      expect(res.body).toHaveProperty('results');
+      expect(res.body.results).toHaveLength(2);
+      expect(vi.mocked(mockFleetCommander.sendCommand as any)).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return 404 when sensorIds are not all owned by tenant', async () => {
+      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue([{ id: 'sensor-1' } as any]);
+
+      await request(app)
+        .post('/fleet/pingora/presets/apparatus-echo')
+        .send({ sensorIds: ['sensor-1', 'sensor-2'], host: 'demo.site', port: 80 })
+        .expect(404);
+
+      expect(vi.mocked(mockFleetCommander.sendCommand as any)).not.toHaveBeenCalled();
     });
   });
 });

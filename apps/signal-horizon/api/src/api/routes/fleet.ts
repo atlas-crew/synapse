@@ -28,6 +28,7 @@ import { SecurityAuditService } from '../../services/audit/security-audit.js';
 import type { ConfigTemplate } from '../../services/fleet/types.js';
 import { ErrorCatalog } from '../../lib/errors.js';
 import { sendProblem } from '../../lib/problem-details.js';
+import { applyApparatusEchoUpstreamPreset } from '../../services/sensorConfigPresets.js';
 
 // ======================== Validation Schemas ========================
 
@@ -350,6 +351,12 @@ const CommandIdParamSchema = z.object({
 
 const PingoraActionBodySchema = z.object({
   action: z.enum(['test', 'reload', 'restart']),
+});
+
+const ApplyApparatusEchoUpstreamBodySchema = z.object({
+  sensorIds: z.string().array().min(1).max(500),
+  host: z.string().min(1).max(255),
+  port: z.coerce.number().int().min(1).max(65535).default(80),
 });
 
 async function validateSensorIdsForTenant(
@@ -1546,6 +1553,94 @@ const SensorLogsQuerySchema = z.object({
         logger.error({ error }, 'Failed to trigger Pingora action');
         res.status(500).json({
           error: 'Failed to trigger Pingora action',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/fleet/pingora/presets/apparatus-echo
+   * Apply the Apparatus Echo upstream preset to sensors and push config.
+   *
+   * Intended for demo/local stacks where `demo.site` is provided by docker compose:
+   * `just dev-waf-echo`
+   */
+  router.post(
+    '/pingora/presets/apparatus-echo',
+    rateLimiters.configMutation,
+    requireScope('fleet:write'),
+    requireRole('operator'),
+    validateBody(ApplyApparatusEchoUpstreamBodySchema),
+    async (req, res) => {
+      try {
+        if (!sensorConfigService) {
+          const entry = ErrorCatalog.SERVICE_UNAVAILABLE;
+          return sendProblem(res, entry.status, 'Sensor config service not available', {
+            code: entry.code,
+            hint: entry.hint,
+            instance: req.originalUrl,
+            context: { operation: 'applyUpstreamPreset' },
+          });
+        }
+
+        const auth = req.auth!;
+        if (!auth?.tenantId) {
+          const entry = ErrorCatalog.UNAUTHORIZED;
+          return sendProblem(res, entry.status, entry.message, {
+            code: entry.code,
+            hint: entry.hint,
+            instance: req.originalUrl,
+            context: { operation: 'applyUpstreamPreset' },
+          });
+        }
+
+        const { sensorIds, host, port } = req.body as z.infer<typeof ApplyApparatusEchoUpstreamBodySchema>;
+
+        const sensorsAuthorized = await validateSensorIdsForTenant(prisma, auth.tenantId, sensorIds);
+        if (!sensorsAuthorized) {
+          sendProblem(res, 404, 'Resource not found', {
+            code: 'NOT_FOUND',
+            instance: req.originalUrl,
+            details: { resource: 'sensor' },
+          });
+          return;
+        }
+
+        const results: Array<
+          | { sensorId: string; ok: true; version: number; commandId?: string }
+          | { sensorId: string; ok: false; error: string }
+        > = [];
+
+        for (const sensorId of sensorIds) {
+          const current = await sensorConfigService.getConfig(sensorId, auth.tenantId);
+          if (!current) {
+            results.push({ sensorId, ok: false, error: 'CONFIG_NOT_FOUND' });
+            continue;
+          }
+
+          const next = applyApparatusEchoUpstreamPreset(current, { host, port });
+          const { version, commandId } = await sensorConfigService.updateConfig(
+            req,
+            sensorId,
+            next,
+            auth.tenantId
+          );
+
+          results.push({ sensorId, ok: true, version, commandId });
+        }
+
+        res.status(202).json({
+          message: 'Upstream preset push initiated',
+          preset: 'apparatus-echo',
+          host,
+          port,
+          results,
+        });
+      } catch (error) {
+        logger.error({ error }, 'Failed to apply upstream preset');
+        res.status(500).json({
+          error: 'Failed to apply upstream preset',
           message: getErrorMessage(error),
         });
       }
