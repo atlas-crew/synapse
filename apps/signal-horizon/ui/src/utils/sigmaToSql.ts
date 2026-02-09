@@ -82,20 +82,38 @@ function parseMap(map: Record<string, any>): string {
       // field: [val1, val2] -> IN or OR
       if (value.some(v => typeof v === 'string' && v.includes('*'))) {
          // Wildcards present -> OR LIKE
-         const likes = value.map(v => `${col} ILIKE '${escapeSql(String(v)).replace(/\*/g, '%')}'`);
+         const likes = value.map(v => {
+          const pattern = escapeSql(String(v)).replace(/\*/g, '%');
+          if (col === 'source_ip') return `IPv4NumToString(source_ip) ILIKE '${pattern}'`;
+          return `${col} ILIKE '${pattern}'`;
+         });
          parts.push(`(${likes.join(' OR ')})`);
       } else {
         // Exact match list -> IN
-        const values = value.map(v => `'${escapeSql(String(v))}'`).join(', ');
-        parts.push(`${col} IN (${values})`);
+        if (col === 'source_ip') {
+          const values = value.map(v => `toIPv4('${escapeSql(String(v))}')`).join(', ');
+          parts.push(`source_ip IN (${values})`);
+        } else {
+          const values = value.map(v => `'${escapeSql(String(v))}'`).join(', ');
+          parts.push(`${col} IN (${values})`);
+        }
       }
     } else {
       // Single value
       const strVal = String(value);
       if (strVal.includes('*')) {
-        parts.push(`${col} ILIKE '${escapeSql(strVal).replace(/\*/g, '%')}'`);
+        const pattern = escapeSql(strVal).replace(/\*/g, '%');
+        if (col === 'source_ip') {
+          parts.push(`IPv4NumToString(source_ip) ILIKE '${pattern}'`);
+        } else {
+          parts.push(`${col} ILIKE '${pattern}'`);
+        }
       } else {
-        parts.push(`${col} = '${escapeSql(strVal)}'`);
+        if (col === 'source_ip') {
+          parts.push(`source_ip = toIPv4('${escapeSql(strVal)}')`);
+        } else {
+          parts.push(`${col} = '${escapeSql(strVal)}'`);
+        }
       }
     }
   }

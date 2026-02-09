@@ -25,7 +25,7 @@ detection:
   condition: selection
 `;
     const sql = convertSigmaToSql(sigma);
-    expect(sql).toContain("source_ip = '192.168.1.1'");
+    expect(sql).toContain("source_ip = toIPv4('192.168.1.1')");
   });
 
   it('handles multiple values in selection (OR logic)', () => {
