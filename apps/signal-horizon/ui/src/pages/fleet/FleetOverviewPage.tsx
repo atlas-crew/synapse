@@ -21,6 +21,7 @@ import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
 import { apiFetch } from '../../lib/api';
+import { KpiStrip, colors } from '@/ui';
 
 interface FleetOverview {
   summary: {
@@ -139,6 +140,41 @@ export function FleetOverviewPage() {
   const summary = overview?.summary || { totalSensors: 0, onlineCount: 0, warningCount: 0, offlineCount: 0, healthScore: 100 };
   const fleetMetrics = overview?.fleetMetrics || { totalRps: 0, avgLatency: 0, avgCpu: 0, avgMemory: 0 };
 
+  const kpiMetrics = [
+    {
+      label: 'Sensors Online',
+      value: formatNumber(summary.onlineCount),
+      subtitle: 'Connected and reporting telemetry',
+      borderColor: colors.green,
+      valueColor: colors.green,
+      icon: <CheckCircle className="w-4 h-4" style={{ color: colors.green }} />,
+    },
+    {
+      label: 'Needs Attention',
+      value: formatNumber(summary.warningCount),
+      subtitle: 'Degraded performance or reconnecting',
+      borderColor: colors.orange,
+      valueColor: colors.orange,
+      icon: <AlertTriangle className="w-4 h-4" style={{ color: colors.orange }} />,
+    },
+    {
+      label: 'Offline',
+      value: formatNumber(summary.offlineCount),
+      subtitle: 'Not reporting; investigate',
+      borderColor: colors.red,
+      valueColor: colors.red,
+      icon: <XCircle className="w-4 h-4" style={{ color: colors.red }} />,
+    },
+    {
+      label: 'Requests/Min',
+      value: formatNumber(fleetMetrics.totalRps),
+      subtitle: 'Total across online sensors',
+      borderColor: colors.purple,
+      valueColor: colors.purple,
+      icon: <Zap className="w-4 h-4" style={{ color: colors.purple }} />,
+    },
+  ];
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -164,49 +200,8 @@ export function FleetOverviewPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatsCard
-          icon={CheckCircle}
-          iconBg="bg-status-success/10"
-          iconColor="text-status-success"
-          value={formatNumber(summary.onlineCount)}
-          label="Sensors Online"
-          description="Number of sensors currently connected and reporting telemetry"
-          borderClassName="border-l-ac-green"
-          valueClassName="text-ac-green"
-        />
-        <StatsCard
-          icon={AlertTriangle}
-          iconBg="bg-status-warning/10"
-          iconColor="text-status-warning"
-          value={formatNumber(summary.warningCount)}
-          label="Needs Attention"
-          description="Sensors with degraded performance, high resource usage, or reconnecting"
-          borderClassName="border-l-ac-orange"
-          valueClassName="text-ac-orange"
-        />
-        <StatsCard
-          icon={XCircle}
-          iconBg="bg-status-error/10"
-          iconColor="text-status-error"
-          value={formatNumber(summary.offlineCount)}
-          label="Offline"
-          description="Sensors that have stopped reporting and may need investigation"
-          borderClassName="border-l-ac-red"
-          valueClassName="text-ac-red"
-        />
-        <StatsCard
-          icon={Zap}
-          iconBg="bg-ac-purple/10"
-          iconColor="text-ac-purple"
-          value={formatNumber(fleetMetrics.totalRps)}
-          label="Requests/Min"
-          description="Total requests per minute across all online sensors"
-          borderClassName="border-l-ac-purple"
-          valueClassName="text-ac-purple"
-        />
-      </div>
+      {/* KPI Strip (@/ui) */}
+      <KpiStrip metrics={kpiMetrics} cols={4} />
 
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
@@ -283,18 +278,6 @@ export function FleetOverviewPage() {
           Showing {filteredSensors.length} of {sensors.length} sensors
         </div>
       </div>
-    </div>
-  );
-}
-
-function StatsCard({ icon: Icon, iconBg, iconColor, value, label, description, borderClassName, valueClassName }: { icon: LucideIcon; iconBg: string; iconColor: string; value: number | string; label: string; description?: string; borderClassName: string; valueClassName: string }) {
-  return (
-    <div className={`card border border-border-subtle border-l-2 p-6 ${borderClassName}`}>
-      <div className={`w-10 h-10 ${iconBg} flex items-center justify-center mb-3`}>
-        <Icon className={`w-5 h-5 ${iconColor}`} />
-      </div>
-      <div className={`text-3xl font-light ${valueClassName}`}>{value}</div>
-      <div className="text-xs font-semibold text-ink-secondary uppercase tracking-wide mt-1" title={description}>{label}</div>
     </div>
   );
 }
