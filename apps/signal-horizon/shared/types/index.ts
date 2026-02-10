@@ -36,3 +36,16 @@ export type {
   PartialRateLimitConfig,
   PartialBlockPageConfig,
 } from './config';
+
+export type {
+  PolicySeverity,
+  EnforcementMode,
+  RateLimitConfig as PolicyRateLimitConfig,
+  WAFProtectionSettings,
+  BotProtectionSettings,
+  GeoBlockingSettings,
+  IPReputationSettings,
+  PolicyConfig,
+  PolicyTemplateMetadata,
+  PolicyTemplate,
+} from './policies';
