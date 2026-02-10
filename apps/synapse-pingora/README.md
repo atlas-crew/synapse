@@ -20,36 +20,45 @@ A proof-of-concept integrating the **real Synapse WAF detection engine** (237 pr
 
 ### Pingora Approach (This PoC)
 
-```
-┌─────────────┐     ┌───────────────────────────────┐     ┌──────────────┐
-│   Client    │────▶│      Synapse-Pingora          │────▶│   Backend    │
-│             │◀────│  ┌─────────────────────────┐  │◀────│   Server     │
-└─────────────┘     │  │  libsynapse (in-proc)   │  │     └──────────────┘
-                    │  │  • 237 Rules            │  │
-                    │  │  • Entity Tracking      │  │
-                    │  │  • Risk Scoring         │  │
-                    │  └─────────────────────────┘  │
-                    │         Single Binary         │
-                    └───────────────────────────────┘
+```mermaid
+flowchart LR
+    Client -->|request| SP["Synapse-Pingora<br/><b>Single Binary</b>"]
+    SP -->|proxy| Backend[Backend Server]
+    Backend -->|response| SP
+    SP -->|response| Client
+
+    subgraph SP_inner [" "]
+        direction TB
+        Engine["libsynapse (in-proc)<br/>237 Rules · Entity Tracking · Risk Scoring"]
+    end
+
+    style SP fill:#1e40af,color:#fff
+    style Engine fill:#2563eb,color:#fff
+    style Client fill:#f8fafc,stroke:#334155
+    style Backend fill:#f8fafc,stroke:#334155
 ```
 
 ### Current Approach (nginx + Node.js)
 
+```mermaid
+flowchart LR
+    Client -->|request| Nginx[nginx]
+    Nginx -->|subrequest| RS["risk-server<br/>(Node.js)"]
+    RS -->|verdict| Nginx
+    Nginx -->|proxy| Backend[Backend Server]
+
+    RS --- NAPI["NAPI Bridge"]
+    NAPI --- Lib["libsynapse<br/>(Rust FFI)"]
+
+    style Nginx fill:#dc2626,color:#fff
+    style RS fill:#dc2626,color:#fff
+    style NAPI fill:#b91c1c,color:#fff
+    style Lib fill:#991b1b,color:#fff
+    style Client fill:#f8fafc,stroke:#334155
+    style Backend fill:#f8fafc,stroke:#334155
 ```
-┌─────────────┐     ┌─────────┐     ┌──────────────┐     ┌──────────────┐
-│   Client    │────▶│  nginx  │────▶│  risk-server │────▶│   Backend    │
-│             │◀────│         │◀────│  (Node.js)   │◀────│   Server     │
-└─────────────┘     └─────────┘     └──────────────┘     └──────────────┘
-                         │                  │
-                         │          ┌───────┴────────┐
-                         │          │  NAPI Bridge   │
-                         │          └───────┬────────┘
-                         │          ┌───────┴────────┐
-                    config mgmt     │  libsynapse    │
-                                    │  (Rust FFI)    │
-                                    └────────────────┘
-                    └── 3 components, FFI overhead ──┘
-```
+
+> **3 components + FFI overhead** vs a single Rust binary.
 
 **Key difference**: Detection happens *inside* the proxy, not across a process boundary.
 
@@ -119,28 +128,26 @@ a **~2-3x speedup** over the Node.js architecture. The real value proposition is
 Copy `config.example.yaml` to `config.yaml`:
 
 ```yaml
-# Server settings
-server:
-  listen: "0.0.0.0:6190"
-  workers: 0  # 0 = auto-detect
+# Server settings (flat fields on GlobalConfig)
+http_addr: "0.0.0.0:80"
+https_addr: "0.0.0.0:443"
+workers: 0                    # 0 = auto-detect CPU count
+shutdown_timeout_secs: 30
+waf_threshold: 70             # Global risk threshold (0-100)
+waf_enabled: true
+log_level: "info"             # trace, debug, info, warn, error
+waf_regex_timeout_ms: 100     # ReDoS protection (max 500)
+# admin_api_key: "..."        # Optional; random key generated if unset
 
 # Upstream backends (round-robin)
 upstreams:
   - host: "127.0.0.1"
     port: 8080
-  - host: "127.0.0.1"
-    port: 8081
 
 # Rate limiting
 rate_limit:
   rps: 10000
   enabled: true
-
-# Logging
-logging:
-  level: "info"  # trace, debug, info, warn, error
-  format: "text"
-  access_log: true
 
 # Detection toggles
 detection:
@@ -148,9 +155,11 @@ detection:
   xss: true
   path_traversal: true
   command_injection: true
-  action: "block"  # block, log, challenge
+  action: "block"             # block, log, challenge
   block_status: 403
 ```
+
+See [`docs/reference/configuration.md`](docs/reference/configuration.md) for the full reference.
 
 ## Pingora Hooks Used
 
@@ -382,15 +391,55 @@ DlpConfig {
 
 ```
 synapse-pingora/
-├── Cargo.toml           # Dependencies (includes libsynapse)
-├── config.example.yaml  # Example configuration
-├── test.sh              # Integration test script
-├── README.md            # This file
-├── src/
-│   ├── main.rs          # Full implementation with real engine
-│   └── minimal_rules.json  # Fallback rules (7 patterns)
-└── benches/
-    └── detection.rs     # Criterion benchmarks
+├── Cargo.toml              # Dependencies
+├── config.example.yaml     # Example configuration
+├── test.sh                 # Integration test script
+├── README.md
+├── benches/
+│   └── detection.rs        # Criterion benchmarks
+├── assets/
+│   └── admin_console.html  # Embedded admin web console
+├── docs/                   # Project documentation
+│   ├── reference/          # Configuration reference
+│   ├── tutorials/          # Tuning, DLP, shadow mirroring
+│   └── api/                # Admin API reference
+└── src/
+    ├── main.rs             # Binary entrypoint + Pingora proxy impl
+    ├── lib.rs              # Library crate root
+    ├── config.rs           # YAML config loading & validation
+    ├── admin_server.rs     # Admin HTTP API (90+ endpoints)
+    ├── api.rs              # API handler traits
+    ├── metrics.rs          # Prometheus metrics registry
+    ├── health.rs           # Health check logic
+    ├── rules.rs            # Rule loading & management
+    ├── tui.rs              # Interactive terminal dashboard
+    ├── waf/                # WAF detection engine
+    ├── entity/             # IP/actor entity store & risk tracking
+    ├── actor/              # Behavioral actor tracking
+    ├── session/            # Session tracking & hijack detection
+    ├── detection/          # Credential stuffing & login detection
+    ├── correlation/        # Campaign correlation engine
+    ├── intelligence/       # Signal intelligence manager
+    ├── dlp/                # Data Loss Prevention scanner
+    ├── profiler/           # Endpoint profiling & schema learning
+    ├── payload/            # Bandwidth & payload analysis
+    ├── trends/             # Trend analysis & anomaly detection
+    ├── fingerprint/        # JA4 fingerprinting & integrity
+    ├── crawler/            # Bot & crawler detection
+    ├── geo/                # GeoIP & impossible travel detection
+    ├── shadow/             # Shadow traffic mirroring
+    ├── signals/            # Signal adapter layer
+    ├── horizon/            # Signal Horizon hub integration
+    ├── tunnel/             # Secure tunnel client
+    ├── telemetry/          # Telemetry & reporting
+    ├── interrogator/       # CAPTCHA, JS challenge, cookie mgmt
+    ├── persistence/        # State persistence layer
+    ├── tarpit/             # Tarpit (not shown: src/tarpit/)
+    ├── utils/              # Circuit breaker & shared utilities
+    └── (14 more modules)   # access, block_log, block_page, body,
+                            # config_manager, headers, ratelimit,
+                            # reload, shutdown, site_waf, sni_validation,
+                            # tls, trap, validation, vhost
 ```
 
 ## License

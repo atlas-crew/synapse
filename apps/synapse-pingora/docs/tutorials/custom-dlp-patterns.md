@@ -113,5 +113,5 @@ curl -X POST "http://<sensor-admin-host>:<port>/reload" \
 
 ## Next Steps
 
-- Review `docs/configuration/REFERENCE.md` for all DLP settings.
+- Review `docs/reference/configuration.md` for all DLP settings.
 - Pair DLP with WAF rule overrides for layered enforcement.

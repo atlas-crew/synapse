@@ -107,5 +107,5 @@ curl -X POST "http://<sensor-admin-host>:<port>/reload" \
 
 ## Next Steps
 
-- Review `docs/configuration/REFERENCE.md` for all shadow mirror settings.
+- Review `docs/reference/configuration.md` for all shadow mirror settings.
 - Pair shadow mirroring with DLP and WAF tuning for layered analysis.

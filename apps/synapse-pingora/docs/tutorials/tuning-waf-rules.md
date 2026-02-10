@@ -107,5 +107,5 @@ Checkpoint:
 
 ## Next Steps
 
-- Review full configuration reference in `docs/configuration/REFERENCE.md`.
+- Review full configuration reference in `docs/reference/configuration.md`.
 - Pair WAF tuning with rate limits and access controls for layered protection.

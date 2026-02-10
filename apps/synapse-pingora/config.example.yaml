@@ -77,7 +77,19 @@ tls:
 # - Compatible with load balancer health checks
 # - Access via: GET http://localhost:6190/_sensor/status
 
-# Future: DLP settings (not yet implemented)
-# dlp:
-#   enabled: false
-#   patterns: []
+# DLP (Data Loss Prevention) scanning
+# Scans request/response bodies for PII and sensitive data.
+# Supports credit cards (Luhn), SSN, IBAN, API keys, and 22 pattern types.
+dlp:
+  enabled: false
+  max_body_size_bytes: 1048576    # 1MB hard limit
+  max_body_inspection_bytes: 8192 # 8KB inspection cap (truncate, not reject)
+  scan_text_only: true            # Skip binary content types
+  action: "mask"                  # mask, hash, block, log
+  patterns:
+    - name: "credit_card"
+      pattern: "\\b\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"
+      action: "mask"
+    - name: "ssn"
+      pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+      action: "block"
