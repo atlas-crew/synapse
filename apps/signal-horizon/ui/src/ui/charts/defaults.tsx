@@ -52,8 +52,8 @@ export const gridDefaults = {
 export const gridDefaultsSoft = {
   ...gridDefaults,
   strokeDasharray: '3 3',
-  stroke: colors.blue,
-  strokeOpacity: 0.15,
+  stroke: colors.chart.grid,
+  strokeOpacity: colors.chart.gridOpacitySoft,
 } as const;
 
 export const tooltipDefaults = {

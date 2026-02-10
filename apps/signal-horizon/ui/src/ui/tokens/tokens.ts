@@ -81,6 +81,7 @@ export const colors = {
   chart: {
     grid: '#001E62',        // at 0.3 opacity
     gridOpacity: 0.3,
+    gridOpacitySoft: 0.15,
     baselineOpacity: 0.8,
     barOpacity: 0.9,
     barHoverOpacity: 1.0,
