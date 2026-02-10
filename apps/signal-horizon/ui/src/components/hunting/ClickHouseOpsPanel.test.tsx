@@ -111,7 +111,7 @@ describe('ClickHouseOpsPanel', () => {
     );
 
     await waitFor(() => expect(getClickHouseOpsSnapshot).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('table', { name: 'ClickHouse ops metrics' })).toBeInTheDocument();
+    await screen.findByRole('table', { name: 'ClickHouse ops metrics' });
 
     rerender(<ClickHouseOpsPanel historicalEnabled={false} getClickHouseOpsSnapshot={getClickHouseOpsSnapshot} />);
     expect(screen.getByText(/ClickHouse disabled/i)).toBeInTheDocument();
