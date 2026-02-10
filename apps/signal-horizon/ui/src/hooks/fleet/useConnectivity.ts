@@ -31,7 +31,22 @@ export interface ConnectivityStatusResponse {
   timestamp: string;
 }
 
-export type ConnectivityTestType = 'ping' | 'dns' | 'tls' | 'traceroute';
+export type ConnectivityTestType =
+  | 'ping'
+  | 'dns'
+  | 'tls'
+  | 'traceroute'
+  | 'http1'
+  | 'http2'
+  | 'h2c'
+  | 'tcp'
+  | 'udp'
+  | 'grpc'
+  | 'mqtt'
+  | 'redis'
+  | 'smtp'
+  | 'icap'
+  | 'syslog';
 
 export interface ConnectivityTestResult {
   testType: ConnectivityTestType;
@@ -64,7 +79,7 @@ async function fetchConnectivityStatus(): Promise<ConnectivityStatusResponse> {
 
 async function runConnectivityTest(params: {
   testType: ConnectivityTestType;
-  target: string;
+  target?: string;
   sensorIds?: string[];
 }): Promise<ConnectivityTestResponse> {
   return apiFetch<ConnectivityTestResponse>('/management/connectivity/test', {

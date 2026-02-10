@@ -17,6 +17,10 @@ import {
   Globe,
   Lock,
   Route,
+  Server,
+  Radio,
+  Database,
+  Mail,
   CheckCircle,
   XCircle,
   AlertTriangle,
@@ -67,6 +71,17 @@ const connectivityTests: ConnectivityTest[] = [
   { id: 'dns', name: 'DNS Resolution', description: 'Verify DNS lookup functionality', icon: Globe },
   { id: 'tls', name: 'TLS Handshake', description: 'Test secure connection establishment', icon: Lock },
   { id: 'traceroute', name: 'Traceroute', description: 'Map network path to endpoints', icon: Route },
+  { id: 'http1', name: 'HTTP/1 Echo', description: 'GET /echo over HTTP/1.1 (Apparatus port 80)', icon: Globe },
+  { id: 'http2', name: 'HTTP/2 Echo', description: 'GET /echo over HTTP/2 TLS (Apparatus port 443)', icon: Lock },
+  { id: 'h2c', name: 'H2C Echo', description: 'GET /echo over HTTP/2 cleartext (Apparatus port 81)', icon: Route },
+  { id: 'tcp', name: 'TCP Echo', description: 'TCP echo round-trip (Apparatus port 9000)', icon: Server },
+  { id: 'udp', name: 'UDP Echo', description: 'UDP echo round-trip (Apparatus port 9001)', icon: Radio },
+  { id: 'grpc', name: 'gRPC Probe', description: 'HTTP/2 preface/settings probe (Apparatus port 50051)', icon: Route },
+  { id: 'mqtt', name: 'MQTT Connect', description: 'CONNECT/CONNACK handshake (Apparatus port 1883)', icon: Radio },
+  { id: 'redis', name: 'Redis PING', description: 'RESP PING/PONG (Apparatus port 6379)', icon: Database },
+  { id: 'smtp', name: 'SMTP EHLO', description: 'SMTP greeting + EHLO (Apparatus port 2525)', icon: Mail },
+  { id: 'icap', name: 'ICAP OPTIONS', description: 'ICAP OPTIONS probe (Apparatus port 1344)', icon: Lock },
+  { id: 'syslog', name: 'Syslog Send', description: 'UDP syslog send (Apparatus port 5140)', icon: Activity },
 ];
 
 interface TestResult {
@@ -82,6 +97,7 @@ interface TestResult {
 export function ConnectivityPage(): React.ReactElement {
   const [runningTest, setRunningTest] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
+  const [targetHost, setTargetHost] = useState<string>('demo.site');
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Cleanup on unmount
@@ -152,14 +168,50 @@ export function ConnectivityPage(): React.ReactElement {
 
   // Run connectivity test mutation with AbortController support
   const testMutation = useMutation({
-    mutationFn: async ({ testId, signal }: { testId: string; signal: AbortSignal }) => {
+    mutationFn: async ({ testId, target, signal }: { testId: string; target?: string; signal: AbortSignal }) => {
       return apiFetch<any>('/management/connectivity/test', {
         method: 'POST',
-        body: { testType: testId },
+        body: target ? { testType: testId, target } : { testType: testId },
         signal,
       });
     },
   });
+
+  const buildTarget = useCallback((testId: string): string | undefined => {
+    const host = targetHost.trim();
+    if (!host) return undefined;
+
+    switch (testId) {
+      case 'http1':
+        return `http://${host}:80/echo`;
+      case 'http2':
+        return `https://${host}:443/echo`;
+      case 'h2c':
+        return `http://${host}:81/echo`;
+      case 'tcp':
+        return `${host}:9000`;
+      case 'udp':
+        return `${host}:9001`;
+      case 'grpc':
+        return `${host}:50051`;
+      case 'mqtt':
+        return `${host}:1883`;
+      case 'redis':
+        return `${host}:6379`;
+      case 'smtp':
+        return `${host}:2525`;
+      case 'icap':
+        return `${host}:1344`;
+      case 'syslog':
+        return `${host}:5140`;
+      case 'ping':
+      case 'dns':
+      case 'tls':
+      case 'traceroute':
+      default:
+        return host;
+    }
+  }, [targetHost]);
 
   const handleRunTest = useCallback(async (testId: string) => {
     // Abort any previous test
@@ -172,7 +224,11 @@ export function ConnectivityPage(): React.ReactElement {
 
     setRunningTest(testId);
     try {
-      const response = await testMutation.mutateAsync({ testId, signal: controller.signal });
+      const response = await testMutation.mutateAsync({
+        testId,
+        target: buildTarget(testId),
+        signal: controller.signal,
+      });
       if (response.result) {
         setTestResults(prev => ({ ...prev, [testId]: response.result }));
       }
@@ -199,7 +255,7 @@ export function ConnectivityPage(): React.ReactElement {
         setRunningTest(null);
       }
     }
-  }, [testMutation]);
+  }, [testMutation, buildTarget]);
 
   // Generate mock chart data
   const latencyTrendData = useMemo(() => {
@@ -300,6 +356,23 @@ export function ConnectivityPage(): React.ReactElement {
         className="bg-surface-card border border-border-subtle p-6"
       >
         <h2 id="diagnostic-tests-heading" className="text-lg font-semibold text-ink-primary mb-4">Network Diagnostic Tests</h2>
+        <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+          <div className="space-y-1">
+            <label htmlFor="connectivity-target-host" className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
+              Target Host
+            </label>
+            <input
+              id="connectivity-target-host"
+              value={targetHost}
+              onChange={(e) => setTargetHost(e.target.value)}
+              className="h-9 w-64 bg-surface-subtle border border-border-subtle px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+              placeholder="demo.site"
+            />
+          </div>
+          <div className="text-xs text-ink-muted">
+            Apparatus ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt, 6379 redis, 2525 smtp, 1344 icap, 5140 syslog
+          </div>
+        </div>
         {/* Live region for screen reader announcements */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {runningTest && `Running ${runningTest} test...`}
@@ -417,6 +490,41 @@ export function ConnectivityPage(): React.ReactElement {
                                 <div className="text-ink-muted">... and {String((result.details.hops as Array<unknown>).length - 8)} more</div>
                               )}
                             </div>
+                          )}
+                        </div>
+                      )}
+                      {(result.testType === 'http1' || result.testType === 'http2' || result.testType === 'h2c') && (
+                        <div className="mt-2 space-y-0.5">
+                          {'statusCode' in (result.details as any) && (
+                            <div>Status: <span className="text-ink-primary">{String((result.details as any).statusCode)}</span></div>
+                          )}
+                        </div>
+                      )}
+                      {(result.testType === 'tcp' || result.testType === 'udp') && (
+                        <div className="mt-2 space-y-0.5">
+                          {'echoed' in (result.details as any) && (
+                            <div>Echoed: <span className="text-ink-primary">{String((result.details as any).echoed)}</span></div>
+                          )}
+                        </div>
+                      )}
+                      {result.testType === 'grpc' && (
+                        <div className="mt-2 space-y-0.5">
+                          {'http2SettingsFrame' in (result.details as any) && (
+                            <div>HTTP/2: <span className="text-ink-primary">{String((result.details as any).http2SettingsFrame)}</span></div>
+                          )}
+                        </div>
+                      )}
+                      {result.testType === 'mqtt' && (
+                        <div className="mt-2 space-y-0.5">
+                          {'connack' in (result.details as any) && (
+                            <div>CONNACK: <span className="text-ink-primary">{String((result.details as any).connack)}</span></div>
+                          )}
+                        </div>
+                      )}
+                      {result.testType === 'redis' && (
+                        <div className="mt-2 space-y-0.5">
+                          {'pong' in (result.details as any) && (
+                            <div>PONG: <span className="text-ink-primary">{String((result.details as any).pong)}</span></div>
                           )}
                         </div>
                       )}
