@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { alpha, axisDefaults, colors, gridDefaults } from '@/ui';
+import { alpha, axisDefaults, colors, gridDefaults, tooltipDefaults } from '@/ui';
 import {
   BarChart3,
   Search,
@@ -232,11 +231,7 @@ export default function ApiIntelligencePage() {
                 <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
                 <XAxis dataKey="date" {...axisDefaults.x} axisLine={false} />
                 <YAxis {...axisDefaults.y} />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                  itemStyle={TOOLTIP_ITEM_STYLE}
-                />
+                <Tooltip {...tooltipDefaults} />
                 <Area
                   type="monotone"
                   dataKey="count"
@@ -286,7 +281,7 @@ export default function ApiIntelligencePage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
-                <XAxis type="number" hide {...axisDefaults.x} />
+                <XAxis type="number" {...axisDefaults.x} hide />
                 <YAxis
                   dataKey="endpoint"
                   type="category"
@@ -294,12 +289,7 @@ export default function ApiIntelligencePage() {
                   width={150}
                   tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
                 />
-                <Tooltip
-                  cursor={{ fill: alpha(colors.blue, 0.1) }}
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                  itemStyle={TOOLTIP_ITEM_STYLE}
-                />
+                <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
                 <Bar dataKey="violationCount" fill="url(#violationGradient)" radius={[0, 0, 0, 0]} barSize={18} />
               </BarChart>
             </ResponsiveContainer>

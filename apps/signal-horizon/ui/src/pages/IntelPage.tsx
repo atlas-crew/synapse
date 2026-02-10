@@ -4,9 +4,8 @@
  */
 
 import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { alpha, axisDefaults, colors, gridDefaults, lineDefaults } from '@/ui';
+import { alpha, axisDefaults, colors, gridDefaults, lineDefaults, tooltipDefaults } from '@/ui';
 import {
   BarChart3,
   TrendingUp,
@@ -137,14 +136,9 @@ export default function IntelPage() {
                 dataKey="day"
                 {...axisDefaults.x}
                 axisLine={false}
-                tick={{ ...axisDefaults.x.tick, fontSize: 11 }}
               />
-              <YAxis {...axisDefaults.y} tick={{ ...axisDefaults.y.tick, fontSize: 11 }} />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                itemStyle={TOOLTIP_ITEM_STYLE}
-              />
+              <YAxis {...axisDefaults.y} />
+              <Tooltip {...tooltipDefaults} />
               <Line {...lineDefaults} dataKey="attacks" stroke={colors.magenta} strokeWidth={2.5} name="Attacks" />
               <Line {...lineDefaults} dataKey="blocked" stroke={colors.green} strokeWidth={2.5} name="Blocked" />
               <Line {...lineDefaults} dataKey="campaigns" stroke={colors.skyBlue} strokeWidth={2.5} name="Campaigns" />
@@ -233,19 +227,14 @@ export default function IntelPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
-                <XAxis type="number" hide {...axisDefaults.x} />
+                <XAxis type="number" {...axisDefaults.x} hide />
                 <YAxis
                   dataKey="label"
                   type="category"
                   {...axisDefaults.y}
                   width={90}
-                  tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
                 />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                  cursor={{ fill: alpha(colors.blue, 0.1) }}
-                />
+                <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
                 <Bar dataKey="value" fill="url(#barGradientMagenta)" radius={[0, 0, 0, 0]} barSize={14} />
               </BarChart>
             </ResponsiveContainer>
@@ -268,19 +257,14 @@ export default function IntelPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
-                <XAxis type="number" hide {...axisDefaults.x} />
+                <XAxis type="number" {...axisDefaults.x} hide />
                 <YAxis
                   dataKey="label"
                   type="category"
                   {...axisDefaults.y}
                   width={120}
-                  tick={{ ...axisDefaults.y.tick, fontSize: 11 }}
                 />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  labelStyle={TOOLTIP_LABEL_STYLE}
-                  cursor={{ fill: alpha(colors.blue, 0.1) }}
-                />
+                <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
                 <Bar dataKey="value" fill="url(#barGradientBlue)" radius={[0, 0, 0, 0]} barSize={14} />
               </BarChart>
             </ResponsiveContainer>
