@@ -37,6 +37,8 @@ import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
 
+const tickSmall11 = { ...axisDefaults.x.tick, fontSize: 11 };
+
 // Demo data - threat activity timeline
 const DEMO_THREAT_TIMELINE = [
   { time: '00:00', threats: 12, blocked: 12, critical: 1, high: 3, medium: 5, low: 3 },
@@ -254,8 +256,6 @@ function TimeRangeSelector({
 
 // Threat Timeline Chart
 function ThreatTimelineChart() {
-  const tickSmall = { ...axisDefaults.x.tick, fontSize: 11 };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -277,9 +277,9 @@ function ThreatTimelineChart() {
             <XAxis
               dataKey="time"
               {...xAxisNoLine}
-              tick={tickSmall}
+              tick={tickSmall11}
             />
-            <YAxis {...axisDefaults.y} tick={tickSmall} />
+            <YAxis {...axisDefaults.y} tick={tickSmall11} />
             <Tooltip {...tooltipDefaults} />
             <Area
               type="monotone"
@@ -297,8 +297,6 @@ function ThreatTimelineChart() {
 
 // Top Threat Sources Chart
 function TopThreatSourcesChart() {
-  const tickSmall = { ...axisDefaults.y.tick, fontSize: 11 };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -315,7 +313,7 @@ function TopThreatSourcesChart() {
               dataKey="ip"
               axisLine={false}
               tickLine={false}
-              tick={tickSmall}
+              tick={tickSmall11}
               width={110}
             />
             <Tooltip {...tooltipDefaults} />
