@@ -579,10 +579,10 @@ describe('SynapseProxyService', () => {
       expect(broker.sendToSensor).toHaveBeenCalledTimes(1);
     });
 
-    it('getProfile rejects templates with slashes (SSRF protection)', async () => {
-      // Templates containing slashes produce encoded paths with %2f,
+    it('getProfile rejects templates with traversal patterns (SSRF protection)', async () => {
+      // Templates containing ".." produce encoded paths with %2e,
       // which are blocked by the SSRF encoded-traversal protection.
-      const template = '/api/v1/users/:id';
+      const template = '../api/v1/users/:id';
 
       await expect(
         service.getProfile(sensorId, tenantId, template)

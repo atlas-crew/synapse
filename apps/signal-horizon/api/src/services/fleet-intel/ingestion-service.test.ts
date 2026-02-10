@@ -95,21 +95,51 @@ describe('FleetIntelIngestionService', () => {
           },
         ],
       }),
-      listProfiles: vi.fn().mockResolvedValue([
-        {
-          template: '/login',
-          method: 'POST',
-          profile: { shape: 'auth' },
-          updatedAt: nowIso,
+      listProfiles: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          profiles: [
+            {
+              template: '/login',
+              sampleCount: 1,
+              firstSeenMs: now,
+              lastUpdatedMs: now,
+              payloadSize: { mean: 0, variance: 0, stdDev: 0, count: 1 },
+              expectedParams: {},
+              contentTypes: {},
+              statusCodes: {},
+              endpointRisk: 0,
+              currentRps: 0,
+            },
+          ],
+          count: 1,
         },
-      ]),
-      getPayloadStats: vi.fn().mockResolvedValue({
-        capturedAt: nowIso,
-        totals: { requests: 10 },
       }),
-      getPayloadEndpoints: vi.fn().mockResolvedValue({ endpoints: [] }),
-      getPayloadAnomalies: vi.fn().mockResolvedValue({ anomalies: [] }),
-      getPayloadBandwidth: vi.fn().mockResolvedValue({ bandwidth: [] }),
+      getPayloadStats: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          total_endpoints: 0,
+          total_entities: 0,
+          total_requests: 10,
+          total_request_bytes: 100,
+          total_response_bytes: 200,
+          avg_request_size: 10,
+          avg_response_size: 20,
+          active_anomalies: 0,
+        },
+      }),
+      getPayloadEndpoints: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      getPayloadAnomalies: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      getPayloadBandwidth: vi.fn().mockResolvedValue({
+        totalBytes: 0,
+        totalBytesIn: 0,
+        totalBytesOut: 0,
+        avgBytesPerRequest: 0,
+        maxRequestSize: 0,
+        maxResponseSize: 0,
+        requestCount: 0,
+        timeline: [],
+      }),
     };
   });
 

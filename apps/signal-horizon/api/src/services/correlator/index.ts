@@ -3,7 +3,7 @@
  * Detects cross-tenant campaigns and threat patterns
  */
 
-import type { PrismaClient, Campaign } from '@prisma/client';
+import type { Prisma, PrismaClient, Campaign } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { Broadcaster } from '../broadcaster/index.js';
 import type { EnrichedSignal, Severity } from '../../types/protocol.js';
@@ -66,6 +66,13 @@ export class Correlator {
     this.broadcaster = broadcaster;
     this.clickhouse = clickhouse ?? null;
     this.sequenceMatcher = new SequenceMatcher();
+  }
+
+  private toJson(value: unknown): Prisma.InputJsonValue {
+    if (value === undefined || value === null) {
+      return {} as Prisma.InputJsonValue;
+    }
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }
 
   /**
@@ -263,11 +270,7 @@ export class Correlator {
         },
         firstSeenAt: now,
         lastActivityAt: now,
-        metadata: {
-          anonFingerprint,
-          signalCount: signals.length,
-          sequenceState,
-        },
+        metadata: this.toJson({ anonFingerprint, signalCount: signals.length, sequenceState }),
       },
     });
 
@@ -305,11 +308,11 @@ export class Correlator {
         tenantsAffected: tenantCount,
         confidence,
         severity,
-        metadata: {
-          ...metadata,
+        metadata: this.toJson({
+          anonFingerprint: metadata.anonFingerprint,
           signalCount: (metadata.signalCount || 0) + signals.length,
           sequenceState,
-        },
+        }),
       },
     });
 

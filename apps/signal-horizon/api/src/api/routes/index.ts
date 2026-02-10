@@ -39,7 +39,6 @@ import { createFleetReleasesRoutes } from './fleet-releases.js';
 import { createFleetPolicyRoutes } from './fleet-policy.js';
 import { createFleetSessionsRoutes } from './fleet-sessions.js';
 import { createFleetBandwidthRoutes } from './fleet-bandwidth.js';
-import { createFleetIntelRoutes } from './fleet-intel.js';
 import { createPlaybookRoutes } from './playbooks.js';
 import docsRouter from './docs.js';
 import { UserAuthService } from '../../services/user-auth.js';

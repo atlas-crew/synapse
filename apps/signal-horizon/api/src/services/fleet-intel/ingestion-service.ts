@@ -11,8 +11,12 @@ import type {
   ActorListResponse,
   CampaignSummaryRaw,
   CampaignsRawResponse,
-  ProfilesResponse,
-  ProfileRecord,
+  ProfilesListResponse,
+  ProfileSummary,
+  PayloadStatsResponse,
+  PayloadEndpointsResponse,
+  PayloadAnomaliesResponse,
+  PayloadBandwidthStats,
   Session,
   SessionStats,
   SessionListResponse,
@@ -374,30 +378,21 @@ export class FleetIntelIngestionService {
   private async upsertProfiles(
     sensorId: string,
     tenantId: string,
-    response: ProfilesResponse
+    response: ProfilesListResponse
   ): Promise<void> {
-    const profiles = this.normalizeProfiles(response);
-    if (!profiles.length) return;
+    if (!response?.success || !response.data) return;
+    const profiles = response.data.profiles ?? [];
+    if (profiles.length === 0) return;
 
     await Promise.all(
-      profiles.map((record) => {
-        const template = this.extractTemplate(record);
-        if (!template) {
-          this.logger.warn({ sensorId, record }, 'Skipping profile without template');
-          return null;
-        }
-
-        const method = this.extractMethod(record);
-        const updatedAt = this.extractUpdatedAt(record);
-        const profilePayload = record.profile ?? record;
-
+      profiles.map((profile: ProfileSummary) => {
         const data = {
           tenantId,
           sensorId,
-          template,
-          method,
-          profile: this.toJson(profilePayload),
-          updatedAt,
+          template: profile.template,
+          method: '',
+          profile: this.toJson(profile),
+          updatedAt: new Date(profile.lastUpdatedMs || Date.now()),
         };
 
         return this.prisma.sensorIntelProfile.upsert({
@@ -405,8 +400,8 @@ export class FleetIntelIngestionService {
             tenantId_sensorId_template_method: {
               tenantId,
               sensorId,
-              template,
-              method,
+              template: profile.template,
+              method: '',
             },
           },
           create: data,
@@ -419,77 +414,27 @@ export class FleetIntelIngestionService {
   private async createPayloadSnapshot(
     sensorId: string,
     tenantId: string,
-    stats: Record<string, unknown>,
-    endpoints: Record<string, unknown> | null,
-    anomalies: Record<string, unknown> | null,
-    bandwidth: Record<string, unknown> | null
+    stats: PayloadStatsResponse,
+    endpoints: PayloadEndpointsResponse | null,
+    anomalies: PayloadAnomaliesResponse | null,
+    bandwidth: PayloadBandwidthStats | null
   ): Promise<void> {
-    const capturedAt = this.extractCapturedAt(stats);
+    if (!stats?.success || !stats.data) return;
+
+    const endpointsData = endpoints?.success ? endpoints.data : undefined;
+    const anomaliesData = anomalies?.success ? anomalies.data : undefined;
 
     await this.prisma.sensorPayloadSnapshot.create({
       data: {
         tenantId,
         sensorId,
-        capturedAt,
-        stats: this.toJson(stats),
-        endpoints: endpoints ? this.toJson(endpoints) : null,
-        anomalies: anomalies ? this.toJson(anomalies) : null,
-        bandwidth: bandwidth ? this.toJson(bandwidth) : null,
+        capturedAt: new Date(),
+        stats: this.toJson(stats.data),
+        endpoints: endpointsData ? this.toJson(endpointsData) : undefined,
+        anomalies: anomaliesData ? this.toJson(anomaliesData) : undefined,
+        bandwidth: bandwidth ? this.toJson(bandwidth) : undefined,
       },
     });
-  }
-
-  private normalizeProfiles(response: ProfilesResponse): ProfileRecord[] {
-    if (Array.isArray(response)) {
-      return response as ProfileRecord[];
-    }
-
-    if (response && typeof response === 'object') {
-      const record = response as { profiles?: ProfileRecord[]; data?: ProfileRecord[] };
-      if (Array.isArray(record.profiles)) return record.profiles;
-      if (Array.isArray(record.data)) return record.data;
-    }
-
-    return [];
-  }
-
-  private extractTemplate(record: ProfileRecord): string | null {
-    const template =
-      (typeof record.template === 'string' && record.template) ||
-      (typeof record.path === 'string' && record.path) ||
-      (typeof record.endpoint === 'string' && record.endpoint) ||
-      (typeof record.route === 'string' && record.route);
-
-    return template ?? null;
-  }
-
-  private extractMethod(record: ProfileRecord): string {
-    const method =
-      (typeof record.method === 'string' && record.method) ||
-      (typeof record.httpMethod === 'string' && record.httpMethod) ||
-      (typeof record.http_method === 'string' && record.http_method);
-
-    return (method ?? 'ANY').toUpperCase();
-  }
-
-  private extractUpdatedAt(record: ProfileRecord): Date {
-    const value =
-      record.updatedAt ??
-      record.updated_at ??
-      record.lastUpdated ??
-      record.updated;
-
-    return this.toDate(value ?? null);
-  }
-
-  private extractCapturedAt(stats: Record<string, unknown>): Date {
-    const value =
-      stats.capturedAt ??
-      stats.captured_at ??
-      stats.timestamp ??
-      stats.time;
-
-    return this.toDate(value ?? null);
   }
 
   private toDate(value?: string | number | null): Date {
@@ -503,8 +448,8 @@ export class FleetIntelIngestionService {
   }
 
   private toJson(value: unknown): Prisma.InputJsonValue {
-    if (value === undefined) {
-      return null;
+    if (value === undefined || value === null) {
+      return {} as Prisma.InputJsonValue;
     }
     return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
   }

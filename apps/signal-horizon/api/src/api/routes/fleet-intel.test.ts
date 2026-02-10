@@ -8,6 +8,7 @@ import request from '../../__tests__/test-request.js';
 import { createFleetIntelRoutes } from './fleet-intel.js';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import type { FleetIntelService } from '../../services/fleet/fleet-intel.js';
 
 vi.mock('../middleware/auth.js', () => ({
   requireScope: (_scope: string) => (req: Request, _res: Response, next: NextFunction) => {
@@ -37,15 +38,21 @@ const injectAuth = (tenantId: string, scopes: string[] = ['fleet:read']) => {
   };
 };
 
-describe('Fleet Intel Routes', () => {
-  let app: Express;
-  let mockPrisma: Partial<PrismaClient>;
+	describe('Fleet Intel Routes', () => {
+	  let app: Express;
+	  let mockPrisma: Partial<PrismaClient>;
+	  let mockFleetIntel: Partial<FleetIntelService>;
 
-  beforeEach(() => {
-    mockPrisma = {
-      sensorIntelActor: {
-        findMany: vi.fn(),
-        count: vi.fn(),
+	  beforeEach(() => {
+	    mockFleetIntel = {
+	      getActors: vi.fn(),
+	      getPayloadStats: vi.fn(),
+	    } as unknown as Partial<FleetIntelService>;
+
+	    mockPrisma = {
+	      sensorIntelActor: {
+	        findMany: vi.fn(),
+	        count: vi.fn(),
       } as unknown as PrismaClient['sensorIntelActor'],
       sensorIntelSession: {
         findMany: vi.fn(),
@@ -64,52 +71,70 @@ describe('Fleet Intel Routes', () => {
       } as unknown as PrismaClient['sensorPayloadSnapshot'],
     };
 
-    app = express();
-    app.use(express.json());
-    app.use(injectAuth('tenant-1'));
-    app.use('/fleet/intel', createFleetIntelRoutes(mockPrisma as PrismaClient, mockLogger));
-  });
+	    app = express();
+	    app.use(express.json());
+	    app.use(injectAuth('tenant-1'));
+	    app.use(
+	      '/fleet/intel',
+	      createFleetIntelRoutes(mockPrisma as PrismaClient, mockLogger, {
+	        fleetIntelService: mockFleetIntel as FleetIntelService,
+	      })
+	    );
+	  });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('returns actor snapshots with pagination', async () => {
-    vi.mocked(mockPrisma.sensorIntelActor!.findMany).mockResolvedValue([
-      {
-        id: 'actor-1',
-        tenantId: 'tenant-1',
-        sensorId: 'sensor-1',
-        actorId: 'actor-1',
-        riskScore: 90,
-        isBlocked: false,
-        firstSeenAt: new Date(),
-        lastSeenAt: new Date(),
-        ips: [],
-        fingerprints: [],
-        sessionIds: [],
-        raw: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ]);
-    vi.mocked(mockPrisma.sensorIntelActor!.count).mockResolvedValue(1);
+	  it('returns actor snapshots with pagination', async () => {
+	    vi.mocked(mockFleetIntel.getActors!).mockResolvedValue({
+	      actors: [
+	      {
+	        id: 'actor-1',
+	        tenantId: 'tenant-1',
+	        sensorId: 'sensor-1',
+	        actorId: 'actor-1',
+	        riskScore: 90,
+	        isBlocked: false,
+	        firstSeenAt: new Date(),
+	        lastSeenAt: new Date(),
+	        ips: [],
+	        fingerprints: [],
+	        sessionIds: [],
+	        raw: {},
+	        createdAt: new Date(),
+	        updatedAt: new Date(),
+	      },
+	      ],
+	      total: 1,
+	    } as any);
 
-    const res = await request(app)
-      .get('/fleet/intel/actors?minRisk=80&limit=10&offset=0')
-      .expect(200);
+	    const res = await request(app)
+	      .get('/fleet/intel/actors?minRisk=80&limit=10&offset=0')
+	      .expect(200);
 
-    expect(res.body.actors).toHaveLength(1);
-    expect(res.body.pagination).toHaveProperty('total', 1);
-  });
+	    expect(res.body.actors).toHaveLength(1);
+	    expect(res.body.total).toBe(1);
+	  });
 
-  it('returns null snapshot when no payload data exists', async () => {
-    vi.mocked(mockPrisma.sensorPayloadSnapshot!.findFirst).mockResolvedValue(null);
+	  it('returns aggregate payload stats', async () => {
+	    vi.mocked(mockFleetIntel.getPayloadStats!).mockResolvedValue({
+	      totalEndpoints: 0,
+	      totalEntities: 0,
+	      totalRequests: 0,
+	      totalRequestBytes: 0,
+	      totalResponseBytes: 0,
+	      avgRequestSize: 0,
+	      avgResponseSize: 0,
+	      activeAnomalies: 0,
+	      sensorCount: 0,
+	      capturedAt: null,
+	    });
 
-    const res = await request(app)
-      .get('/fleet/intel/payload/stats')
-      .expect(200);
+	    const res = await request(app)
+	      .get('/fleet/intel/payload/stats')
+	      .expect(200);
 
-    expect(res.body).toHaveProperty('snapshot', null);
-  });
-});
+	    expect(res.body).toHaveProperty('sensorCount', 0);
+	  });
+	});

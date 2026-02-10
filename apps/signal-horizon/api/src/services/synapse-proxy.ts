@@ -348,23 +348,6 @@ export interface SessionDetailResponse {
   session: Session;
 }
 
-export type PayloadStatsResponse = Record<string, unknown>;
-export type PayloadEndpointsResponse = Record<string, unknown>;
-export type PayloadAnomaliesResponse = Record<string, unknown>;
-export type PayloadBandwidthResponse = Record<string, unknown>;
-
-export interface ProfileRecord {
-  template?: string;
-  method?: string | null;
-  updatedAt?: string;
-  updated_at?: string;
-  profile?: unknown;
-  [key: string]: unknown;
-}
-
-export type ProfilesResponse = { profiles?: ProfileRecord[]; data?: ProfileRecord[] } | ProfileRecord[];
-export type ProfileDetailResponse = ProfileRecord | { profile?: ProfileRecord } | Record<string, unknown>;
-
 export interface EvalRequest {
   method: string;
   path: string;
@@ -833,9 +816,15 @@ export class SynapseProxyService extends EventEmitter {
       );
     }
 
-    // Reject encoded path traversal attempts (%2e = '.', %2f = '/')
+    // Reject encoded path traversal attempts (%2e = '.').
+    // Note: some endpoints (like /api/profiles/:template) legitimately contain encoded slashes.
     const lower = endpoint.toLowerCase();
-    if (lower.includes('%2e') || lower.includes('%2f') || lower.includes('%5c')) {
+    const isProfilesTemplatePath = lower.startsWith('/api/profiles/');
+    if (
+      lower.includes('%2e') ||
+      lower.includes('%5c') ||
+      (!isProfilesTemplatePath && lower.includes('%2f'))
+    ) {
       throw new SynapseProxyError(
         'Invalid endpoint: encoded traversal detected',
         'INVALID_ENDPOINT'
@@ -1389,28 +1378,6 @@ export class SynapseProxyService extends EventEmitter {
   /**
    * Get payload bandwidth statistics
    */
-  async getPayloadBandwidth(
-    sensorId: string,
-    tenantId: string
-  ): Promise<PayloadBandwidthResponse> {
-    const cacheKey = `payload:bandwidth:${sensorId}`;
-    const cached = this.getFromCache<PayloadBandwidthResponse>(cacheKey);
-    if (cached) return cached;
-
-    const result = await this.proxyRequest<PayloadBandwidthResponse>(
-      sensorId,
-      tenantId,
-      '/_sensor/payload/bandwidth',
-      'GET'
-    );
-
-    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
-    return result;
-  }
-
-  /**
-   * List threat campaigns
-   */
   async listCampaigns(
     sensorId: string,
     tenantId: string,
@@ -1435,51 +1402,6 @@ export class SynapseProxyService extends EventEmitter {
 
     this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
     return result;
-  }
-
-  /**
-   * List payload profiles
-   */
-  async listProfiles(
-    sensorId: string,
-    tenantId: string,
-    options?: { limit?: number; offset?: number }
-  ): Promise<ProfilesResponse> {
-    const cacheKey = `profiles:${sensorId}:${JSON.stringify(options ?? {})}`;
-    const cached = this.getFromCache<ProfilesResponse>(cacheKey);
-    if (cached) return cached;
-
-    const query = new URLSearchParams();
-    if (options?.limit) query.set('limit', String(options.limit));
-    if (options?.offset) query.set('offset', String(options.offset));
-    const suffix = query.toString() ? `?${query.toString()}` : '';
-
-    const result = await this.proxyRequest<ProfilesResponse>(
-      sensorId,
-      tenantId,
-      `/api/profiles${suffix}`,
-      'GET'
-    );
-
-    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
-    return result;
-  }
-
-  /**
-   * Get profile details by template
-   */
-  async getProfile(
-    sensorId: string,
-    tenantId: string,
-    template: string
-  ): Promise<ProfileDetailResponse> {
-    const encodedTemplate = encodeURIComponent(template);
-    return this.proxyRequest<ProfileDetailResponse>(
-      sensorId,
-      tenantId,
-      `/api/profiles/${encodedTemplate}`,
-      'GET'
-    );
   }
 
   /**
@@ -1544,25 +1466,6 @@ export class SynapseProxyService extends EventEmitter {
       `/_sensor/sessions/${sessionId}`,
       'GET'
     );
-  }
-
-  /**
-   * Get payload profiling summary stats
-   */
-  async getPayloadStats(sensorId: string, tenantId: string): Promise<PayloadStatsResponse> {
-    const cacheKey = `payload:stats:${sensorId}`;
-    const cached = this.getFromCache<PayloadStatsResponse>(cacheKey);
-    if (cached) return cached;
-
-    const result = await this.proxyRequest<PayloadStatsResponse>(
-      sensorId,
-      tenantId,
-      '/_sensor/payload/stats',
-      'GET'
-    );
-
-    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
-    return result;
   }
 
   /**
@@ -1644,15 +1547,24 @@ export class SynapseProxyService extends EventEmitter {
   /**
    * List all endpoint profiles
    */
-  async listProfiles(sensorId: string, tenantId: string): Promise<ProfilesListResponse> {
-    const cacheKey = `profiles:${sensorId}`;
+  async listProfiles(
+    sensorId: string,
+    tenantId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<ProfilesListResponse> {
+    const cacheKey = `profiles:${sensorId}:${JSON.stringify(options ?? {})}`;
     const cached = this.getFromCache<ProfilesListResponse>(cacheKey);
     if (cached) return cached;
+
+    const query = new URLSearchParams();
+    if (options?.limit) query.set('limit', String(options.limit));
+    if (options?.offset) query.set('offset', String(options.offset));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
 
     const result = await this.proxyRequest<ProfilesListResponse>(
       sensorId,
       tenantId,
-      '/api/profiles',
+      `/api/profiles${suffix}`,
       'GET'
     );
 

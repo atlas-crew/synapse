@@ -56,13 +56,6 @@ model Tenant {
   sensorIntelProfiles  SensorIntelProfile[]
   sensorPayloadSnapshots SensorPayloadSnapshot[]
 
-  // Sensor intel relations
-  sensorIntelActors     SensorIntelActor[]
-  sensorIntelSessions   SensorIntelSession[]
-  sensorIntelCampaigns  SensorIntelCampaign[]
-  sensorIntelProfiles   SensorIntelProfile[]
-  sensorPayloadSnapshots SensorPayloadSnapshot[]
-
   // Beam relations
   beamEndpoints      Endpoint[]      @relation("TenantEndpoints")
   beamRules          CustomerRule[]  @relation("TenantRules")
@@ -304,13 +297,6 @@ model Sensor {
   apiKeys           SensorApiKey[]
   diagnosticBundles DiagnosticBundle[]
   updateHistory     SensorUpdate[]
-
-  // Intel relations
-  sensorIntelActors    SensorIntelActor[]
-  sensorIntelSessions   SensorIntelSession[]
-  sensorIntelCampaigns SensorIntelCampaign[]
-  sensorIntelProfiles  SensorIntelProfile[]
-  sensorPayloadSnapshots SensorPayloadSnapshot[]
 
   // Beam relations
   beamEndpoints       Endpoint[]       @relation("SensorEndpoints")
@@ -1070,126 +1056,6 @@ model SensorPingoraConfig {
 // =============================================================================
 // Fleet Intelligence Snapshots
 // =============================================================================
-
-model SensorIntelActor {
-  id        String @id @default(cuid())
-  tenantId  String
-  sensorId  String
-  actorId   String
-  riskScore Float
-  isBlocked Boolean @default(false)
-
-  firstSeenAt DateTime
-  lastSeenAt  DateTime
-
-  ips         Json?
-  fingerprints Json?
-  sessionIds   Json?
-  raw          Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, sensorId, actorId])
-  @@index([tenantId, lastSeenAt(sort: Desc)])
-  @@index([sensorId])
-  @@map("sensor_intel_actor")
-}
-
-model SensorIntelSession {
-  id          String @id @default(cuid())
-  tenantId    String
-  sensorId    String
-  sessionId   String
-  actorId     String?
-  requestCount Int
-  isSuspicious Boolean
-
-  lastActivityAt DateTime
-  boundIp        String?
-  boundJa4       String?
-  hijackAlerts   Json?
-  raw            Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, sensorId, sessionId])
-  @@index([tenantId, lastActivityAt(sort: Desc)])
-  @@index([sensorId])
-  @@map("sensor_intel_session")
-}
-
-model SensorIntelCampaign {
-  id          String @id @default(cuid())
-  tenantId    String
-  sensorId    String
-  campaignId  String
-  status      String
-  riskScore   Float
-  confidence  Float
-  actorCount  Int
-  attackTypes Json?
-
-  firstSeenAt     DateTime
-  lastActivityAt  DateTime
-  raw             Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, sensorId, campaignId])
-  @@index([tenantId, lastActivityAt(sort: Desc)])
-  @@index([sensorId])
-  @@map("sensor_intel_campaign")
-}
-
-model SensorIntelProfile {
-  id        String @id @default(cuid())
-  tenantId  String
-  sensorId  String
-  template  String
-  method    String?
-  profile   Json
-  updatedAt DateTime
-  createdAt DateTime @default(now())
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, sensorId, template, method])
-  @@index([tenantId, updatedAt(sort: Desc)])
-  @@index([sensorId])
-  @@map("sensor_intel_profile")
-}
-
-model SensorPayloadSnapshot {
-  id         String @id @default(cuid())
-  tenantId   String
-  sensorId   String
-  capturedAt DateTime
-  stats      Json
-  bandwidth  Json?
-  endpoints  Json?
-  anomalies  Json?
-  createdAt  DateTime @default(now())
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, capturedAt(sort: Desc)])
-  @@index([sensorId])
-  @@map("sensor_payload_snapshot")
-}
 
 // Scheduled rule deployments - persisted for restart recovery
 model ScheduledDeployment {
