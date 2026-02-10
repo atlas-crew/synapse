@@ -1,4 +1,4 @@
-import { RouteObject } from 'react-router-dom';
+import { RouteObject, Navigate, useParams } from 'react-router-dom';
 import { BeamErrorBoundary } from '../components/beam/BeamErrorBoundary';
 import { BeamPageWrapper } from '../components/beam/BeamPageWrapper';
 import BeamDashboardPage from '../pages/beam/BeamDashboardPage';
@@ -8,12 +8,18 @@ import ErrorAnalysisPage from '../pages/beam/analytics/ErrorAnalysisPage';
 import ApiCatalogPage from '../pages/beam/catalog/ApiCatalogPage';
 import ServicesPage from '../pages/beam/catalog/ServicesPage';
 import SchemaChangesPage from '../pages/beam/catalog/SchemaChangesPage';
-import ActiveRulesPage from '../pages/beam/rules/ActiveRulesPage';
-import RuleTemplatesPage from '../pages/beam/rules/RuleTemplatesPage';
-import CustomRulesPage from '../pages/beam/rules/CustomRulesPage';
 import ThreatActivityPage from '../pages/beam/threats/ThreatActivityPage';
 import BlockedRequestsPage from '../pages/beam/threats/BlockedRequestsPage';
 import AttackPatternsPage from '../pages/beam/threats/AttackPatternsPage';
+
+/**
+ * Redirect component that preserves the subpath (finding 16)
+ */
+function BeamRulesRedirect() {
+  const params = useParams();
+  const splat = params['*'];
+  return <Navigate to={`/fleet/rules${splat ? `/${splat}` : ''}`} replace />;
+}
 
 /**
  * Beam Protection Routes
@@ -103,34 +109,8 @@ export const beamRoutes: RouteObject[] = [
     ),
   },
   {
-    path: '/beam/rules',
-    element: (
-      <BeamErrorBoundary level="page" title="Rules Error">
-        <BeamPageWrapper>
-          <ActiveRulesPage />
-        </BeamPageWrapper>
-      </BeamErrorBoundary>
-    ),
-  },
-  {
-    path: '/beam/rules/templates',
-    element: (
-      <BeamErrorBoundary level="page" title="Rule Templates Error">
-        <BeamPageWrapper>
-          <RuleTemplatesPage />
-        </BeamPageWrapper>
-      </BeamErrorBoundary>
-    ),
-  },
-  {
-    path: '/beam/rules/custom',
-    element: (
-      <BeamErrorBoundary level="page" title="Custom Rules Error">
-        <BeamPageWrapper>
-          <CustomRulesPage />
-        </BeamPageWrapper>
-      </BeamErrorBoundary>
-    ),
+    path: '/beam/rules/*',
+    element: <BeamRulesRedirect />,
   },
   {
     path: '/beam/threats',

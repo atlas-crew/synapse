@@ -29,6 +29,10 @@ interface ApiRule {
   exclusions: unknown;
   sensitivity: number;
   enabled: boolean;
+  status: string;
+  totalSensors: number;
+  deployedSensors: number;
+  failedSensors: number;
   createdAt: string;
   updatedAt: string;
   _count?: { deployments: number; endpointBindings: number };
@@ -75,6 +79,7 @@ export interface UseBeamRulesResult {
   refetch: () => Promise<void>;
   fetchRuleById: (id: string) => Promise<Rule | null>;
   createRule: (payload: CreateRulePayload) => Promise<Rule | null>;
+  updateRule: (id: string, updates: Partial<Rule>) => Promise<Rule | null>;
   lastUpdated: Date | null;
   activeRules: Rule[];
   rulesByCategory: Map<RuleCategory, Rule[]>;
@@ -97,6 +102,7 @@ function generateDemoRules(): Rule[] {
       exclusions: [],
       sensitivity: 8,
       enabled: true,
+      status: 'active',
       deployedSensors: 12,
       totalSensors: 12,
       triggers24h: 847,
@@ -114,6 +120,7 @@ function generateDemoRules(): Rule[] {
       exclusions: [{ type: 'path', value: '/api/health', reason: 'Health check endpoint' }],
       sensitivity: 6,
       enabled: true,
+      status: 'active',
       deployedSensors: 10,
       totalSensors: 12,
       triggers24h: 721,
@@ -132,6 +139,7 @@ function generateDemoRules(): Rule[] {
       exclusions: [],
       sensitivity: 7,
       enabled: true,
+      status: 'active',
       deployedSensors: 12,
       totalSensors: 12,
       triggers24h: 398,
@@ -148,6 +156,7 @@ function generateDemoRules(): Rule[] {
       exclusions: [],
       sensitivity: 8,
       enabled: true,
+      status: 'active',
       deployedSensors: 12,
       totalSensors: 12,
       triggers24h: 534,
@@ -165,6 +174,7 @@ function generateDemoRules(): Rule[] {
       exclusions: [{ type: 'ip', value: '10.0.0.0/8', reason: 'Internal traffic' }],
       sensitivity: 5,
       enabled: false,
+      status: 'paused',
       deployedSensors: 0,
       totalSensors: 12,
       triggers24h: 0,
@@ -236,6 +246,7 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
       refetch: async () => {},
       fetchRuleById: async () => null,
       createRule: async () => null,
+      updateRule: async () => null,
       lastUpdated: new Date(demoData.generatedAt),
       activeRules: demoActiveRules,
       rulesByCategory: demoRulesByCategory,
@@ -264,9 +275,11 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
     exclusions: Array.isArray(apiRule.exclusions) ? apiRule.exclusions : [],
     sensitivity: apiRule.sensitivity || 5,
     enabled: apiRule.enabled,
-    deployedSensors: apiRule._count?.deployments ?? 0,
-    totalSensors: 12,
+    status: apiRule.status || 'active',
+    deployedSensors: apiRule.deployedSensors ?? apiRule._count?.deployments ?? 0,
+    totalSensors: apiRule.totalSensors ?? 0,
     triggers24h: 0,
+    createdAt: apiRule.createdAt,
     rolloutStrategy: 'immediate',
   }), []);
 
@@ -331,6 +344,30 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
     }
   }, [transformRule]);
 
+  const updateRule = useCallback(async (id: string, updates: Partial<Rule>): Promise<Rule | null> => {
+    try {
+      // Map UI fields back to API fields if necessary
+      const payload = {
+        enabled: updates.enabled,
+        severity: updates.severity,
+        action: updates.action,
+        sensitivity: updates.sensitivity,
+      };
+
+      const data = await apiFetch<{ rule: ApiRule }>(`/beam/rules/${id}`, {
+        method: 'PATCH',
+        body: payload,
+      });
+
+      const updatedRule = transformRule(data.rule);
+      setRules(prev => prev.map(r => r.id === id ? updatedRule : r));
+      return updatedRule;
+    } catch (err) {
+      console.error('[useBeamRules] Failed to update rule:', err);
+      throw err;
+    }
+  }, [transformRule]);
+
   // Computed: active rules
   const activeRules = useMemo(() => rules.filter(r => r.enabled), [rules]);
 
@@ -369,6 +406,7 @@ export function useBeamRules(options: UseBeamRulesOptions = {}): UseBeamRulesRes
     refetch: fetchData,
     fetchRuleById,
     createRule,
+    updateRule,
     lastUpdated,
     activeRules,
     rulesByCategory,

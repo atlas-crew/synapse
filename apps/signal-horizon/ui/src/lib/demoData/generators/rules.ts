@@ -355,10 +355,12 @@ function generateRules(scenario: DemoScenario): Rule[] {
       exclusions: generateExclusions(scenario),
       sensitivity: 0.7 + Math.random() * 0.25, // 70-95% sensitivity
       enabled: true,
+      status: 'active',
       deployedSensors,
       totalSensors,
       triggers24h: triggers,
       lastTriggered,
+      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       rolloutStrategy,
       rolloutStatus: hasRollout
         ? {

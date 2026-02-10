@@ -124,10 +124,12 @@ export interface Rule {
   exclusions: RuleExclusion[];
   sensitivity: number;
   enabled: boolean;
+  status: string;
   deployedSensors: number;
   totalSensors: number;
   triggers24h: number;
   lastTriggered?: string;
+  createdAt?: string;
   rolloutStrategy: RolloutStrategy;
   rolloutStatus?: RolloutStatus;
 }
