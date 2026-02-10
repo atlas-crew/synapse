@@ -38,6 +38,7 @@ export default {
           'blue-darker': '#001E6A',
           'gray-mid': '#7F7F7F',
           'sky-light': '#BEDDFF',
+          'card-dark': '#0A1A3A',
           // Legacy - keep for transition
           cloud: '#5EAB44',
         },

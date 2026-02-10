@@ -1,0 +1,26 @@
+{
+  "target": "reference",
+  "name": "SOCVisualizations",
+  "isRedesign": false,
+  "painPoints": ["accessibility", "brand identity", "high-density", "avoiding generic AI-style slop"],
+  "inspiration": ["Bloomberg terminals", "Atlas Crew", "Grafana"],
+  "brandFeel": ["compact", "modern", "security", "technology", "clean"],
+  "density": "compact",
+  "targetUser": "Security Analysts",
+  "context": "desktop SOC",
+  "constraints": ["WCAG AA", "no border radius", "Rubik font"],
+  "extractedTokens": {
+    "colors": {
+      "primary": "#0057B7",
+      "navy": "#001E62",
+      "magenta": "#D62598",
+      "success": "#008731",
+      "warning": "#C24900",
+      "danger": "#BF3A30",
+      "purple": "#A400FF",
+      "sky": "#3298BC"
+    },
+    "typography": "Rubik",
+    "borderRadius": "0px"
+  }
+}
