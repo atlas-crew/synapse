@@ -15,6 +15,11 @@ const router: ReturnType<typeof Router> = Router();
 // In prod: ./site (copied during build to dist/site)
 const getSiteRoot = () => {
   const prodPath = path.resolve(__dirname, '../../site'); // From dist/api/routes/docs.js to dist/site
+  // Dev: app-local docs live at apps/signal-horizon/site (sibling of api/)
+  // Prefer these over apps/signal-horizon/api/docs so Support & Docs shows product docs.
+  const devAppSiteFromApiCwd = path.resolve(process.cwd(), '../site');
+  const devAppSiteFromRepoCwd = path.resolve(process.cwd(), 'apps/signal-horizon/site');
+  const devAppSiteFromSrc = path.resolve(__dirname, '../../../../../site');
   const cwdSitePath = path.resolve(process.cwd(), 'site');
   const cwdDocsPath = path.resolve(process.cwd(), 'docs');
   // Repo root docs (when cwd is apps/signal-horizon/api)
@@ -22,6 +27,9 @@ const getSiteRoot = () => {
   const legacyDevPath = path.resolve(__dirname, '../../../../site');
 
   if (existsSync(prodPath)) return prodPath;
+  if (existsSync(devAppSiteFromApiCwd)) return devAppSiteFromApiCwd;
+  if (existsSync(devAppSiteFromSrc)) return devAppSiteFromSrc;
+  if (existsSync(devAppSiteFromRepoCwd)) return devAppSiteFromRepoCwd;
   if (existsSync(cwdSitePath)) return cwdSitePath;
   if (existsSync(cwdDocsPath)) return cwdDocsPath;
   if (existsSync(repoDocsPath)) return repoDocsPath;
