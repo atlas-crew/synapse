@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Activity, Shield, Star } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb } from '../../components/ui/Breadcrumb';
+import { Breadcrumb } from '@/ui';
 import { CopyButton } from '../../components/ui/CopyButton';
 import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';

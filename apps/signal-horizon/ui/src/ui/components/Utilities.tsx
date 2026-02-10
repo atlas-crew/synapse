@@ -124,10 +124,10 @@ interface BreadcrumbItem { label: string; to?: string; onClick?: () => void; }
 interface BreadcrumbProps { items: BreadcrumbItem[]; separator?: string; style?: React.CSSProperties; }
 
 export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, separator = '/', style }) => (
-  <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontFamily, fontSize: '13px', ...style }}>
+  <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontFamily, fontSize: '13px', marginBottom: spacing.md, ...style }}>
     {items.map((item, i) => (
       <React.Fragment key={i}>
-        {i > 0 && <span style={{ color: 'rgba(255,255,255,0.2)' }}>{separator}</span>}
+        {i > 0 && <span aria-hidden="true" style={{ color: 'rgba(255,255,255,0.2)' }}>{separator}</span>}
         {item.to ? (
           <Link
             to={item.to}

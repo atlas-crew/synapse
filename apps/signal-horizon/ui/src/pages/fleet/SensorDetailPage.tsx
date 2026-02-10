@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb } from '../../components/ui/Breadcrumb';
+import { Breadcrumb } from '@/ui';
 import { SensorStatusBadge } from '../../components/fleet';
 import { SensorDetailSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
