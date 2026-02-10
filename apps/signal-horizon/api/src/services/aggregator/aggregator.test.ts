@@ -329,6 +329,223 @@ describe('Aggregator', () => {
     });
   });
 
+  describe('backpressure warning', () => {
+    it('should log warning when queue reaches 80% capacity', () => {
+      // BUFFER_PRESSURE_THRESHOLD = 0.8. The check is: currentSize / maxQueueSize >= 0.8
+      // currentSize is checked BEFORE the signal is pushed, so when queueing the 9th
+      // signal into a maxQueueSize=10 queue, currentSize is 8, utilization = 8/10 = 0.8.
+      const smallConfig = { ...defaultConfig, maxQueueSize: 10, batchSize: 100 };
+      aggregator = new Aggregator(mockPrisma, mockLogger, mockCorrelator, smallConfig);
+
+      // Queue 9 signals - at the 9th, currentSize is 8 (80%), triggering warning
+      for (let i = 0; i < 9; i++) {
+        aggregator.queueSignal(createTestSignal({ sourceIp: `192.168.1.${i}` }));
+      }
+
+      // The logger.child() returns mockReturnThis, so warn is on the child logger
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          utilization: expect.any(Number),
+          queueSize: expect.any(Number),
+          maxSize: 10,
+        }),
+        'Signal queue approaching capacity'
+      );
+    });
+
+    it('should not log warning when queue is below 80% capacity', () => {
+      const smallConfig = { ...defaultConfig, maxQueueSize: 20, batchSize: 100 };
+      aggregator = new Aggregator(mockPrisma, mockLogger, mockCorrelator, smallConfig);
+
+      // Queue 10 signals (50% of 20) - should not trigger warning
+      for (let i = 0; i < 10; i++) {
+        aggregator.queueSignal(createTestSignal({ sourceIp: `192.168.1.${i}` }));
+      }
+
+      // Check that warn was NOT called with the capacity message
+      const warnCalls = vi.mocked(mockLogger.warn).mock.calls;
+      const capacityCalls = warnCalls.filter(
+        (args) => typeof args[1] === 'string' && args[1].includes('approaching capacity')
+      );
+      expect(capacityCalls).toHaveLength(0);
+    });
+  });
+
+  describe('retryQueue', () => {
+    it('should accept signals into retry queue during active flush', async () => {
+      // Create a slow-resolving mock that gives us time to queue during flush
+      let resolveFlush: () => void;
+      const flushPromise = new Promise<void>((resolve) => {
+        resolveFlush = resolve;
+      });
+
+      vi.mocked(mockPrisma.signal.create).mockImplementation(() => {
+        return flushPromise.then(() => ({ id: 'signal-id-123' })) as any;
+      });
+
+      // Queue enough signals to trigger a flush
+      for (let i = 0; i < 5; i++) {
+        aggregator.queueSignal(createTestSignal({ sourceIp: `192.168.1.${i}` }));
+      }
+
+      // The batch flush is now in progress. Queue a signal during flush.
+      // Need to give the flush a tick to start
+      await vi.advanceTimersByTimeAsync(0);
+
+      const result = aggregator.queueSignal(createTestSignal({ sourceIp: '10.0.0.1' }));
+      expect(result.accepted).toBe(true);
+      expect(result.reason).toBe('flushing');
+
+      const stats = aggregator.getStats();
+      expect(stats.retryQueueSize).toBe(1);
+
+      // Now resolve the flush so cleanup works properly
+      resolveFlush!();
+      await vi.advanceTimersByTimeAsync(100);
+    });
+  });
+
+  describe('ClickHouse write', () => {
+    let mockClickhouse: { isEnabled: ReturnType<typeof vi.fn>; insertSignalEvents: ReturnType<typeof vi.fn> };
+    let aggregatorWithCH: Aggregator;
+
+    beforeEach(() => {
+      mockClickhouse = {
+        isEnabled: vi.fn().mockReturnValue(true),
+        insertSignalEvents: vi.fn().mockResolvedValue(undefined),
+      };
+
+      // Ensure prisma.signal.create returns createdAt so writeToClickHouse doesn't fail
+      vi.mocked(mockPrisma.signal.create).mockResolvedValue({
+        id: 'signal-id-ch',
+        createdAt: new Date('2025-01-01T00:00:00Z'),
+      } as never);
+
+      aggregatorWithCH = new Aggregator(
+        mockPrisma,
+        mockLogger,
+        mockCorrelator,
+        defaultConfig,
+        mockClickhouse as any
+      );
+    });
+
+    afterEach(async () => {
+      await aggregatorWithCH.stop();
+    });
+
+    it('should store signals in Prisma with correct shape when ClickHouse is enabled', async () => {
+      const signal = createTestSignal({
+        sourceIp: '10.0.0.1',
+        fingerprint: 'fp-test',
+        severity: 'HIGH',
+        confidence: 0.9,
+        eventCount: 3,
+      });
+
+      aggregatorWithCH.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      // The signal should have been stored in Prisma with correct fields
+      expect(mockPrisma.signal.create).toHaveBeenCalledTimes(1);
+      const createCall = vi.mocked(mockPrisma.signal.create).mock.calls[0][0];
+      expect(createCall.data).toMatchObject({
+        tenantId: 'tenant-1',
+        sensorId: 'sensor-1',
+        signalType: 'IP_THREAT',
+        sourceIp: '10.0.0.1',
+        fingerprint: 'fp-test',
+        severity: 'HIGH',
+        confidence: 0.9,
+        eventCount: 3,
+      });
+
+      // The ClickHouse retry buffer is initialized internally; verify insertSignalEvents
+      // was called on the underlying clickhouse client (via the retry buffer)
+      expect(mockClickhouse.insertSignalEvents).toHaveBeenCalledTimes(1);
+      const rows = mockClickhouse.insertSignalEvents.mock.calls[0][0];
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tenant_id: 'tenant-1',
+        sensor_id: 'sensor-1',
+        signal_type: 'IP_THREAT',
+        source_ip: '10.0.0.1',
+        fingerprint: 'fp-test',
+        severity: 'HIGH',
+        confidence: 0.9,
+        event_count: 3,
+      });
+      expect(rows[0].timestamp).toBe('2025-01-01T00:00:00.000Z');
+      expect(typeof rows[0].metadata).toBe('string');
+    });
+  });
+
+  describe('impossible travel integration', () => {
+    let mockImpossibleTravel: { processLogin: ReturnType<typeof vi.fn> };
+    let aggregatorWithTravel: Aggregator;
+
+    beforeEach(() => {
+      mockImpossibleTravel = {
+        processLogin: vi.fn().mockResolvedValue(undefined),
+      };
+
+      aggregatorWithTravel = new Aggregator(
+        mockPrisma,
+        mockLogger,
+        mockCorrelator,
+        defaultConfig,
+        undefined, // clickhouse
+        mockImpossibleTravel as any
+      );
+    });
+
+    afterEach(async () => {
+      await aggregatorWithTravel.stop();
+    });
+
+    it('should call processLogin when signal has geolocation metadata', async () => {
+      const signal = createTestSignal({
+        sourceIp: '10.0.0.1',
+        fingerprint: 'user-fp-1',
+        metadata: {
+          latitude: 40.7128,
+          longitude: -74.006,
+          city: 'New York',
+          countryCode: 'US',
+        },
+      });
+
+      aggregatorWithTravel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockImpossibleTravel.processLogin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-fp-1',
+          tenantId: 'tenant-1',
+          ip: '10.0.0.1',
+          location: expect.objectContaining({
+            latitude: 40.7128,
+            longitude: -74.006,
+            city: 'New York',
+            countryCode: 'US',
+          }),
+        })
+      );
+    });
+
+    it('should NOT call processLogin when signal lacks geolocation metadata', async () => {
+      const signal = createTestSignal({
+        sourceIp: '10.0.0.1',
+        metadata: { someField: 'value' },
+      });
+
+      aggregatorWithTravel.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockImpossibleTravel.processLogin).not.toHaveBeenCalled();
+    });
+  });
+
   describe('APIIntelligenceService integration', () => {
     let mockAPIIntelligence: APIIntelligenceService;
     let aggregatorWithAPIIntel: Aggregator;

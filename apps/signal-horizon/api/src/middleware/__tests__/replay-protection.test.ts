@@ -648,4 +648,106 @@ describe('replay-protection', () => {
       expect(DEFAULT_REPLAY_CONFIG.skipMethods).toContain('OPTIONS');
     });
   });
+
+  describe('store error resilience', () => {
+    test('returns 503 when sync store.checkAndAdd throws', () => {
+      const faultyStore = {
+        size: 0,
+        checkAndAdd: () => { throw new Error('store connection lost'); },
+        exists: () => false,
+        cleanup: () => 0,
+        destroy: () => {},
+      };
+
+      const protection = createReplayProtection({ store: faultyStore as any });
+
+      const req = createMockRequest({
+        'x-request-nonce': generateNonce(),
+        'x-request-timestamp': String(Date.now()),
+      }, { method: 'POST' });
+      const { res, getStatusCode, getJsonBody } = createMockResponse();
+      const next = vi.fn();
+
+      protection.middleware(req as Request, res as Response, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(getStatusCode()).toBe(503);
+      expect(getJsonBody().code).toBe('REPLAY_STORE_UNAVAILABLE');
+      protection.destroy();
+    });
+
+    test('returns 503 when async store.checkAndAdd rejects', async () => {
+      const faultyAsyncStore = {
+        size: 0,
+        checkAndAdd: () => Promise.reject(new Error('redis unavailable')),
+        exists: () => Promise.resolve(false),
+        cleanup: () => Promise.resolve(0),
+        destroy: () => Promise.resolve(),
+      };
+
+      const protection = createReplayProtection({ store: faultyAsyncStore as any });
+
+      const req = createMockRequest({
+        'x-request-nonce': generateNonce(),
+        'x-request-timestamp': String(Date.now()),
+      }, { method: 'POST' });
+      const { res, getStatusCode, getJsonBody } = createMockResponse();
+      const next = vi.fn();
+
+      protection.middleware(req as Request, res as Response, next);
+
+      // Wait for the async rejection handler to fire
+      await vi.waitFor(() => {
+        expect(getStatusCode()).toBe(503);
+      });
+
+      expect(next).not.toHaveBeenCalled();
+      expect(getJsonBody().code).toBe('REPLAY_STORE_UNAVAILABLE');
+      protection.destroy();
+    });
+
+    test('recovers after store comes back from error', () => {
+      let shouldFail = true;
+      const recoverableStore = {
+        size: 0,
+        checkAndAdd: () => {
+          if (shouldFail) {
+            throw new Error('temporary failure');
+          }
+          return true;
+        },
+        exists: () => false,
+        cleanup: () => 0,
+        destroy: () => {},
+      };
+
+      const protection = createReplayProtection({ store: recoverableStore as any });
+
+      // First request: store is down -> 503
+      const req1 = createMockRequest({
+        'x-request-nonce': generateNonce(),
+        'x-request-timestamp': String(Date.now()),
+      }, { method: 'POST' });
+      const { res: res1, getStatusCode: getStatus1 } = createMockResponse();
+      const next1 = vi.fn();
+      protection.middleware(req1 as Request, res1 as Response, next1);
+      expect(getStatus1()).toBe(503);
+      expect(next1).not.toHaveBeenCalled();
+
+      // Store recovers
+      shouldFail = false;
+
+      // Second request: store is back -> passes through
+      const req2 = createMockRequest({
+        'x-request-nonce': generateNonce(),
+        'x-request-timestamp': String(Date.now()),
+      }, { method: 'POST' });
+      const { res: res2 } = createMockResponse();
+      const next2 = vi.fn();
+      protection.middleware(req2 as Request, res2 as Response, next2);
+      expect(next2).toHaveBeenCalled();
+
+      protection.destroy();
+    });
+  });
 });

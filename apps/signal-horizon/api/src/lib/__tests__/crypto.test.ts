@@ -184,4 +184,36 @@ describe('Crypto Utilities', () => {
       expect(hasEncryptedFields(nested)).toBe(true);
     });
   });
+
+  describe('decryptConfig tamper resistance', () => {
+    it('should throw when ciphertext byte is flipped', () => {
+      const plaintext = 'sensitive-api-key-value';
+      const encrypted = encryptConfig(plaintext);
+
+      // Decode, flip a byte in the middle of the ciphertext portion, re-encode
+      const buf = Buffer.from(encrypted, 'base64');
+      // salt(16) + iv(12) + authTag(16) = 44 bytes header; flip a byte in the ciphertext
+      const flipIndex = Math.min(48, buf.length - 1);
+      buf[flipIndex] = buf[flipIndex] ^ 0xff;
+      const tampered = buf.toString('base64');
+
+      expect(() => decryptConfig(tampered)).toThrow();
+    });
+
+    it('should throw when ciphertext is truncated', () => {
+      const plaintext = 'another-secret-value-12345';
+      const encrypted = encryptConfig(plaintext);
+
+      // Decode and chop off the last 8 bytes, then re-encode
+      const buf = Buffer.from(encrypted, 'base64');
+      const truncated = buf.subarray(0, buf.length - 8).toString('base64');
+
+      expect(() => decryptConfig(truncated)).toThrow();
+    });
+
+    it('should throw on garbled / invalid base64 input', () => {
+      const garbled = '!!!not-valid-base64-at-all@@@###$$$';
+      expect(() => decryptConfig(garbled)).toThrow();
+    });
+  });
 });

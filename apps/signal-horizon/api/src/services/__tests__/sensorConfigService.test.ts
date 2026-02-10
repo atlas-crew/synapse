@@ -284,4 +284,263 @@ describe('SensorConfigService', () => {
       );
     });
   });
+
+  // =========================================================================
+  // P1: Version increment
+  // =========================================================================
+  describe('P1: Version increment', () => {
+    it('updateConfig increments version from the current value', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: SENSOR_1,
+        tenantId: TENANT_1,
+        pingoraConfig: { fullConfig: { server: {} }, version: 5 },
+      });
+      (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({
+        version: 6,
+      });
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+      const result = await service.updateConfig(mockReq, SENSOR_1, validConfig as any, TENANT_1);
+
+      expect(result).toHaveProperty('version', 6);
+
+      // Verify the upsert was called with version = currentVersion + 1
+      const upsertCall = (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(upsertCall.create.version).toBe(6);
+      expect(upsertCall.update.version).toBe(6);
+    });
+
+    it('updateConfig starts at version 1 when no prior config exists', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: SENSOR_1,
+        tenantId: TENANT_1,
+        pingoraConfig: null,
+      });
+      (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({
+        version: 1,
+      });
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+      const result = await service.updateConfig(mockReq, SENSOR_1, validConfig as any, TENANT_1);
+
+      expect(result).toHaveProperty('version', 1);
+
+      const upsertCall = (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(upsertCall.create.version).toBe(1);
+      expect(upsertCall.update.version).toBe(1);
+    });
+  });
+
+  // =========================================================================
+  // P1: Command push
+  // =========================================================================
+  describe('P1: Command push', () => {
+    it('updateConfig sends push_config command with config payload and version string', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: SENSOR_1,
+        tenantId: TENANT_1,
+        pingoraConfig: { fullConfig: { server: {} }, version: 2 },
+      });
+      (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({
+        version: 3,
+      });
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+      const result = await service.updateConfig(mockReq, SENSOR_1, validConfig as any, TENANT_1);
+
+      expect(result).toHaveProperty('commandId', 'cmd-1');
+      expect(mockFleetCommander.sendCommand).toHaveBeenCalledWith(
+        TENANT_1,
+        SENSOR_1,
+        {
+          type: 'push_config',
+          payload: {
+            config: validConfig,
+            version: '3',
+          },
+        },
+      );
+    });
+  });
+
+  // =========================================================================
+  // P1: Audit logging
+  // =========================================================================
+  describe('P1: Audit logging', () => {
+    it('updateConfig calls logConfigUpdated when sensor already has config', async () => {
+      const existingConfig = { server: { waf_enabled: false, waf_threshold: 50 } };
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: SENSOR_1,
+        tenantId: TENANT_1,
+        pingoraConfig: { fullConfig: existingConfig, version: 1 },
+      });
+      (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({
+        version: 2,
+      });
+      // Existing config is not encrypted
+      mockHasEncrypted.mockReturnValue(false);
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+      await service.updateConfig(mockReq, SENSOR_1, validConfig as any, TENANT_1);
+
+      expect(mockAuditService.logConfigUpdated).toHaveBeenCalledWith(
+        mockReq,
+        'sensor_config',
+        SENSOR_1,
+        existingConfig, // previousConfig (plaintext, not encrypted)
+        validConfig,    // new config values
+      );
+      expect(mockAuditService.logConfigCreated).not.toHaveBeenCalled();
+    });
+
+    it('updateConfig calls logConfigCreated when sensor has no prior config', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: SENSOR_1,
+        tenantId: TENANT_1,
+        pingoraConfig: null,
+      });
+      (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({
+        version: 1,
+      });
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+      await service.updateConfig(mockReq, SENSOR_1, validConfig as any, TENANT_1);
+
+      expect(mockAuditService.logConfigCreated).toHaveBeenCalledWith(
+        mockReq,
+        'sensor_config',
+        SENSOR_1,
+        validConfig,
+      );
+      expect(mockAuditService.logConfigUpdated).not.toHaveBeenCalled();
+    });
+
+    it('updateConfig does not throw when auditService is not provided', async () => {
+      const serviceNoAudit = createService(false);
+
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: SENSOR_1,
+        tenantId: TENANT_1,
+        pingoraConfig: { fullConfig: { server: {} }, version: 1 },
+      });
+      (mockPrisma.sensorPingoraConfig.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({
+        version: 2,
+      });
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+      const result = await serviceNoAudit.updateConfig(
+        mockReq,
+        SENSOR_1,
+        validConfig as any,
+        TENANT_1,
+      );
+
+      expect(result).toHaveProperty('version', 2);
+      expect(mockAuditService.logConfigUpdated).not.toHaveBeenCalled();
+      expect(mockAuditService.logConfigCreated).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // P1: Legacy plaintext getConfig
+  // =========================================================================
+  describe('P1: Legacy plaintext getConfig', () => {
+    it('getConfig returns raw config and logs warning when config has no encrypted fields', async () => {
+      const plaintextConfig = {
+        server: { waf_enabled: true, waf_threshold: 80 },
+        hmacSecret: 'plain-secret-value',
+      };
+
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        tenantId: TENANT_1,
+      });
+      (mockPrisma.sensorPingoraConfig.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        sensorId: SENSOR_1,
+        fullConfig: plaintextConfig,
+        version: 1,
+      });
+      mockHasEncrypted.mockReturnValue(false);
+
+      const result = await service.getConfig(SENSOR_1, TENANT_1);
+
+      // Should return raw config without decryption
+      expect(mockDecrypt).not.toHaveBeenCalled();
+      expect(result).toEqual(plaintextConfig);
+
+      // Should log a warning about plaintext config
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { sensorId: SENSOR_1 },
+        expect.stringContaining('plaintext'),
+      );
+    });
+  });
+
+  // =========================================================================
+  // P1: getConfig edge cases
+  // =========================================================================
+  describe('P1: getConfig edge cases', () => {
+    it('getConfig returns null when config record exists but fullConfig is null', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        tenantId: TENANT_1,
+      });
+      (mockPrisma.sensorPingoraConfig.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        sensorId: SENSOR_1,
+        fullConfig: null,
+        version: 0,
+      });
+
+      const result = await service.getConfig(SENSOR_1, TENANT_1);
+
+      expect(result).toBeNull();
+      expect(mockDecrypt).not.toHaveBeenCalled();
+    });
+
+    it('getConfig returns null when no config record exists at all', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+        tenantId: TENANT_1,
+      });
+      (mockPrisma.sensorPingoraConfig.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(
+        null,
+      );
+
+      const result = await service.getConfig(SENSOR_1, TENANT_1);
+
+      expect(result).toBeNull();
+      expect(mockDecrypt).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // P1: updateConfig error handling
+  // =========================================================================
+  describe('P1: updateConfig error handling', () => {
+    it('updateConfig throws NOT_FOUND for a non-existent sensor', async () => {
+      (mockPrisma.sensor.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+
+      await expect(
+        service.updateConfig(mockReq, 'non-existent', validConfig as any, TENANT_1),
+      ).rejects.toThrow();
+
+      await expect(
+        service.updateConfig(mockReq, 'non-existent', validConfig as any, TENANT_1),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      expect(mockPrisma.sensorPingoraConfig.upsert).not.toHaveBeenCalled();
+    });
+
+    it('updateConfig rejects an empty config object', async () => {
+      const mockReq = { auth: { tenantId: TENANT_1 } } as any;
+
+      await expect(
+        service.updateConfig(mockReq, SENSOR_1, {} as any, TENANT_1),
+      ).rejects.toThrow('ZodError');
+
+      expect(mockPrisma.sensor.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.sensorPingoraConfig.upsert).not.toHaveBeenCalled();
+    });
+  });
 });

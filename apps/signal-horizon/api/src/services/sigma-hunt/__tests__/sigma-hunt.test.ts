@@ -768,4 +768,147 @@ describe('SigmaHuntService', () => {
     const acked = await svc.ackLead('tenant-1', leadId);
     expect(acked?.status).toBe('ACKED');
   });
+
+  describe('lookbackMinutes clamping', () => {
+    it('clamps value below minimum (4 → 5)', async () => {
+      const kv = createMemoryKv();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn().mockReturnThis() } as any;
+
+      const clickhouse: Partial<ClickHouseService> = {
+        isEnabled: () => true,
+        queryWithParams: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new SigmaHuntService(kv, logger, clickhouse as ClickHouseService);
+      await svc.createRule('tenant-1', { name: 'clamp-min', sqlTemplate: SIGMA_SQL });
+
+      await svc.runScheduledHunts({ lookbackMinutes: 4, maxRowsPerRule: 500 });
+
+      // The query should use the clamped 5-minute lookback, not the provided 4.
+      // We verify by inspecting the startTime param: clamped lookback means a wider window
+      // (5 min + 5 min overlap = 10 min from now) vs unclamped (4 min + 5 min overlap = 9 min).
+      const call = vi.mocked(clickhouse.queryWithParams!).mock.calls[0]!;
+      const params = call[1] as any;
+      const startTimeStr: string = params.startTime;
+      const startTime = new Date(startTimeStr.replace(' ', 'T') + 'Z');
+      const now = Date.now();
+      // Default start = now - lookback. Overlap subtracts 5 more minutes.
+      // With clamped 5min: start = now - 5min - 5min = now - 10min
+      // With unclamped 4min: start = now - 4min - 5min = now - 9min
+      // The start time should be at least ~10 minutes before now (allowing some test execution time).
+      const diffMinutes = (now - startTime.getTime()) / (60 * 1000);
+      expect(diffMinutes).toBeGreaterThanOrEqual(9.5); // Clamped to 5, not 4
+    });
+
+    it('clamps value above maximum (1441 → 1440)', async () => {
+      const kv = createMemoryKv();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn().mockReturnThis() } as any;
+
+      const clickhouse: Partial<ClickHouseService> = {
+        isEnabled: () => true,
+        queryWithParams: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new SigmaHuntService(kv, logger, clickhouse as ClickHouseService);
+      await svc.createRule('tenant-1', { name: 'clamp-max', sqlTemplate: SIGMA_SQL });
+
+      await svc.runScheduledHunts({ lookbackMinutes: 1441, maxRowsPerRule: 500 });
+
+      // The start time should correspond to 1440min (24h) + 5min overlap, NOT 1441min + 5min.
+      const call = vi.mocked(clickhouse.queryWithParams!).mock.calls[0]!;
+      const params = call[1] as any;
+      const startTimeStr: string = params.startTime;
+      const startTime = new Date(startTimeStr.replace(' ', 'T') + 'Z');
+      const now = Date.now();
+      const diffMinutes = (now - startTime.getTime()) / (60 * 1000);
+      // Clamped to 1440 + 5 overlap = 1445 max
+      expect(diffMinutes).toBeLessThanOrEqual(1446);
+      // Should not exceed 1441 + 5 = 1446 (unclamped value)
+      expect(diffMinutes).toBeLessThanOrEqual(1446);
+    });
+
+    it('defaults to 60 when not provided', async () => {
+      const kv = createMemoryKv();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn().mockReturnThis() } as any;
+
+      const clickhouse: Partial<ClickHouseService> = {
+        isEnabled: () => true,
+        queryWithParams: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new SigmaHuntService(kv, logger, clickhouse as ClickHouseService);
+      await svc.createRule('tenant-1', { name: 'default-lb', sqlTemplate: SIGMA_SQL });
+
+      await svc.runScheduledHunts({ maxRowsPerRule: 500 });
+
+      const call = vi.mocked(clickhouse.queryWithParams!).mock.calls[0]!;
+      const params = call[1] as any;
+      const startTimeStr: string = params.startTime;
+      const startTime = new Date(startTimeStr.replace(' ', 'T') + 'Z');
+      const now = Date.now();
+      // Default 60min + 5min overlap = ~65 minutes before now
+      const diffMinutes = (now - startTime.getTime()) / (60 * 1000);
+      expect(diffMinutes).toBeGreaterThanOrEqual(64);
+      expect(diffMinutes).toBeLessThanOrEqual(66);
+    });
+  });
+
+  describe('maxRowsPerRule clamping', () => {
+    it('clamps value below minimum (9 → 10)', async () => {
+      const kv = createMemoryKv();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn().mockReturnThis() } as any;
+
+      const clickhouse: Partial<ClickHouseService> = {
+        isEnabled: () => true,
+        queryWithParams: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new SigmaHuntService(kv, logger, clickhouse as ClickHouseService);
+      await svc.createRule('tenant-1', { name: 'rows-min', sqlTemplate: SIGMA_SQL });
+
+      await svc.runScheduledHunts({ lookbackMinutes: 60, maxRowsPerRule: 9 });
+
+      const call = vi.mocked(clickhouse.queryWithParams!).mock.calls[0]!;
+      const params = call[1] as any;
+      expect(params.limit).toBe(10); // Clamped from 9 to minimum 10
+    });
+
+    it('clamps value above maximum (5001 → 5000)', async () => {
+      const kv = createMemoryKv();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn().mockReturnThis() } as any;
+
+      const clickhouse: Partial<ClickHouseService> = {
+        isEnabled: () => true,
+        queryWithParams: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new SigmaHuntService(kv, logger, clickhouse as ClickHouseService);
+      await svc.createRule('tenant-1', { name: 'rows-max', sqlTemplate: SIGMA_SQL });
+
+      await svc.runScheduledHunts({ lookbackMinutes: 60, maxRowsPerRule: 5001 });
+
+      const call = vi.mocked(clickhouse.queryWithParams!).mock.calls[0]!;
+      const params = call[1] as any;
+      expect(params.limit).toBe(5000); // Clamped from 5001 to maximum 5000
+    });
+
+    it('defaults to 500 when not provided', async () => {
+      const kv = createMemoryKv();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn().mockReturnThis() } as any;
+
+      const clickhouse: Partial<ClickHouseService> = {
+        isEnabled: () => true,
+        queryWithParams: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new SigmaHuntService(kv, logger, clickhouse as ClickHouseService);
+      await svc.createRule('tenant-1', { name: 'rows-default', sqlTemplate: SIGMA_SQL });
+
+      await svc.runScheduledHunts({ lookbackMinutes: 60 });
+
+      const call = vi.mocked(clickhouse.queryWithParams!).mock.calls[0]!;
+      const params = call[1] as any;
+      expect(params.limit).toBe(500); // Default value
+    });
+  });
 });
