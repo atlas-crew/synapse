@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import type { Broadcaster } from '../broadcaster/index.js';
 import type { EnrichedSignal, Severity } from '../../types/protocol.js';
 import type { ClickHouseService, CampaignHistoryRow } from '../../storage/clickhouse/index.js';
+import { SequenceMatcher, type CampaignSequenceState } from './sequence-matcher.js';
 
 interface CorrelationResult {
   isCampaign: boolean;
@@ -23,6 +24,7 @@ interface CorrelationResult {
 interface CampaignMetadata {
   anonFingerprint?: string;
   signalCount?: number;
+  sequenceState?: CampaignSequenceState;
 }
 
 function isCampaignMetadata(value: unknown): value is CampaignMetadata {
@@ -45,6 +47,7 @@ export class Correlator {
   private logger: Logger;
   private broadcaster: Broadcaster;
   private clickhouse: ClickHouseService | null;
+  private sequenceMatcher: SequenceMatcher;
 
   // Correlation thresholds
   private readonly CROSS_TENANT_THRESHOLD = 2; // 2+ tenants = fleet campaign
@@ -62,6 +65,7 @@ export class Correlator {
     this.logger = logger.child({ service: 'correlator' });
     this.broadcaster = broadcaster;
     this.clickhouse = clickhouse ?? null;
+    this.sequenceMatcher = new SequenceMatcher();
   }
 
   /**
@@ -171,7 +175,7 @@ export class Correlator {
       campaign = await this.createCampaign(anonFingerprint, signals, tenantCount);
     } else {
       // Update existing campaign
-      await this.updateCampaign(existingCampaign.id, signals, tenantCount);
+      await this.updateCampaign(existingCampaign.id, signals, tenantCount, existingCampaign);
       campaign = existingCampaign;
     }
 
@@ -231,25 +235,38 @@ export class Correlator {
   ): Promise<Campaign> {
     const now = new Date();
 
+    // Process initial signals through sequence matcher
+    const baseConfidence = this.calculateConfidence(signals);
+    const baseSeverity = this.calculateSeverity(signals);
+
+    const { newState: sequenceState, confidence, severity } = this.sequenceMatcher.processSignalBatch(
+      { history: [] },
+      signals,
+      baseConfidence,
+      baseSeverity
+    );
+
     const campaign = await this.prisma.campaign.create({
       data: {
         name: `Fleet Campaign ${anonFingerprint.substring(0, 8)}`,
         description: `Cross-tenant attack detected affecting ${tenantCount} tenants`,
         status: 'ACTIVE',
-        severity: this.calculateSeverity(signals),
+        severity,
         isCrossTenant: true,
         tenantsAffected: tenantCount,
-        confidence: this.calculateConfidence(signals),
+        confidence,
         correlationSignals: {
           fingerprintMatch: this.FINGERPRINT_CONFIDENCE,
           timingMatch: this.TIMING_CONFIDENCE,
           tenantCount,
+          currentStage: sequenceState.currentStage,
         },
         firstSeenAt: now,
         lastActivityAt: now,
         metadata: {
           anonFingerprint,
           signalCount: signals.length,
+          sequenceState,
         },
       },
     });
@@ -263,14 +280,36 @@ export class Correlator {
   private async updateCampaign(
     campaignId: string,
     signals: EnrichedSignal[],
-    tenantCount: number
+    tenantCount: number,
+    existingCampaign: Campaign
   ): Promise<void> {
+    // FIX P1.2: Consistently use type guard for metadata
+    const metadata = isCampaignMetadata(existingCampaign.metadata)
+      ? existingCampaign.metadata
+      : { anonFingerprint: undefined, signalCount: 0 };
+
+    const initialSequenceState: CampaignSequenceState = metadata.sequenceState || { history: [] };
+
+    // FIX P2.7: Use extracted processSignalBatch
+    const { newState: sequenceState, confidence, severity } = this.sequenceMatcher.processSignalBatch(
+      initialSequenceState,
+      signals,
+      existingCampaign.confidence,
+      existingCampaign.severity
+    );
+
     const campaign = await this.prisma.campaign.update({
       where: { id: campaignId },
       data: {
         lastActivityAt: new Date(),
         tenantsAffected: tenantCount,
-        confidence: this.calculateConfidence(signals),
+        confidence,
+        severity,
+        metadata: {
+          ...metadata,
+          signalCount: (metadata.signalCount || 0) + signals.length,
+          sequenceState,
+        },
       },
     });
 

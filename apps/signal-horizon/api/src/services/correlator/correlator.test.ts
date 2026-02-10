@@ -196,6 +196,79 @@ describe('Correlator', () => {
         }),
       });
     });
+
+    it('should escalate confidence and severity based on sequential pattern (RECON -> EXPLOIT)', async () => {
+      // 1. Initial RECON signals
+      const reconSignals = [
+        createEnrichedSignal({ 
+          tenantId: 'tenant-1', 
+          anonFingerprint: 'seq-fp', 
+          signalType: 'TEMPLATE_DISCOVERY',
+          confidence: 0.5 
+        }),
+        createEnrichedSignal({ 
+          tenantId: 'tenant-2', 
+          anonFingerprint: 'seq-fp', 
+          signalType: 'TEMPLATE_DISCOVERY',
+          confidence: 0.5 
+        }),
+      ];
+
+      vi.mocked(mockPrisma.campaign.create).mockResolvedValue({
+        id: 'camp-1',
+        confidence: 0.6,
+        metadata: { anonFingerprint: 'seq-fp', sequenceState: { currentStage: 'reconnaissance', history: [] } }
+      } as never);
+
+      await correlator.analyzeSignals(reconSignals);
+
+      expect(mockPrisma.campaign.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          confidence: expect.any(Number),
+          correlationSignals: expect.objectContaining({
+            currentStage: 'reconnaissance'
+          }),
+        }),
+      });
+
+      // 2. Subsequent EXPLOIT signals
+      const exploitSignals = [
+        createEnrichedSignal({ 
+          tenantId: 'tenant-1', 
+          anonFingerprint: 'seq-fp', 
+          signalType: 'SCHEMA_VIOLATION',
+          confidence: 0.8 
+        }),
+        createEnrichedSignal({ 
+          tenantId: 'tenant-3', 
+          anonFingerprint: 'seq-fp', 
+          signalType: 'SCHEMA_VIOLATION',
+          confidence: 0.8 
+        }),
+      ];
+
+      const existingCampaign = {
+        id: 'camp-1',
+        confidence: 0.6,
+        severity: 'MEDIUM',
+        metadata: { anonFingerprint: 'seq-fp', sequenceState: { currentStage: 'reconnaissance', history: [] } }
+      };
+
+      vi.mocked(mockPrisma.campaign.findMany).mockResolvedValue([existingCampaign] as never);
+
+      await correlator.analyzeSignals(exploitSignals);
+
+      expect(mockPrisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: 'camp-1' },
+        data: expect.objectContaining({
+          confidence: expect.any(Number), // Confidence should boost on progression
+        }),
+      });
+
+      const updateCall = vi.mocked(mockPrisma.campaign.update).mock.calls[0][0];
+      const updatedConfidence = (updateCall.data as any).confidence;
+      expect(updatedConfidence).toBeGreaterThan(0.6);
+    });
   });
 
   describe('batch lookup optimization', () => {
@@ -232,6 +305,118 @@ describe('Correlator', () => {
       // First campaign failed, second succeeded
       expect(results).toHaveLength(1);
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('metadata resilience', () => {
+    it('should handle malformed campaign metadata gracefully', async () => {
+      const existingCampaign = {
+        id: 'bad-meta-campaign',
+        name: 'Bad Meta',
+        status: 'ACTIVE',
+        severity: 'MEDIUM',
+        isCrossTenant: true,
+        confidence: 0.6,
+        tenantsAffected: 2,
+        metadata: 'this-is-a-string-not-an-object',
+      };
+
+      vi.mocked(mockPrisma.campaign.findMany).mockResolvedValue([existingCampaign] as never);
+      vi.mocked(mockPrisma.campaign.update).mockResolvedValue(existingCampaign as never);
+
+      const signals = [
+        createEnrichedSignal({ tenantId: 'tenant-1', anonFingerprint: 'bad-meta-fp' }),
+        createEnrichedSignal({ tenantId: 'tenant-2', anonFingerprint: 'bad-meta-fp' }),
+      ];
+
+      // Should not throw — falls back to safe defaults
+      const results = await correlator.analyzeSignals(signals);
+
+      // String metadata fails isCampaignMetadata, so no match found — creates new campaign
+      expect(mockPrisma.campaign.create).toHaveBeenCalled();
+    });
+
+    it('should handle numeric campaign metadata gracefully', async () => {
+      const existingCampaign = {
+        id: 'num-meta-campaign',
+        name: 'Num Meta',
+        status: 'ACTIVE',
+        severity: 'LOW',
+        isCrossTenant: true,
+        confidence: 0.5,
+        tenantsAffected: 2,
+        metadata: 42,
+      };
+
+      vi.mocked(mockPrisma.campaign.findMany).mockResolvedValue([existingCampaign] as never);
+
+      const signals = [
+        createEnrichedSignal({ tenantId: 'tenant-1', anonFingerprint: 'num-fp' }),
+        createEnrichedSignal({ tenantId: 'tenant-2', anonFingerprint: 'num-fp' }),
+      ];
+
+      // Should not throw — numeric metadata fails type guard
+      const results = await correlator.analyzeSignals(signals);
+      expect(mockPrisma.campaign.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('severity escalation via sequence', () => {
+    it('should escalate to CRITICAL when exfiltration follows exploitation', async () => {
+      const existingCampaign = {
+        id: 'escalate-campaign',
+        name: 'Escalate',
+        status: 'ACTIVE',
+        severity: 'HIGH',
+        isCrossTenant: true,
+        confidence: 0.7,
+        tenantsAffected: 3,
+        metadata: {
+          anonFingerprint: 'esc-fp',
+          signalCount: 5,
+          sequenceState: {
+            currentStage: 'exploitation',
+            highestStage: 'exploitation',
+            history: [{ stage: 'exploitation', signalId: 'prev', timestamp: '2026-01-01', confidence: 0.8 }],
+          },
+        },
+      };
+
+      vi.mocked(mockPrisma.campaign.findMany).mockResolvedValue([existingCampaign] as never);
+      vi.mocked(mockPrisma.campaign.update).mockResolvedValue(existingCampaign as never);
+
+      // Send DLP exfiltration signals
+      const signals = [
+        createEnrichedSignal({
+          tenantId: 'tenant-1',
+          anonFingerprint: 'esc-fp',
+          signalType: 'SCHEMA_VIOLATION',
+          metadata: { dlp_match_count: 3 },
+          confidence: 0.9,
+        }),
+        createEnrichedSignal({
+          tenantId: 'tenant-2',
+          anonFingerprint: 'esc-fp',
+          signalType: 'SCHEMA_VIOLATION',
+          metadata: { dlp_match_count: 1 },
+          confidence: 0.85,
+        }),
+      ];
+
+      await correlator.analyzeSignals(signals);
+
+      expect(mockPrisma.campaign.update).toHaveBeenCalledWith({
+        where: { id: 'escalate-campaign' },
+        data: expect.objectContaining({
+          severity: 'CRITICAL',
+          confidence: expect.any(Number),
+        }),
+      });
+
+      // Verify confidence increased
+      const updateCall = vi.mocked(mockPrisma.campaign.update).mock.calls[0][0];
+      const updatedConfidence = (updateCall.data as any).confidence;
+      expect(updatedConfidence).toBeGreaterThan(0.7);
     });
   });
 
