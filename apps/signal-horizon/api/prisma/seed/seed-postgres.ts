@@ -62,6 +62,32 @@ const ENDPOINT_PATHS = [
   '/internal/metrics',
 ] as const;
 
+const API_INTELLIGENCE_VIOLATION_TYPES = [
+  'type_mismatch',
+  'missing_required_field',
+  'extra_field',
+  'format_error',
+  'constraint_violation',
+  'invalid_enum_value',
+] as const;
+
+function violationMessageForType(v: (typeof API_INTELLIGENCE_VIOLATION_TYPES)[number]): string {
+  switch (v) {
+    case 'type_mismatch':
+      return 'Field had an unexpected type (seeded schema mismatch).';
+    case 'missing_required_field':
+      return 'Request missing required field (seeded schema mismatch).';
+    case 'extra_field':
+      return 'Request contained an unexpected field (seeded schema mismatch).';
+    case 'format_error':
+      return 'Field did not match required format (seeded schema mismatch).';
+    case 'constraint_violation':
+      return 'Value violated schema constraint (seeded schema mismatch).';
+    case 'invalid_enum_value':
+      return 'Value not in allowed enum set (seeded schema mismatch).';
+  }
+}
+
 function tenantSeedName(i: number): { name: string; tier: TenantTier; sharing: SharingPreference } {
   const presets = [
     { name: 'Acme Corporation', tier: TenantTier.PLATINUM, sharing: SharingPreference.CONTRIBUTE_AND_RECEIVE },
@@ -848,6 +874,10 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
     }
 
     // Beam endpoints + schema changes
+    const endpointsBySensor = new Map<
+      string,
+      Array<{ method: string; path: string; pathTemplate: string; service: string; hasSchema: boolean }>
+    >();
     for (const sensorId of sensors) {
       const chosen = [...ENDPOINT_PATHS];
       rng.shuffleInPlace(chosen);
@@ -857,6 +887,10 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
         const pathTemplate = chosen[e];
         const svc = pathTemplate.includes('/admin') ? 'admin-service' : pathTemplate.includes('/auth') ? 'auth-service' : 'api-gateway';
         const hasSchema = rng.bool(0.7);
+        const firstSeenAt = new Date(now - rng.int(0, opts.recentDays * 86_400_000));
+        const lastSeenAt = new Date(
+          clamp(firstSeenAt.getTime() + rng.int(30_000, opts.recentDays * 86_400_000), firstSeenAt.getTime(), now)
+        );
         const requestSchema = hasSchema
           ? ({
               type: 'object',
@@ -872,15 +906,18 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
           : null;
 
         const schemaHash = hasSchema ? sha256Hex(JSON.stringify({ requestSchema, responseSchema })) : null;
+        const path = pathTemplate.replace('{id}', String(rng.int(1, 9999)));
 
         const ep = await prisma.endpoint.create({
           data: {
             tenantId,
             sensorId,
             method,
-            path: pathTemplate.replace('{id}', String(rng.int(1, 9999))),
+            path,
             pathTemplate,
             service: svc,
+            firstSeenAt,
+            lastSeenAt,
             requestCount: rng.int(1000, 250_000),
             hasSchema,
             schemaVersion: hasSchema ? `v${rng.int(1, 6)}` : null,
@@ -897,6 +934,10 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
             metadata: { seeded: true } as Prisma.InputJsonValue,
           },
         });
+
+        const arr = endpointsBySensor.get(sensorId) ?? [];
+        arr.push({ method, path, pathTemplate, service: svc, hasSchema });
+        endpointsBySensor.set(sensorId, arr);
 
         if (hasSchema && rng.bool(0.25)) {
           await prisma.endpointSchemaChange.create({
@@ -1063,14 +1104,52 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
       SignalType.FINGERPRINT_THREAT,
     ] as const;
     for (const sensorId of sensors) {
+      const seededEndpoints = endpointsBySensor.get(sensorId) ?? [];
       for (let i = 0; i < opts.signalsPerSensor; i++) {
-        const type = rng.pick(types);
+        // Bias toward API intelligence so dashboards aren't empty in seeded/dev environments.
+        const type = rng.bool(0.35)
+          ? rng.pick([SignalType.SCHEMA_VIOLATION, SignalType.TEMPLATE_DISCOVERY] as const)
+          : rng.pick(types);
         const fp = `fp_${sha256Hex(`${tenantId}:${sensorId}:${i}`).slice(0, 16)}`;
         const anonFp = sha256Hex(`${fp}:${anonymizationSalt}`);
         const ts = new Date(now - rng.int(0, opts.recentDays * 86_400_000));
         const sourceIp = tenantScopedIp(t);
         const confidence = clamp(0.55 + rng.float() * 0.45, 0, 1);
         const sev = signalSeverityForType(type);
+
+        // API Intelligence pages query these keys specifically (`metadata.endpoint`, `metadata.method`, etc).
+        const pickedEndpoint = seededEndpoints.length > 0 ? rng.pick(seededEndpoints) : null;
+        const endpoint = pickedEndpoint?.pathTemplate ?? rng.pick(ENDPOINT_PATHS);
+        const method = pickedEndpoint?.method ?? rng.pick(ENDPOINT_METHODS);
+        const baseMeta: Record<string, unknown> = {
+          endpoint,
+          method,
+          // Keep legacy key used elsewhere in seed/demo payloads.
+          path: endpoint,
+          user_agent: rng.pick(['python-requests/2.31.0', 'curl/8.6.0', 'Mozilla/5.0', 'okhttp/4.12.0']),
+          ja3: `ja3:${sha256Hex(`${fp}:ja3`).slice(0, 32)}`,
+          request_id: `req_${randomHex(rng, 8)}`,
+        };
+
+        if (type === SignalType.TEMPLATE_DISCOVERY) {
+          baseMeta.templatePattern = pickedEndpoint?.pathTemplate ?? endpoint;
+          baseMeta.discoveryConfidence = clamp(0.6 + rng.float() * 0.4, 0, 1);
+          baseMeta.parameterTypes = String(baseMeta.templatePattern).includes('{id}')
+            ? ({ id: rng.pick(['uuid', 'int', 'string']) } as Record<string, string>)
+            : {};
+        }
+
+        if (type === SignalType.SCHEMA_VIOLATION) {
+          const violationType = rng.pick(API_INTELLIGENCE_VIOLATION_TYPES);
+          baseMeta.violationType = violationType;
+          baseMeta.violationPath = rng.pick([
+            '$.body.example',
+            '$.query.limit',
+            '$.headers.x-client-id',
+            '$.body.items[0].price',
+          ]);
+          baseMeta.violationMessage = violationMessageForType(violationType);
+        }
         signals.push({
           tenantId,
           sensorId,
@@ -1082,13 +1161,7 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
           confidence,
           eventCount: rng.int(1, 120),
           createdAt: ts,
-          metadata: {
-            path: rng.pick(ENDPOINT_PATHS),
-            method: rng.pick(ENDPOINT_METHODS),
-            user_agent: rng.pick(['python-requests/2.31.0', 'curl/8.6.0', 'Mozilla/5.0', 'okhttp/4.12.0']),
-            ja3: `ja3:${sha256Hex(`${fp}:ja3`).slice(0, 32)}`,
-            request_id: `req_${randomHex(rng, 8)}`,
-          } as Prisma.InputJsonValue,
+          metadata: baseMeta as Prisma.InputJsonValue,
         });
       }
     }
