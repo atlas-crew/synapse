@@ -1519,6 +1519,18 @@ impl SynapseProxy {
         Arc::clone(&self.block_log)
     }
 
+    pub fn tarpit_manager(&self) -> Arc<TarpitManager> {
+        Arc::clone(&self.tarpit_manager)
+    }
+
+    pub fn progression_manager(&self) -> Arc<ProgressionManager> {
+        Arc::clone(&self.progression_manager)
+    }
+
+    pub fn shadow_mirror_manager(&self) -> Option<Arc<ShadowMirrorManager>> {
+        self.shadow_mirror_manager.clone()
+    }
+
     /// Extract client IP from headers or connection, validating X-Forwarded-For against trusted proxies.
     ///
     /// Security: Walks the XFF chain from right (closest proxy) to left (original client),
@@ -5495,6 +5507,13 @@ fn main() {
         )
     };
 
+    // Finding #15: Inject dependencies for snapshotting
+    metrics_registry.set_tarpit_manager(proxy.tarpit_manager());
+    metrics_registry.set_progression_manager(proxy.progression_manager());
+    if let Some(shadow) = proxy.shadow_mirror_manager() {
+        metrics_registry.set_shadow_mirror_manager(shadow);
+    }
+
     // Phase 5 & 9: Start all shared background maintenance tasks
     // These tasks handle risk decay, state cleanup, and correlation cycles
     let background_rt = match tokio::runtime::Builder::new_multi_thread()
@@ -5591,14 +5610,6 @@ fn main() {
         let metrics_for_tui = Arc::clone(&metrics_registry);
         let entities_for_tui = Arc::clone(&shared_entity_manager);
         let block_log_for_tui = Arc::clone(&shared_block_log);
-
-        // Finding #15: Inject dependencies for snapshotting
-        {
-            let mut m = metrics_for_tui.as_ref(); // This is wrong, it's an Arc
-        }
-        // Actually I need to set these on the registry
-        metrics_registry.entity_manager = Some(Arc::clone(&shared_entity_manager));
-        metrics_registry.block_log = Some(Arc::clone(&shared_block_log));
 
         // Run server in background thread
         std::thread::spawn(move || {
