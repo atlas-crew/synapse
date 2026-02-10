@@ -846,7 +846,7 @@ impl TuiApp {
             .split(area);
 
         // Top Risky Entities
-        let top_entities = self.entities.list_top_risk(10);
+        let top_entities = &self.snapshot.top_entities;
         let header = Row::new(vec![
             Cell::from("IP Address"),
             Cell::from("Risk"),
@@ -890,7 +890,7 @@ impl TuiApp {
         f.render_stateful_widget(table, chunks[0], &mut self.entity_table_state);
 
         // Recent Blocks
-        let recent_blocks = self.block_log.recent(10);
+        let recent_blocks = &self.snapshot.recent_blocks;
         let block_items: Vec<ListItem> = recent_blocks
             .iter()
             .map(|b| {
@@ -1013,7 +1013,7 @@ impl TuiApp {
         let area = centered_rect(70, 60, f.size());
         f.render_widget(Clear, area);
 
-        let top_entities = self.entities.list_top_risk(10);
+        let top_entities = &self.snapshot.top_entities;
         let selected_idx = self.entity_table_state.selected().unwrap_or(0);
         
         if let Some(snapshot) = top_entities.get(selected_idx) {
@@ -1130,7 +1130,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 /// Start the TUI application
 pub fn start_tui(
-    metrics: Arc<MetricsRegistry>,
+    provider: Arc<dyn TuiDataProvider>,
     entities: Arc<EntityManager>,
     block_log: Arc<BlockLog>,
     synapse: Arc<parking_lot::RwLock<Synapse>>,

@@ -5587,13 +5587,21 @@ fn main() {
         let entities_for_tui = Arc::clone(&shared_entity_manager);
         let block_log_for_tui = Arc::clone(&shared_block_log);
 
+        // Finding #15: Inject dependencies for snapshotting
+        {
+            let mut m = metrics_for_tui.as_ref(); // This is wrong, it's an Arc
+        }
+        // Actually I need to set these on the registry
+        metrics_registry.entity_manager = Some(Arc::clone(&shared_entity_manager));
+        metrics_registry.block_log = Some(Arc::clone(&shared_block_log));
+
         // Run server in background thread
         std::thread::spawn(move || {
             server.run_forever();
         });
 
         // Run TUI in main thread (blocks until 'q' is pressed)
-        if let Err(e) = synapse_pingora::tui::start_tui(metrics_for_tui, entities_for_tui, block_log_for_tui, Arc::clone(&SYNAPSE)) {
+        if let Err(e) = synapse_pingora::tui::start_tui(metrics_for_tui as Arc<dyn synapse_pingora::metrics::TuiDataProvider>, entities_for_tui, block_log_for_tui, Arc::clone(&SYNAPSE)) {
             eprintln!("TUI error: {}", e);
         }
 

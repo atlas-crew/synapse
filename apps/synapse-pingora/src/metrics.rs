@@ -60,21 +60,21 @@ const MAX_METRICS_MAP_SIZE: usize = 1000;
 #[derive(Default)]
 pub struct MetricsRegistry {
     /// Actor manager for intelligence aggregation (labs-tui)
-    pub(crate) actor_manager: Option<Arc<ActorManager>>,
+    pub(crate) actor_manager: RwLock<Option<Arc<ActorManager>>>,
     /// Crawler detector for intelligence aggregation (labs-tui)
-    pub(crate) crawler_detector: Option<Arc<CrawlerDetector>>,
+    pub(crate) crawler_detector: RwLock<Option<Arc<CrawlerDetector>>>,
     /// Tarpit manager for mitigation visibility (labs-tui)
-    pub(crate) tarpit_manager: Option<Arc<TarpitManager>>,
+    pub(crate) tarpit_manager: RwLock<Option<Arc<TarpitManager>>>,
     /// Progression manager for challenge visibility (labs-tui)
-    pub(crate) progression_manager: Option<Arc<ProgressionManager>>,
+    pub(crate) progression_manager: RwLock<Option<Arc<ProgressionManager>>>,
     /// Shadow mirror manager for honeypot visibility (labs-tui)
-    pub(crate) shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
+    pub(crate) shadow_mirror_manager: RwLock<Option<Arc<ShadowMirrorManager>>>,
     /// Trends manager for geo-anomaly visibility (labs-tui)
-    pub(crate) trends_manager: Option<Arc<TrendsManager>>,
+    pub(crate) trends_manager: RwLock<Option<Arc<TrendsManager>>>,
     /// Entity manager for risk tracking (labs-tui)
-    pub(crate) entity_manager: Option<Arc<EntityManager>>,
+    pub(crate) entity_manager: RwLock<Option<Arc<EntityManager>>>,
     /// Block log for recent events (labs-tui)
-    pub(crate) block_log: Option<Arc<BlockLog>>,
+    pub(crate) block_log: RwLock<Option<Arc<BlockLog>>>,
     /// Request counters by status code
     request_counts: RequestCounters,
     /// Latency histograms
@@ -1120,6 +1120,38 @@ impl MetricsRegistry {
             start_time: Some(Instant::now()),
             ..Default::default()
         }
+    }
+
+    pub fn set_actor_manager(&mut self, manager: Arc<ActorManager>) {
+        self.actor_manager = Some(manager);
+    }
+
+    pub fn set_crawler_detector(&mut self, detector: Arc<CrawlerDetector>) {
+        self.crawler_detector = Some(detector);
+    }
+
+    pub fn set_tarpit_manager(&mut self, manager: Arc<TarpitManager>) {
+        self.tarpit_manager = Some(manager);
+    }
+
+    pub fn set_progression_manager(&mut self, manager: Arc<ProgressionManager>) {
+        self.progression_manager = Some(manager);
+    }
+
+    pub fn set_shadow_mirror_manager(&mut self, manager: Arc<ShadowMirrorManager>) {
+        self.shadow_mirror_manager = Some(manager);
+    }
+
+    pub fn set_trends_manager(&mut self, manager: Arc<TrendsManager>) {
+        self.trends_manager = Some(manager);
+    }
+
+    pub fn set_entity_manager(&mut self, manager: Arc<EntityManager>) {
+        self.entity_manager = Some(manager);
+    }
+
+    pub fn set_block_log(&mut self, log: Arc<BlockLog>) {
+        self.block_log = Some(log);
     }
 
     /// Records a request with status code and latency.
