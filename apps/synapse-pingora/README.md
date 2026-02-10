@@ -167,7 +167,7 @@ See [`docs/reference/configuration.md`](docs/reference/configuration.md) for the
 |------|---------|
 | `early_request_filter` | Rate limiting (pre-TLS) |
 | `request_filter` | Attack detection (main filter) |
-| `request_body_filter` | Body inspection stub (DLP future) |
+| `request_body_filter` | DLP body inspection (PII/sensitive data scanning) |
 | `upstream_peer` | Round-robin backend selection |
 | `upstream_request_filter` | Add `X-Synapse-*` headers |
 | `logging` | Access logs with timing |
