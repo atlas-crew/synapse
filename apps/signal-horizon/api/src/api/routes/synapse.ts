@@ -9,6 +9,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { Logger } from 'pino';
 import { createHash } from 'node:crypto';
+import type { PrismaClient } from '@prisma/client';
 import { requireScope, requireRole } from '../middleware/auth.js';
 import { sendProblem } from '../../lib/problem-details.js';
 import {
@@ -153,6 +154,7 @@ const GlobalConfigUpdateSchema = ConfigUpdateSchema.extend({
 
 export interface SynapseRoutesOptions {
   fleetIntelService?: import('../../services/fleet/fleet-intel.js').FleetIntelService;
+  prisma?: PrismaClient;
 }
 
 export function createSynapseRoutes(
@@ -161,7 +163,7 @@ export function createSynapseRoutes(
   options: SynapseRoutesOptions = {}
 ): Router {
   const router = Router();
-  const { fleetIntelService } = options;
+  const { fleetIntelService, prisma } = options;
 
   // ==========================================================================
   // Compatibility: DLP Proxy Endpoints
@@ -173,11 +175,30 @@ export function createSynapseRoutes(
   router.get(
     '/:sensorId/proxy/_sensor/dlp/stats',
     requireScope('fleet:read'),
-    async (_req: Request, res: Response): Promise<void> => {
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+      const sensorId = (req.params as { sensorId: string }).sensorId;
+
+      const snapshot = prisma
+        ? await prisma.sensorPayloadSnapshot.findFirst({
+            where: { tenantId, sensorId },
+            orderBy: { capturedAt: 'desc' },
+            select: { stats: true },
+          })
+        : null;
+
+      const stats = (snapshot?.stats ?? null) as unknown;
+      const obj = typeof stats === 'object' && stats !== null ? (stats as Record<string, unknown>) : null;
+      const dlp = obj && typeof obj.dlp === 'object' && obj.dlp !== null ? (obj.dlp as Record<string, unknown>) : null;
+
+      const totalScans = Number(dlp?.totalScans ?? 0);
+      const totalMatches = Number(dlp?.totalMatches ?? 0);
+      const patternCount = Number(dlp?.patternCount ?? 0);
+
       res.json({
-        totalScans: 0,
-        totalMatches: 0,
-        patternCount: 0,
+        totalScans: Number.isFinite(totalScans) ? totalScans : 0,
+        totalMatches: Number.isFinite(totalMatches) ? totalMatches : 0,
+        patternCount: Number.isFinite(patternCount) ? patternCount : 0,
       });
     }
   );
@@ -185,8 +206,37 @@ export function createSynapseRoutes(
   router.get(
     '/:sensorId/proxy/_sensor/dlp/violations',
     requireScope('fleet:read'),
-    async (_req: Request, res: Response): Promise<void> => {
-      res.json({ violations: [] });
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+      const sensorId = (req.params as { sensorId: string }).sensorId;
+
+      const snapshot = prisma
+        ? await prisma.sensorPayloadSnapshot.findFirst({
+            where: { tenantId, sensorId },
+            orderBy: { capturedAt: 'desc' },
+            select: { stats: true },
+          })
+        : null;
+
+      const stats = (snapshot?.stats ?? null) as unknown;
+      const obj = typeof stats === 'object' && stats !== null ? (stats as Record<string, unknown>) : null;
+      const dlp = obj && typeof obj.dlp === 'object' && obj.dlp !== null ? (obj.dlp as Record<string, unknown>) : null;
+      const rawViolations = Array.isArray(dlp?.violations) ? (dlp?.violations as unknown[]) : [];
+
+      const violations = rawViolations
+        .map((v) => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : null))
+        .filter((v): v is Record<string, unknown> => !!v)
+        .map((v) => ({
+          timestamp: Number(v.timestamp ?? Date.now()),
+          pattern_name: String(v.pattern_name ?? 'Unknown'),
+          data_type: String(v.data_type ?? 'unknown'),
+          severity: String(v.severity ?? 'low'),
+          masked_value: String(v.masked_value ?? '********'),
+          client_ip: v.client_ip === undefined || v.client_ip === null ? undefined : String(v.client_ip),
+          path: String(v.path ?? '/'),
+        }));
+
+      res.json({ violations });
     }
   );
 

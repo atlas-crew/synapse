@@ -775,17 +775,76 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
         },
       });
 
-      await prisma.sensorPayloadSnapshot.create({
-        data: {
-          tenantId,
-          sensorId: sensors[0],
-          capturedAt: new Date(now - rng.int(10_000, 120_000)),
-          stats: { cpu: rng.int(10, 95), mem: rng.int(20, 96), seeded: true } as Prisma.InputJsonValue,
-          bandwidth: { in_mbps: rng.int(10, 900), out_mbps: rng.int(10, 900) } as Prisma.InputJsonValue,
-          endpoints: { discovered: opts.endpointsPerSensor } as Prisma.InputJsonValue,
-          anomalies: { impossible_travel: rng.int(0, 4) } as Prisma.InputJsonValue,
-        },
-      });
+      const dlpPatterns = [
+        { name: 'Visa Card', type: 'credit_card', severity: 'critical', masked: '****-****-****-4242' },
+        { name: 'SSN (formatted)', type: 'ssn', severity: 'critical', masked: '***-**-6789' },
+        { name: 'AWS Secret Key', type: 'aws_key', severity: 'critical', masked: 'AKIA****************' },
+        { name: 'GitHub Token', type: 'api_key', severity: 'critical', masked: 'ghp_************************' },
+        { name: 'Email Address', type: 'email', severity: 'medium', masked: 'u***@example.com' },
+      ] as const;
+      const dlpPaths = [
+        '/api/v1/users/profile',
+        '/api/v1/payments/checkout',
+        '/api/v1/admin/audit-export',
+        '/api/v1/auth/login',
+        '/api/v1/debug/dump',
+      ] as const;
+
+      // Seed per-sensor payload stats so Fleet Health can render CPU/memory/RPS/latency.
+      for (let i = 0; i < sensors.length; i++) {
+        const sensorId = sensors[i]!;
+        const cpu = clamp(10 + rng.float() * 85, 0, 100);
+        const memory = clamp(18 + rng.float() * 80, 0, 100);
+        const rps = Math.round(clamp(20 + rng.float() * 1200, 0, 5000));
+        const latencyMs = Math.round(clamp(8 + rng.float() * 180, 1, 2000));
+
+        const stats: Record<string, unknown> = {
+          cpu,
+          memory,
+          rps,
+          latencyMs,
+          seeded: true,
+        };
+
+        // Only the stable bridge sensor (tenant 0) gets DLP violations for the DLP dashboard.
+        if (t === 0 && sensorId === BRIDGE_SENSOR_ID) {
+          const totalScans = rng.int(25_000, 900_000);
+          const totalMatches = rng.int(18, 240);
+          const violationsCount = Math.min(20, Math.max(0, Math.min(totalMatches, rng.int(8, 18))));
+
+          const violations = Array.from({ length: violationsCount }, (_v, j) => {
+            const p = rng.pick(dlpPatterns);
+            return {
+              timestamp: now - j * 5 * 60_000 - rng.int(0, 60_000),
+              pattern_name: p.name,
+              data_type: p.type,
+              severity: p.severity,
+              masked_value: p.masked,
+              client_ip: tenantScopedIp(t),
+              path: rng.pick(dlpPaths),
+            };
+          });
+
+          stats.dlp = {
+            totalScans,
+            totalMatches,
+            patternCount: 25,
+            violations,
+          };
+        }
+
+        await prisma.sensorPayloadSnapshot.create({
+          data: {
+            tenantId,
+            sensorId,
+            capturedAt: new Date(now - rng.int(10_000, 120_000) - i * 1_000),
+            stats: stats as Prisma.InputJsonValue,
+            bandwidth: { in_mbps: rng.int(10, 900), out_mbps: rng.int(10, 900) } as Prisma.InputJsonValue,
+            endpoints: { discovered: opts.endpointsPerSensor } as Prisma.InputJsonValue,
+            anomalies: { impossible_travel: rng.int(0, 4) } as Prisma.InputJsonValue,
+          },
+        });
+      }
     }
 
     // Beam endpoints + schema changes

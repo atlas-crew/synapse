@@ -81,13 +81,13 @@ describe('Synapse RBAC', () => {
     'listRules' | 'addRule' | 'updateRule' | 'deleteRule' | 'updateSensorConfig'
   >;
 
-  const buildApp = (scopes?: string[]) => {
+  const buildApp = (scopes?: string[], routeOptions?: Parameters<typeof createSynapseRoutes>[2]) => {
     const expressApp = express();
     expressApp.use(express.json());
     if (scopes) {
       expressApp.use(injectAuth(scopes));
     }
-    expressApp.use('/synapse', createSynapseRoutes(synapseProxy as SynapseProxyService, mockLogger));
+    expressApp.use('/synapse', createSynapseRoutes(synapseProxy as SynapseProxyService, mockLogger, routeOptions));
     return expressApp;
   };
 
@@ -147,6 +147,64 @@ describe('Synapse RBAC', () => {
       'tenant-1',
       expect.any(Object)
     );
+  });
+
+  it('returns seeded DLP data when payload snapshot is present', async () => {
+    const fakePrisma: { sensorPayloadSnapshot: { findFirst: ReturnType<typeof vi.fn> } } = {
+      sensorPayloadSnapshot: {
+        findFirst: vi.fn().mockResolvedValue({
+          stats: {
+            dlp: {
+              totalScans: 12345,
+              totalMatches: 12,
+              patternCount: 25,
+              violations: [
+                {
+                  timestamp: 1700000000000,
+                  pattern_name: 'Visa Card',
+                  data_type: 'credit_card',
+                  severity: 'critical',
+                  masked_value: '****-****-****-4242',
+                  client_ip: '185.228.13.10',
+                  path: '/api/v1/payments/checkout',
+                },
+              ],
+            },
+          },
+        }),
+      },
+    };
+
+    const seededApp = buildApp(['fleet:read'], { prisma: fakePrisma });
+
+    const statsRes = await request(seededApp)
+      .get('/synapse/sensor-1/proxy/_sensor/dlp/stats')
+      .expect(200);
+
+    expect(statsRes.body).toMatchObject({
+      totalScans: 12345,
+      totalMatches: 12,
+      patternCount: 25,
+    });
+
+    const violationsRes = await request(seededApp)
+      .get('/synapse/sensor-1/proxy/_sensor/dlp/violations')
+      .expect(200);
+
+    expect(violationsRes.body).toMatchObject({
+      violations: [
+        expect.objectContaining({
+          pattern_name: 'Visa Card',
+          data_type: 'credit_card',
+          severity: 'critical',
+          masked_value: '****-****-****-4242',
+          client_ip: '185.228.13.10',
+          path: '/api/v1/payments/checkout',
+        }),
+      ],
+    });
+
+    expect(fakePrisma.sensorPayloadSnapshot.findFirst).toHaveBeenCalled();
   });
 
   it('rejects unauthenticated POST /synapse/:sensorId/rules', async () => {
