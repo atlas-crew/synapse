@@ -141,6 +141,35 @@ describe('Auth Routes', () => {
       expect(res.headers['set-cookie']).toContain('horizon_api_key=dev_');
       expect(prisma.apiKey.upsert).toHaveBeenCalled();
     });
+
+    it('allows IPv6 loopback (::1)', async () => {
+      vi.mocked(prisma.tenant.findFirst).mockResolvedValue(null);
+
+      const res = await request(app)
+        .get('/api/v1/auth/dev/bootstrap')
+        .set('X-Forwarded-For', '::1')
+        .expect(200);
+
+      expect(res.body.ok).toBe(true);
+    });
+
+    it('allows IPv4-mapped IPv6 (::ffff:127.0.0.1) after prefix strip', async () => {
+      vi.mocked(prisma.tenant.findFirst).mockResolvedValue(null);
+
+      const res = await request(app)
+        .get('/api/v1/auth/dev/bootstrap')
+        .set('X-Forwarded-For', '::ffff:127.0.0.1')
+        .expect(200);
+
+      expect(res.body.ok).toBe(true);
+    });
+
+    it('returns 403 for private non-loopback IP (10.0.0.1)', async () => {
+      await request(app)
+        .get('/api/v1/auth/dev/bootstrap')
+        .set('X-Forwarded-For', '10.0.0.1')
+        .expect(403);
+    });
   });
 
   describe('POST /login', () => {

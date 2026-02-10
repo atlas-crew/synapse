@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express, { type Express } from 'express';
 import cookieParser from 'cookie-parser';
 import { createHmac, createHash } from 'node:crypto';
@@ -439,5 +439,127 @@ describe('Auth middleware cookie fallback (labs-n6nf)', () => {
 
     // The invalid JWT will fall through to API key lookup which also fails
     expect(res.body).toMatchObject({ code: 'INVALID_API_KEY' });
+  });
+});
+
+describe('Auth middleware API key expiry boundary', () => {
+  let prisma: PrismaClient;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    // Disable JWT so auth falls through to the API key path
+    mockConfig.telemetry.jwtSecret = undefined;
+
+    prisma = {
+      tokenBlacklist: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+      apiKey: {
+        findUnique: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    } as unknown as PrismaClient;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function buildApiKeyRecord(expiresAt: Date | null) {
+    const apiKey = 'boundary-test-key';
+    const keyHash = createHash('sha256').update(apiKey).digest('hex');
+    return {
+      apiKey,
+      keyHash,
+      record: {
+        id: 'ak-boundary',
+        tenantId: 'tenant-boundary',
+        isRevoked: false,
+        expiresAt,
+        scopes: ['fleet:read'],
+        tenant: { id: 'tenant-boundary' },
+      },
+    };
+  }
+
+  it('treats expiresAt exactly at current time as valid (not strictly less than)', async () => {
+    // The condition is: expiresAt < new Date()
+    // When expiresAt === now, this is false, so key is still valid.
+    const now = new Date('2026-02-10T12:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const { apiKey, keyHash, record } = buildApiKeyRecord(new Date('2026-02-10T12:00:00.000Z'));
+    vi.mocked(prisma.apiKey.findUnique).mockImplementation(async ({ where }: any) => {
+      if (where?.keyHash === keyHash) return record as never;
+      return null as never;
+    });
+
+    const app = express();
+    app.use(cookieParser());
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${apiKey}`)
+      .expect(200);
+
+    expect(res.body.auth).toMatchObject({
+      tenantId: 'tenant-boundary',
+      apiKeyId: 'ak-boundary',
+    });
+  });
+
+  it('rejects API key expired 1ms in the past with 401 API_KEY_EXPIRED', async () => {
+    const now = new Date('2026-02-10T12:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    // expiresAt is 1ms before now → expiresAt < new Date() is true
+    const { apiKey, keyHash, record } = buildApiKeyRecord(new Date('2026-02-10T11:59:59.999Z'));
+    vi.mocked(prisma.apiKey.findUnique).mockImplementation(async ({ where }: any) => {
+      if (where?.keyHash === keyHash) return record as never;
+      return null as never;
+    });
+
+    const app = express();
+    app.use(cookieParser());
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${apiKey}`)
+      .expect(401);
+
+    expect(res.body).toMatchObject({ code: 'API_KEY_EXPIRED' });
+  });
+
+  it('treats null expiresAt as valid (no expiry)', async () => {
+    const { apiKey, keyHash, record } = buildApiKeyRecord(null);
+    vi.mocked(prisma.apiKey.findUnique).mockImplementation(async ({ where }: any) => {
+      if (where?.keyHash === keyHash) return record as never;
+      return null as never;
+    });
+
+    const app = express();
+    app.use(cookieParser());
+    app.use(express.json());
+    app.use(createAuthMiddleware(prisma));
+    app.get('/secure', (req, res) => res.json({ auth: req.auth }));
+
+    const res = await request(app)
+      .get('/secure')
+      .set('Authorization', `Bearer ${apiKey}`)
+      .expect(200);
+
+    expect(res.body.auth).toMatchObject({
+      tenantId: 'tenant-boundary',
+      apiKeyId: 'ak-boundary',
+      scopes: ['fleet:read'],
+    });
   });
 });

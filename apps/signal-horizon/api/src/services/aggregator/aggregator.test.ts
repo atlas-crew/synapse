@@ -264,6 +264,71 @@ describe('Aggregator', () => {
     });
   });
 
+  describe('idempotency store', () => {
+    let mockIdempotencyStore: { checkAndAdd: ReturnType<typeof vi.fn> };
+    let aggregatorWithIdempotency: Aggregator;
+
+    beforeEach(() => {
+      mockIdempotencyStore = {
+        checkAndAdd: vi.fn().mockResolvedValue(true),
+      };
+
+      // Need findFirst for the duplicate-signal lookup fallback
+      (mockPrisma as any).signal.findFirst = vi.fn().mockResolvedValue(null);
+
+      aggregatorWithIdempotency = new Aggregator(
+        mockPrisma,
+        mockLogger,
+        mockCorrelator,
+        defaultConfig,
+        undefined, // clickhouse
+        undefined, // impossibleTravel
+        undefined, // apiIntelligence
+        undefined, // threatService
+        undefined, // playbookTrigger
+        mockIdempotencyStore as any
+      );
+    });
+
+    afterEach(async () => {
+      await aggregatorWithIdempotency.stop();
+    });
+
+    it('should store signal when checkAndAdd returns true (new signal)', async () => {
+      mockIdempotencyStore.checkAndAdd.mockResolvedValue(true);
+
+      aggregatorWithIdempotency.queueSignal(createTestSignal());
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockIdempotencyStore.checkAndAdd).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.signal.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip signal when checkAndAdd returns false (duplicate)', async () => {
+      mockIdempotencyStore.checkAndAdd.mockResolvedValue(false);
+
+      aggregatorWithIdempotency.queueSignal(createTestSignal());
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockIdempotencyStore.checkAndAdd).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.signal.create).not.toHaveBeenCalled();
+    });
+
+    it('should pass custom idempotencyKey to checkAndAdd when present', async () => {
+      mockIdempotencyStore.checkAndAdd.mockResolvedValue(true);
+
+      const signal = createTestSignal({ idempotencyKey: 'custom-key-abc' });
+      aggregatorWithIdempotency.queueSignal(signal);
+      await vi.advanceTimersByTimeAsync(defaultConfig.batchTimeoutMs + 100);
+
+      expect(mockIdempotencyStore.checkAndAdd).toHaveBeenCalledWith(
+        'custom-key-abc',
+        expect.any(Number),
+        expect.objectContaining({ tenantId: 'tenant-1' })
+      );
+    });
+  });
+
   describe('APIIntelligenceService integration', () => {
     let mockAPIIntelligence: APIIntelligenceService;
     let aggregatorWithAPIIntel: Aggregator;
