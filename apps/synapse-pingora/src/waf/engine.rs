@@ -416,20 +416,21 @@ impl Engine {
 
     /// Load rules from JSON bytes.
     pub fn load_rules(&mut self, json: &[u8]) -> Result<usize, WafError> {
-        let rules: Vec<WafRule> =
-            serde_json::from_slice(json).map_err(|e| WafError::ParseError(e.to_string()))?;
-
+        let rules = Self::parse_rules(json)?;
         let count = rules.len();
         self.reload_rules(rules)?;
         Ok(count)
     }
 
-    /// Get the number of loaded rules.
-    pub fn rule_count(&self) -> usize {
-        self.rules.len()
+    /// Parse rules from JSON bytes without modifying engine state.
+    ///
+    /// This allows expensive parsing to happen outside of global locks.
+    pub fn parse_rules(json: &[u8]) -> Result<Vec<WafRule>, WafError> {
+        serde_json::from_slice(json).map_err(|e| WafError::ParseError(e.to_string()))
     }
 
-    fn reload_rules(&mut self, rules: Vec<WafRule>) -> Result<(), WafError> {
+    /// Reload the engine with a new set of rules.
+    pub fn reload_rules(&mut self, rules: Vec<WafRule>) -> Result<(), WafError> {
         self.rules = rules;
         self.rule_id_to_index = self
             .rules

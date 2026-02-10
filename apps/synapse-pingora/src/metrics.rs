@@ -4,17 +4,54 @@
 //! exposing request counts, latencies, WAF statistics, and backend health.
 
 use crate::tunnel::TunnelChannel;
-use crate::actor::ActorManager;
-use crate::crawler::CrawlerDetector;
-use crate::tarpit::TarpitManager;
-use crate::interrogator::ProgressionManager;
-use crate::shadow::ShadowMirrorManager;
-use crate::trends::TrendsManager;
+use crate::actor::{ActorManager, ActorState};
+use crate::crawler::{CrawlerDetector, CrawlerStatsSnapshot};
+use crate::tarpit::{TarpitManager, TarpitStats};
+use crate::interrogator::{ProgressionManager, ProgressionStatsSnapshot};
+use crate::shadow::{ShadowMirrorManager, ShadowMirrorStats};
+use crate::trends::{TrendsManager, Anomaly};
 use parking_lot::RwLock;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+use crate::entity::{EntitySnapshot, EntityManager};
+use crate::block_log::{BlockEvent, BlockLog};
+
+/// Snapshot of metrics for TUI display (labs-tui optimization).
+#[derive(Clone, Default)]
+pub struct MetricsSnapshot {
+    pub uptime_secs: u64,
+    pub total_requests: u64,
+    pub total_blocked: u64,
+    pub active_requests: u64,
+    pub avg_latency_ms: f64,
+    pub avg_waf_detection_us: f64,
+    pub request_history: Vec<u64>,
+    pub top_rules: Vec<(String, u64)>,
+    pub backend_status: Vec<(String, BackendMetrics)>,
+    pub top_crawlers: Vec<(String, u64)>,
+    pub top_bad_bots: Vec<(String, u64)>,
+    pub top_risky_actors: Vec<ActorState>,
+    pub top_ja4_clusters: Vec<(String, Vec<String>, f64)>,
+    pub top_dlp_hits: Vec<(String, u64)>,
+    pub tarpit_stats: Option<TarpitStats>,
+    pub progression_stats: Option<ProgressionStatsSnapshot>,
+    pub shadow_stats: Option<ShadowMirrorStats>,
+    pub recent_geo_anomalies: Vec<Anomaly>,
+    pub top_entities: Vec<EntitySnapshot>,
+    pub recent_blocks: Vec<BlockEvent>,
+}
+
+/// Trait for providing data to the TUI (labs-tui decoupling).
+pub trait TuiDataProvider: Send + Sync {
+    /// Get a fresh snapshot of the system state.
+    fn get_snapshot(&self) -> MetricsSnapshot;
+    
+    /// Reset global statistics.
+    fn reset_all(&self);
+}
 
 /// Maximum number of entries allowed in any metrics hash map to prevent DoS via memory exhaustion. (labs-7tdw)
 const MAX_METRICS_MAP_SIZE: usize = 1000;
@@ -34,6 +71,10 @@ pub struct MetricsRegistry {
     pub(crate) shadow_mirror_manager: Option<Arc<ShadowMirrorManager>>,
     /// Trends manager for geo-anomaly visibility (labs-tui)
     pub(crate) trends_manager: Option<Arc<TrendsManager>>,
+    /// Entity manager for risk tracking (labs-tui)
+    pub(crate) entity_manager: Option<Arc<EntityManager>>,
+    /// Block log for recent events (labs-tui)
+    pub(crate) block_log: Option<Arc<BlockLog>>,
     /// Request counters by status code
     request_counts: RequestCounters,
     /// Latency histograms
@@ -60,6 +101,59 @@ pub struct MetricsRegistry {
     pub status_message: Arc<RwLock<Option<String>>>,
     /// Registry start time for uptime calculation
     start_time: Option<Instant>,
+
+    /// Cached snapshot for TUI (labs-tui optimization)
+    last_snapshot: RwLock<Option<(Instant, MetricsSnapshot)>>,
+}
+
+impl TuiDataProvider for MetricsRegistry {
+    fn get_snapshot(&self) -> MetricsSnapshot {
+        // Finding #15: Check if cached snapshot is fresh (1 second TTL)
+        {
+            let last = self.last_snapshot.read();
+            if let Some((ts, snap)) = &*last {
+                if ts.elapsed() < Duration::from_secs(1) {
+                    return snap.clone();
+                }
+            }
+        }
+
+        // Generate new snapshot
+        let snap = MetricsSnapshot {
+            uptime_secs: self.uptime_secs(),
+            total_requests: self.total_requests(),
+            total_blocked: self.total_blocked(),
+            active_requests: self.active_requests(),
+            avg_latency_ms: self.avg_latency_ms(),
+            avg_waf_detection_us: self.avg_waf_detection_us(),
+            request_history: self.request_history(),
+            top_rules: self.top_rules(10),
+            backend_status: self.backend_status(),
+            top_crawlers: self.top_crawlers(10),
+            top_bad_bots: self.top_bad_bots(10),
+            top_risky_actors: self.top_risky_actors(10),
+            top_ja4_clusters: self.top_ja4_clusters(10),
+            top_dlp_hits: self.top_dlp_hits(10),
+            tarpit_stats: self.tarpit_stats(),
+            progression_stats: self.progression_stats(),
+            shadow_stats: self.shadow_stats(),
+            recent_geo_anomalies: self.recent_geo_anomalies(10),
+            top_entities: self.entity_manager.as_ref().map(|m| m.list_top_risk(10)).unwrap_or_default(),
+            recent_blocks: self.block_log.as_ref().map(|l| l.recent(10)).unwrap_or_default(),
+        };
+
+        // Update cache
+        {
+            let mut last = self.last_snapshot.write();
+            *last = Some((Instant::now(), snap.clone()));
+        }
+
+        snap
+    }
+
+    fn reset_all(&self) {
+        self.reset();
+    }
 }
 
 impl std::fmt::Debug for MetricsRegistry {

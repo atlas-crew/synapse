@@ -62,6 +62,9 @@ cargo build --release
 # Run (uses default config)
 ./target/release/synapse-pingora
 
+# Run with interactive TUI dashboard
+./target/release/synapse-pingora --tui
+
 # Or with config file
 cp config.example.yaml config.yaml
 ./target/release/synapse-pingora
@@ -392,7 +395,7 @@ synapse-pingora/
 
 ## License
 
-Apache 2.0 (same as Pingora)
+Copyright AtlasCrew, LLC
 
 ## See Also
 

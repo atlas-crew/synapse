@@ -24,7 +24,7 @@ use hex;
 
 use crate::block_log::BlockLog;
 use crate::entity::EntityManager;
-use crate::metrics::MetricsRegistry;
+use crate::metrics::{MetricsRegistry, TuiDataProvider, MetricsSnapshot};
 use crate::waf::Synapse;
 
 /// Action that requires operator confirmation
@@ -36,8 +36,10 @@ pub enum ConfirmationAction {
 
 /// TUI Dashboard Application
 pub struct TuiApp {
-    /// Metrics registry for real-time stats
-    metrics: Arc<MetricsRegistry>,
+    /// Data provider for real-time stats
+    provider: Arc<dyn TuiDataProvider>,
+    /// Last snapshot of metrics
+    snapshot: MetricsSnapshot,
     /// Entity manager for risk tracking
     entities: Arc<EntityManager>,
     /// Block log for recent events
@@ -84,13 +86,14 @@ pub struct TuiApp {
 
 impl TuiApp {
     pub fn new(
-        metrics: Arc<MetricsRegistry>,
+        provider: Arc<dyn TuiDataProvider>,
         entities: Arc<EntityManager>,
         block_log: Arc<BlockLog>,
         synapse: Arc<parking_lot::RwLock<Synapse>>,
     ) -> Self {
         Self {
-            metrics,
+            provider,
+            snapshot: MetricsSnapshot::default(),
             entities,
             block_log,
             synapse,
@@ -119,6 +122,11 @@ impl TuiApp {
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         let mut last_tick = Instant::now();
         while !self.should_quit {
+            // Update snapshot if not paused
+            if !self.paused {
+                self.snapshot = self.provider.get_snapshot();
+            }
+
             if !self.paused || self.show_help {
                 terminal.draw(|f| self.ui(f))?;
             }
@@ -159,7 +167,7 @@ impl TuiApp {
                     } else {
                         match key.code {
                             KeyCode::Char('q') => self.should_quit = true,
-                            KeyCode::Char('r') => self.metrics.reset(),
+                            KeyCode::Char('r') => self.provider.reset_all(),
                             KeyCode::Char('p') | KeyCode::Char(' ') => self.paused = !self.paused,
                             KeyCode::Char('?') | KeyCode::Char('h') => self.show_help = !self.show_help,
                             KeyCode::Char('1') => self.active_tab = 0,
@@ -275,17 +283,28 @@ impl TuiApp {
                     // Finding #3: Simple integrity check (checksum)
                     let hash = hex::encode(Sha256::digest(&json));
                     
-                    let mut synapse = self.synapse.write();
-                    match synapse.load_rules(&json) {
-                        Ok(count) => {
-                            drop(synapse);
-                            self.set_message(&format!("Reloaded {} rules (Hash: {}...)", count, &hash[..8]));
-                            reloaded = true;
-                            break;
+                    // Parse outside of lock
+                    match Synapse::parse_rules(&json) {
+                        Ok(rules) => {
+                            let count = rules.len();
+                            let mut synapse = self.synapse.write();
+                            match synapse.reload_rules(rules) {
+                                Ok(_) => {
+                                    drop(synapse);
+                                    self.set_message(&format!("Reloaded {} rules (Hash: {}...)", count, &hash[..8]));
+                                    reloaded = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    drop(synapse);
+                                    self.set_message(&format!("Failed to reload rules: {}", e));
+                                    reloaded = true;
+                                    break;
+                                }
+                            }
                         }
                         Err(e) => {
-                            drop(synapse);
-                            self.set_message(&format!("Failed to parse rules: {}", e));
+                            self.set_message(&format!("Failed to parse rules from {}: {}", path, e));
                             reloaded = true;
                             break;
                         }
@@ -319,7 +338,7 @@ impl TuiApp {
                 self.entity_table_state.select(Some(i));
             }
             1 => {
-                let len = self.metrics.top_rules(10).len();
+                let len = self.snapshot.top_rules.len();
                 if len == 0 { return; }
                 let i = match self.rule_table_state.selected() {
                     Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
@@ -328,7 +347,7 @@ impl TuiApp {
                 self.rule_table_state.select(Some(i));
             }
             2 => {
-                let len = self.metrics.top_risky_actors(10).len();
+                let len = self.snapshot.top_risky_actors.len();
                 if len == 0 { return; }
                 let i = match self.actor_table_state.selected() {
                     Some(i) => if i >= len.saturating_sub(1) { 0 } else { i + 1 },
@@ -352,7 +371,7 @@ impl TuiApp {
                 self.entity_table_state.select(Some(i));
             }
             1 => {
-                let len = self.metrics.top_rules(10).len();
+                let len = self.snapshot.top_rules.len();
                 if len == 0 { return; }
                 let i = match self.rule_table_state.selected() {
                     Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
@@ -361,7 +380,7 @@ impl TuiApp {
                 self.rule_table_state.select(Some(i));
             }
             2 => {
-                let len = self.metrics.top_risky_actors(10).len();
+                let len = self.snapshot.top_risky_actors.len();
                 if len == 0 { return; }
                 let i = match self.actor_table_state.selected() {
                     Some(i) => if i == 0 { len.saturating_sub(1) } else { i - 1 },
@@ -421,9 +440,9 @@ impl TuiApp {
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect) {
-        let uptime = self.start_time.elapsed().as_secs();
-        let total_requests = self.metrics.total_requests();
-        let blocked = self.metrics.total_blocked();
+        let uptime = self.snapshot.uptime_secs;
+        let total_requests = self.snapshot.total_requests;
+        let blocked = self.snapshot.total_blocked;
         
         let block_rate = if total_requests > 0 {
             (blocked as f64 / total_requests as f64) * 100.0
@@ -497,7 +516,7 @@ impl TuiApp {
             .split(area);
 
         // Top WAF Rules
-        let top_rules = self.metrics.top_rules(10);
+        let top_rules = &self.snapshot.top_rules;
         let header = Row::new(vec![
             Cell::from("Rule ID"),
             Cell::from("Hits"),
@@ -522,7 +541,7 @@ impl TuiApp {
         f.render_stateful_widget(rule_table, chunks[0], &mut self.rule_table_state);
 
         // Upstream Status
-        let backends = self.metrics.backend_status();
+        let backends = &self.snapshot.backend_status;
         let b_header = Row::new(vec![
             Cell::from("Upstream"),
             Cell::from("Status"),
@@ -574,7 +593,7 @@ impl TuiApp {
             .split(chunks[0]);
 
         // Legitimate Crawlers
-        let crawlers = self.metrics.top_crawlers(10);
+        let crawlers = &self.snapshot.top_crawlers;
         let c_items: Vec<ListItem> = crawlers.iter().map(|(name, hits)| {
             ListItem::new(format!("{:<15} : {} hits", name, hits))
                 .style(Style::default().fg(Color::Green))
@@ -584,7 +603,7 @@ impl TuiApp {
         f.render_widget(c_list, left_chunks[0]);
 
         // Bad Bots
-        let bad_bots = self.metrics.top_bad_bots(10);
+        let bad_bots = &self.snapshot.top_bad_bots;
         let b_items: Vec<ListItem> = bad_bots.iter().map(|(name, hits)| {
             ListItem::new(format!("{:<15} : {} hits", name, hits))
                 .style(Style::default().fg(Color::Red))
@@ -594,7 +613,7 @@ impl TuiApp {
         f.render_widget(b_list, left_chunks[1]);
 
         // DLP Hits
-        let dlp_hits = self.metrics.top_dlp_hits(10);
+        let dlp_hits = &self.snapshot.top_dlp_hits;
         let d_items: Vec<ListItem> = dlp_hits.iter().map(|(name, hits)| {
             ListItem::new(format!("{:<15} : {} matches", name, hits))
                 .style(Style::default().fg(Color::Magenta))
@@ -609,7 +628,7 @@ impl TuiApp {
             .split(chunks[1]);
 
         // JA4 clusters
-        let clusters = self.metrics.top_ja4_clusters(10);
+        let clusters = &self.snapshot.top_ja4_clusters;
         let header = Row::new(vec![
             Cell::from("Fingerprint (JA4)"),
             Cell::from("Nodes"),
@@ -638,7 +657,7 @@ impl TuiApp {
         f.render_widget(table, right_chunks[0]);
 
         // Top Risky Actors (Fingerprint correlated)
-        let top_actors = self.metrics.top_risky_actors(10);
+        let top_actors = &self.snapshot.top_risky_actors;
         let a_header = Row::new(vec![
             Cell::from("Actor ID (Correlated)"),
             Cell::from("Risk"),
@@ -681,7 +700,7 @@ impl TuiApp {
             .split(chunks[0]);
 
         // Tarpit Status
-        if let Some(tarpit) = self.metrics.tarpit_stats() {
+        if let Some(ref tarpit) = self.snapshot.tarpit_stats {
             let items = vec![
                 ListItem::new(format!("Tracked States: {}", tarpit.total_states)),
                 ListItem::new(format!("Active Tarpits: {}", tarpit.active_tarpits)),
@@ -698,7 +717,7 @@ impl TuiApp {
         }
 
         // Challenge Stats
-        if let Some(prog) = self.metrics.progression_stats() {
+        if let Some(ref prog) = self.snapshot.progression_stats {
             let items = vec![
                 ListItem::new(format!("Actors Tracked: {}", prog.actors_tracked)),
                 ListItem::new(format!("Issued:         {}", prog.challenges_issued)),
@@ -720,7 +739,7 @@ impl TuiApp {
             .split(chunks[1]);
 
         // Shadow Mirroring
-        if let Some(shadow) = self.metrics.shadow_stats() {
+        if let Some(ref shadow) = self.snapshot.shadow_stats {
             let items = vec![
                 ListItem::new(format!("Mirror Mode:   {}", if shadow.enabled { "ACTIVE" } else { "OFF" })),
                 ListItem::new(format!("Success:       {}", shadow.delivery_successes)),
@@ -737,7 +756,7 @@ impl TuiApp {
         }
 
         // Geo Anomalies
-        let geo_anomalies = self.metrics.recent_geo_anomalies(10);
+        let geo_anomalies = &self.snapshot.recent_geo_anomalies;
         let items: Vec<ListItem> = geo_anomalies.iter().map(|a| {
             ListItem::new(format!("[{:?}] {}", a.severity, a.description))
                 .style(Style::default().fg(match a.severity {
@@ -763,7 +782,8 @@ impl TuiApp {
             .split(area);
 
         // RPS Gauge
-        let rps = self.metrics.requests_last_minute() / 60;
+        let history = &self.snapshot.request_history;
+        let rps = history.last().copied().unwrap_or(0);
         let rps_gauge = Gauge::default()
             .block(Block::default().borders(Borders::ALL).title(" Requests/sec "))
             .gauge_style(Style::default().fg(Color::Green))
@@ -772,10 +792,9 @@ impl TuiApp {
         f.render_widget(rps_gauge, chunks[0]);
 
         // Traffic Trend (Sparkline)
-        let history = self.metrics.request_history();
         let sparkline = Sparkline::default()
             .block(Block::default().borders(Borders::ALL).title(" Traffic Trend (60s) "))
-            .data(&history)
+            .data(history)
             .style(Style::default().fg(Color::Green));
         f.render_widget(sparkline, chunks[1]);
 
@@ -805,14 +824,14 @@ impl TuiApp {
         f.render_widget(mem_gauge, res_chunks[1]);
 
         // Detailed Metrics
-        let avg_latency = self.metrics.avg_latency_ms();
-        let avg_waf = self.metrics.avg_waf_detection_us();
+        let avg_latency = self.snapshot.avg_latency_ms;
+        let avg_waf = self.snapshot.avg_waf_detection_us;
         
         let metrics_list = vec![
             ListItem::new(format!("Avg Latency:   {:.2} ms", avg_latency)),
             ListItem::new(format!("WAF Detection: {:.2} μs", avg_waf)),
-            ListItem::new(format!("Active Conns:  {}", self.metrics.active_requests())),
-            ListItem::new(format!("Rules Loaded:  {}", 0)), // TODO: DetectionEngine not found in crate root
+            ListItem::new(format!("Active Conns:  {}", self.snapshot.active_requests)),
+            ListItem::new(format!("Rules Loaded:  {}", self.snapshot.top_rules.len())),
         ];
 
         let metrics = List::new(metrics_list)

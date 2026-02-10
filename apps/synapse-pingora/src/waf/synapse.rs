@@ -70,6 +70,16 @@ impl Synapse {
         self.engine.load_rules(json)
     }
 
+    /// Parse rules from JSON bytes without modifying state.
+    pub fn parse_rules(json: &[u8]) -> Result<Vec<crate::waf::WafRule>, WafError> {
+        Engine::parse_rules(json)
+    }
+
+    /// Reload the engine with a new set of pre-parsed rules.
+    pub fn reload_rules(&mut self, rules: Vec<crate::waf::WafRule>) -> Result<(), WafError> {
+        self.engine.reload_rules(rules)
+    }
+
     /// Analyze a request and return a verdict.
     pub fn analyze(&self, req: &Request) -> Verdict {
         self.engine.analyze(req)
