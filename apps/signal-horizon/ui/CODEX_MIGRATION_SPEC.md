@@ -12,6 +12,7 @@ Migrate all pages and shared components in `/src/pages/` and `/src/components/` 
 - `@/ui/styles/global.css` → already imported in `main.tsx`
 - `OverviewPage.tsx` → already migrated (reference implementation)
 - All 26 library components are built and exported from `@/ui`
+- Legacy `src/lib/chartTheme.ts` is removed; use `@/ui` chart defaults + helpers instead (`axisDefaults`, `gridDefaults*`, `tooltipDefaults`, `legendDefaults`, `formatValue`, `alpha`, `lighten`, `darken`)
 
 ---
 
