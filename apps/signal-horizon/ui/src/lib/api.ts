@@ -160,13 +160,25 @@ export async function apiFetch<T = any>(endpoint: string, options: FetchOptions 
     if (csrf && !headers['X-CSRF-Token']) headers['X-CSRF-Token'] = csrf;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers,
-    credentials: 'include', // labs-n6nf: send httpOnly cookies
-    signal,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const url = `${API_BASE_URL}${endpoint}`;
+
+  const doFetch = async (cache: RequestCache): Promise<Response> =>
+    fetch(url, {
+      method,
+      headers,
+      credentials: 'include', // labs-n6nf: send httpOnly cookies
+      signal,
+      cache,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+  // APIs are highly dynamic and auth-scoped; browser 304 revalidation breaks our JSON parsing.
+  // Avoid conditional requests by bypassing the HTTP cache.
+  let response = await doFetch('no-store');
+  if (response.status === 304) {
+    // Defensive: if the browser still revalidated, retry once with a stronger bypass.
+    response = await doFetch('reload');
+  }
 
   if (!response.ok) {
     throw await buildApiError(response);
