@@ -185,9 +185,6 @@ describe('CampaignTimelinePage', () => {
       events: [
         makeEvent({
           name: payload,
-          eventType: payload,
-          status: payload,
-          severity: payload,
         }),
       ],
       meta: { campaignId: 'camp-xss', count: 1 },
