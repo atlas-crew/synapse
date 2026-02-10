@@ -430,6 +430,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/signals',
   '/_sensor/trends',
   '/api/profiles',
+  '/api/profiles/',
 ] as const;
 
 /** Sensor ID format validation */
@@ -1517,12 +1518,19 @@ export class SynapseProxyService extends EventEmitter {
     template: string
   ): Promise<ProfileDetailResponse> {
     const encodedTemplate = encodeURIComponent(template);
-    return this.proxyRequest<ProfileDetailResponse>(
+    const cacheKey = `profiles:${sensorId}:${encodedTemplate}`;
+    const cached = this.getFromCache<ProfileDetailResponse>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.proxyRequest<ProfileDetailResponse>(
       sensorId,
       tenantId,
       `/api/profiles/${encodedTemplate}`,
       'GET'
     );
+
+    this.setCache(cacheKey, result, this.LIST_CACHE_TTL);
+    return result;
   }
 
   /**
