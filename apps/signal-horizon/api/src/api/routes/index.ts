@@ -31,7 +31,6 @@ import { createOnboardingRoutes } from './onboarding.js';
 import { createTenantRoutes } from './tenant.js';
 import { createAuthRoutes } from './auth.js';
 import { createUserRoutes } from './users.js';
-import { createOnboardingRoutes } from './onboarding.js';
 import { createSynapseRoutes } from './synapse.js';
 import { createAPIIntelligenceRoutes } from './api-intelligence.js';
 import { createFleetControlRoutes } from './fleet-control.js';
@@ -217,7 +216,7 @@ export function createApiRouter(
   }
 
   // Mount Beam (Customer Protection Console) routes
-  router.use('/beam', createBeamRouter(prisma, logger));
+  router.use('/beam', createBeamRouter(prisma, logger, options.securityAuditService));
   logger.info('Beam routes mounted at /api/v1/beam');
 
   // Mount Tunnel routes for remote sensor access
@@ -246,6 +245,7 @@ export function createApiRouter(
   if (options.synapseProxy) {
     router.use('/synapse', createSynapseRoutes(options.synapseProxy, logger, {
       fleetIntelService: options.fleetIntelService,
+      prisma,
     }));
     logger.info('Synapse routes mounted at /api/v1/synapse');
   }

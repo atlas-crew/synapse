@@ -23,6 +23,7 @@ import { Broadcaster } from './services/broadcaster/index.js';
 import { HuntService } from './services/hunt/index.js';
 import { APIIntelligenceService } from './services/api-intelligence/index.js';
 import { createApiRouter } from './api/routes/index.js';
+import { createOpsRoutes } from './api/routes/ops.js';
 import { ClickHouseService, ClickHouseRetryBuffer } from './storage/clickhouse/index.js';
 import { FileRetryStore } from './storage/clickhouse/persistent-store.js';
 import path from 'node:path';
@@ -906,6 +907,18 @@ async function start() {
   });
   app.use('/api/v1', apiRouter);
   logger.info('API routes mounted at /api/v1 (includes fleet and synapse routes)');
+
+  // Ops routes (fleet-admin infra visibility). Kept outside createApiRouter so we can
+  // safely iterate without touching the central routes index.
+  app.use(
+    '/api/v1/ops',
+    createOpsRoutes(prisma, logger, {
+      clickhouse,
+      clickhouseConfig: config.clickhouse,
+      kv: sharedRedis?.kv ?? null,
+    })
+  );
+  logger.info('Ops routes mounted at /api/v1/ops');
 
   const authCoverageAggregator = new AuthCoverageAggregator();
   app.use('/api/v1/auth-coverage', createAuthCoverageRoutes(authCoverageAggregator));
