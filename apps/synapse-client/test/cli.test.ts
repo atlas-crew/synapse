@@ -1,190 +1,325 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execSync, spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { describe, it, expect, vi } from 'vitest';
+import { main, VERSION, type IO, type ClientFactory } from '../src/cli-lib.js';
 
-const CLI_PATH = resolve(__dirname, '../dist/cli.js');
-
-// Helper to run CLI
-function runCli(args: string[], env: Record<string, string> = {}): { stdout: string; stderr: string; status: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    encoding: 'utf-8',
-    env: { ...process.env, ...env },
-  });
+function captureIO(): { io: IO; stdout: string[]; stderr: string[] } {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
   return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    status: result.status ?? 1,
+    io: {
+      log: (msg = '') => stdout.push(String(msg)),
+      error: (msg = '') => stderr.push(String(msg)),
+    },
+    stdout,
+    stderr,
   };
 }
 
-describe('CLI', () => {
-  describe('--version', () => {
-    it('should show version', () => {
-      const result = runCli(['--version']);
-      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(result.status).toBe(0);
-    });
+function makeOkClient() {
+  return {
+    health: vi.fn(async () => ({ status: 'ok', service: 'risk-server', uptime: 12, version: '1.2.3' })),
+    getStatus: vi.fn(async () => ({
+      totalRequests: 1,
+      blockedRequests: 2,
+      requestRate: 3,
+      blockRate: 4,
+      fallbackRate: 5,
+      rulesCount: 6,
+      autoblockThreshold: 7,
+      riskDecayPerMinute: 8,
+      riskBasedBlockingEnabled: true,
+      requestBlockingEnabled: true,
+      allowIpSpoofing: false,
+      mode: 'demo',
+    })),
+    getMetrics: vi.fn(async () => 'm'),
+    listEntities: vi.fn(async () => ({ entities: [], count: 0 })),
+    listBlocks: vi.fn(async () => ({ blocks: [], count: 0 })),
+    releaseEntity: vi.fn(async () => ({ released: true })),
+    releaseAll: vi.fn(async () => ({ released: 9 })),
+    getConfig: vi.fn(async () => ({ config: { port: 3000 } as any })),
+    updateConfig: vi.fn(async () => ({ config: { requestBlockingEnabled: true } as any, updated: ['x'] })),
+    listRules: vi.fn(async () => ({
+      rules: [{ id: 1, description: 'd', matches: [], blocking: true, risk: 10, name: 'n', classification: 'c' }],
+      stats: { total: 1, blocking: 1, riskBased: 1, runtime: 0 },
+    })),
+    addRule: vi.fn(async () => ({ success: true, rule: { id: 1, description: 'd', matches: [] } as any, stats: { total: 1, blocking: 0, riskBased: 1, runtime: 1 } })),
+    removeRule: vi.fn(async () => ({ removed: true, stats: { total: 1, blocking: 0, riskBased: 1, runtime: 0 } })),
+    clearRules: vi.fn(async () => ({ cleared: 2, stats: { total: 1, blocking: 0, riskBased: 1, runtime: 0 } })),
+    reloadRules: vi.fn(async () => ({ success: true, message: 'reloaded', stats: { total: 3, blocking: 1, riskBased: 2 } })),
+    evaluate: vi.fn(async () => ({
+      matched: true,
+      totalRisk: 42,
+      wouldBlock: true,
+      blockReason: 'b',
+      matchedRules: [{ id: 1, risk: 42, blocking: true, reasons: ['r'], name: 'n' }],
+    })),
+    listActors: vi.fn(async () => ({ actors: [], count: 0 })),
+    getActorStats: vi.fn(async () => ({ totalActors: 1, suspiciousActors: 0, jsExecutedCount: 1, fingerprintChanges: 0, averageSessionCount: 1 })),
+    setActorFingerprint: vi.fn(async () => ({ success: true, actor: { ip: '1.2.3.4' } as any })),
+  };
+}
 
-    it('should show version with -v', () => {
-      const result = runCli(['-v']);
-      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(result.status).toBe(0);
-    });
+describe('synapse-client CLI (cli-lib)', () => {
+  it('prints version', async () => {
+    const { io, stdout } = captureIO();
+    const code = await main(['--version'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n').trim()).toBe(VERSION);
   });
 
-  describe('--help', () => {
-    it('should show help', () => {
-      const result = runCli(['--help']);
-      expect(result.stdout).toContain('Synapse CLI');
-      expect(result.stdout).toContain('USAGE:');
-      expect(result.stdout).toContain('COMMANDS:');
-      expect(result.stdout).toContain('EXAMPLES:');
-      expect(result.status).toBe(0);
-    });
-
-    it('should show help with -h', () => {
-      const result = runCli(['-h']);
-      expect(result.stdout).toContain('Synapse CLI');
-      expect(result.status).toBe(0);
-    });
-
-    it('should show help when no command provided', () => {
-      const result = runCli([]);
-      expect(result.stdout).toContain('Synapse CLI');
-      expect(result.status).toBe(1); // Exit 1 when no command
-    });
+  it('prints help', async () => {
+    const { io, stdout } = captureIO();
+    const code = await main(['--help'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Synapse CLI');
+    expect(stdout.join('\n')).toContain('USAGE:');
+    expect(stdout.join('\n')).toContain('COMMANDS:');
   });
 
-  describe('argument parsing', () => {
-    it('should require --url or SYNAPSE_URL', () => {
-      const result = runCli(['status']);
-      expect(result.stderr).toContain('--url or SYNAPSE_URL is required');
-      expect(result.status).toBe(1);
-    });
-
-    it('should accept --url flag', () => {
-      // This will fail to connect, but should parse args correctly
-      const result = runCli(['--url', 'http://localhost:9999', 'health']);
-      // Should attempt to connect (will fail)
-      expect(result.stderr).toContain('Error:');
-      expect(result.status).toBe(2); // Runtime error
-    });
-
-    it('should accept SYNAPSE_URL environment variable', () => {
-      const result = runCli(['health'], { SYNAPSE_URL: 'http://localhost:9999' });
-      expect(result.stderr).toContain('Error:');
-      expect(result.status).toBe(2);
-    });
-
-    it('should require value for --url', () => {
-      const result = runCli(['--url']);
-      expect(result.stderr).toContain('--url requires a value');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require value for --timeout', () => {
-      const result = runCli(['--timeout']);
-      expect(result.stderr).toContain('--timeout requires a value');
-      expect(result.status).toBe(1);
-    });
-
-    it('should reject non-numeric timeout', () => {
-      const result = runCli(['--timeout', 'abc', '--url', 'http://localhost:3000', 'status']);
-      expect(result.stderr).toContain('--timeout must be a number');
-      expect(result.status).toBe(1);
-    });
+  it('requires --url or SYNAPSE_URL', async () => {
+    const { io, stderr } = captureIO();
+    const code = await main(['status'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(1);
+    expect(stderr.join('\n')).toContain('--url or SYNAPSE_URL is required');
   });
 
-  describe('command validation', () => {
-    it('should reject unknown commands', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'unknown-command']);
-      expect(result.stderr).toContain('Unknown command');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require entityId for release command', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'release']);
-      expect(result.stderr).toContain('release requires entityId or IP');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require arguments for config-set', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'config-set']);
-      expect(result.stderr).toContain('config-set requires key=value');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require JSON for rule-add', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'rule-add']);
-      expect(result.stderr).toContain('rule-add requires JSON');
-      expect(result.status).toBe(1);
-    });
-
-    it('should reject invalid JSON for rule-add', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'rule-add', 'not-json']);
-      expect(result.stderr).toContain('Invalid JSON');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require rule ID for rule-remove', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'rule-remove']);
-      expect(result.stderr).toContain('rule-remove requires rule ID');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require numeric rule ID for rule-remove', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'rule-remove', 'abc']);
-      expect(result.stderr).toContain('numeric rule ID');
-      expect(result.status).toBe(1);
-    });
-
-    it('should require method and URL for evaluate', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'evaluate']);
-      expect(result.stderr).toContain('evaluate requires method and URL');
-      expect(result.status).toBe(1);
-    });
+  it('runs health (human)', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'health'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Status: ok');
+    expect(client.health).toHaveBeenCalledTimes(1);
   });
 
-  describe('environment variables', () => {
-    it('should support SYNAPSE_JSON for JSON output', () => {
-      // Can't easily test output format without a real server
-      // Just verify the flag is accepted
-      const result = runCli(['health'], { SYNAPSE_URL: 'http://localhost:9999', SYNAPSE_JSON: '1' });
-      expect(result.status).toBe(2); // Runtime error (can't connect)
-    });
-
-    it('should support SYNAPSE_DEBUG for debug output', () => {
-      const result = runCli(['health'], { SYNAPSE_URL: 'http://localhost:9999', SYNAPSE_DEBUG: '1' });
-      // Debug output goes to stderr
-      expect(result.stderr).toContain('[synapse]');
-      expect(result.status).toBe(2);
-    });
-
-    it('should support SYNAPSE_TIMEOUT', () => {
-      const result = runCli(['health'], { SYNAPSE_URL: 'http://localhost:9999', SYNAPSE_TIMEOUT: '1000' });
-      expect(result.status).toBe(2);
-    });
+  it('runs status', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'status'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('total requests: 1');
+    expect(client.getStatus).toHaveBeenCalledTimes(1);
   });
 
-  describe('exit codes', () => {
-    it('should exit 0 for --help', () => {
-      const result = runCli(['--help']);
-      expect(result.status).toBe(0);
-    });
+  it('runs metrics', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'metrics'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('m');
+    expect(client.getMetrics).toHaveBeenCalledTimes(1);
+  });
 
-    it('should exit 0 for --version', () => {
-      const result = runCli(['--version']);
-      expect(result.status).toBe(0);
-    });
+  it('runs entities (empty)', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'entities'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('No entities tracked');
+    expect(client.listEntities).toHaveBeenCalledTimes(1);
+  });
 
-    it('should exit 1 for usage errors', () => {
-      const result = runCli(['--url', 'http://localhost:3000', 'unknown']);
-      expect(result.status).toBe(1);
-    });
+  it('runs blocks (empty)', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'blocks'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('No blocks recorded');
+    expect(client.listBlocks).toHaveBeenCalledTimes(1);
+  });
 
-    it('should exit 2 for runtime errors', () => {
-      const result = runCli(['--url', 'http://localhost:9999', 'health']);
-      expect(result.status).toBe(2);
-    });
+  it('release requires id/ip', async () => {
+    const { io, stderr } = captureIO();
+    const code = await main(['--url', 'http://x', 'release'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(1);
+    expect(stderr.join('\n')).toContain('release requires entityId or IP address');
+  });
+
+  it('runs release', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'release', '1.2.3.4'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Released: 1.2.3.4');
+    expect(client.releaseEntity).toHaveBeenCalledWith('1.2.3.4');
+  });
+
+  it('runs release-all', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'release-all'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Released 9 entities');
+    expect(client.releaseAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs config (default json for objects)', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'config'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('"config"');
+    expect(client.getConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('config-set parses booleans/numbers/null/json/quoted', async () => {
+    const client = makeOkClient();
+    const { io } = captureIO();
+    const code = await main(
+      [
+        '--url',
+        'http://x',
+        'config-set',
+        'riskBasedBlockingEnabled=false',
+        'autoblockThreshold=80',
+        'trustedProxyCidrs=["10.0.0.0/8"]',
+        'maxIpsTracked=null',
+        'targetOrigin="http://example.com:8080"',
+      ],
+      {},
+      (() => client) as unknown as ClientFactory,
+      io
+    );
+    expect(code).toBe(0);
+    expect(client.updateConfig).toHaveBeenCalledWith({
+      riskBasedBlockingEnabled: false,
+      autoblockThreshold: 80,
+      trustedProxyCidrs: ['10.0.0.0/8'],
+      maxIpsTracked: null,
+      targetOrigin: 'http://example.com:8080',
+    } as any);
+  });
+
+  it('runs rules', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'rules'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Total: 1');
+    expect(client.listRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('rule-add requires json', async () => {
+    const { io, stderr } = captureIO();
+    const code = await main(['--url', 'http://x', 'rule-add', 'not-json'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(1);
+    expect(stderr.join('\n')).toContain('Invalid JSON for rule definition');
+  });
+
+  it('runs rule-add with ttl', async () => {
+    const client = makeOkClient();
+    const { io } = captureIO();
+    const code = await main(
+      ['--url', 'http://x', 'rule-add', '{"description":"d","matches":[]}', '60'],
+      {},
+      (() => client) as unknown as ClientFactory,
+      io
+    );
+    expect(code).toBe(0);
+    expect(client.addRule).toHaveBeenCalledWith({ description: 'd', matches: [] }, 60);
+  });
+
+  it('rule-remove requires numeric id', async () => {
+    const { io, stderr } = captureIO();
+    const code = await main(['--url', 'http://x', 'rule-remove', 'abc'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(1);
+    expect(stderr.join('\n')).toContain('numeric rule ID');
+  });
+
+  it('runs rule-remove', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'rule-remove', '1'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Removed rule 1');
+    expect(client.removeRule).toHaveBeenCalledWith(1);
+  });
+
+  it('runs rules-clear', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'rules-clear'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Cleared 2 runtime rules');
+    expect(client.clearRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs reload', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'reload'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('reloaded');
+    expect(stdout.join('\n')).toContain('Total rules: 3');
+    expect(client.reloadRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('evaluate validates headers json', async () => {
+    const { io, stderr } = captureIO();
+    const code = await main(
+      ['--url', 'http://x', 'evaluate', 'GET', '/x', '{not-json}'],
+      {},
+      (() => makeOkClient()) as unknown as ClientFactory,
+      io
+    );
+    expect(code).toBe(1);
+    expect(stderr.join('\n')).toContain('Invalid JSON for headers');
+  });
+
+  it('runs evaluate', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'evaluate', 'GET', '/x'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Would Block: true');
+    expect(client.evaluate).toHaveBeenCalledWith({ method: 'GET', url: '/x' });
+  });
+
+  it('runs actors', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'actors'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('Total actors: 0');
+    expect(client.listActors).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs actor-stats', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(['--url', 'http://x', 'actor-stats'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('"totalActors"');
+    expect(client.getActorStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs actor-fingerprint', async () => {
+    const client = makeOkClient();
+    const { io, stdout } = captureIO();
+    const code = await main(
+      ['--url', 'http://x', 'actor-fingerprint', '1.2.3.4', 'fp'],
+      {},
+      (() => client) as unknown as ClientFactory,
+      io
+    );
+    expect(code).toBe(0);
+    expect(stdout.join('\n')).toContain('"success"');
+    expect(client.setActorFingerprint).toHaveBeenCalledWith('1.2.3.4', 'fp');
+  });
+
+  it('unknown command is usage error', async () => {
+    const { io, stderr } = captureIO();
+    const code = await main(['--url', 'http://x', 'nope'], {}, (() => makeOkClient()) as unknown as ClientFactory, io);
+    expect(code).toBe(1);
+    expect(stderr.join('\n')).toContain('Unknown command');
+  });
+
+  it('runtime error returns exit 2', async () => {
+    const client = makeOkClient();
+    client.health.mockRejectedValueOnce(new Error('boom'));
+    const { io, stderr } = captureIO();
+    const code = await main(['--url', 'http://x', 'health'], {}, (() => client) as unknown as ClientFactory, io);
+    expect(code).toBe(2);
+    expect(stderr.join('\n')).toContain('boom');
   });
 });
