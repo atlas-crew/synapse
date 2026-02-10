@@ -74,6 +74,7 @@ export { Tooltip, ProgressBar, EmptyState, Spinner, LoadingOverlay, Breadcrumb }
 export {
   axisDefaults,
   gridDefaults,
+  gridDefaultsSoft,
   tooltipDefaults,
   legendDefaults,
   barDefaults,

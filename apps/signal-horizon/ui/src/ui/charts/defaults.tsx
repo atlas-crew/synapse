@@ -48,6 +48,14 @@ export const gridDefaults = {
   vertical: false,
 } as const;
 
+// Softer grid variant for dense charts where the default grid competes with data.
+export const gridDefaultsSoft = {
+  ...gridDefaults,
+  strokeDasharray: '3 3',
+  stroke: colors.blue,
+  strokeOpacity: 0.15,
+} as const;
+
 export const tooltipDefaults = {
   contentStyle: {
     background: '#0A1A3A',

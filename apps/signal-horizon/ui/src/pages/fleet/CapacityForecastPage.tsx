@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { linearRegression, predict, daysUntilThreshold } from '../../utils/math';
-import { axisDefaults, colors, gridDefaults, legendDefaults, tooltipDefaults } from '@/ui';
+import { axisDefaults, colors, gridDefaultsSoft, legendDefaults, tooltipDefaults } from '@/ui';
 
 // =============================================================================
 // Mock Data Generation
@@ -214,12 +214,7 @@ export default function CapacityForecastPage() {
                 </linearGradient>
               </defs>
 
-              <CartesianGrid
-                {...gridDefaults}
-                strokeDasharray="3 3"
-                stroke={colors.blue}
-                strokeOpacity={0.15}
-              />
+              <CartesianGrid {...gridDefaultsSoft} />
               <XAxis
                 dataKey="date"
                 {...xAxisNoLine}
