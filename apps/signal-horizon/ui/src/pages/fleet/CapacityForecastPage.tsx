@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../../lib/chartTheme';
 import {
   ComposedChart,
   Line,
@@ -21,6 +20,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { linearRegression, predict, daysUntilThreshold } from '../../utils/math';
+import { axisDefaults, colors, gridDefaults, legendDefaults, tooltipDefaults } from '@/ui';
 
 // =============================================================================
 // Mock Data Generation
@@ -122,6 +122,8 @@ export default function CapacityForecastPage() {
     };
   }, [selectedRegion, regionData]);
 
+  const xAxis = { ...axisDefaults.x, axisLine: false };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -203,49 +205,43 @@ export default function CapacityForecastPage() {
             <ComposedChart data={combinedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="usageGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#529EEC" stopOpacity={0.5}/>
-                  <stop offset="50%" stopColor="#0057B7" stopOpacity={0.25}/>
-                  <stop offset="100%" stopColor="#0057B7" stopOpacity={0.05}/>
+                  <stop offset="0%" stopColor={colors.skyBlue} stopOpacity={0.5}/>
+                  <stop offset="50%" stopColor={colors.blue} stopOpacity={0.25}/>
+                  <stop offset="100%" stopColor={colors.blue} stopOpacity={0.05}/>
                 </linearGradient>
                 <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#D62598" stopOpacity={0.3}/>
-                  <stop offset="100%" stopColor="#D62598" stopOpacity={0.05}/>
+                  <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.3}/>
+                  <stop offset="100%" stopColor={colors.magenta} stopOpacity={0.05}/>
                 </linearGradient>
               </defs>
 
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 87, 183, 0.15)" vertical={false} />
+              <CartesianGrid {...gridDefaults} />
               <XAxis
                 dataKey="date"
-                tick={{ fill: '#7B8FA8', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
+                {...xAxis}
                 minTickGap={30}
               />
               <YAxis
                 unit="%"
                 domain={[0, 100]}
-                tick={{ fill: '#7B8FA8', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
+                {...axisDefaults.y}
               />
               <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                itemStyle={TOOLTIP_ITEM_STYLE}
+                {...tooltipDefaults}
                 formatter={(val: number) => typeof val === 'number' ? val.toFixed(1) + '%' : val}
               />
-              <Legend verticalAlign="top" height={36} wrapperStyle={{ color: '#B0C4DE' }} />
+              <Legend {...legendDefaults} verticalAlign="top" height={36} />
 
               {/* Threshold Lines */}
-              <ReferenceLine y={80} stroke="#E35205" strokeDasharray="3 3" strokeWidth={1.5} label={{ position: 'right', value: 'Warning (80%)', fill: '#E35205', fontSize: 10 }} />
-              <ReferenceLine y={100} stroke="#EF3340" strokeDasharray="3 3" strokeWidth={1.5} label={{ position: 'right', value: 'Capacity (100%)', fill: '#EF3340', fontSize: 10 }} />
+              <ReferenceLine y={80} stroke={colors.orange} strokeDasharray="3 3" strokeWidth={1.5} label={{ position: 'right', value: 'Warning (80%)', fill: colors.orange, fontSize: 10 }} />
+              <ReferenceLine y={100} stroke={colors.red} strokeDasharray="3 3" strokeWidth={1.5} label={{ position: 'right', value: 'Capacity (100%)', fill: colors.red, fontSize: 10 }} />
 
               {/* Historical Usage Area */}
               <Area
                 type="monotone"
                 dataKey="usage"
                 name="Historical Usage"
-                stroke="#529EEC"
+                stroke={colors.skyBlue}
                 fill="url(#usageGradient)"
                 strokeWidth={2.5}
               />
@@ -267,7 +263,7 @@ export default function CapacityForecastPage() {
                 type="monotone"
                 dataKey="forecast"
                 name="Projected Trend"
-                stroke="#D62598"
+                stroke={colors.magenta}
                 strokeWidth={2.5}
                 strokeDasharray="5 5"
                 dot={false}
