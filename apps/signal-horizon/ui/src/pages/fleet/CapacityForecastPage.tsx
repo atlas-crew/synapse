@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { linearRegression, predict, daysUntilThreshold } from '../../utils/math';
-import { axisDefaults, colors, gridDefaultsSoft, legendDefaults, tooltipDefaults } from '@/ui';
+import { axisDefaults, colors, gridDefaultsSoft, legendDefaults, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 // =============================================================================
 // Mock Data Generation
@@ -29,7 +29,6 @@ import { axisDefaults, colors, gridDefaultsSoft, legendDefaults, tooltipDefaults
 const REGIONS = ['US-East', 'EU-West', 'AP-South'];
 const HISTORY_DAYS = 30;
 const FORECAST_DAYS = 14;
-const xAxisNoLine = { ...axisDefaults.x, axisLine: false };
 
 interface DailyMetric {
   day: number;
