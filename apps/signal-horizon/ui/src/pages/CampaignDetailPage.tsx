@@ -5,9 +5,8 @@
 
 import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { TOOLTIP_CONTENT_STYLE, TOOLTIP_LABEL_STYLE, TOOLTIP_ITEM_STYLE } from '../lib/chartTheme';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { Breadcrumb } from '../components/ui/Breadcrumb';
+import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults } from '@/ui';
 import {
   Target,
   Clock,
@@ -32,6 +31,8 @@ import {
   Tooltip,
 } from 'recharts';
 import { useHorizonStore } from '../stores/horizonStore';
+
+const xAxisNoLine = { ...axisDefaults.x, axisLine: false };
 
 const mockCorrelationSignals = [
   { name: 'HTTP Fingerprint Match', confidence: 0.98, color: 'bg-ac-green' },
@@ -189,15 +190,11 @@ export default function CampaignDetailPage() {
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={attackTimeline}>
-              <CartesianGrid stroke="rgba(0, 87, 183, 0.15)" strokeDasharray="4 4" vertical={false} />
-              <XAxis dataKey="time" stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis stroke="#7B8FA8" tick={{ fill: '#7B8FA8', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelStyle={TOOLTIP_LABEL_STYLE}
-                itemStyle={TOOLTIP_ITEM_STYLE}
-              />
-              <Area type="monotone" dataKey="volume" stroke="var(--ac-red)" fill="var(--ac-red)" fillOpacity={0.25} />
+              <CartesianGrid {...gridDefaultsSoft} />
+              <XAxis dataKey="time" {...xAxisNoLine} />
+              <YAxis {...axisDefaults.y} />
+              <Tooltip {...tooltipDefaults} />
+              <Area type="monotone" dataKey="volume" stroke={colors.red} fill={colors.red} fillOpacity={0.25} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

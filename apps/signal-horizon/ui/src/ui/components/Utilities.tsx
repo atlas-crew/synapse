@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { colors, fontFamily, fontWeight, spacing, shadows, transitions } from '../tokens/tokens';
 
 /**
@@ -119,15 +120,24 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ message = 'Loadi
 );
 LoadingOverlay.displayName = 'LoadingOverlay';
 
-interface BreadcrumbItem { label: string; onClick?: () => void; }
+interface BreadcrumbItem { label: string; to?: string; onClick?: () => void; }
 interface BreadcrumbProps { items: BreadcrumbItem[]; separator?: string; style?: React.CSSProperties; }
 
 export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, separator = '/', style }) => (
-  <nav style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontFamily, fontSize: '13px', ...style }}>
+  <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontFamily, fontSize: '13px', ...style }}>
     {items.map((item, i) => (
       <React.Fragment key={i}>
         {i > 0 && <span style={{ color: 'rgba(255,255,255,0.2)' }}>{separator}</span>}
-        {item.onClick ? (
+        {item.to ? (
+          <Link
+            to={item.to}
+            style={{ color: colors.skyBlue, cursor: 'pointer', fontWeight: fontWeight.regular, transition: `color ${transitions.fast}`, textDecoration: 'none' }}
+            onMouseEnter={(e) => ((e.target as HTMLElement).style.color = colors.hover.linkDark)}
+            onMouseLeave={(e) => ((e.target as HTMLElement).style.color = colors.skyBlue)}
+          >
+            {item.label}
+          </Link>
+        ) : item.onClick ? (
           <span
             onClick={item.onClick}
             style={{ color: colors.skyBlue, cursor: 'pointer', fontWeight: fontWeight.regular, transition: `color ${transitions.fast}` }}
@@ -137,7 +147,9 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({ items, separator = '/', 
             {item.label}
           </span>
         ) : (
-          <span style={{ color: '#F0F4F8', fontWeight: fontWeight.medium }}>{item.label}</span>
+          <span aria-current={i === items.length - 1 ? 'page' : undefined} style={{ color: '#F0F4F8', fontWeight: fontWeight.medium }}>
+            {item.label}
+          </span>
         )}
       </React.Fragment>
     ))}
