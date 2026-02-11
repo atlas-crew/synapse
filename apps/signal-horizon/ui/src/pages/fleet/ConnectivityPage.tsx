@@ -39,6 +39,7 @@ import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
 import {
   SectionHeader,
+  Stack,
   alpha,
   axisDefaults,
   colors,
@@ -522,7 +523,12 @@ export function ConnectivityPage(): React.ReactElement {
                 aria-labelledby={`test-name-${test.id}`}
                 className="bg-surface-subtle border border-border-subtle p-4"
               >
-                <div className="flex items-start justify-between gap-3">
+                <Stack
+                  direction="row"
+                  align="flex-start"
+                  justify="space-between"
+                  style={{ gap: '12px' }}
+                >
                   <div className="flex items-start gap-3 flex-1">
                     <Icon className="w-5 h-5 text-ink-muted mt-0.5" aria-hidden="true" />
                     <div className="flex-1">
@@ -541,7 +547,7 @@ export function ConnectivityPage(): React.ReactElement {
                   >
                     {isRunning ? 'Running...' : 'Run Test'}
                   </button>
-                </div>
+                </Stack>
 
                 {/* Test Result Display */}
                 {result && (

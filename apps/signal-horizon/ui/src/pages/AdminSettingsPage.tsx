@@ -45,7 +45,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, SectionHeader, Spinner, Tabs } from '@/ui';
+import { Button, SectionHeader, Spinner, Stack, Tabs } from '@/ui';
 
 const PAGE_TITLE_STYLE = {
   fontSize: '20px',
@@ -855,7 +855,7 @@ const AdminSettingsPage: React.FC = () => {
 
                 {policyEditorOpen && (
                   <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
-                    <div className="flex items-start justify-between gap-4">
+                    <Stack direction="row" align="flex-start" justify="space-between" gap="md">
                       <div>
                         <h3 className="text-sm font-bold text-ink-primary uppercase tracking-widest">
                           Policy Template Editor
@@ -875,7 +875,7 @@ const AdminSettingsPage: React.FC = () => {
                       >
                         <X className="w-4 h-4" />
                       </button>
-                    </div>
+                    </Stack>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
@@ -1479,7 +1479,7 @@ const AdminSettingsPage: React.FC = () => {
                 </section>
 
                 <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
-                  <div className="flex items-center justify-between gap-4">
+                  <Stack direction="row" align="center" justify="space-between" gap="md">
                     <SectionHeader
                       title="Connectivity Status"
                       size="h2"
@@ -1495,7 +1495,7 @@ const AdminSettingsPage: React.FC = () => {
                         </button>
                       }
                     />
-                  </div>
+                  </Stack>
 
                   {connectivityLoading ? (
                     <div className="py-10 text-center text-ink-muted">Loading connectivity...</div>

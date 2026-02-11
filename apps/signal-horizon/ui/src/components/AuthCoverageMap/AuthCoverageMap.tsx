@@ -4,7 +4,7 @@ import { Shield, Search, Filter, ArrowUpDown, AlertTriangle } from 'lucide-react
 import { SummaryCards, CoverageMapSummary } from './SummaryCards.js';
 import { GapsPanel } from './GapsPanel.js';
 import { EndpointsTable, EndpointAuthStats } from './EndpointsTable.js';
-import { Button, SectionHeader, Spinner } from '@/ui';
+import { Button, SectionHeader, Spinner, Stack } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -145,7 +145,12 @@ export const AuthCoverageMap: React.FC = () => {
       </div>
       
       <section className="bg-surface-card border border-border-subtle shadow-sm">
-        <div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <Stack
+          direction="column"
+          justify="space-between"
+          gap="md"
+          className="p-4 border-b border-border-subtle md:!flex-row md:!items-center"
+        >
           <SectionHeader
             title="All Observed Endpoints"
             size="h4"
@@ -206,7 +211,7 @@ export const AuthCoverageMap: React.FC = () => {
               </select>
             </div>
           </div>
-        </div>
+        </Stack>
         
         {endpointsLoading ? (
           <div className="p-12 flex flex-col items-center justify-center text-ink-muted italic bg-surface-base">

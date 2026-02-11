@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useServiceControl, type ServiceState, type ControlCommand, type ControlResult } from '../../hooks/fleet/useServiceControl';
-import { Modal, Spinner } from '@/ui';
+import { Modal, Spinner, Stack } from '@/ui';
 
 export interface ServiceControlPanelProps {
   /** Target sensor ID */
@@ -451,7 +451,12 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
         {/* Status Section */}
         <div className={clsx('p-4 space-y-4', compact && 'p-3 space-y-3')}>
           {/* State Badge and Connections */}
-          <div className={clsx('flex items-center justify-between', compact && 'flex-col items-start gap-2')}>
+          <Stack
+            direction={compact ? 'column' : 'row'}
+            align={compact ? 'flex-start' : 'center'}
+            justify="space-between"
+            gap="sm"
+          >
             {/* State Badge */}
             <div
               className={clsx(
@@ -470,7 +475,7 @@ export const ServiceControlPanel = memo(function ServiceControlPanel({
                 {activeConnections} connection{activeConnections !== 1 ? 's' : ''}
               </span>
             </div>
-          </div>
+          </Stack>
 
           {/* Uptime and Last Reload */}
           <div className={clsx('grid gap-3', compact ? 'grid-cols-1' : 'grid-cols-2')}>

@@ -5,7 +5,7 @@ import fcose from 'cytoscape-fcose';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch, API_KEY } from '../../lib/api';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 cytoscape.use(fcose);
 
@@ -341,10 +341,10 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
             {hoveredNode.details && Object.keys(hoveredNode.details).length > 0 && (
               <div className="mt-2 pt-2 border-t border-border-subtle space-y-1">
                 {Object.entries(hoveredNode.details).map(([key, value]) => (
-                  <div key={key} className="flex justify-between gap-4 text-[11px]">
+                  <Stack key={key} direction="row" justify="space-between" gap="md" className="text-[11px]">
                     <span className="text-ink-muted">{key}</span>
                     <span className="text-ink-primary font-medium tabular-nums">{value}</span>
-                  </div>
+                  </Stack>
                 ))}
               </div>
             )}
