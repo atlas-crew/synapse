@@ -1,4 +1,4 @@
-import { useState, useEffect, useReducer, useRef } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { CheckCircle, Circle, X, Play, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { Playbook } from './PlaybookSelector';
