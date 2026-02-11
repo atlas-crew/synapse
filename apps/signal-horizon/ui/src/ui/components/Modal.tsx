@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useId, useRef } from 'react';
 import { colors, fontFamily, fontWeight, spacing, shadows, transitions } from '../tokens/tokens';
 
 /**
@@ -10,6 +10,7 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  titleId?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl' | string;
   persistent?: boolean;
   children: React.ReactNode;
@@ -27,28 +28,81 @@ export const Modal: React.FC<ModalProps> & { Footer: React.FC<{ children: React.
   open,
   onClose,
   title,
+  titleId,
   size = 'md',
   persistent,
   children,
   style,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const generatedTitleId = useId();
+  const resolvedTitleId = titleId ?? generatedTitleId;
+
+  const getFocusableElements = useCallback((): HTMLElement[] => {
+    if (!dialogRef.current) return [];
+    const selector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.from(dialogRef.current.querySelectorAll<HTMLElement>(selector)).filter(
+      (element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'),
+    );
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !persistent) onClose();
+      if (e.key !== 'Tab') return;
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        e.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey) {
+        if (!active || active === first || !dialogRef.current?.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+        return;
+      }
+
+      if (!active || active === last || !dialogRef.current?.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
     },
-    [onClose, persistent],
+    [getFocusableElements, onClose, persistent],
   );
 
   useEffect(() => {
-    if (open) {
-      document.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
-    }
+    if (!open) return;
+
+    const previousActiveElement = document.activeElement as HTMLElement | null;
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
+
+    const raf = requestAnimationFrame(() => {
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+        return;
+      }
+      dialogRef.current?.focus();
+    });
+
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
+      previousActiveElement?.focus();
     };
-  }, [open, handleKeyDown]);
+  }, [getFocusableElements, handleKeyDown, open]);
 
   if (!open) return null;
 
@@ -70,6 +124,11 @@ export const Modal: React.FC<ModalProps> & { Footer: React.FC<{ children: React.
       onClick={persistent ? undefined : onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? resolvedTitleId : undefined}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: colors.card.dark,
@@ -96,10 +155,20 @@ export const Modal: React.FC<ModalProps> & { Footer: React.FC<{ children: React.
               flexShrink: 0,
             }}
           >
-            <span style={{ fontFamily, fontWeight: fontWeight.light, fontSize: '1.25rem', color: '#F0F4F8' }}>
+            <h2
+              id={resolvedTitleId}
+              style={{
+                fontFamily,
+                fontWeight: fontWeight.light,
+                fontSize: '1.25rem',
+                color: '#F0F4F8',
+                margin: 0,
+              }}
+            >
               {title}
-            </span>
+            </h2>
             <button
+              type="button"
               onClick={onClose}
               style={{
                 background: 'none',
