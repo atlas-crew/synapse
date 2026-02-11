@@ -8,7 +8,7 @@ import { Download, ChevronDown, ChevronRight, Database, Clock, ExternalLink, Ter
 import { clsx } from 'clsx';
 import type { SignalResult, HuntResult } from '../../hooks/useHunt';
 import { getCyberChefUrl, CyberChefRecipes } from '../../utils/cyberchef';
-import { Button, SectionHeader, Spinner } from '@/ui';
+import { Button, SectionHeader, Spinner, Stack } from '@/ui';
 
 interface HuntResultsTableProps {
   result: HuntResult | null;
@@ -140,7 +140,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
   return (
     <div className="card">
       <div className="card-header flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" style={{ gap: '16px' }}>
           <SectionHeader
             title="Results"
             size="h4"
@@ -148,22 +148,22 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
             style={{ marginBottom: 0 }}
             titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
             actions={(
-              <div className="flex items-center gap-3 text-sm text-ink-muted">
+              <Stack direction="row" align="center" style={{ gap: '12px' }} className="text-sm text-ink-muted">
                 <span>{result?.total.toLocaleString()} total</span>
                 <span className="text-ink-muted">|</span>
-                <span className="flex items-center gap-1">
+                <Stack direction="row" align="center" gap="xs">
                   <Database className="w-3.5 h-3.5" />
-                  {result ? getSourceLabel(result.source) : ''}
-                </span>
+                  <span>{result ? getSourceLabel(result.source) : ''}</span>
+                </Stack>
                 <span className="text-ink-muted">|</span>
-                <span className="flex items-center gap-1">
+                <Stack direction="row" align="center" gap="xs">
                   <Clock className="w-3.5 h-3.5" />
-                  {result?.queryTimeMs}ms
-                </span>
-              </div>
+                  <span>{result?.queryTimeMs}ms</span>
+                </Stack>
+              </Stack>
             )}
           />
-        </div>
+        </Stack>
         <button
           onClick={() => signals.length > 0 && exportToCsv(signals)}
           disabled={signals.length === 0}
@@ -251,7 +251,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                       </span>
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
+                      <Stack direction="row" align="center" gap="sm">
                         <div className="w-12 h-1.5 overflow-hidden bg-surface-subtle">
                           <div
                             className="h-full bg-ac-blue"
@@ -261,7 +261,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                         <span className="text-sm text-ink-muted">
                           {(signal.confidence * 100).toFixed(0)}%
                         </span>
-                      </div>
+                      </Stack>
                     </td>
                     <td className="text-sm">{signal.eventCount.toLocaleString()}</td>
                   </tr>
@@ -292,11 +292,13 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                                   )}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center gap-2 px-3 py-2 bg-surface-base border border-border-subtle hover:border-ac-blue text-sm transition-colors group"
+                                  className="px-3 py-2 bg-surface-base border border-border-subtle hover:border-ac-blue text-sm transition-colors group"
                                 >
-                                  <Terminal className="w-4 h-4 text-ac-blue" />
-                                  <span>Analyze Metadata in CyberChef</span>
-                                  <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  <Stack direction="row" align="center" gap="sm">
+                                    <Terminal className="w-4 h-4 text-ac-blue" />
+                                    <span>Analyze Metadata in CyberChef</span>
+                                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </Stack>
                                 </a>
                                 
                                 {signal.anonFingerprint && (
@@ -307,11 +309,13 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
                                     )}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-2 px-3 py-2 bg-surface-base border border-border-subtle hover:border-ac-blue text-sm transition-colors group"
+                                    className="px-3 py-2 bg-surface-base border border-border-subtle hover:border-ac-blue text-sm transition-colors group"
                                   >
-                                    <Terminal className="w-4 h-4 text-ac-blue" />
-                                    <span>Analyze Fingerprint</span>
-                                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <Stack direction="row" align="center" gap="sm">
+                                      <Terminal className="w-4 h-4 text-ac-blue" />
+                                      <span>Analyze Fingerprint</span>
+                                      <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </Stack>
                                   </a>
                                 )}
                               </div>

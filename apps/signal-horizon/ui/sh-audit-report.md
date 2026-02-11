@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 18:23_
+_Generated: 2026-02-11 18:27_
 
 ## Summary
 
-**Total findings: 431**
+**Total findings: 423**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 431 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 423 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -36,7 +36,6 @@ Priority files to migrate first (most raw patterns):
 | 8 | `components/LoadingStates.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
-| 7 | `components/hunting/HuntResultsTable.tsx` |
 | 7 | `components/hunting/HuntQueryBuilder.tsx` |
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
 | 7 | `components/fleet/ServiceControlPanel.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 4 | `pages/soc/CampaignsPage.tsx` |
 | 4 | `pages/fleet/SensorKeysPage.tsx` |
 | 4 | `pages/beam/catalog/ServicesPage.tsx` |
+| 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
 
 ---
 
@@ -93,8 +93,8 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
-| `components/hunting/SigmaImportModal.tsx` | 65 | `<div className="flex items-center gap-3">` |
-| `components/hunting/HuntResultsTable.tsx` | 143 | `<div className="flex items-center gap-4">` |
-| `components/hunting/HuntResultsTable.tsx` | 151 | `<div className="flex items-center gap-3 text-sm text-ink-muted">` |
-| `components/hunting/HuntResultsTable.tsx` | 154 | `<span className="flex items-center gap-1">` |
+| `components/hunting/SavedQueries.tsx` | 111 | `<div className="flex items-center gap-2 flex-1 min-w-0">` |
+| `components/hunting/SavedQueries.tsx` | 121 | `<div className="flex items-center gap-1 mt-0.5 text-xs text-ink-muted">` |
+| `components/hunting/SavedQueries.tsx` | 130 | `<div className="flex items-center gap-1 shrink-0">` |
+| `components/hunting/SavedQueries.tsx` | 171 | `<div className="flex items-center gap-4">` |
 
