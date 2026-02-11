@@ -5,7 +5,17 @@
 
 import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { alpha, axisDefaults, colors, gridDefaults, lineDefaults, tooltipDefaults } from '@/ui';
+import {
+  Button,
+  SectionHeader,
+  Tabs,
+  alpha,
+  axisDefaults,
+  colors,
+  gridDefaults,
+  lineDefaults,
+  tooltipDefaults,
+} from '@/ui';
 import {
   BarChart3,
   TrendingUp,
@@ -74,7 +84,13 @@ const targetedEndpoints = [
 
 const mockIOCs = [
   { type: 'IP', value: '185.228.101.0/24', firstSeen: '2h ago', hits: 12421, status: 'BLOCKED' },
-  { type: 'Fingerprint', value: 'python-requests', firstSeen: '4h ago', hits: 8234, status: 'BLOCKED' },
+  {
+    type: 'Fingerprint',
+    value: 'python-requests',
+    firstSeen: '4h ago',
+    hits: 8234,
+    status: 'BLOCKED',
+  },
   { type: 'ASN', value: 'AS12345', firstSeen: '6h ago', hits: 5102, status: 'MONITORING' },
   { type: 'UA', value: 'abC123d45f6...', firstSeen: '8h ago', hits: 3891, status: 'BLOCKED' },
   { type: 'IP', value: '45.134.26.0/24', firstSeen: '12h ago', hits: 2567, status: 'BLOCKED' },
@@ -83,41 +99,33 @@ const mockIOCs = [
 export default function IntelPage() {
   useDocumentTitle('Intel');
   const timeRange = useTimeRange();
-  const setTimeRange = useHorizonStore(s => s.setTimeRange);
+  const setTimeRange = useHorizonStore((s) => s.setTimeRange);
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-light text-ink-primary">Global Intelligence</h1>
-          <p className="text-ink-secondary mt-1">
-            Fleet-wide attack trends and IOC export
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 border border-border-subtle p-1">
-            {timeRanges.map((range) => (
-              <button
-                key={range}
-                onClick={() => setTimeRange(range)}
-                className={clsx(
-                  'px-3 py-1.5 text-xs font-medium tracking-[0.08em] uppercase',
-                  timeRange === range
-                    ? 'bg-link text-ac-white'
-                    : 'text-ink-muted hover:text-ink-primary'
-                )}
-              >
-                {range}
-              </button>
-            ))}
+      <SectionHeader
+        title="Global Intelligence"
+        description="Fleet-wide attack trends and IOC export"
+        actions={
+          <div className="flex items-center gap-3">
+            <Tabs
+              variant="pills"
+              size="sm"
+              active={timeRange}
+              onChange={(key) => setTimeRange(key as any)}
+              tabs={timeRanges.map((range) => ({ key: range, label: range }))}
+            />
+            <Button
+              variant="outlined"
+              size="md"
+              icon={<Download className="w-4 h-4" aria-hidden="true" />}
+            >
+              Export Report
+            </Button>
           </div>
-          <button className="btn-outline h-10 px-4 text-xs">
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Attack Volume Trend */}
       <div className="card">
@@ -132,16 +140,30 @@ export default function IntelPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={volumeData}>
               <CartesianGrid {...gridDefaults} strokeDasharray="3 3" />
-              <XAxis
-                dataKey="day"
-                {...axisDefaults.x}
-                axisLine={false}
-              />
+              <XAxis dataKey="day" {...axisDefaults.x} axisLine={false} />
               <YAxis {...axisDefaults.y} />
               <Tooltip {...tooltipDefaults} />
-              <Line {...lineDefaults} dataKey="attacks" stroke={colors.magenta} strokeWidth={2.5} name="Attacks" />
-              <Line {...lineDefaults} dataKey="blocked" stroke={colors.green} strokeWidth={2.5} name="Blocked" />
-              <Line {...lineDefaults} dataKey="campaigns" stroke={colors.skyBlue} strokeWidth={2.5} name="Campaigns" />
+              <Line
+                {...lineDefaults}
+                dataKey="attacks"
+                stroke={colors.magenta}
+                strokeWidth={2.5}
+                name="Attacks"
+              />
+              <Line
+                {...lineDefaults}
+                dataKey="blocked"
+                stroke={colors.green}
+                strokeWidth={2.5}
+                name="Blocked"
+              />
+              <Line
+                {...lineDefaults}
+                dataKey="campaigns"
+                stroke={colors.skyBlue}
+                strokeWidth={2.5}
+                name="Campaigns"
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -163,10 +185,8 @@ export default function IntelPage() {
                   </div>
                 </div>
                 <span
-                  className={clsx(
-                    'text-sm font-medium',
-                    threat.change > 0 ? 'text-ac-red' : 'text-ac-green'
-                  )}
+                  className="text-sm font-medium"
+                  style={{ color: threat.change > 0 ? colors.red : colors.green }}
                 >
                   {threat.change > 0 ? '+' : ''}
                   {threat.change}%
@@ -186,12 +206,14 @@ export default function IntelPage() {
             {newFingerprints.map((fp) => (
               <div key={fp.label} className="flex items-center justify-between text-sm">
                 <span className="text-ink-secondary">{fp.label}</span>
-                <span className="text-ac-red">{fp.hits.toLocaleString()} hits</span>
+                <span style={{ color: colors.red }}>{fp.hits.toLocaleString()} hits</span>
               </div>
             ))}
-            <button className="text-link text-xs font-semibold tracking-[0.14em] uppercase">
-              Investigate All →
-            </button>
+            <div>
+              <Button variant="ghost" size="sm">
+                Investigate All →
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -228,14 +250,14 @@ export default function IntelPage() {
                 </defs>
                 <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
                 <XAxis type="number" {...axisDefaults.x} hide />
-                <YAxis
-                  dataKey="label"
-                  type="category"
-                  {...axisDefaults.y}
-                  width={90}
-                />
+                <YAxis dataKey="label" type="category" {...axisDefaults.y} width={90} />
                 <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
-                <Bar dataKey="value" fill="url(#barGradientMagenta)" radius={[0, 0, 0, 0]} barSize={14} />
+                <Bar
+                  dataKey="value"
+                  fill="url(#barGradientMagenta)"
+                  radius={[0, 0, 0, 0]}
+                  barSize={14}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -258,14 +280,14 @@ export default function IntelPage() {
                 </defs>
                 <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />
                 <XAxis type="number" {...axisDefaults.x} hide />
-                <YAxis
-                  dataKey="label"
-                  type="category"
-                  {...axisDefaults.y}
-                  width={120}
-                />
+                <YAxis dataKey="label" type="category" {...axisDefaults.y} width={120} />
                 <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
-                <Bar dataKey="value" fill="url(#barGradientBlue)" radius={[0, 0, 0, 0]} barSize={14} />
+                <Bar
+                  dataKey="value"
+                  fill="url(#barGradientBlue)"
+                  radius={[0, 0, 0, 0]}
+                  barSize={14}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -277,23 +299,34 @@ export default function IntelPage() {
         <div className="card-header flex items-center justify-between">
           <h2 className="font-medium text-ink-primary">Recent IOCs (Indicators of Compromise)</h2>
           <div className="flex gap-2">
-            <button className="btn-ghost text-xs py-1 px-2">
-              <FileJson className="w-4 h-4 mr-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<FileJson className="w-4 h-4" aria-hidden="true" />}
+            >
               JSON
-            </button>
-            <button className="btn-ghost text-xs py-1 px-2">
-              <FileText className="w-4 h-4 mr-1" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<FileText className="w-4 h-4" aria-hidden="true" />}
+            >
               CSV
-            </button>
-            <button className="btn-primary h-10 px-4 text-xs">
-              <Download className="w-4 h-4 mr-1" />
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              icon={<Download className="w-4 h-4" aria-hidden="true" />}
+            >
               Export
-            </button>
+            </Button>
           </div>
         </div>
         <div className="overflow-x-auto">
           <table className="data-table">
-            <caption className="sr-only">Indicators of compromise with hit counts and status</caption>
+            <caption className="sr-only">
+              Indicators of compromise with hit counts and status
+            </caption>
             <thead>
               <tr>
                 <th>Type</th>
@@ -312,12 +345,20 @@ export default function IntelPage() {
                   <td className="text-ink-secondary">{ioc.hits.toLocaleString()}</td>
                   <td>
                     <span
-                      className={clsx(
-                        'px-2 py-0.5 text-xs border',
+                      className="px-2 py-0.5 text-xs border"
+                      style={
                         ioc.status === 'BLOCKED'
-                          ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                          : 'bg-ac-orange/10 text-ac-orange border-ac-orange/30'
-                      )}
+                          ? {
+                              background: alpha(colors.red, 0.15),
+                              color: colors.red,
+                              borderColor: alpha(colors.red, 0.4),
+                            }
+                          : {
+                              background: alpha(colors.orange, 0.1),
+                              color: colors.orange,
+                              borderColor: alpha(colors.orange, 0.3),
+                            }
+                      }
                     >
                       {ioc.status}
                     </span>
@@ -349,7 +390,7 @@ function SummaryRow({
         <div className="text-sm text-ink-secondary">{label}</div>
         <div className="text-2xl font-light text-ink-primary">{value}</div>
       </div>
-      <span className={clsx('text-sm font-medium', positive ? 'text-ac-green' : 'text-ac-red')}>
+      <span className="text-sm font-medium" style={{ color: positive ? colors.green : colors.red }}>
         {delta}
       </span>
     </div>
