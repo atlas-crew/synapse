@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Target, Activity, Shield, Users } from 'lucide-react';
-import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchCampaigns } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocCampaign, SocCampaignListResponse } from '../../types/soc';
+import { Button, Input, SectionHeader, Tabs, alpha, colors, spacing } from '@/ui';
 
 const statusTabs = [
   { label: 'Active', value: 'ACTIVE' },
@@ -23,7 +23,9 @@ function buildDemoCampaigns(scenario: string): SocCampaignListResponse {
   const intensity = scenario === 'high-threat' ? 1.2 : scenario === 'normal' ? 1 : 0.6;
   const campaigns: SocCampaign[] = Array.from({ length: 7 }).map((_, index) => {
     const status = statusTabs[index % 4].value as SocCampaign['status'];
-    const severity = (index % 4 === 0 ? 'CRITICAL' : index % 4 === 1 ? 'HIGH' : index % 4 === 2 ? 'MEDIUM' : 'LOW') as SocCampaign['severity'];
+    const severity = (
+      index % 4 === 0 ? 'CRITICAL' : index % 4 === 1 ? 'HIGH' : index % 4 === 2 ? 'MEDIUM' : 'LOW'
+    ) as SocCampaign['severity'];
     const actorCount = Math.round((12 + index * 3) * intensity);
     const confidence = Math.min(0.98, 0.6 + index * 0.05);
     return {
@@ -35,7 +37,10 @@ function buildDemoCampaigns(scenario: string): SocCampaignListResponse {
       actorCount,
       firstSeen: now - (index + 2) * 12 * 3600 * 1000,
       lastSeen: now - index * 2 * 3600 * 1000,
-      summary: status === 'RESOLVED' ? 'Contained and resolved by automated controls.' : 'Coordinated probing across multiple endpoints.',
+      summary:
+        status === 'RESOLVED'
+          ? 'Contained and resolved by automated controls.'
+          : 'Coordinated probing across multiple endpoints.',
       correlationTypes: ['fingerprint', 'timing', 'targeting'].slice(0, (index % 3) + 1),
     };
   });
@@ -80,10 +85,13 @@ export default function CampaignsPage() {
   }, [campaigns, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
-    const byStatus = campaigns.reduce((acc, campaign) => {
-      acc[campaign.status] = (acc[campaign.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const byStatus = campaigns.reduce(
+      (acc, campaign) => {
+        acc[campaign.status] = (acc[campaign.status] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return {
       active: byStatus.ACTIVE ?? 0,
@@ -107,82 +115,89 @@ export default function CampaignsPage() {
         campaign.actorCount,
         Math.round(campaign.confidence * 100),
         new Date(campaign.lastSeen).toISOString(),
-      ])
+      ]),
     );
   };
 
   return (
     <div className="p-6 space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs tracking-[0.3em] uppercase text-ink-muted">Signal Horizon</p>
-          <h1 className="text-3xl font-light text-ink-primary">Campaigns</h1>
-          <p className="text-ink-secondary mt-2">Coordinate response to active multi-actor campaigns across the fleet.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</label>
-          <input
-            value={sensorId}
-            onChange={(event) => setSensorId(event.target.value)}
-            className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
-            placeholder="synapse-pingora-1"
-          />
-          <button
-            className="btn-outline h-10 px-4 text-xs"
-            onClick={handleExport}
-            disabled={!canExport}
-          >
-            Export CSV
-          </button>
-        </div>
-      </header>
+      <SectionHeader
+        eyebrow="Signal Horizon"
+        title="Campaigns"
+        description="Coordinate response to active multi-actor campaigns across the fleet."
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
+            <div style={{ width: 180 }}>
+              <Input
+                value={sensorId}
+                onChange={(event) => setSensorId(event.target.value)}
+                placeholder="synapse-pingora-1"
+                size="sm"
+              />
+            </div>
+            <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
+              Export CSV
+            </Button>
+          </div>
+        }
+      />
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon={Target} label="Active Campaigns" value={stats.active} tone="text-ac-red" />
-        <StatCard icon={Shield} label="Detected" value={stats.detected} tone="text-ac-orange" />
-        <StatCard icon={Users} label="Actors Linked" value={stats.totalActors} tone="text-ac-blue" />
+        <StatCard
+          icon={Target}
+          label="Active Campaigns"
+          value={stats.active}
+          accentColor={colors.red}
+        />
+        <StatCard
+          icon={Shield}
+          label="Detected"
+          value={stats.detected}
+          accentColor={colors.orange}
+        />
+        <StatCard
+          icon={Users}
+          label="Actors Linked"
+          value={stats.totalActors}
+          accentColor={colors.blue}
+        />
       </section>
 
       <section className="card">
         <div className="card-header flex flex-wrap items-center gap-3">
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Status</div>
-          <div className="flex flex-wrap gap-2">
-            {statusTabs.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                className={clsx(
-                  'px-3 py-1 text-xs border transition-colors',
-                  statusFilter === tab.value
-                    ? 'bg-surface-card text-ink-primary border-link'
-                    : 'text-ink-secondary border-border-subtle hover:text-ink-primary'
-                )}
-                onClick={() => setStatusFilter(tab.value)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            tabs={statusTabs.map((tab) => ({ key: tab.value, label: tab.label }))}
+            active={statusFilter}
+            onChange={setStatusFilter}
+            variant="pills"
+            size="sm"
+          />
           <div className="ml-auto">
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search campaign"
-              aria-label="Search campaigns"
-              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
-            />
+            <div style={{ width: 180 }}>
+              <Input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search campaign"
+                aria-label="Search campaigns"
+                size="sm"
+              />
+            </div>
           </div>
         </div>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading campaigns...</div>}
-          {error && <div className="text-ac-red">Failed to load campaigns.</div>}
+          {error && <div style={{ color: colors.red }}>Failed to load campaigns.</div>}
           {!isLoading && filteredCampaigns.length === 0 && (
             <div className="text-ink-muted">No campaigns match the current filters.</div>
           )}
           {filteredCampaigns.length > 0 && (
             <div className="overflow-x-auto">
               <table className="data-table">
-                <caption className="sr-only">Threat campaigns with severity and confidence levels</caption>
+                <caption className="sr-only">
+                  Threat campaigns with severity and confidence levels
+                </caption>
                 <thead>
                   <tr>
                     <th>Campaign</th>
@@ -197,31 +212,56 @@ export default function CampaignsPage() {
                   {filteredCampaigns.map((campaign) => (
                     <tr key={campaign.campaignId}>
                       <td className="text-ink-primary">
-                        <Link to={`/campaigns/${campaign.campaignId}`} className="text-link hover:text-link-hover">
+                        <Link
+                          to={`/campaigns/${campaign.campaignId}`}
+                          className="text-link hover:text-link-hover"
+                        >
                           {campaign.name}
                         </Link>
-                        <div className="text-xs text-ink-muted font-mono">{campaign.campaignId}</div>
+                        <div className="text-xs text-ink-muted font-mono">
+                          {campaign.campaignId}
+                        </div>
                       </td>
                       <td>
                         <span
-                          className={clsx(
-                            'px-2 py-0.5 text-xs border',
+                          className="px-2 py-0.5 text-xs border"
+                          style={
                             campaign.status === 'ACTIVE'
-                              ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
+                              ? {
+                                  background: alpha(colors.red, 0.15),
+                                  color: colors.red,
+                                  borderColor: alpha(colors.red, 0.4),
+                                }
                               : campaign.status === 'DETECTED'
-                                ? 'bg-ac-orange/15 text-ac-orange border-ac-orange/40'
+                                ? {
+                                    background: alpha(colors.orange, 0.15),
+                                    color: colors.orange,
+                                    borderColor: alpha(colors.orange, 0.4),
+                                  }
                                 : campaign.status === 'DORMANT'
-                                  ? 'bg-ac-blue/10 text-ac-blue border-ac-blue/40'
-                                  : 'bg-ac-green/10 text-ac-green border-ac-green/40'
-                          )}
+                                  ? {
+                                      background: alpha(colors.blue, 0.1),
+                                      color: colors.blue,
+                                      borderColor: alpha(colors.blue, 0.4),
+                                    }
+                                  : {
+                                      background: alpha(colors.green, 0.1),
+                                      color: colors.green,
+                                      borderColor: alpha(colors.green, 0.4),
+                                    }
+                          }
                         >
                           {campaign.status}
                         </span>
                       </td>
                       <td className="text-ink-secondary">{campaign.severity}</td>
                       <td className="text-ink-secondary">{campaign.actorCount}</td>
-                      <td className="text-ink-secondary">{Math.round(campaign.confidence * 100)}%</td>
-                      <td className="text-ink-secondary">{new Date(campaign.lastSeen).toLocaleString()}</td>
+                      <td className="text-ink-secondary">
+                        {Math.round(campaign.confidence * 100)}%
+                      </td>
+                      <td className="text-ink-secondary">
+                        {new Date(campaign.lastSeen).toLocaleString()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -257,17 +297,17 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  tone,
+  accentColor,
 }: {
   icon: typeof Target;
   label: string;
   value: number;
-  tone: string;
+  accentColor: string;
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className={clsx('w-10 h-10 flex items-center justify-center', tone, 'bg-surface-subtle')}>
-        <Icon className="w-5 h-5" />
+      <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
+        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
       </div>
       <div>
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>

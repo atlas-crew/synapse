@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Activity, Shield, Clock } from 'lucide-react';
-import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchSessions } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocSession, SocSessionListResponse } from '../../types/soc';
+import { Button, Input, SectionHeader, alpha, colors, spacing } from '@/ui';
 
 function buildDemoSessions(scenario: string): SocSessionListResponse {
   const now = Date.now();
@@ -40,8 +40,13 @@ function buildDemoSessions(scenario: string): SocSessionListResponse {
   });
 
   const suspiciousSessions = sessions.filter((session) => session.isSuspicious).length;
-  const activeSessions = sessions.filter((session) => session.lastActivity > now - 30 * 60 * 1000).length;
-  const hijackAlerts = sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0);
+  const activeSessions = sessions.filter(
+    (session) => session.lastActivity > now - 30 * 60 * 1000,
+  ).length;
+  const hijackAlerts = sessions.reduce(
+    (count, session) => count + (session.hijackAlerts?.length ?? 0),
+    0,
+  );
 
   return {
     sessions,
@@ -65,11 +70,14 @@ export default function SessionsPage() {
   const [actorFilter, setActorFilter] = useState('');
   const [suspiciousOnly, setSuspiciousOnly] = useState(false);
 
-  const queryParams = useMemo(() => ({
-    actorId: actorFilter.trim() || undefined,
-    suspicious: suspiciousOnly || undefined,
-    limit: 50,
-  }), [actorFilter, suspiciousOnly]);
+  const queryParams = useMemo(
+    () => ({
+      actorId: actorFilter.trim() || undefined,
+      suspicious: suspiciousOnly || undefined,
+      limit: 50,
+    }),
+    [actorFilter, suspiciousOnly],
+  );
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['soc', 'sessions', sensorId, queryParams, isDemoMode, scenario],
@@ -90,7 +98,16 @@ export default function SessionsPage() {
     if (!canExport) return;
     downloadCsv(
       `soc-sessions-${sensorId}-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Session ID', 'Actor ID', 'Last Activity', 'Requests', 'Suspicious', 'Hijack Alerts', 'Bound IP', 'JA4'],
+      [
+        'Session ID',
+        'Actor ID',
+        'Last Activity',
+        'Requests',
+        'Suspicious',
+        'Hijack Alerts',
+        'Bound IP',
+        'JA4',
+      ],
       sessions.map((session) => [
         session.sessionId,
         session.actorId ?? '',
@@ -100,54 +117,60 @@ export default function SessionsPage() {
         session.hijackAlerts?.length ?? 0,
         session.boundIp ?? '',
         session.boundJa4 ?? '',
-      ])
+      ]),
     );
   };
 
   return (
     <div className="p-6 space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs tracking-[0.3em] uppercase text-ink-muted">Signal Horizon</p>
-          <h1 className="text-3xl font-light text-ink-primary">Sessions</h1>
-          <p className="text-ink-secondary mt-2">Inspect session behavior, hijack alerts, and enforcement actions.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</label>
-          <input
-            value={sensorId}
-            onChange={(event) => setSensorId(event.target.value)}
-            className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
-            placeholder="synapse-pingora-1"
-          />
-          <button
-            className="btn-outline h-10 px-4 text-xs"
-            onClick={handleExport}
-            disabled={!canExport}
-          >
-            Export CSV
-          </button>
-        </div>
-      </header>
+      <SectionHeader
+        eyebrow="Signal Horizon"
+        title="Sessions"
+        description="Inspect session behavior, hijack alerts, and enforcement actions."
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
+            <div style={{ width: 180 }}>
+              <Input
+                value={sensorId}
+                onChange={(event) => setSensorId(event.target.value)}
+                placeholder="synapse-pingora-1"
+                size="sm"
+              />
+            </div>
+            <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
+              Export CSV
+            </Button>
+          </div>
+        }
+      />
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           icon={Activity}
           label="Active Sessions"
-          value={stats?.activeSessions ?? sessions.filter((session) => session.lastActivity > Date.now() - 30 * 60 * 1000).length}
-          tone="text-ac-blue"
+          value={
+            stats?.activeSessions ??
+            sessions.filter((session) => session.lastActivity > Date.now() - 30 * 60 * 1000).length
+          }
+          accentColor={colors.blue}
         />
         <StatCard
           icon={AlertTriangle}
           label="Suspicious"
-          value={stats?.suspiciousSessions ?? sessions.filter((session) => session.isSuspicious).length}
-          tone="text-ac-orange"
+          value={
+            stats?.suspiciousSessions ?? sessions.filter((session) => session.isSuspicious).length
+          }
+          accentColor={colors.orange}
         />
         <StatCard
           icon={Shield}
           label="Hijack Alerts"
-          value={stats?.hijackAlerts ?? sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0)}
-          tone="text-ac-red"
+          value={
+            stats?.hijackAlerts ??
+            sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0)
+          }
+          accentColor={colors.red}
         />
       </section>
 
@@ -155,18 +178,21 @@ export default function SessionsPage() {
         <div className="card-header flex flex-wrap items-center gap-3">
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            <input
-              value={actorFilter}
-              onChange={(event) => setActorFilter(event.target.value)}
-              placeholder="Actor ID"
-              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
-            />
+            <div style={{ width: 180 }}>
+              <Input
+                value={actorFilter}
+                onChange={(event) => setActorFilter(event.target.value)}
+                placeholder="Actor ID"
+                size="sm"
+              />
+            </div>
             <label className="flex items-center gap-2 text-sm text-ink-secondary">
               <input
                 type="checkbox"
                 checked={suspiciousOnly}
                 onChange={(event) => setSuspiciousOnly(event.target.checked)}
                 className="h-4 w-4"
+                style={{ accentColor: colors.blue }}
               />
               Suspicious only
             </label>
@@ -174,14 +200,16 @@ export default function SessionsPage() {
         </div>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading sessions...</div>}
-          {error && <div className="text-ac-red">Failed to load sessions.</div>}
+          {error && <div style={{ color: colors.red }}>Failed to load sessions.</div>}
           {!isLoading && sessions.length === 0 && (
             <div className="text-ink-muted">No sessions match the current filters.</div>
           )}
           {sessions.length > 0 && (
             <div className="overflow-x-auto">
               <table className="data-table">
-                <caption className="sr-only">Active sessions with actor and alert information</caption>
+                <caption className="sr-only">
+                  Active sessions with actor and alert information
+                </caption>
                 <thead>
                   <tr>
                     <th>Session</th>
@@ -196,13 +224,19 @@ export default function SessionsPage() {
                   {sessions.map((session) => (
                     <tr key={session.sessionId}>
                       <td className="font-mono text-sm text-ink-primary">
-                        <Link to={`/sessions/${session.sessionId}`} className="text-link hover:text-link-hover">
+                        <Link
+                          to={`/sessions/${session.sessionId}`}
+                          className="text-link hover:text-link-hover"
+                        >
                           {session.sessionId}
                         </Link>
                       </td>
                       <td className="text-ink-secondary">
                         {session.actorId ? (
-                          <Link to={`/actors/${session.actorId}`} className="text-link hover:text-link-hover">
+                          <Link
+                            to={`/actors/${session.actorId}`}
+                            className="text-link hover:text-link-hover"
+                          >
                             {session.actorId}
                           </Link>
                         ) : (
@@ -216,12 +250,20 @@ export default function SessionsPage() {
                       <td className="text-ink-secondary">{session.hijackAlerts?.length ?? 0}</td>
                       <td>
                         <span
-                          className={clsx(
-                            'px-2 py-0.5 text-xs border',
+                          className="px-2 py-0.5 text-xs border"
+                          style={
                             session.isSuspicious
-                              ? 'bg-ac-orange/15 text-ac-orange border-ac-orange/40'
-                              : 'bg-ac-green/10 text-ac-green border-ac-green/40'
-                          )}
+                              ? {
+                                  background: alpha(colors.orange, 0.15),
+                                  color: colors.orange,
+                                  borderColor: alpha(colors.orange, 0.4),
+                                }
+                              : {
+                                  background: alpha(colors.green, 0.1),
+                                  color: colors.green,
+                                  borderColor: alpha(colors.green, 0.4),
+                                }
+                          }
                         >
                           {session.isSuspicious ? 'Suspicious' : 'Active'}
                         </span>
@@ -241,7 +283,8 @@ export default function SessionsPage() {
             <Clock className="w-4 h-4" /> Session Aging
           </div>
           <div className="mt-3 text-ink-secondary text-sm">
-            {stats?.expiredSessions ?? 0} expired sessions tracked. Focus on suspicious sessions first.
+            {stats?.expiredSessions ?? 0} expired sessions tracked. Focus on suspicious sessions
+            first.
           </div>
         </div>
         <div className="card p-4">
@@ -249,7 +292,9 @@ export default function SessionsPage() {
             <Shield className="w-4 h-4" /> Enforcement
           </div>
           <div className="mt-3 text-ink-secondary text-sm">
-            {stats?.totalInvalidated ? `${stats.totalInvalidated} sessions invalidated recently.` : 'No automatic revocations recorded.'}
+            {stats?.totalInvalidated
+              ? `${stats.totalInvalidated} sessions invalidated recently.`
+              : 'No automatic revocations recorded.'}
           </div>
         </div>
       </section>
@@ -261,17 +306,17 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  tone,
+  accentColor,
 }: {
   icon: typeof Activity;
   label: string;
   value: number;
-  tone: string;
+  accentColor: string;
 }) {
   return (
     <div className="card p-4 flex items-center gap-4">
-      <div className={clsx('w-10 h-10 flex items-center justify-center', tone, 'bg-surface-subtle')}>
-        <Icon className="w-5 h-5" />
+      <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
+        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
       </div>
       <div>
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>

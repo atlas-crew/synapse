@@ -3,8 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Shield, Activity, Fingerprint } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb } from '@/ui';
-import { clsx } from 'clsx';
+import { Breadcrumb, Button, EmptyState, SectionHeader, alpha, colors, spacing } from '@/ui';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
@@ -74,45 +73,56 @@ export default function SessionDetailPage() {
 
   if (!session) {
     return (
-      <div className="p-6">
-        <div className="card p-6 text-center">
-          <AlertTriangle className="w-8 h-8 text-ink-muted mx-auto mb-3" />
-          <p className="text-ink-secondary">Session not found.</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={<AlertTriangle aria-hidden="true" />}
+        title="Session Not Found"
+        description="The requested session could not be found."
+      />
     );
   }
 
+  const sessionStateStyle = session.isSuspicious
+    ? {
+        background: alpha(colors.orange, 0.15),
+        color: colors.orange,
+        borderColor: alpha(colors.orange, 0.4),
+      }
+    : {
+        background: alpha(colors.green, 0.1),
+        color: colors.green,
+        borderColor: alpha(colors.green, 0.4),
+      };
+
   return (
     <div className="p-6 space-y-6">
-      <Breadcrumb items={[
-        { label: 'Sessions', to: '/sessions' },
-        { label: session.sessionId },
-      ]} />
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link to="/sessions" className="text-sm text-link hover:text-link-hover">Back to Sessions</Link>
-          <h1 className="text-3xl font-light text-ink-primary mt-2">{session.sessionId}</h1>
-          <p className="text-ink-secondary mt-1">Created {new Date(session.creationTime).toLocaleString()}</p>
-          {session.actorId && (
-            <Link to={`/actors/${session.actorId}`} className="text-sm text-link hover:text-link-hover mt-2 inline-block">
-              View actor {session.actorId}
-            </Link>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-outline h-10 px-4 text-xs">Revoke Session</button>
-          <span
-            className={clsx(
-              'px-2 py-1 text-xs border',
-              session.isSuspicious
-                ? 'bg-ac-orange/15 text-ac-orange border-ac-orange/40'
-                : 'bg-ac-green/10 text-ac-green border-ac-green/40'
-            )}
+      <Breadcrumb items={[{ label: 'Sessions', to: '/sessions' }, { label: session.sessionId }]} />
+      <header className="space-y-2">
+        <Link to="/sessions" className="text-sm text-link hover:text-link-hover">
+          Back to Sessions
+        </Link>
+        <SectionHeader
+          title={session.sessionId}
+          description={`Created ${new Date(session.creationTime).toLocaleString()}`}
+          size="h3"
+          actions={
+            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+              <Button variant="outlined" size="sm">
+                Revoke Session
+              </Button>
+              <span className="px-2 py-1 text-xs border" style={sessionStateStyle}>
+                {session.isSuspicious ? 'Suspicious' : 'Active'}
+              </span>
+            </div>
+          }
+        />
+        {session.actorId && (
+          <Link
+            to={`/actors/${session.actorId}`}
+            className="text-sm text-link hover:text-link-hover inline-block"
           >
-            {session.isSuspicious ? 'Suspicious' : 'Active'}
-          </span>
-        </div>
+            View actor {session.actorId}
+          </Link>
+        )}
       </header>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -127,34 +137,40 @@ export default function SessionDetailPage() {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4">
           <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
-            <Fingerprint className="w-4 h-4" /> Identity Binding
+            <Fingerprint aria-hidden="true" className="w-4 h-4" /> Identity Binding
           </div>
           <div className="mt-3 space-y-2 text-sm text-ink-secondary">
             <div>
-              <span className="text-ink-muted">Token:</span> <span className="font-mono">{session.tokenHash}</span>
+              <span className="text-ink-muted">Token:</span>{' '}
+              <span className="font-mono">{session.tokenHash}</span>
             </div>
             <div>
-              <span className="text-ink-muted">JA4:</span> <span className="font-mono">{session.boundJa4 ?? 'Unbound'}</span>
+              <span className="text-ink-muted">JA4:</span>{' '}
+              <span className="font-mono">{session.boundJa4 ?? 'Unbound'}</span>
             </div>
             <div>
-              <span className="text-ink-muted">IP:</span> <span className="font-mono">{session.boundIp ?? 'Unbound'}</span>
+              <span className="text-ink-muted">IP:</span>{' '}
+              <span className="font-mono">{session.boundIp ?? 'Unbound'}</span>
             </div>
           </div>
         </div>
         <div className="card p-4">
           <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
-            <Activity className="w-4 h-4" /> Session Pulse
+            <Activity aria-hidden="true" className="w-4 h-4" /> Session Pulse
           </div>
           <div className="mt-3 text-ink-secondary text-sm">
-            Last activity {new Date(session.lastActivity).toLocaleString()}. Request volume trending {session.requestCount > 400 ? 'elevated' : 'stable'}.
+            Last activity {new Date(session.lastActivity).toLocaleString()}. Request volume trending{' '}
+            {session.requestCount > 400 ? 'elevated' : 'stable'}.
           </div>
         </div>
         <div className="card p-4">
           <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
-            <Shield className="w-4 h-4" /> Response Notes
+            <Shield aria-hidden="true" className="w-4 h-4" /> Response Notes
           </div>
           <div className="mt-3 text-ink-secondary text-sm">
-            {session.isSuspicious ? 'Investigate for potential hijack or token replay.' : 'Session remains within normal bounds.'}
+            {session.isSuspicious
+              ? 'Investigate for potential hijack or token replay.'
+              : 'Session remains within normal bounds.'}
           </div>
         </div>
       </section>
@@ -171,19 +187,29 @@ export default function SessionDetailPage() {
           {(session.hijackAlerts ?? []).map((alert, index) => (
             <div key={`${alert.alertType}-${index}`} className="flex flex-wrap items-center gap-3">
               <div
-                className={clsx(
-                  'px-2 py-1 text-xs border',
+                className="px-2 py-1 text-xs border"
+                style={
                   alert.confidence > 0.8
-                    ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                    : 'bg-ac-orange/15 text-ac-orange border-ac-orange/40'
-                )}
+                    ? {
+                        background: alpha(colors.red, 0.15),
+                        color: colors.red,
+                        borderColor: alpha(colors.red, 0.4),
+                      }
+                    : {
+                        background: alpha(colors.orange, 0.15),
+                        color: colors.orange,
+                        borderColor: alpha(colors.orange, 0.4),
+                      }
+                }
               >
                 {alert.alertType.replace('_', ' ')}
               </div>
               <div className="flex-1 text-sm text-ink-secondary">
                 {alert.originalValue} → {alert.newValue}
               </div>
-              <div className="text-xs text-ink-muted">{new Date(alert.timestamp).toLocaleString()}</div>
+              <div className="text-xs text-ink-muted">
+                {new Date(alert.timestamp).toLocaleString()}
+              </div>
               <div className="text-xs text-ink-muted">{Math.round(alert.confidence * 100)}%</div>
             </div>
           ))}
