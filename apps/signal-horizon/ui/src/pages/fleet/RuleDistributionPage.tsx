@@ -23,7 +23,7 @@ import {
   Clock,
   RefreshCw,
   Zap,
-  Loader2
+  Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useBeamRules } from '../../hooks/useBeamRules';
@@ -33,35 +33,37 @@ import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/ui/Toast';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import type { Rule } from '../../types/beam';
+import { Box, Button, SectionHeader, alpha, colors, spacing } from '@/ui';
 
 type RuleStatus = 'active' | 'paused' | 'deploying' | 'failed';
 type RuleSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 const SEVERITY_CONFIG: Record<RuleSeverity, { color: string; bg: string }> = {
-  critical: { color: 'text-red-400', bg: 'bg-red-500/20' },
-  high: { color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  medium: { color: 'text-sky-400', bg: 'bg-sky-500/20' },
-  low: { color: 'text-blue-400', bg: 'bg-blue-500/20' },
+  critical: { color: colors.red, bg: alpha(colors.red, 0.2) },
+  high: { color: colors.orange, bg: alpha(colors.orange, 0.2) },
+  medium: { color: colors.skyBlue, bg: alpha(colors.skyBlue, 0.2) },
+  low: { color: colors.blue, bg: alpha(colors.blue, 0.2) },
 };
 
-const STATUS_CONFIG: Record<RuleStatus, { icon: React.ElementType; color: string; label: string }> = {
-  active: { icon: ShieldCheck, color: 'text-green-400', label: 'Active' },
-  paused: { icon: ShieldOff, color: 'text-gray-400', label: 'Paused' },
-  deploying: { icon: Clock, color: 'text-blue-400', label: 'Deploying' },
-  failed: { icon: ShieldAlert, color: 'text-red-400', label: 'Failed' },
-};
+const STATUS_CONFIG: Record<RuleStatus, { icon: React.ElementType; color: string; label: string }> =
+  {
+    active: { icon: ShieldCheck, color: colors.green, label: 'Active' },
+    paused: { icon: ShieldOff, color: colors.gray.mid, label: 'Paused' },
+    deploying: { icon: Clock, color: colors.blue, label: 'Deploying' },
+    failed: { icon: ShieldAlert, color: colors.red, label: 'Failed' },
+  };
 
 // Stat Card
 function StatCard({
   label,
   value,
   icon: Icon,
-  color = 'text-horizon-400',
+  accentColor = colors.skyBlue,
 }: {
   label: string;
   value: string;
   icon: React.ElementType;
-  color?: string;
+  accentColor?: string;
 }) {
   return (
     <motion.div
@@ -75,7 +77,7 @@ function StatCard({
           <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
         <div className="p-3 bg-surface-subtle/50">
-          <Icon className={clsx('w-6 h-6', color)} />
+          <Icon className="w-6 h-6" style={{ color: accentColor }} />
         </div>
       </div>
     </motion.div>
@@ -117,33 +119,35 @@ function RuleCard({
   const severityConfig = SEVERITY_CONFIG[rule.severity as RuleSeverity] || SEVERITY_CONFIG.medium;
   const statusConfig = STATUS_CONFIG[rule.status as RuleStatus] || STATUS_CONFIG.active;
   const StatusIcon = statusConfig.icon;
+  const cardBorderColor =
+    rule.status === 'failed'
+      ? alpha(colors.red, 0.5)
+      : rule.status === 'deploying'
+        ? alpha(colors.blue, 0.5)
+        : undefined;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
-        'bg-surface-card border overflow-hidden transition-all',
+        'bg-surface-card border border-border-subtle overflow-hidden transition-all hover:border-link/50',
         isUpdating && 'opacity-60 grayscale',
-        rule.status === 'failed'
-          ? 'border-red-500/50'
-          : rule.status === 'deploying'
-          ? 'border-blue-500/50'
-          : 'border-border-subtle hover:border-ac-blue/50'
       )}
+      style={cardBorderColor ? { borderColor: cardBorderColor } : undefined}
     >
       <div className="px-5 py-4 flex items-center justify-between">
-        <button
-          onClick={onToggle}
-          className="flex items-center gap-4 flex-1 text-left"
-        >
+        <button onClick={onToggle} className="flex items-center gap-4 flex-1 text-left">
           <div className="p-2 bg-surface-subtle">
-            <Shield className="w-5 h-5 text-horizon-400" />
+            <Shield className="w-5 h-5" style={{ color: colors.skyBlue }} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-ink-primary font-medium">{rule.name}</h3>
-              <span className={clsx('px-2 py-0.5 text-[10px] uppercase font-bold tracking-widest', severityConfig.color, severityConfig.bg)}>
+              <span
+                className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-widest"
+                style={{ color: severityConfig.color, background: severityConfig.bg }}
+              >
                 {rule.severity}
               </span>
             </div>
@@ -153,16 +157,24 @@ function RuleCard({
 
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <p className="text-[10px] uppercase font-bold text-ink-muted tracking-tighter">Triggers</p>
-            <p className="text-ink-primary font-mono text-sm">{(rule.triggers24h || 0).toLocaleString()}</p>
+            <p className="text-[10px] uppercase font-bold text-ink-muted tracking-tighter">
+              Triggers
+            </p>
+            <p className="text-ink-primary font-mono text-sm">
+              {(rule.triggers24h || 0).toLocaleString()}
+            </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] uppercase font-bold text-ink-muted tracking-tighter">Last Seen</p>
+            <p className="text-[10px] uppercase font-bold text-ink-muted tracking-tighter">
+              Last Seen
+            </p>
             <p className="text-ink-secondary text-sm">{formatRelativeTime(rule.lastTriggered)}</p>
           </div>
-          <div className={clsx('flex items-center gap-1', statusConfig.color)}>
-            <StatusIcon className="w-4 h-4" />
-            <span className="text-[10px] uppercase font-bold tracking-widest">{statusConfig.label}</span>
+          <div className="flex items-center gap-1" style={{ color: statusConfig.color }}>
+            <StatusIcon className="w-4 h-4" aria-hidden="true" />
+            <span className="text-[10px] uppercase font-bold tracking-widest">
+              {statusConfig.label}
+            </span>
           </div>
           <button
             onClick={(e) => {
@@ -172,13 +184,15 @@ function RuleCard({
             disabled={isUpdating}
             className={clsx(
               'relative w-12 h-6 transition-colors',
-              rule.enabled ? 'bg-status-success' : 'bg-surface-elevated border border-border-subtle'
+              rule.enabled
+                ? 'bg-status-success'
+                : 'bg-surface-elevated border border-border-subtle',
             )}
           >
             <span
               className={clsx(
                 'absolute top-1 w-4 h-4 bg-white shadow transition-transform',
-                rule.enabled ? 'left-7' : 'left-1'
+                rule.enabled ? 'left-7' : 'left-1',
               )}
             />
           </button>
@@ -196,12 +210,16 @@ function RuleCard({
         <div className="px-5 py-4 border-t border-border-subtle bg-surface-subtle">
           <div className="space-y-4">
             <div>
-              <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">Description</p>
+              <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">
+                Description
+              </p>
               <p className="text-sm text-ink-secondary leading-relaxed">{rule.description}</p>
             </div>
             <div className="flex items-center gap-8">
               <div>
-                <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">Fleet Synchronization</p>
+                <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">
+                  Fleet Synchronization
+                </p>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="w-32 h-2 bg-surface-base overflow-hidden border border-border-subtle">
                     <div
@@ -210,10 +228,19 @@ function RuleCard({
                         rule.deployedSensors === rule.totalSensors
                           ? 'bg-status-success'
                           : rule.deployedSensors > 0
-                          ? 'bg-ac-blue'
-                          : 'bg-surface-elevated'
+                            ? 'bg-surface-elevated'
+                            : 'bg-surface-elevated',
                       )}
-                      style={{ width: `${(rule.deployedSensors / rule.totalSensors) * 100}%` }}
+                      style={
+                        rule.deployedSensors === rule.totalSensors
+                          ? { width: `${(rule.deployedSensors / rule.totalSensors) * 100}%` }
+                          : rule.deployedSensors > 0
+                            ? {
+                                width: `${(rule.deployedSensors / rule.totalSensors) * 100}%`,
+                                background: colors.blue,
+                              }
+                            : { width: `${(rule.deployedSensors / rule.totalSensors) * 100}%` }
+                      }
                     />
                   </div>
                   <span className="text-ink-secondary text-xs font-mono">
@@ -222,28 +249,43 @@ function RuleCard({
                 </div>
               </div>
               <div>
-                <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">Created</p>
+                <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">
+                  Created
+                </p>
                 <p className="text-ink-secondary text-sm font-mono">
                   {new Date(rule.createdAt || Date.now()).toLocaleDateString()}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3 pt-2">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onToggleEnabled(); }}
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleEnabled();
+                }}
                 disabled={isUpdating}
-                className={clsx(
-                  "px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2",
-                  rule.enabled ? "bg-ac-navy text-white hover:bg-ac-navy-light" : "bg-status-success text-white hover:bg-status-success/90"
-                )}
+                variant={rule.enabled ? 'secondary' : 'primary'}
+                size="sm"
+                icon={
+                  isUpdating ? (
+                    <Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" />
+                  ) : rule.enabled ? (
+                    <Pause aria-hidden="true" className="w-3.5 h-3.5" />
+                  ) : (
+                    <Play aria-hidden="true" className="w-3.5 h-3.5" />
+                  )
+                }
               >
-                {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : rule.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                 {rule.enabled ? 'Pause Rule' : 'Activate Rule'}
-              </button>
-              <button className="px-4 py-2 border-2 border-border-subtle text-ink-secondary hover:text-ink-primary hover:bg-surface-card text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2">
-                <Settings className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="outlined"
+                size="sm"
+                icon={<Settings aria-hidden="true" className="w-3.5 h-3.5" />}
+                onClick={(e) => e.stopPropagation()}
+              >
                 Configure Logic
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -262,15 +304,20 @@ export function RuleDistributionPage() {
   const [confirmToggleRule, setConfirmToggleRule] = useState<Rule | null>(null);
 
   // Fetch data
-  const { rules, isLoading: rulesLoading, refetch, updateRule } = useBeamRules({ pollingInterval: 30000 });
+  const {
+    rules,
+    isLoading: rulesLoading,
+    refetch,
+    updateRule,
+  } = useBeamRules({ pollingInterval: 30000 });
   const { data: sensors = [] } = useSensors();
 
   // Auto-expand rule from URL (finding 16)
   useEffect(() => {
     if (ruleId && rules.length > 0) {
-      const rule = rules.find(r => r.id === ruleId);
+      const rule = rules.find((r) => r.id === ruleId);
       if (rule) {
-        setExpandedRules(prev => {
+        setExpandedRules((prev) => {
           if (prev.has(ruleId)) return prev;
           const next = new Set(prev);
           next.add(ruleId);
@@ -283,16 +330,16 @@ export function RuleDistributionPage() {
   // Fleet distribution mutation
   const deployMutation = useMutation({
     mutationFn: async (ruleIds: string[]) => {
-      const sensorIds = sensors.filter(s => s.status === 'online').map(s => s.id);
+      const sensorIds = sensors.filter((s) => s.status === 'online').map((s) => s.id);
       if (sensorIds.length === 0) throw new Error('No online sensors found to target');
-      
-      await apiFetch('/fleet/rules/push', { 
-        method: 'POST', 
-        body: { 
-          ruleIds, 
-          sensorIds, 
-          strategy: 'immediate' 
-        } 
+
+      await apiFetch('/fleet/rules/push', {
+        method: 'POST',
+        body: {
+          ruleIds,
+          sensorIds,
+          strategy: 'immediate',
+        },
       });
     },
     onSuccess: () => {
@@ -300,16 +347,21 @@ export function RuleDistributionPage() {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'rules'] });
     },
     onError: (err) => {
-      toast.error('Failed to distribute rules: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    }
+      toast.error(
+        'Failed to distribute rules: ' + (err instanceof Error ? err.message : 'Unknown error'),
+      );
+    },
   });
 
-  const handleToggleRule = useCallback((ruleId: string) => {
-    const newExpanded = new Set(expandedRules);
-    if (newExpanded.has(ruleId)) newExpanded.delete(ruleId);
-    else newExpanded.add(ruleId);
-    setExpandedRules(newExpanded);
-  }, [expandedRules]);
+  const handleToggleRule = useCallback(
+    (ruleId: string) => {
+      const newExpanded = new Set(expandedRules);
+      if (newExpanded.has(ruleId)) newExpanded.delete(ruleId);
+      else newExpanded.add(ruleId);
+      setExpandedRules(newExpanded);
+    },
+    [expandedRules],
+  );
 
   const handleToggleEnabled = async (rule: Rule) => {
     setUpdatingRuleId(rule.id);
@@ -318,20 +370,22 @@ export function RuleDistributionPage() {
       // 1. Update rule in database
       const nextEnabled = !rule.enabled;
       await updateRule(rule.id, { enabled: nextEnabled });
-      
+
       // 2. Immediately push update to the whole fleet
       await deployMutation.mutateAsync([rule.id]);
-      
+
       toast.success(`Rule "${rule.name}" ${nextEnabled ? 'activated' : 'paused'} across fleet`);
     } catch (err) {
-      toast.error(`Failed to toggle rule "${rule.name}": ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error(
+        `Failed to toggle rule "${rule.name}": ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
     } finally {
       setUpdatingRuleId(null);
     }
   };
 
   const handleDeployAll = async () => {
-    const activeRuleIds = rules.filter(r => r.enabled).map(r => r.id);
+    const activeRuleIds = rules.filter((r) => r.enabled).map((r) => r.id);
     if (activeRuleIds.length === 0) {
       toast.info('No active rules to deploy');
       return;
@@ -344,7 +398,12 @@ export function RuleDistributionPage() {
     const total = rules.length;
     const active = rules.filter((r) => r.enabled).length;
     const totalTriggers = rules.reduce((sum, r) => sum + (r.triggers24h || 0), 0);
-    const avgSync = total > 0 ? (rules.reduce((sum, r) => sum + (r.deployedSensors || 0), 0) / (total * (sensors.length || 1))) * 100 : 100;
+    const avgSync =
+      total > 0
+        ? (rules.reduce((sum, r) => sum + (r.deployedSensors || 0), 0) /
+            (total * (sensors.length || 1))) *
+          100
+        : 100;
 
     return { total, active, totalTriggers, avgSync };
   }, [rules, sensors]);
@@ -372,29 +431,44 @@ export function RuleDistributionPage() {
       />
 
       {/* Header */}
-      <header className="flex justify-between items-end border-b border-border-subtle pb-6">
-        <div>
-          <h1 className="text-3xl font-light text-ink-primary mb-2 uppercase tracking-tight">Fleet Rule Control</h1>
-          <p className="text-ink-secondary">Manage and synchronize WAF protection logic across the global sensor array.</p>
-        </div>
-        <div className="flex gap-4">
-          <button
-            onClick={() => refetch()}
-            className="flex items-center gap-2 px-4 py-2 border-2 border-border-subtle text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle transition-all text-xs font-bold uppercase tracking-widest"
-          >
-            <RefreshCw className={clsx('w-4 h-4', rulesLoading && 'animate-spin')} />
-            Refresh State
-          </button>
-          <button
-            onClick={handleDeployAll}
-            disabled={deployMutation.isPending}
-            className="flex items-center gap-2 px-6 py-2 bg-ac-navy text-white hover:bg-ac-blue-darker transition-all text-xs font-bold uppercase tracking-widest shadow-lg shadow-ac-blue/20"
-          >
-            {deployMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-            Sync Full Fleet
-          </button>
-        </div>
-      </header>
+      <div className="border-b border-border-subtle pb-6">
+        <SectionHeader
+          title="Fleet Rule Control"
+          description="Manage and synchronize WAF protection logic across the global sensor array."
+          actions={
+            <div className="flex gap-4">
+              <Button
+                variant="outlined"
+                size="sm"
+                onClick={() => refetch()}
+                icon={
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={clsx('w-4 h-4', rulesLoading && 'animate-spin')}
+                  />
+                }
+              >
+                Refresh State
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleDeployAll}
+                disabled={deployMutation.isPending}
+                icon={
+                  deployMutation.isPending ? (
+                    <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Zap aria-hidden="true" className="w-4 h-4" />
+                  )
+                }
+              >
+                Sync Full Fleet
+              </Button>
+            </div>
+          }
+        />
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -403,42 +477,64 @@ export function RuleDistributionPage() {
           label="Active Policies"
           value={stats.active.toString()}
           icon={ShieldCheck}
-          color="text-status-success"
+          accentColor={colors.green}
         />
         <StatCard
           label="Total Interceptions"
           value={stats.totalTriggers.toLocaleString()}
           icon={Activity}
-          color="text-ac-sky-blue"
+          accentColor={colors.skyBlue}
         />
         <StatCard
           label="Fleet Convergence"
           value={`${stats.avgSync.toFixed(1)}%`}
           icon={RefreshCw}
-          color="text-ac-orange"
+          accentColor={colors.orange}
         />
       </div>
 
       {/* Deployment Advisory */}
-      <div className="bg-ac-card-dark p-4 border-l-4 border-ac-magenta flex items-center justify-between text-white">
+      <Box
+        bg="card"
+        border="left"
+        borderColor={colors.magenta}
+        flex
+        direction="row"
+        align="center"
+        justify="space-between"
+        style={{ padding: spacing.md }}
+      >
         <div className="flex items-center gap-4">
-          <AlertTriangle className="w-5 h-5 text-ac-magenta" />
+          <AlertTriangle aria-hidden="true" className="w-5 h-5" style={{ color: colors.magenta }} />
           <div>
-            <p className="text-sm font-bold uppercase tracking-widest">Global Policy Mode: ENFORCEMENT</p>
-            <p className="text-[10px] text-white/60 uppercase tracking-tighter">Rule toggles trigger immediate deployment to {sensors.length} sensors across {new Set(sensors.map(s => s.region)).size} regions.</p>
+            <p className="text-sm font-bold uppercase tracking-widest">
+              Global Policy Mode: ENFORCEMENT
+            </p>
+            <p
+              className="text-[10px] uppercase tracking-tighter"
+              style={{ color: alpha(colors.white, 0.6) }}
+            >
+              Rule toggles trigger immediate deployment to {sensors.length} sensors across{' '}
+              {new Set(sensors.map((s) => s.region)).size} regions.
+            </p>
           </div>
         </div>
-        <div className="flex gap-2 font-mono text-[10px] text-white/40">
+        <div
+          className="flex gap-2 font-mono text-[10px]"
+          style={{ color: alpha(colors.white, 0.4) }}
+        >
           <span>TAG: FLEET_SYNC_v3</span>
         </div>
-      </div>
+      </Box>
 
       {/* Rules List */}
       <div className="space-y-4">
         {rules.length === 0 ? (
           <div className="text-center py-20 bg-surface-subtle border border-dashed border-border-subtle">
             <ShieldOff className="w-12 h-12 mx-auto text-ink-muted mb-4 opacity-20" />
-            <p className="text-ink-secondary uppercase tracking-widest font-bold">No rules found in tenant policy</p>
+            <p className="text-ink-secondary uppercase tracking-widest font-bold">
+              No rules found in tenant policy
+            </p>
           </div>
         ) : (
           rules.map((rule) => (
