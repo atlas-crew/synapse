@@ -81,7 +81,8 @@ export function DemoModeBanner({
 
   return (
     <div
-      role="alert"
+      role="status"
+      aria-live="polite"
       className={clsx(
         'flex items-center justify-between gap-3 border px-4 py-3 mb-4',
         styles.border,

@@ -414,7 +414,7 @@ export function ConnectionBanner({
 
   return (
     <div
-      role="alert"
+      role="status"
       aria-live="polite"
       className={clsx(
         'flex items-center justify-center gap-2 py-2 px-4 text-sm',

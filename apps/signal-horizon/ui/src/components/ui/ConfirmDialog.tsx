@@ -32,7 +32,7 @@ export function ConfirmDialog({
   return (
     <Modal open={open} onClose={onCancel} size="480px">
       <div
-        role="alertdialog"
+        role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-desc"
