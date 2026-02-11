@@ -9,7 +9,7 @@ import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type CampaignTimelineEvent } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
-import { Alert, Button, Input, SectionHeader, spacing } from '@/ui';
+import { Alert, Button, CARD_HEADER_TITLE_STYLE, Input, SectionHeader, spacing } from '@/ui';
 
 function formatConfidenceOrNa(confidence: unknown): string {
   if (typeof confidence !== 'number') return 'n/a';
@@ -173,7 +173,12 @@ export default function CampaignTimelinePage() {
 
       <div className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Query</h2>
+          <SectionHeader
+            title="Query"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
           <p className="text-xs text-ink-muted mt-1">
             Campaign: <span className="font-mono">{header}</span>
           </p>
@@ -228,7 +233,12 @@ export default function CampaignTimelinePage() {
 
       <div className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Timeline</h2>
+          <SectionHeader
+            title="Timeline"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
           <p className="text-xs text-ink-muted mt-1">
             {events ? (
               <span className="font-mono">count={events.length}</span>

@@ -59,7 +59,11 @@ export { MetricCard } from './components/MetricCard';
 export { KpiStrip } from './components/KpiStrip';
 export { ChartPanel } from './components/ChartPanel';
 export { StatusBadge } from './components/StatusBadge';
-export { SectionHeader } from './components/SectionHeader';
+export {
+  SectionHeader,
+  CARD_HEADER_TITLE_STYLE,
+  TRUNCATED_CARD_HEADER_TITLE_STYLE,
+} from './components/SectionHeader';
 export { DataTable, ValuePill } from './components/DataTable';
 export { Button } from './components/Button';
 export { Alert } from './components/Alert';

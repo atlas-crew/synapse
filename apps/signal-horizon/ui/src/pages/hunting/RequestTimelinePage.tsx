@@ -9,7 +9,16 @@ import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type RecentRequest, type RequestTimelineEvent } from '../../hooks/useHunt';
 import RequestTimelineGraph from '../../components/hunting/RequestTimelineGraph';
-import { Alert, Button, Input, SectionHeader, Tabs, spacing } from '@/ui';
+import {
+  Alert,
+  Button,
+  CARD_HEADER_TITLE_STYLE,
+  Input,
+  SectionHeader,
+  Tabs,
+  TRUNCATED_CARD_HEADER_TITLE_STYLE,
+  spacing,
+} from '@/ui';
 
 function summarizeEvent(e: RequestTimelineEvent): string {
   switch (e.kind) {
@@ -202,7 +211,12 @@ export default function RequestTimelinePage() {
       <div className="card">
         <div className="card-header flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="font-medium text-ink-primary truncate">Recent</h2>
+            <SectionHeader
+              title="Recent"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={TRUNCATED_CARD_HEADER_TITLE_STYLE}
+            />
             <p className="text-xs text-ink-muted mt-1">
               Latest <span className="font-mono">request_id</span> values (ClickHouse).
             </p>
@@ -277,7 +291,12 @@ export default function RequestTimelinePage() {
 
       <div className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Lookup</h2>
+          <SectionHeader
+            title="Lookup"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="card-body">
           <form
@@ -346,7 +365,12 @@ export default function RequestTimelinePage() {
       <div className="card">
         <div className="card-header flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="font-medium text-ink-primary truncate">Timeline</h2>
+            <SectionHeader
+              title="Timeline"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={TRUNCATED_CARD_HEADER_TITLE_STYLE}
+            />
             <p className="text-xs text-ink-muted mt-1 font-mono truncate">{header}</p>
           </div>
           <div className="flex items-center gap-3">

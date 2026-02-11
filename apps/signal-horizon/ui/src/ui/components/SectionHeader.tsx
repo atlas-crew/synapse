@@ -41,10 +41,23 @@ interface SectionHeaderProps {
 }
 
 const headingSizes = {
-  h1: { fontSize: '3rem', lineHeight: '56px' },
-  h2: { fontSize: '1.875rem', lineHeight: '38px' },
-  h3: { fontSize: '1.75rem', lineHeight: '36px' },
-  h4: { fontSize: '1.5rem', lineHeight: '32px' },
+  h1: { fontSize: '2.5rem', lineHeight: '48px' },
+  h2: { fontSize: '1.5rem', lineHeight: '32px' },
+  h3: { fontSize: '1.25rem', lineHeight: '28px' },
+  h4: { fontSize: '1.125rem', lineHeight: '24px' },
+};
+
+export const CARD_HEADER_TITLE_STYLE: React.CSSProperties = {
+  fontSize: '16px',
+  lineHeight: '22px',
+  fontWeight: 500,
+};
+
+export const TRUNCATED_CARD_HEADER_TITLE_STYLE: React.CSSProperties = {
+  ...CARD_HEADER_TITLE_STYLE,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 };
 
 export const SectionHeader: React.FC<SectionHeaderProps> = ({
@@ -61,6 +74,8 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
   titleStyle,
   style,
 }) => {
+  const HeadingTag = size as 'h1' | 'h2' | 'h3' | 'h4';
+
   if (variant === 'numbered') {
     return (
       <div
@@ -92,18 +107,20 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
         >
           {number}
         </div>
-        <span
+        <HeadingTag
           id={titleId}
+          title={title}
           style={{
             fontFamily,
             fontWeight: fontWeight.light,
             ...headingSizes[size],
             color: '#F0F4F8',
+            margin: 0,
             ...titleStyle,
           }}
         >
           {title}
-        </span>
+        </HeadingTag>
       </div>
     );
   }
@@ -146,8 +163,9 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
                 {icon}
               </span>
             )}
-            <div
+            <HeadingTag
               id={titleId}
+              title={title}
               style={{
                 fontFamily,
                 fontWeight: fontWeight.light,
@@ -158,7 +176,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
               }}
             >
               {title}
-            </div>
+            </HeadingTag>
           </div>
           {description && (
             <div

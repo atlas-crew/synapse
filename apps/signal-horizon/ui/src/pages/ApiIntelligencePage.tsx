@@ -3,6 +3,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Alert,
   Button,
+  CARD_HEADER_TITLE_STYLE,
   Input,
   SectionHeader,
   alpha,
@@ -217,7 +218,12 @@ export default function ApiIntelligencePage() {
 
         <div className="card h-[400px]">
           <div className="card-header">
-            <h2 className="font-medium text-ink-primary">Discovery Trend (7 Days)</h2>
+            <SectionHeader
+              title="Discovery Trend (7 Days)"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+            />
           </div>
           <div className="card-body h-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -250,7 +256,12 @@ export default function ApiIntelligencePage() {
       {/* Drift Analysis & Violations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <h2 className="font-medium text-ink-primary">Recent Schema Drift</h2>
+          <SectionHeader
+            title="Recent Schema Drift"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
           {schemaDriftGroups.length > 0 ? (
             schemaDriftGroups.map((group) => (
               <SchemaDriftDiff
@@ -270,7 +281,12 @@ export default function ApiIntelligencePage() {
 
         <div className="card h-full">
           <div className="card-header">
-            <h2 className="font-medium text-ink-primary">Top Violating Endpoints</h2>
+            <SectionHeader
+              title="Top Violating Endpoints"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+            />
           </div>
           <div className="card-body h-96">
             <ResponsiveContainer width="100%" height="100%">
