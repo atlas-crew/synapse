@@ -6,6 +6,7 @@ import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { ResourceBarGroup } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
 import { apiFetch } from '../../lib/api';
+import { Box, SectionHeader, alpha, colors, spacing } from '@/ui';
 
 interface HealthSummary {
   overallScore: number;
@@ -36,81 +37,95 @@ export function FleetHealthPage() {
   });
 
   // Memoize online sensors
-  const onlineSensors = useMemo(
-    () => sensors.filter((s) => s.status !== 'offline'),
-    [sensors]
-  );
+  const onlineSensors = useMemo(() => sensors.filter((s) => s.status !== 'offline'), [sensors]);
 
   // Memoize average CPU calculation
   const avgCpu = useMemo(
-    () => onlineSensors.length > 0
-      ? onlineSensors.reduce((sum, s) => sum + s.cpu, 0) / onlineSensors.length
-      : 0,
-    [onlineSensors]
+    () =>
+      onlineSensors.length > 0
+        ? onlineSensors.reduce((sum, s) => sum + s.cpu, 0) / onlineSensors.length
+        : 0,
+    [onlineSensors],
   );
 
   // Memoize average memory calculation
   const avgMemory = useMemo(
-    () => onlineSensors.length > 0
-      ? onlineSensors.reduce((sum, s) => sum + s.memory, 0) / onlineSensors.length
-      : 0,
-    [onlineSensors]
+    () =>
+      onlineSensors.length > 0
+        ? onlineSensors.reduce((sum, s) => sum + s.memory, 0) / onlineSensors.length
+        : 0,
+    [onlineSensors],
   );
 
   // Memoize critical sensors
   const criticalSensors = useMemo(
     () => sensors.filter((s) => s.status === 'offline' || s.cpu > 90 || s.memory > 90),
-    [sensors]
+    [sensors],
   );
 
   // Memoize warning sensors
   const warningSensors = useMemo(
-    () => sensors.filter(
-      (s) => s.status === 'warning' || (s.cpu > 75 && s.cpu <= 90) || (s.memory > 75 && s.memory <= 90)
-    ),
-    [sensors]
+    () =>
+      sensors.filter(
+        (s) =>
+          s.status === 'warning' ||
+          (s.cpu > 75 && s.cpu <= 90) ||
+          (s.memory > 75 && s.memory <= 90),
+      ),
+    [sensors],
   );
 
   // Memoize health score
   const healthScore = useMemo(
-    () => metrics
-      ? Math.round(((metrics.onlineCount / Math.max(metrics.totalSensors, 1)) * 100))
-      : 0,
-    [metrics]
+    () =>
+      metrics ? Math.round((metrics.onlineCount / Math.max(metrics.totalSensors, 1)) * 100) : 0,
+    [metrics],
   );
+  const healthColor =
+    healthScore >= 90 ? colors.green : healthScore >= 70 ? colors.orange : colors.red;
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-light text-ink-primary">Fleet Health</h1>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Monitor the health and performance of your sensor fleet
-        </p>
-      </div>
+      <SectionHeader
+        title="Fleet Health"
+        description="Monitor the health and performance of your sensor fleet"
+      />
 
       {/* Health Score */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <div className={`card border border-border-subtle border-l-2 p-6 md:col-span-2 ${
-          healthScore >= 90 ? 'border-l-ac-green' : healthScore >= 70 ? 'border-l-ac-orange' : 'border-l-ac-red'
-        }`}>
+        <Box
+          bg="card"
+          border="left"
+          borderColor={healthColor}
+          p="lg"
+          style={{ gridColumn: 'span 2 / span 2' }}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-ink-secondary">Overall Health Score</p>
-              <p className={`mt-2 text-5xl font-light ${
-                healthScore >= 90 ? 'text-ac-green' : healthScore >= 70 ? 'text-ac-orange' : 'text-ac-red'
-              }`}>{healthScore}%</p>
+              <p className="mt-2 text-5xl font-light" style={{ color: healthColor }}>
+                {healthScore}%
+              </p>
             </div>
             <div className="w-20 h-20 flex items-center justify-center border border-border-subtle">
               {healthScore >= 90 ? (
-                <CheckCircle2 className="w-8 h-8 text-ac-green" />
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="w-8 h-8"
+                  style={{ color: colors.green }}
+                />
               ) : healthScore >= 70 ? (
-                <AlertTriangle className="w-8 h-8 text-ac-orange" />
+                <AlertTriangle
+                  aria-hidden="true"
+                  className="w-8 h-8"
+                  style={{ color: colors.orange }}
+                />
               ) : (
-                <XCircle className="w-8 h-8 text-ac-red" />
+                <XCircle aria-hidden="true" className="w-8 h-8" style={{ color: colors.red }} />
               )}
             </div>
           </div>
-        </div>
+        </Box>
 
         <MetricCard
           label="Critical Alerts"
@@ -132,52 +147,67 @@ export function FleetHealthPage() {
 
       {/* Resource Usage */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
+        <Box bg="card" border="top" borderColor={colors.blue} p="lg">
           <h3 className="text-lg font-medium text-ink-primary mb-4">Fleet Resource Usage</h3>
           <ResourceBarGroup cpu={avgCpu} memory={avgMemory} disk={35} size="lg" />
-        </div>
+        </Box>
 
-        <div className="card border border-border-subtle border-t-2 border-t-ac-navy dark:border-t-ac-sky-light p-6">
+        <Box bg="card" border="top" borderColor={colors.navy} p="lg">
           <h3 className="text-lg font-medium text-ink-primary mb-4">Status Distribution</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 bg-ac-green" />
+                <div className="w-4 h-4" style={{ background: colors.green }} />
                 <span className="text-sm text-ink-secondary">Online</span>
               </div>
-              <span className="text-sm font-medium text-ac-green">{metrics?.onlineCount ?? 0}</span>
+              <span className="text-sm font-medium" style={{ color: colors.green }}>
+                {metrics?.onlineCount ?? 0}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 bg-ac-orange" />
+                <div className="w-4 h-4" style={{ background: colors.orange }} />
                 <span className="text-sm text-ink-secondary">Warning</span>
               </div>
-              <span className="text-sm font-medium text-ac-orange">{metrics?.warningCount ?? 0}</span>
+              <span className="text-sm font-medium" style={{ color: colors.orange }}>
+                {metrics?.warningCount ?? 0}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-4 h-4 bg-ac-gray-mid" />
+                <div className="w-4 h-4" style={{ background: colors.gray.mid }} />
                 <span className="text-sm text-ink-secondary">Offline</span>
               </div>
-              <span className="text-sm font-medium text-ac-red">{metrics?.offlineCount ?? 0}</span>
+              <span className="text-sm font-medium" style={{ color: colors.red }}>
+                {metrics?.offlineCount ?? 0}
+              </span>
             </div>
           </div>
-        </div>
+        </Box>
       </div>
 
       {/* Sensors Requiring Attention */}
       {criticalSensors.length > 0 && (
-        <div className="card border border-border-subtle border-t-2 border-t-ac-red p-6">
-          <h3 className="text-lg font-medium text-ac-red mb-4">
+        <Box bg="card" border="top" borderColor={colors.red} p="lg">
+          <h3 className="text-lg font-medium mb-4" style={{ color: colors.red }}>
             Critical Issues ({criticalSensors.length})
           </h3>
           <div className="space-y-3">
             {criticalSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 border border-ac-red/20 bg-ac-red/10 cursor-pointer hover:bg-ac-red/15 focus:outline-none focus:ring-2 focus:ring-ac-red/50"
+                className="flex items-center justify-between p-3 cursor-pointer focus:outline-none focus:ring-2"
+                style={{
+                  border: `1px solid ${alpha(colors.red, 0.3)}`,
+                  background: alpha(colors.red, 0.1),
+                }}
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/fleet/sensors/${sensor.id}`); } }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/fleet/sensors/${sensor.id}`);
+                  }
+                }}
                 tabIndex={0}
                 role="link"
                 aria-label={`View critical sensor ${sensor.name}`}
@@ -192,22 +222,31 @@ export function FleetHealthPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Box>
       )}
 
       {/* Warning Sensors */}
       {warningSensors.length > 0 && (
-        <div className="card border border-border-subtle border-t-2 border-t-ac-orange p-6">
-          <h3 className="text-lg font-medium text-ac-orange mb-4">
+        <Box bg="card" border="top" borderColor={colors.orange} p="lg">
+          <h3 className="text-lg font-medium mb-4" style={{ color: colors.orange }}>
             Warnings ({warningSensors.length})
           </h3>
           <div className="space-y-3">
             {warningSensors.slice(0, 5).map((sensor) => (
               <div
                 key={sensor.id}
-                className="flex items-center justify-between p-3 border border-ac-orange/20 bg-ac-orange/10 cursor-pointer hover:bg-ac-orange/15 focus:outline-none focus:ring-2 focus:ring-ac-orange/50"
+                className="flex items-center justify-between p-3 cursor-pointer focus:outline-none focus:ring-2"
+                style={{
+                  border: `1px solid ${alpha(colors.orange, 0.3)}`,
+                  background: alpha(colors.orange, 0.1),
+                }}
                 onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/fleet/sensors/${sensor.id}`); } }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/fleet/sensors/${sensor.id}`);
+                  }
+                }}
                 tabIndex={0}
                 role="link"
                 aria-label={`View warning sensor ${sensor.name}`}
@@ -222,20 +261,32 @@ export function FleetHealthPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Box>
       )}
 
       {/* All Healthy */}
       {criticalSensors.length === 0 && warningSensors.length === 0 && sensors.length > 0 && (
-        <div className="card border border-border-subtle border-t-2 border-t-ac-green p-6 text-center">
+        <Box
+          bg="card"
+          border="top"
+          borderColor={colors.green}
+          p="lg"
+          style={{ textAlign: 'center' }}
+        >
           <div className="flex items-center justify-center mb-2">
-            <CheckCircle2 className="w-10 h-10 text-ac-green" />
+            <CheckCircle2
+              aria-hidden="true"
+              className="w-10 h-10"
+              style={{ color: colors.green }}
+            />
           </div>
-          <h3 className="text-lg font-medium text-ac-green">All Systems Healthy</h3>
+          <h3 className="text-lg font-medium" style={{ color: colors.green }}>
+            All Systems Healthy
+          </h3>
           <p className="text-sm text-ink-secondary mt-1">
             All {sensors.length} sensors are operating normally
           </p>
-        </div>
+        </Box>
       )}
     </div>
   );

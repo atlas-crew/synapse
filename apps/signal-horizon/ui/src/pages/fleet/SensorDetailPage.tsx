@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb } from '@/ui';
+import { Alert, Breadcrumb, Button, EmptyState, colors } from '@/ui';
 import { SensorStatusBadge } from '../../components/fleet';
 import { SensorDetailSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
@@ -96,31 +96,42 @@ export function SensorDetailPage() {
   if (sensorError) {
     return (
       <div className="p-12 text-center">
-        <p className="text-status-error mb-4">{(sensorError as Error).message || 'Failed to load sensor details.'}</p>
-        <button
-          onClick={() => refetchSensor()}
-          disabled={isSensorFetching}
-          className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
-        >
-          {isSensorFetching ? 'Retrying...' : 'Retry'}
-        </button>
+        <Alert status="error" title="Failed to load sensor details" style={{ textAlign: 'left' }}>
+          {(sensorError as Error).message || 'Failed to load sensor details.'}
+        </Alert>
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            onClick={() => refetchSensor()}
+            disabled={isSensorFetching}
+            loading={isSensorFetching}
+          >
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
 
   if (!sensor) {
     return (
-      <div className="p-12 text-center">
-        <p className="text-ink-secondary">Sensor not found.</p>
-      </div>
+      <EmptyState
+        title="Sensor Not Found"
+        description="The requested sensor could not be located. It may have been deleted or you may not have access."
+        action={
+          <Button variant="outlined" onClick={() => navigate('/fleet')}>
+            Back to Fleet
+          </Button>
+        }
+      />
     );
   }
 
-  const status = sensor.connectionState === 'CONNECTED'
-    ? 'online'
-    : sensor.connectionState === 'RECONNECTING'
-      ? 'warning'
-      : 'offline';
+  const status =
+    sensor.connectionState === 'CONNECTED'
+      ? 'online'
+      : sensor.connectionState === 'RECONNECTING'
+        ? 'warning'
+        : 'offline';
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'overview', label: 'Overview' },
@@ -135,21 +146,26 @@ export function SensorDetailPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <Breadcrumb items={[
-        { label: 'Fleet', to: '/fleet' },
-        { label: sensor.name || 'Sensor Detail' },
-      ]} />
+      <Breadcrumb
+        items={[{ label: 'Fleet', to: '/fleet' }, { label: sensor.name || 'Sensor Detail' }]}
+      />
       {/* Header */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
         <div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">
           <div>
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => navigate('/fleet')}
-              className="mb-2 text-xs uppercase tracking-[0.25em] text-ac-blue hover:text-ac-blue/80 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+              icon={
+                <span aria-hidden="true" style={{ color: colors.gray.mid }}>
+                  ←
+                </span>
+              }
+              style={{ marginBottom: 8 }}
             >
-              <span className="text-ink-secondary">←</span>
               Back to Fleet
-            </button>
+            </Button>
             <h1 className="text-2xl font-light text-ink-primary">{sensor.name}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.18em] text-ink-secondary">
               <SensorStatusBadge status={status} />
@@ -159,27 +175,27 @@ export function SensorDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button
+            <Button
+              variant="outlined"
               onClick={() => diagnosticsMutation.mutate()}
               disabled={diagnosticsMutation.isPending}
-              className="btn-outline h-10 px-4 text-xs uppercase tracking-[0.2em]"
             >
               {diagnosticsMutation.isPending ? 'Running...' : 'Run Diagnostics'}
-            </button>
-            <button
-              onClick={() => restartMutation.mutate()}
-              disabled={restartMutation.isPending}
-              className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]"
-            >
+            </Button>
+            <Button onClick={() => restartMutation.mutate()} disabled={restartMutation.isPending}>
               {restartMutation.isPending ? 'Restarting...' : 'Restart Sensor'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Tabs — WCAG 1.3.1 ARIA tab pattern */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-navy">
-        <nav role="tablist" aria-label="Sensor details" className="flex flex-wrap gap-6 px-6 py-3 bg-surface-inset border-b border-border-subtle">
+        <nav
+          role="tablist"
+          aria-label="Sensor details"
+          className="flex flex-wrap gap-6 px-6 py-3 bg-surface-inset border-b border-border-subtle"
+        >
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -202,16 +218,19 @@ export function SensorDetailPage() {
 
       {/* Tab Content */}
       <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
-        {activeTab === 'overview' && <OverviewTab sensor={sensor} systemInfo={systemInfo} diagnostics={diagnosticsMutation.data} onRestartSensor={() => restartMutation.mutate()} />}
+        {activeTab === 'overview' && (
+          <OverviewTab
+            sensor={sensor}
+            systemInfo={systemInfo}
+            diagnostics={diagnosticsMutation.data}
+            onRestartSensor={() => restartMutation.mutate()}
+          />
+        )}
         {activeTab === 'performance' && <PerformanceTab data={performance} />}
         {activeTab === 'network' && <NetworkTab data={network} />}
         {activeTab === 'processes' && <ProcessesTab data={processes} />}
         {activeTab === 'logs' && (
-          <LogViewer
-            sensorId={sensor.id}
-            sensorName={sensor.name}
-            height="600px"
-          />
+          <LogViewer sensorId={sensor.id} sensorName={sensor.name} height="600px" />
         )}
         {activeTab === 'configuration' && <ConfigurationTab sensor={sensor} />}
         {activeTab === 'remote-shell' && (

@@ -21,7 +21,7 @@ import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
 import { apiFetch } from '../../lib/api';
-import { KpiStrip, colors } from '@/ui';
+import { Button, Input, KpiStrip, SectionHeader, Select, colors, spacing } from '@/ui';
 
 interface FleetOverview {
   summary: {
@@ -62,7 +62,12 @@ async function fetchSensors(): Promise<SensorSummary[]> {
   return data.sensors.map((s: any) => ({
     id: s.id,
     name: s.name,
-    status: s.connectionState === 'CONNECTED' ? 'online' : s.connectionState === 'RECONNECTING' ? 'warning' : 'offline',
+    status:
+      s.connectionState === 'CONNECTED'
+        ? 'online'
+        : s.connectionState === 'RECONNECTING'
+          ? 'warning'
+          : 'offline',
     cpu: s.metadata?.cpu ?? 0,
     memory: s.metadata?.memory ?? 0,
     rps: s.metadata?.rps ?? 0,
@@ -121,13 +126,19 @@ export function FleetOverviewPage() {
     return true;
   });
 
-  const handleSensorClick = useCallback((sensor: SensorSummary) => {
-    navigate(`/fleet/sensors/${sensor.id}`);
-  }, [navigate]);
+  const handleSensorClick = useCallback(
+    (sensor: SensorSummary) => {
+      navigate(`/fleet/sensors/${sensor.id}`);
+    },
+    [navigate],
+  );
 
-  const handleConfigureClick = useCallback((sensor: SensorSummary) => {
-    navigate(`/fleet/sensors/${sensor.id}/config`);
-  }, [navigate]);
+  const handleConfigureClick = useCallback(
+    (sensor: SensorSummary) => {
+      navigate(`/fleet/sensors/${sensor.id}/config`);
+    },
+    [navigate],
+  );
 
   if (overviewLoading || sensorsLoading) {
     return (
@@ -137,8 +148,22 @@ export function FleetOverviewPage() {
     );
   }
 
-  const summary = overview?.summary || { totalSensors: 0, onlineCount: 0, warningCount: 0, offlineCount: 0, healthScore: 100 };
-  const fleetMetrics = overview?.fleetMetrics || { totalRps: 0, avgLatency: 0, avgCpu: 0, avgMemory: 0 };
+  const summary = overview?.summary || {
+    totalSensors: 0,
+    onlineCount: 0,
+    warningCount: 0,
+    offlineCount: 0,
+    healthScore: 100,
+  };
+  const fleetMetrics = overview?.fleetMetrics || {
+    totalRps: 0,
+    avgLatency: 0,
+    avgCpu: 0,
+    avgMemory: 0,
+  };
+  const headerDescription = `Sensor Fleet Command & Health Monitoring${
+    lastUpdatedText ? ` · Updated ${lastUpdatedText}` : ''
+  }`;
 
   const kpiMetrics = [
     {
@@ -155,7 +180,9 @@ export function FleetOverviewPage() {
       subtitle: 'Degraded performance or reconnecting',
       borderColor: colors.orange,
       valueColor: colors.orange,
-      icon: <AlertTriangle aria-hidden="true" className="w-4 h-4" style={{ color: colors.orange }} />,
+      icon: (
+        <AlertTriangle aria-hidden="true" className="w-4 h-4" style={{ color: colors.orange }} />
+      ),
     },
     {
       label: 'Offline',
@@ -178,37 +205,56 @@ export function FleetOverviewPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-light text-ink-primary">Signal Array</h1>
-          <p className="text-ink-secondary">
-            Sensor Fleet Command & Health Monitoring
-            {lastUpdatedText && (
-              <span className="ml-2 text-xs text-ink-muted">
-                &middot; Updated {lastUpdatedText}
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button className="btn-outline h-10 px-4 text-xs uppercase tracking-[0.2em]">
-            Export Report
-          </button>
-          <button className="btn-primary h-10 px-4 text-xs uppercase tracking-[0.2em]">
-            Deploy Sensor
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        title="Signal Array"
+        description={headerDescription}
+        actions={
+          <div style={{ display: 'flex', gap: spacing.sm }}>
+            <Button variant="outlined" size="md">
+              Export Report
+            </Button>
+            <Button variant="magenta" size="md">
+              Deploy Sensor
+            </Button>
+          </div>
+        }
+      />
 
       {/* KPI Strip (@/ui) */}
       <KpiStrip metrics={kpiMetrics} cols={4} />
 
       {/* Quick Actions */}
       <div className="grid grid-cols-4 gap-4">
-        <QuickAction icon={Search} title="Run Diagnostics" description="Check sensor health & connectivity" accentClassName="border-l-ac-blue dark:border-l-ac-sky-light" iconClassName="text-ac-blue dark:text-ac-sky-light" />
-        <QuickAction icon={Shield} title="DLP Management" description="Monitor sensitive data leaks" onClick={() => navigate('/fleet/dlp')} accentClassName="border-l-ac-green" iconClassName="text-ac-green" />
-        <QuickAction icon={Settings} title="Configure Sensors" description="Kernel params & Synapse-Pingora config" onClick={() => navigate('/fleet/config')} accentClassName="border-l-ac-orange" iconClassName="text-ac-orange" />
-        <QuickAction icon={Globe} title="Test Connectivity" description="Run network connectivity tests" accentClassName="border-l-ac-purple" iconClassName="text-ac-purple" />
+        <QuickAction
+          icon={Search}
+          title="Run Diagnostics"
+          description="Check sensor health & connectivity"
+          accentClassName="border-l-ac-blue dark:border-l-ac-sky-light"
+          iconClassName="text-ac-blue dark:text-ac-sky-light"
+        />
+        <QuickAction
+          icon={Shield}
+          title="DLP Management"
+          description="Monitor sensitive data leaks"
+          onClick={() => navigate('/fleet/dlp')}
+          accentClassName="border-l-ac-green"
+          iconClassName="text-ac-green"
+        />
+        <QuickAction
+          icon={Settings}
+          title="Configure Sensors"
+          description="Kernel params & Synapse-Pingora config"
+          onClick={() => navigate('/fleet/config')}
+          accentClassName="border-l-ac-orange"
+          iconClassName="text-ac-orange"
+        />
+        <QuickAction
+          icon={Globe}
+          title="Test Connectivity"
+          description="Run network connectivity tests"
+          accentClassName="border-l-ac-purple"
+          iconClassName="text-ac-purple"
+        />
       </div>
 
       {/* Alerts and Distribution */}
@@ -216,15 +262,17 @@ export function FleetOverviewPage() {
         <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-ink-primary">Recent Alerts</h2>
-            <button className="text-sm text-ac-blue dark:text-ac-sky-light hover:underline focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50">View All</button>
+            <Button variant="ghost" size="sm">
+              View All
+            </Button>
           </div>
           <div className="space-y-3">
             {(overview?.recentAlerts || []).length === 0 ? (
               <div className="text-ink-secondary text-sm py-4 text-center">No recent alerts</div>
             ) : (
-              overview?.recentAlerts.slice(0, 5).map((alert) => (
-                <AlertItem key={alert.id} alert={alert} />
-              ))
+              overview?.recentAlerts
+                .slice(0, 5)
+                .map((alert) => <AlertItem key={alert.id} alert={alert} />)
             )}
           </div>
         </div>
@@ -248,29 +296,33 @@ export function FleetOverviewPage() {
         <div className="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-inset">
           <h2 className="text-lg font-semibold text-ink-primary">Sensor Fleet</h2>
           <div className="flex items-center gap-4">
-            <input
-              type="text"
-              placeholder="Search sensors..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search sensors by name"
-              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50"
-            />
-            <select
-              value={filters.status || ''}
-              onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
-              aria-label="Filter sensors by status"
-              className="px-3 py-2 text-sm border border-border-subtle bg-surface-base focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50"
-            >
-              <option value="">All Status</option>
-              <option value="online">Online</option>
-              <option value="warning">Warning</option>
-              <option value="offline">Offline</option>
-            </select>
+            <div style={{ width: 260 }}>
+              <Input
+                placeholder="Search sensors..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search sensors by name"
+                size="sm"
+              />
+            </div>
+            <div style={{ width: 160 }}>
+              <Select
+                value={filters.status || ''}
+                onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
+                aria-label="Filter sensors by status"
+                size="sm"
+                options={[
+                  { value: '', label: 'All Status' },
+                  { value: 'online', label: 'Online' },
+                  { value: 'warning', label: 'Warning' },
+                  { value: 'offline', label: 'Offline' },
+                ]}
+              />
+            </div>
           </div>
         </div>
-        <SensorTable 
-          sensors={filteredSensors} 
+        <SensorTable
+          sensors={filteredSensors}
           onSensorClick={handleSensorClick}
           onConfigureClick={handleConfigureClick}
         />
@@ -282,7 +334,23 @@ export function FleetOverviewPage() {
   );
 }
 
-function QuickAction({ icon: Icon, title, description, onClick, accentClassName, iconClassName, disabled = false }: { icon: LucideIcon; title: string; description: string; onClick?: () => void; accentClassName: string; iconClassName: string; disabled?: boolean }) {
+function QuickAction({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+  accentClassName,
+  iconClassName,
+  disabled = false,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  onClick?: () => void;
+  accentClassName: string;
+  iconClassName: string;
+  disabled?: boolean;
+}) {
   const isDisabled = disabled || !onClick;
   return (
     <button
@@ -297,7 +365,9 @@ function QuickAction({ icon: Icon, title, description, onClick, accentClassName,
           <Icon className={`w-5 h-5 ${iconClassName}`} />
         </div>
         <div>
-          <div className="font-semibold text-ink-primary group-hover:text-ink-primary transition-colors">{title}</div>
+          <div className="font-semibold text-ink-primary group-hover:text-ink-primary transition-colors">
+            {title}
+          </div>
           <div className="text-sm text-ink-secondary">{description}</div>
         </div>
       </div>
@@ -305,21 +375,35 @@ function QuickAction({ icon: Icon, title, description, onClick, accentClassName,
   );
 }
 
-function AlertItem({ alert }: { alert: { id: string; sensorName: string; type: string; error: string | null; createdAt: string } }) {
+function AlertItem({
+  alert,
+}: {
+  alert: { id: string; sensorName: string; type: string; error: string | null; createdAt: string };
+}) {
   const timeAgo = getTimeAgo(new Date(alert.createdAt));
   return (
     <div className="flex items-start gap-3 p-3 hover:bg-surface-subtle transition-colors">
-      <AlertTriangle className="w-5 h-5 text-status-error flex-shrink-0 mt-0.5" />
+      <AlertTriangle
+        aria-hidden="true"
+        className="w-5 h-5 flex-shrink-0 mt-0.5"
+        style={{ color: colors.red }}
+      />
       <div className="flex-1 min-w-0">
         <div className="font-medium text-ink-primary truncate">{alert.type.replace(/_/g, ' ')}</div>
-        <div className="text-sm text-ink-secondary truncate">{alert.sensorName}: {alert.error || 'Command failed'}</div>
+        <div className="text-sm text-ink-secondary truncate">
+          {alert.sensorName}: {alert.error || 'Command failed'}
+        </div>
       </div>
       <div className="text-sm text-ink-secondary whitespace-nowrap">{timeAgo}</div>
     </div>
   );
 }
 
-function RegionBar({ region }: { region: { region: string; online: number; warning: number; offline: number; total: number } }) {
+function RegionBar({
+  region,
+}: {
+  region: { region: string; online: number; warning: number; offline: number; total: number };
+}) {
   const total = region.total || 1;
   const onlinePct = (region.online / total) * 100;
   const warningPct = (region.warning / total) * 100;
@@ -332,9 +416,15 @@ function RegionBar({ region }: { region: { region: string; online: number; warni
         <span className="text-sm text-ink-secondary">{region.total} sensors</span>
       </div>
       <div className="h-6 flex overflow-hidden bg-surface-subtle border border-border-subtle">
-        {onlinePct > 0 && <div className="bg-status-success" style={{ width: `${onlinePct}%` }} />}
-        {warningPct > 0 && <div className="bg-status-warning" style={{ width: `${warningPct}%` }} />}
-        {offlinePct > 0 && <div className="bg-status-error" style={{ width: `${offlinePct}%` }} />}
+        {onlinePct > 0 && (
+          <div style={{ width: `${onlinePct}%`, background: colors.status.success }} />
+        )}
+        {warningPct > 0 && (
+          <div style={{ width: `${warningPct}%`, background: colors.status.warning }} />
+        )}
+        {offlinePct > 0 && (
+          <div style={{ width: `${offlinePct}%`, background: colors.status.error }} />
+        )}
       </div>
     </div>
   );
@@ -347,7 +437,14 @@ function formatNumber(n: number): string {
 }
 
 function formatRegion(region: string): string {
-  const names: Record<string, string> = { 'us-east-1': 'US East', 'us-west-1': 'US West', 'us-west-2': 'US West 2', 'eu-west-1': 'EU West', 'eu-central-1': 'EU Central', 'ap-southeast-1': 'Asia Pacific' };
+  const names: Record<string, string> = {
+    'us-east-1': 'US East',
+    'us-west-1': 'US West',
+    'us-west-2': 'US West 2',
+    'eu-west-1': 'EU West',
+    'eu-central-1': 'EU Central',
+    'ap-southeast-1': 'Asia Pacific',
+  };
   return names[region] || region;
 }
 
