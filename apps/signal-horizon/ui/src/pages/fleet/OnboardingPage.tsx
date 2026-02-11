@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button } from '@/ui';
+import { Button, SectionHeader } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -61,6 +61,18 @@ interface NewTokenRequest {
   expiresIn?: number;
   region?: string;
 }
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const MODAL_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+};
 
 export function OnboardingPage(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<'tokens' | 'pending'>('tokens');
@@ -211,21 +223,22 @@ export function OnboardingPage(): React.ReactElement {
   return (
     <div className="flex-1 p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Sensor Onboarding</h1>
-          <p className="text-sm text-ink-secondary mt-1">
-            Manage registration tokens and approve pending sensors
-          </p>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New Token
-        </button>
-      </div>
+      <SectionHeader
+        title="Sensor Onboarding"
+        description="Manage registration tokens and approve pending sensors"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            New Token
+          </button>
+        }
+      />
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -467,9 +480,12 @@ export function OnboardingPage(): React.ReactElement {
       {isModalOpen && !generatedToken && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold text-ink-primary mb-4">
-              Create Registration Token
-            </h2>
+            <SectionHeader
+              title="Create Registration Token"
+              size="h4"
+              style={{ marginBottom: '16px' }}
+              titleStyle={MODAL_HEADER_TITLE_STYLE}
+            />
             <form onSubmit={handleCreateToken} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-ink-secondary mb-1">
@@ -555,7 +571,12 @@ export function OnboardingPage(): React.ReactElement {
                 <Check className="w-5 h-5 text-ac-green" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-ink-primary">Token Created</h2>
+                <SectionHeader
+                  title="Token Created"
+                  size="h4"
+                  style={{ marginBottom: 0 }}
+                  titleStyle={MODAL_HEADER_TITLE_STYLE}
+                />
                 <p className="text-sm text-ink-secondary">
                   Copy this token now. It won't be shown again.
                 </p>
@@ -608,7 +629,12 @@ export function OnboardingPage(): React.ReactElement {
                 <Trash2 className="w-5 h-5 text-ac-red" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-ink-primary">Revoke Token</h2>
+                <SectionHeader
+                  title="Revoke Token"
+                  size="h4"
+                  style={{ marginBottom: 0 }}
+                  titleStyle={MODAL_HEADER_TITLE_STYLE}
+                />
                 <p className="text-sm text-ink-secondary">This action cannot be undone.</p>
               </div>
             </div>

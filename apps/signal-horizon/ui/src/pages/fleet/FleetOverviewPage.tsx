@@ -22,6 +22,12 @@ import type { SensorSummary } from '../../types/fleet';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
 import { apiFetch } from '../../lib/api';
 import { Button, Input, KpiStrip, SectionHeader, Select, colors, spacing } from '@/ui';
+const CARD_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+};
 
 interface FleetOverview {
   summary: {
@@ -261,10 +267,17 @@ export function FleetOverviewPage() {
       <div className="grid grid-cols-2 gap-6">
         <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-ink-primary">Recent Alerts</h2>
-            <Button variant="ghost" size="sm">
-              View All
-            </Button>
+            <SectionHeader
+              title="Recent Alerts"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Button variant="ghost" size="sm">
+                  View All
+                </Button>
+              }
+            />
           </div>
           <div className="space-y-3">
             {(overview?.recentAlerts || []).length === 0 ? (
@@ -278,7 +291,12 @@ export function FleetOverviewPage() {
         </div>
 
         <div className="card border border-border-subtle border-t-2 border-t-ac-navy dark:border-t-ac-sky-light p-6">
-          <h2 className="text-lg font-semibold text-ink-primary mb-4">Fleet Distribution</h2>
+          <SectionHeader
+            title="Fleet Distribution"
+            size="h4"
+            style={{ marginBottom: '16px' }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
           <div className="space-y-3">
             {(overview?.regionDistribution || []).length === 0 ? (
               <div className="text-ink-secondary text-sm py-4 text-center">No region data</div>
@@ -294,32 +312,39 @@ export function FleetOverviewPage() {
       {/* Sensor Fleet Table */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light">
         <div className="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-inset">
-          <h2 className="text-lg font-semibold text-ink-primary">Sensor Fleet</h2>
-          <div className="flex items-center gap-4">
-            <div style={{ width: 260 }}>
-              <Input
-                placeholder="Search sensors..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search sensors by name"
-                size="sm"
-              />
-            </div>
-            <div style={{ width: 160 }}>
-              <Select
-                value={filters.status || ''}
-                onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
-                aria-label="Filter sensors by status"
-                size="sm"
-                options={[
-                  { value: '', label: 'All Status' },
-                  { value: 'online', label: 'Online' },
-                  { value: 'warning', label: 'Warning' },
-                  { value: 'offline', label: 'Offline' },
-                ]}
-              />
-            </div>
-          </div>
+          <SectionHeader
+            title="Sensor Fleet"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+            actions={
+              <div className="flex items-center gap-4">
+                <div style={{ width: 260 }}>
+                  <Input
+                    placeholder="Search sensors..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-label="Search sensors by name"
+                    size="sm"
+                  />
+                </div>
+                <div style={{ width: 160 }}>
+                  <Select
+                    value={filters.status || ''}
+                    onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
+                    aria-label="Filter sensors by status"
+                    size="sm"
+                    options={[
+                      { value: '', label: 'All Status' },
+                      { value: 'online', label: 'Online' },
+                      { value: 'warning', label: 'Warning' },
+                      { value: 'offline', label: 'Offline' },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
+          />
         </div>
         <SensorTable
           sensors={filteredSensors}

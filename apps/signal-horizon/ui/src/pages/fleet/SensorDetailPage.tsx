@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Alert, Breadcrumb, Button, EmptyState, Tabs, colors } from '@/ui';
+import { Alert, Breadcrumb, Button, EmptyState, SectionHeader, Tabs, colors } from '@/ui';
 import { SensorStatusBadge } from '../../components/fleet';
 import { SensorDetailSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
@@ -23,6 +23,13 @@ import {
   type TabType,
 } from './sensor-detail';
 import { apiFetch } from '../../lib/api';
+
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 export function SensorDetailPage() {
   useDocumentTitle('Sensor Detail');
@@ -168,7 +175,12 @@ export function SensorDetailPage() {
             >
               Back to Fleet
             </Button>
-            <h1 className="text-xl font-light text-ink-primary">{sensor.name}</h1>
+            <SectionHeader
+              title={sensor.name}
+              size="h1"
+              style={PAGE_HEADER_STYLE}
+              titleStyle={PAGE_HEADER_TITLE_STYLE}
+            />
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.18em] text-ink-secondary">
               <SensorStatusBadge status={status} />
               <span>ID {sensor.id.slice(0, 8)}...</span>
