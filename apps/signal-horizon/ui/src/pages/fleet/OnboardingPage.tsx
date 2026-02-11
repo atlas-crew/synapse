@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button, SectionHeader } from '@/ui';
+import { Button, Modal, SectionHeader } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -67,13 +67,6 @@ const PAGE_HEADER_TITLE_STYLE = {
   lineHeight: '28px',
   color: 'var(--text-primary)',
 };
-const MODAL_HEADER_TITLE_STYLE = {
-  fontSize: '18px',
-  lineHeight: '28px',
-  fontWeight: 600,
-  color: 'var(--text-primary)',
-};
-
 export function OnboardingPage(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<'tokens' | 'pending'>('tokens');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -478,186 +471,160 @@ export function OnboardingPage(): React.ReactElement {
 
       {/* Create Token Modal */}
       {isModalOpen && !generatedToken && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
-            <SectionHeader
-              title="Create Registration Token"
-              size="h4"
-              style={{ marginBottom: '16px' }}
-              titleStyle={MODAL_HEADER_TITLE_STYLE}
-            />
-            <form onSubmit={handleCreateToken} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">
-                  Token Name
-                </label>
-                <input
-                  name="name"
-                  type="text"
-                  required
-                  placeholder="e.g., AWS Production Fleet"
-                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:border-link focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">
-                  Max Uses
-                </label>
-                <input
-                  name="maxUses"
-                  type="number"
-                  min="1"
-                  max="1000"
-                  defaultValue="10"
-                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
-                />
-                <p className="text-xs text-ink-muted mt-1">
-                  Number of sensors that can use this token
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">
-                  Expires In (days)
-                </label>
-                <input
-                  name="expiresIn"
-                  type="number"
-                  min="1"
-                  max="365"
-                  placeholder="Optional"
-                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:border-link focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Region</label>
-                <select
-                  name="region"
-                  className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
-                >
-                  <option value="">Any Region</option>
-                  <option value="us-east-1">US East (N. Virginia)</option>
-                  <option value="us-west-2">US West (Oregon)</option>
-                  <option value="eu-west-1">EU (Ireland)</option>
-                  <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
-                </select>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="btn-ghost flex-1"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary flex-1"
-                  disabled={generateMutation.isPending}
-                >
-                  {generateMutation.isPending ? 'Creating...' : 'Create Token'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal open onClose={() => setIsModalOpen(false)} size="520px" title="Create Registration Token">
+          <form onSubmit={handleCreateToken} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">Token Name</label>
+              <input
+                name="name"
+                type="text"
+                required
+                placeholder="e.g., AWS Production Fleet"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:border-link focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">Max Uses</label>
+              <input
+                name="maxUses"
+                type="number"
+                min="1"
+                max="1000"
+                defaultValue="10"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
+              />
+              <p className="text-xs text-ink-muted mt-1">
+                Number of sensors that can use this token
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">
+                Expires In (days)
+              </label>
+              <input
+                name="expiresIn"
+                type="number"
+                min="1"
+                max="365"
+                placeholder="Optional"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary placeholder:text-ink-muted focus:border-link focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">Region</label>
+              <select
+                name="region"
+                className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
+              >
+                <option value="">Any Region</option>
+                <option value="us-east-1">US East (N. Virginia)</option>
+                <option value="us-west-2">US West (Oregon)</option>
+                <option value="eu-west-1">EU (Ireland)</option>
+                <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+              </select>
+            </div>
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="btn-ghost flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-primary flex-1"
+                disabled={generateMutation.isPending}
+              >
+                {generateMutation.isPending ? 'Creating...' : 'Create Token'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* Generated Token Modal */}
       {generatedToken && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-lg">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-ac-green/10 flex items-center justify-center">
-                <Check className="w-5 h-5 text-ac-green" />
-              </div>
-              <div>
-                <SectionHeader
-                  title="Token Created"
-                  size="h4"
-                  style={{ marginBottom: 0 }}
-                  titleStyle={MODAL_HEADER_TITLE_STYLE}
-                />
-                <p className="text-sm text-ink-secondary">
-                  Copy this token now. It won't be shown again.
-                </p>
-              </div>
+        <Modal
+          open
+          onClose={() => {
+            setGeneratedToken(null);
+            setIsModalOpen(false);
+          }}
+          size="640px"
+          title="Token Created"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-ac-green/10 flex items-center justify-center">
+              <Check className="w-5 h-5 text-ac-green" />
             </div>
-            <div className="bg-surface-subtle border border-border-subtle p-4 mb-4">
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-sm font-mono text-ink-primary break-all">
-                  {generatedToken}
-                </code>
-                <Button
-                  onClick={handleCopyToken}
-                  variant="ghost"
-                  size="sm"
-                  icon={copiedToken ? <Check className="w-4 h-4 text-ac-green" /> : <Copy className="w-4 h-4" />}
-                  style={{ height: '32px', padding: 0 }}
-                  title="Copy token"
-                />
-              </div>
-            </div>
-            <div className="bg-ac-orange/10 border border-ac-orange/20 p-3 mb-4">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-ac-orange flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-ac-orange">
-                  This token grants sensor registration access. Store it securely and don't share it
-                  publicly.
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={() => {
-                setGeneratedToken(null);
-                setIsModalOpen(false);
-              }}
-              fill
-              size="sm"
-            >
-              Done
-            </Button>
+            <p className="text-sm text-ink-secondary">Copy this token now. It won't be shown again.</p>
           </div>
-        </div>
+          <div className="bg-surface-subtle border border-border-subtle p-4 mb-4">
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-sm font-mono text-ink-primary break-all">
+                {generatedToken}
+              </code>
+              <Button
+                onClick={handleCopyToken}
+                variant="ghost"
+                size="sm"
+                icon={copiedToken ? <Check className="w-4 h-4 text-ac-green" /> : <Copy className="w-4 h-4" />}
+                style={{ height: '32px', padding: 0 }}
+                title="Copy token"
+              />
+            </div>
+          </div>
+          <div className="bg-ac-orange/10 border border-ac-orange/20 p-3 mb-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-ac-orange flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-ac-orange">
+                This token grants sensor registration access. Store it securely and don't share it
+                publicly.
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => {
+              setGeneratedToken(null);
+              setIsModalOpen(false);
+            }}
+            fill
+            size="sm"
+          >
+            Done
+          </Button>
+        </Modal>
       )}
 
       {/* Revoke Confirmation Modal */}
       {tokenToRevoke && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-ac-red/10 flex items-center justify-center">
-                <Trash2 className="w-5 h-5 text-ac-red" />
-              </div>
-              <div>
-                <SectionHeader
-                  title="Revoke Token"
-                  size="h4"
-                  style={{ marginBottom: 0 }}
-                  titleStyle={MODAL_HEADER_TITLE_STYLE}
-                />
-                <p className="text-sm text-ink-secondary">This action cannot be undone.</p>
-              </div>
+        <Modal open onClose={() => setTokenToRevoke(null)} size="520px" title="Revoke Token">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-ac-red/10 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-ac-red" />
             </div>
-            <p className="text-sm text-ink-secondary mb-4">
-              Sensors that haven't registered yet will no longer be able to use this token. Already
-              registered sensors will not be affected.
-            </p>
-            <div className="flex gap-3">
-              <Button onClick={() => setTokenToRevoke(null)} variant="ghost" size="sm" fill>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => revokeMutation.mutate(tokenToRevoke)}
-                size="sm"
-                fill
-                style={{ background: '#EF3340' }}
-                disabled={revokeMutation.isPending}
-              >
-                {revokeMutation.isPending ? 'Revoking...' : 'Revoke Token'}
-              </Button>
-            </div>
+            <p className="text-sm text-ink-secondary">This action cannot be undone.</p>
           </div>
-        </div>
+          <p className="text-sm text-ink-secondary mb-4">
+            Sensors that haven't registered yet will no longer be able to use this token. Already
+            registered sensors will not be affected.
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={() => setTokenToRevoke(null)} variant="ghost" size="sm" fill>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => revokeMutation.mutate(tokenToRevoke)}
+              size="sm"
+              fill
+              style={{ background: '#EF3340' }}
+              disabled={revokeMutation.isPending}
+            >
+              {revokeMutation.isPending ? 'Revoking...' : 'Revoke Token'}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

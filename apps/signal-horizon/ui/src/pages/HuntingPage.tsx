@@ -3,7 +3,7 @@
  * Query builder, filters, results table, saved queries
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Database } from 'lucide-react';
 import {
@@ -19,7 +19,6 @@ import {
   SigmaRulesPanel,
 } from '../components/hunting';
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
-import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Alert,
@@ -27,8 +26,8 @@ import {
   Button,
   CARD_HEADER_TITLE_STYLE,
   Input,
+  Modal,
   SectionHeader,
-  alpha,
   colors,
   spacing,
 } from '@/ui';
@@ -326,9 +325,6 @@ interface SaveQueryModalProps {
 function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const modalRef = useRef<HTMLDivElement>(null);
-  const stableOnCancel = useCallback(() => onCancel(), [onCancel]);
-  useFocusTrap(modalRef, true, stableOnCancel);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -337,53 +333,35 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ background: alpha(colors.black, 0.6) }}
-    >
-      <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="save-query-title"
-        className="bg-surface-base border border-border-subtle p-6 w-full max-w-md"
-      >
-        <SectionHeader
-          title="Save Query"
-          titleId="save-query-title"
-          size="h4"
-          style={{ marginBottom: '16px' }}
-          titleStyle={CARD_HEADER_TITLE_STYLE}
+    <Modal open onClose={onCancel} size="520px" title="Save Query">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Name *"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="My saved query"
+          autoFocus
+          size="md"
         />
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Name *"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My saved query"
-            autoFocus
-            size="md"
-          />
-          <Input
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional description..."
-            multiline
-            rows={2}
-            size="md"
-          />
-          <div className="flex gap-3 justify-end">
-            <Button variant="outlined" type="button" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!name.trim()}>
-              Save Query
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <Input
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Optional description..."
+          multiline
+          rows={2}
+          size="md"
+        />
+        <div className="flex gap-3 justify-end">
+          <Button variant="outlined" type="button" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!name.trim()}>
+            Save Query
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
