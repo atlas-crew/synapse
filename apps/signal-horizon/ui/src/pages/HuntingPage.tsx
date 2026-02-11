@@ -21,7 +21,17 @@ import {
 import { useHunt, type HuntQuery, type HuntResult, type SavedQuery } from '../hooks/useHunt';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { Alert, Box, Button, Input, SectionHeader, alpha, colors, spacing } from '@/ui';
+import {
+  Alert,
+  Box,
+  Button,
+  CARD_HEADER_TITLE_STYLE,
+  Input,
+  SectionHeader,
+  alpha,
+  colors,
+  spacing,
+} from '@/ui';
 
 export default function HuntingPage() {
   useDocumentTitle('Threat Hunting');
@@ -338,9 +348,13 @@ function SaveQueryModal({ onSave, onCancel }: SaveQueryModalProps) {
         aria-labelledby="save-query-title"
         className="bg-surface-base border border-border-subtle p-6 w-full max-w-md"
       >
-        <h2 id="save-query-title" className="text-lg font-medium text-ink-primary mb-4">
-          Save Query
-        </h2>
+        <SectionHeader
+          title="Save Query"
+          titleId="save-query-title"
+          size="h4"
+          style={{ marginBottom: '16px' }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Name *"
@@ -387,8 +401,13 @@ function QueryExamples({ onRun }: { onRun: (query: string) => void }) {
   return (
     <div className="card">
       <div className="card-header flex items-center justify-between">
-        <h2 className="font-medium text-ink-primary">Query Examples</h2>
-        <span className="text-xs text-ink-muted">20 links</span>
+        <SectionHeader
+          title="Query Examples"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+          actions={<span className="text-xs text-ink-muted">20 links</span>}
+        />
       </div>
       <div className="card-body space-y-2">
         {examples.map((example) => (

@@ -9,6 +9,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Breadcrumb,
   Button,
+  CARD_HEADER_TITLE_STYLE,
   EmptyState,
   SectionHeader,
   StatusBadge,
@@ -202,7 +203,12 @@ export default function CampaignDetailPage() {
       {/* Attack Timeline */}
       <section className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Attack Timeline</h2>
+          <SectionHeader
+            title="Attack Timeline"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="card-body h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -227,10 +233,17 @@ export default function CampaignDetailPage() {
         {/* Participating IPs */}
         <section className="card">
           <div className="card-header flex items-center justify-between">
-            <h2 className="font-medium text-ink-primary">Participating IPs</h2>
-            <Button variant="outlined" size="sm">
-              Block All
-            </Button>
+            <SectionHeader
+              title="Participating IPs"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Button variant="outlined" size="sm">
+                  Block All
+                </Button>
+              }
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -266,10 +279,17 @@ export default function CampaignDetailPage() {
         {/* Affected Customers */}
         <section className="card">
           <div className="card-header flex items-center justify-between">
-            <h2 className="font-medium text-ink-primary">Affected Customers</h2>
-            <Button variant="outlined" size="sm">
-              View All
-            </Button>
+            <SectionHeader
+              title="Affected Customers"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Button variant="outlined" size="sm">
+                  View All
+                </Button>
+              }
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -306,7 +326,12 @@ export default function CampaignDetailPage() {
       {/* Correlation Signals */}
       <section className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Correlation Signals</h2>
+          <SectionHeader
+            title="Correlation Signals"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="card-body space-y-4">
           {mockCorrelationSignals.map((signal) => (

@@ -37,10 +37,30 @@ import {
 } from 'recharts';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  SectionHeader,
+  alpha,
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 
 const xAxisSmall = { ...xAxisNoLine, tick: { ...xAxisNoLine.tick, fontSize: 11 } } as const;
 const yAxisSmall = { ...axisDefaults.y, tick: { ...axisDefaults.y.tick, fontSize: 11 } } as const;
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const SECTION_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+};
 
 interface ConnectivityStats {
   total: number;
@@ -405,12 +425,13 @@ export function ConnectivityPage(): React.ReactElement {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-light text-ink-primary">Connectivity Monitor</h1>
-        <p className="text-ink-secondary mt-1">
-          Real-time network connectivity status and diagnostics
-        </p>
-      </div>
+      <SectionHeader
+        title="Connectivity Monitor"
+        description="Real-time network connectivity status and diagnostics"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+      />
 
       {/* Top Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -449,9 +470,13 @@ export function ConnectivityPage(): React.ReactElement {
         aria-labelledby="diagnostic-tests-heading"
         className="bg-surface-card border border-border-subtle p-6"
       >
-        <h2 id="diagnostic-tests-heading" className="text-lg font-semibold text-ink-primary mb-4">
-          Network Diagnostic Tests
-        </h2>
+        <SectionHeader
+          title="Network Diagnostic Tests"
+          titleId="diagnostic-tests-heading"
+          size="h4"
+          style={{ marginBottom: '16px' }}
+          titleStyle={SECTION_HEADER_TITLE_STYLE}
+        />
         <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
           <div className="space-y-1">
             <label
@@ -748,7 +773,12 @@ export function ConnectivityPage(): React.ReactElement {
       {/* Sensor Connectivity Table */}
       <div className="bg-surface-card border border-border-subtle overflow-hidden">
         <div className="p-6 border-b border-border-subtle">
-          <h2 className="text-lg font-semibold text-ink-primary">Sensor Connectivity Status</h2>
+          <SectionHeader
+            title="Sensor Connectivity Status"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={SECTION_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -832,7 +862,12 @@ export function ConnectivityPage(): React.ReactElement {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Latency Trend Chart */}
         <div className="bg-surface-card border border-border-subtle p-6">
-          <h2 className="text-lg font-semibold text-ink-primary mb-4">Latency Trend (24h)</h2>
+          <SectionHeader
+            title="Latency Trend (24h)"
+            size="h4"
+            style={{ marginBottom: '16px' }}
+            titleStyle={SECTION_HEADER_TITLE_STYLE}
+          />
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={latencyTrendData}>
               <defs>
@@ -859,9 +894,12 @@ export function ConnectivityPage(): React.ReactElement {
 
         {/* Connection Events Chart */}
         <div className="bg-surface-card border border-border-subtle p-6">
-          <h2 className="text-lg font-semibold text-ink-primary mb-4">
-            Connection Events (Weekly)
-          </h2>
+          <SectionHeader
+            title="Connection Events (Weekly)"
+            size="h4"
+            style={{ marginBottom: '16px' }}
+            titleStyle={SECTION_HEADER_TITLE_STYLE}
+          />
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={connectionEventsData}>
               <defs>

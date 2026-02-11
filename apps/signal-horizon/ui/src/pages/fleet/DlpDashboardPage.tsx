@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
-import { Button } from '@/ui';
+import { Button, SectionHeader } from '@/ui';
 
 interface DlpStats {
   totalScans: number;
@@ -22,6 +22,18 @@ interface DlpViolation {
   client_ip?: string;
   path: string;
 }
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const CARD_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 500,
+  color: 'var(--text-primary)',
+};
 
 async function fetchDlpStats(): Promise<DlpStats> {
   const sensorId = 'synapse-pingora-1';
@@ -67,12 +79,13 @@ export function DlpDashboardPage() {
   return (
     <div className="p-6 space-y-6 min-h-screen bg-surface-base">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Data Loss Prevention</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Monitor sensitive data leaks and fleet-wide DLP violations
-          </p>
-        </div>
+        <SectionHeader
+          title="Data Loss Prevention"
+          description="Monitor sensitive data leaks and fleet-wide DLP violations"
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <div className="flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/20 text-status-success text-xs font-bold">
           <Shield className="w-4 h-4" />
           {isDemoMode ? 'SIMULATED ENFORCEMENT' : 'ENFORCEMENT ACTIVE'}
@@ -109,21 +122,26 @@ export function DlpDashboardPage() {
       </div>
 
       <div className="card shadow-lg">
-        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between bg-surface-card">
-          <h2 className="text-lg font-medium text-ink-primary flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-ac-red" />
-            Recent Violations
-          </h2>
-          <div className="flex gap-2">
-            <Button
-              variant="outlined"
-              size="sm"
-              icon={<FileSearch className="w-3.5 h-3.5" />}
-              style={{ height: '30px', padding: '0 12px', fontSize: '12px' }}
-            >
-              Export CSV
-            </Button>
-          </div>
+        <div className="px-6 py-4 border-b border-border-subtle bg-surface-card">
+          <SectionHeader
+            title="Recent Violations"
+            icon={<AlertTriangle className="w-5 h-5 text-ac-red" />}
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+            actions={
+              <div className="flex gap-2">
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  icon={<FileSearch className="w-3.5 h-3.5" />}
+                  style={{ height: '30px', padding: '0 12px', fontSize: '12px' }}
+                >
+                  Export CSV
+                </Button>
+              </div>
+            }
+          />
         </div>
 
         <div className="overflow-x-auto">

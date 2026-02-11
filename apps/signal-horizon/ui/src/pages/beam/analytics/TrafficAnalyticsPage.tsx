@@ -24,9 +24,23 @@ import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStat
 import { GeoTrafficMap } from '../../../components/beam/analytics/GeoTrafficMap';
 import { LatencyHistogram } from '../../../components/beam/analytics/LatencyHistogram';
 import { ErrorRateChart } from '../../../components/beam/analytics/ErrorRateChart';
-import { alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  SectionHeader,
+  alpha,
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: '1h', label: '1 Hour' },
@@ -410,10 +424,13 @@ export default function TrafficAnalyticsPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Traffic Analytics</h1>
-          <p className="text-ink-secondary mt-1">Loading traffic data...</p>
-        </div>
+        <SectionHeader
+          title="Traffic Analytics"
+          description="Loading traffic data..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <CardSkeleton />
       </div>
@@ -423,13 +440,14 @@ export default function TrafficAnalyticsPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Traffic Analytics</h1>
-          <p className="text-ink-secondary mt-1">API traffic patterns and trends</p>
-        </div>
-        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-      </div>
+      <SectionHeader
+        title="Traffic Analytics"
+        description="API traffic patterns and trends"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={<TimeRangeSelector value={timeRange} onChange={setTimeRange} />}
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">

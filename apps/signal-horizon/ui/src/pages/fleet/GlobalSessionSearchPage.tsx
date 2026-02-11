@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
-import { Button, Modal } from '@/ui';
+import { Button, Modal, SectionHeader } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -76,6 +76,18 @@ const initialRevokeModalState: RevokeModalState = {
   sensorId: '',
   reason: '',
   global: true,
+};
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+const FORM_HEADER_TITLE_STYLE = {
+  fontSize: '18px',
+  lineHeight: '28px',
+  fontWeight: 500,
+  color: 'var(--text-primary)',
 };
 
 // =============================================================================
@@ -270,23 +282,24 @@ export function GlobalSessionSearchPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Global Session Search</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Search and manage sessions across all sensors in your fleet
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          style={{ height: '36px', padding: '0 16px' }}
-          onClick={refreshStats}
-          disabled={isLoadingStats}
-        >
-          Refresh Stats
-        </Button>
-      </div>
+      <SectionHeader
+        title="Global Session Search"
+        description="Search and manage sessions across all sensors in your fleet"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            style={{ height: '36px', padding: '0 16px' }}
+            onClick={refreshStats}
+            disabled={isLoadingStats}
+          >
+            Refresh Stats
+          </Button>
+        }
+      />
 
       {/* Alerts */}
       {actionError && (
@@ -362,7 +375,12 @@ export function GlobalSessionSearchPage() {
 
       {/* Search Form */}
       <form onSubmit={handleSearch} className="card p-6">
-        <h2 className="text-lg font-medium text-ink-primary mb-4">Search Sessions</h2>
+        <SectionHeader
+          title="Search Sessions"
+          size="h4"
+          style={{ marginBottom: '16px' }}
+          titleStyle={FORM_HEADER_TITLE_STYLE}
+        />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {/* Session ID */}
