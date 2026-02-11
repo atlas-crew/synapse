@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Alert,
+  Box,
   Button,
   CARD_HEADER_TITLE_STYLE,
   Input,
@@ -166,7 +167,7 @@ export default function ApiIntelligencePage() {
             >
               Filter
             </Button>
-            <div style={{ width: 320 }}>
+            <Box style={{ width: 320 }}>
               <Input
                 placeholder="Search endpoints..."
                 value={searchQuery}
@@ -175,7 +176,7 @@ export default function ApiIntelligencePage() {
                 size="sm"
                 icon={<Search className="w-4 h-4" aria-hidden="true" />}
               />
-            </div>
+            </Box>
           </div>
         }
       />

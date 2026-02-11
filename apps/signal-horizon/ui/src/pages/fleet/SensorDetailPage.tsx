@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Alert, Breadcrumb, Button, EmptyState, SectionHeader, Tabs, colors } from '@/ui';
+import { Alert, Breadcrumb, Button, EmptyState, SectionHeader, Stack, Tabs, colors } from '@/ui';
 import { SensorStatusBadge } from '../../components/fleet';
 import { SensorDetailSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
@@ -106,7 +106,7 @@ export function SensorDetailPage() {
         <Alert status="error" title="Failed to load sensor details" style={{ textAlign: 'left' }}>
           {(sensorError as Error).message || 'Failed to load sensor details.'}
         </Alert>
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+        <Stack direction="row" justify="center" style={{ marginTop: 16 }}>
           <Button
             onClick={() => refetchSensor()}
             disabled={isSensorFetching}
@@ -114,7 +114,7 @@ export function SensorDetailPage() {
           >
             Retry
           </Button>
-        </div>
+        </Stack>
       </div>
     );
   }

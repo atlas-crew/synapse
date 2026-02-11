@@ -16,9 +16,9 @@ import {
   Input,
   SectionHeader,
   Spinner,
+  Stack,
   Tabs,
   TRUNCATED_CARD_HEADER_TITLE_STYLE,
-  spacing,
 } from '@/ui';
 
 function summarizeEvent(e: RequestTimelineEvent): string {
@@ -158,7 +158,7 @@ export default function RequestTimelinePage() {
         description="Pivot ClickHouse telemetry by request_id."
         size="h3"
         actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <Stack direction="row" align="center" gap="sm">
             <Button
               type="button"
               variant="outlined"
@@ -188,7 +188,7 @@ export default function RequestTimelinePage() {
             >
               Refresh
             </Button>
-          </div>
+          </Stack>
         }
       />
       <div className="text-ink-secondary -mt-3">

@@ -1,9 +1,9 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 13:13_
+_Generated: 2026-02-11 13:16_
 
 ## Summary
 
-**Total findings: 565**
+**Total findings: 547**
 
 ### Findings by Component
 
@@ -12,9 +12,9 @@ _Generated: 2026-02-11 13:13_
 | Stack (row+align+gap) | 487 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 | Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
-| Box | 13 | Raw styled div → use <Box> primitive |
-| Stack (inline) | 7 | Inline flex style → use <Stack> primitive |
 | Text | 6 | Raw styled text elements → use <Text> primitive |
+| Stack (inline) | 1 | Inline flex style → use <Stack> primitive |
+| Box | 1 | Raw styled div → use <Box> primitive |
 
 ### Files by Hit Count (Work Order)
 
@@ -32,13 +32,11 @@ Priority files to migrate first (most raw patterns):
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
 | 11 | `components/fleet/RemoteShell.tsx` |
-| 10 | `pages/OverviewPage.tsx` |
 | 10 | `components/fleet/WebTerminal.tsx` |
 | 10 | `components/fleet/ServiceControlPanel.tsx` |
 | 10 | `components/fleet/LogViewer.tsx` |
 | 10 | `components/LoadingStates.tsx` |
 | 9 | `pages/fleet/SensorConfigPage.tsx` |
-| 9 | `pages/fleet/FleetOverviewPage.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `pages/beam/BeamDashboardPage.tsx` |
@@ -46,8 +44,8 @@ Priority files to migrate first (most raw patterns):
 | 9 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
+| 8 | `pages/OverviewPage.tsx` |
 | 8 | `components/fleet/RolloutManager.tsx` |
-| 7 | `pages/hunting/RequestTimelinePage.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
 | 7 | `components/hunting/HuntResultsTable.tsx` |
@@ -59,9 +57,11 @@ Priority files to migrate first (most raw patterns):
 | 6 | `pages/SupportPage.tsx` |
 | 6 | `components/soc/CampaignGraph.tsx` |
 | 6 | `components/AuthCoverageMap/AuthCoverageMap.tsx` |
+| 5 | `pages/hunting/RequestTimelinePage.tsx` |
 | 5 | `pages/fleet/OnboardingPage.tsx` |
 | 5 | `pages/fleet/FleetHealthPage.tsx` |
 | 5 | `pages/fleet/ConfigManagerPage.tsx` |
+| 5 | `pages/beam/analytics/ResponseTimesPage.tsx` |
 
 ---
 
@@ -73,18 +73,6 @@ Raw styled div → use <Box> primitive
 | File | Line | Match |
 |------|------|-------|
 | `components/fleet/LogViewer.tsx` | 120 | `<div style={style} className="group">` |
-| `pages/OverviewPage.tsx` | 295 | `<div style={{ display: 'flex', gap: '8px' }}>` |
-| `pages/ApiIntelligencePage.tsx` | 169 | `<div style={{ width: 320 }}>` |
-| `pages/hunting/RequestTimelinePage.tsx` | 161 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/hunting/CampaignTimelinePage.tsx` | 123 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/CampaignDetailPage.tsx` | 126 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/fleet/FleetOverviewPage.tsx` | 218 | `<div style={{ display: 'flex', gap: spacing.sm }}>` |
-| `pages/fleet/FleetOverviewPage.tsx` | 322 | `<div style={{ width: 260 }}>` |
-| `pages/fleet/FleetOverviewPage.tsx` | 331 | `<div style={{ width: 160 }}>` |
-| `pages/fleet/FleetOverviewPage.tsx` | 445 | `<div style={{ width: `${onlinePct}%`, background: colors.status.success }} />` |
-| `pages/fleet/FleetOverviewPage.tsx` | 448 | `<div style={{ width: `${warningPct}%`, background: colors.status.warning }} />` |
-| `pages/fleet/FleetOverviewPage.tsx` | 451 | `<div style={{ width: `${offlinePct}%`, background: colors.status.error }} />` |
-| `pages/fleet/SensorDetailPage.tsx` | 109 | `<div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>` |
 
 ### Text
 Raw styled text elements → use <Text> primitive
@@ -104,12 +92,6 @@ Inline flex style → use <Stack> primitive
 | File | Line | Match |
 |------|------|-------|
 | `components/ui/PersistentTooltip.tsx` | 162 | `display: 'flex',` |
-| `pages/OverviewPage.tsx` | 295 | `<div style={{ display: 'flex', gap: '8px' }}>` |
-| `pages/hunting/RequestTimelinePage.tsx` | 161 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/hunting/CampaignTimelinePage.tsx` | 123 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/CampaignDetailPage.tsx` | 126 | `<div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>` |
-| `pages/fleet/FleetOverviewPage.tsx` | 218 | `<div style={{ display: 'flex', gap: spacing.sm }}>` |
-| `pages/fleet/SensorDetailPage.tsx` | 109 | `<div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>` |
 
 ### Stack (col+gap)
 Tailwind flex-col + gap → use <Stack direction=column>

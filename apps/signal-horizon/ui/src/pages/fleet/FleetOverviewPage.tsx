@@ -21,7 +21,7 @@ import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
 import { apiFetch } from '../../lib/api';
-import { Button, Input, KpiStrip, SectionHeader, Select, colors, spacing } from '@/ui';
+import { Box, Button, Input, KpiStrip, SectionHeader, Select, Stack, colors } from '@/ui';
 const CARD_HEADER_TITLE_STYLE = {
   fontSize: '18px',
   lineHeight: '28px',
@@ -215,14 +215,14 @@ export function FleetOverviewPage() {
         title="Signal Array"
         description={headerDescription}
         actions={
-          <div style={{ display: 'flex', gap: spacing.sm }}>
+          <Stack direction="row" gap="sm">
             <Button variant="outlined" size="md">
               Export Report
             </Button>
             <Button variant="magenta" size="md">
               Deploy Sensor
             </Button>
-          </div>
+          </Stack>
         }
       />
 
@@ -319,7 +319,7 @@ export function FleetOverviewPage() {
             titleStyle={CARD_HEADER_TITLE_STYLE}
             actions={
               <div className="flex items-center gap-4">
-                <div style={{ width: 260 }}>
+                <Box style={{ width: 260 }}>
                   <Input
                     placeholder="Search sensors..."
                     value={searchQuery}
@@ -327,8 +327,8 @@ export function FleetOverviewPage() {
                     aria-label="Search sensors by name"
                     size="sm"
                   />
-                </div>
-                <div style={{ width: 160 }}>
+                </Box>
+                <Box style={{ width: 160 }}>
                   <Select
                     value={filters.status || ''}
                     onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
@@ -341,7 +341,7 @@ export function FleetOverviewPage() {
                       { value: 'offline', label: 'Offline' },
                     ]}
                   />
-                </div>
+                </Box>
               </div>
             }
           />
@@ -442,13 +442,13 @@ function RegionBar({
       </div>
       <div className="h-6 flex overflow-hidden bg-surface-subtle border border-border-subtle">
         {onlinePct > 0 && (
-          <div style={{ width: `${onlinePct}%`, background: colors.status.success }} />
+          <Box style={{ width: `${onlinePct}%`, background: colors.status.success }} />
         )}
         {warningPct > 0 && (
-          <div style={{ width: `${warningPct}%`, background: colors.status.warning }} />
+          <Box style={{ width: `${warningPct}%`, background: colors.status.warning }} />
         )}
         {offlinePct > 0 && (
-          <div style={{ width: `${offlinePct}%`, background: colors.status.error }} />
+          <Box style={{ width: `${offlinePct}%`, background: colors.status.error }} />
         )}
       </div>
     </div>

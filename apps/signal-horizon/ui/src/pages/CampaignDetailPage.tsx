@@ -12,12 +12,12 @@ import {
   CARD_HEADER_TITLE_STYLE,
   EmptyState,
   SectionHeader,
+  Stack,
   StatusBadge,
   alpha,
   axisDefaults,
   colors,
   gridDefaultsSoft,
-  spacing,
   tooltipDefaults,
   xAxisNoLine,
 } from '@/ui';
@@ -123,7 +123,7 @@ export default function CampaignDetailPage() {
           }
           size="h3"
           actions={
-            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Stack direction="row" align="center" gap="sm">
               <Button
                 variant="outlined"
                 size="sm"
@@ -134,7 +134,7 @@ export default function CampaignDetailPage() {
               <Button size="sm" icon={<Shield aria-hidden="true" className="w-4 h-4" />}>
                 Open War Room
               </Button>
-            </div>
+            </Stack>
           }
         />
         <div className="flex items-center gap-2">

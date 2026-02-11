@@ -40,7 +40,7 @@ import {
 import { useRelativeTime } from '../hooks/useRelativeTime';
 
 // ─── @/ui library imports ────────────────────────────────────────────────────
-import { SectionHeader, KpiStrip, Button, colors } from '@/ui';
+import { SectionHeader, KpiStrip, Button, Stack, colors } from '@/ui';
 
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
@@ -292,7 +292,7 @@ export default function OverviewPage() {
         size="h3"
         mb="sm"
         actions={
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <Stack direction="row" gap="sm">
             <Button
               variant="outlined"
               size="sm"
@@ -307,7 +307,7 @@ export default function OverviewPage() {
             <Button variant="secondary" size="sm" icon={<Settings className="w-4 h-4" />}>
               Settings
             </Button>
-          </div>
+          </Stack>
         }
       />
 
