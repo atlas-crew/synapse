@@ -1,9 +1,9 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 12:27_
+_Generated: 2026-02-11 13:03_
 
 ## Summary
 
-**Total findings: 608**
+**Total findings: 593**
 
 ### Findings by Component
 
@@ -13,7 +13,6 @@ _Generated: 2026-02-11 12:27_
 | Box | 33 | Raw styled div → use <Box> primitive |
 | Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
-| Tabs | 15 | Raw tab implementations → use <Tabs> |
 | Stack (inline) | 15 | Inline flex style → use <Stack> primitive |
 | Text | 7 | Raw styled text elements → use <Text> primitive |
 
@@ -23,10 +22,10 @@ Priority files to migrate first (most raw patterns):
 
 | Hits | File |
 |------|------|
-| 30 | `pages/AdminSettingsPage.tsx` |
-| 22 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
+| 21 | `pages/AdminSettingsPage.tsx` |
 | 21 | `components/fleet/FileBrowser.tsx` |
 | 19 | `pages/fleet/ReleasesPage.tsx` |
+| 17 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 16 | `App.tsx` |
 | 13 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
@@ -228,8 +227,8 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 | `pages/WarRoomPage.tsx` | 361 | `<div className="flex items-end justify-between gap-4">` |
 | `pages/hunting/RequestTimelinePage.tsx` | 214 | `<div className="card-header flex items-center justify-between gap-4">` |
 | `pages/hunting/RequestTimelinePage.tsx` | 368 | `<div className="card-header flex items-center justify-between gap-4">` |
-| `pages/AdminSettingsPage.tsx` | 878 | `<div className="flex items-start justify-between gap-4">` |
-| `pages/AdminSettingsPage.tsx` | 1511 | `<div className="flex items-center justify-between gap-4">` |
+| `pages/AdminSettingsPage.tsx` | 858 | `<div className="flex items-start justify-between gap-4">` |
+| `pages/AdminSettingsPage.tsx` | 1482 | `<div className="flex items-center justify-between gap-4">` |
 | `pages/fleet/sensor-detail/OverviewTab.tsx` | 286 | `className="flex items-center justify-between gap-4 border border-border-subtle b` |
 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 232 | `<div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">` |
 | `pages/fleet/ConnectivityPage.tsx` | 525 | `<div className="flex items-start justify-between gap-3">` |
@@ -237,25 +236,4 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 | `pages/fleet/ConfigManagerPage.tsx` | 974 | `<div key={log.id} className="p-4 flex items-start justify-between gap-4">` |
 | `pages/fleet/ConfigManagerPage.tsx` | 1175 | `<div className="flex items-center justify-between gap-4 mb-2">` |
 | `pages/fleet/SensorDetailPage.tsx` | 163 | `<div className="flex items-start justify-between gap-6 p-6 bg-surface-inset">` |
-
-### Tabs
-Raw tab implementations → use <Tabs>
-
-| File | Line | Match |
-|------|------|-------|
-| `pages/AdminSettingsPage.tsx` | 492 | `role="tablist"` |
-| `pages/AdminSettingsPage.tsx` | 513 | `role="tab"` |
-| `pages/AdminSettingsPage.tsx` | 558 | `role="tabpanel"` |
-| `pages/AdminSettingsPage.tsx` | 792 | `role="tabpanel"` |
-| `pages/AdminSettingsPage.tsx` | 1036 | `role="tabpanel"` |
-| `pages/AdminSettingsPage.tsx` | 1207 | `role="tabpanel"` |
-| `pages/AdminSettingsPage.tsx` | 1444 | `role="tabpanel"` |
-| `pages/AdminSettingsPage.tsx` | 1841 | `role="tabpanel"` |
-| `pages/AdminSettingsPage.tsx` | 2006 | `role="tabpanel"` |
-| `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 273 | `<div role="tabpanel" id="tabpanel-config-drift" aria-labelledby="tab-config-drif` |
-| `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 284 | `<div role="tabpanel" id="tabpanel-config-pingora" aria-labelledby="tab-config-pi` |
-| `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 333 | `<div role="tabpanel" id="tabpanel-config-general" aria-labelledby="tab-config-ge` |
-| `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 418 | `<div role="tabpanel" id="tabpanel-config-kernel" aria-labelledby="tab-config-ker` |
-| `pages/fleet/sensor-detail/ConfigurationTab.tsx` | 492 | `<div role="tabpanel" id="tabpanel-config-history" aria-labelledby="tab-config-hi` |
-| `pages/fleet/SensorDetailPage.tsx` | 224 | `<div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${active` |
 

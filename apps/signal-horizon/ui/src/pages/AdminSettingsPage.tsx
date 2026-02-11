@@ -45,7 +45,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, SectionHeader, Spinner } from '@/ui';
+import { Button, SectionHeader, Spinner, Tabs } from '@/ui';
 
 const PAGE_TITLE_STYLE = {
   fontSize: '20px',
@@ -487,47 +487,33 @@ const AdminSettingsPage: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar Navigation */}
         <aside className="w-full lg:w-64 flex-shrink-0">
-          <nav
-            className="flex flex-col space-y-1"
-            role="tablist"
-            aria-label="Settings categories"
-            onKeyDown={(e) => {
-              const activeIndex = tabs.findIndex((t) => t.id === activeTab);
-              if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                const next = tabs[(activeIndex + 1) % tabs.length];
-                setActiveTab(next.id);
-                document.getElementById(`tab-${next.id}`)?.focus();
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                const prev = tabs[(activeIndex - 1 + tabs.length) % tabs.length];
-                setActiveTab(prev.id);
-                document.getElementById(`tab-${prev.id}`)?.focus();
-              }
-            }}
-          >
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                id={`tab-${tab.id}`}
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`panel-${tab.id}`}
-                tabIndex={activeTab === tab.id ? 0 : -1}
-                onClick={() => setActiveTab(tab.id)}
-                className={clsx(
-                  'flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all border-l-4',
-                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1',
-                  activeTab === tab.id
-                    ? 'bg-ac-navy text-white border-ac-magenta'
-                    : 'bg-surface-subtle text-ink-primary border-transparent hover:bg-border-subtle',
-                )}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+          <Tabs
+            tabs={tabs.map((tab) => ({
+              key: tab.id,
+              label: tab.label,
+              icon: <tab.icon className="w-4 h-4" />,
+            }))}
+            active={activeTab}
+            onChange={(key) =>
+              setActiveTab(
+                key as
+                  | 'tenant'
+                  | 'policies'
+                  | 'automation'
+                  | 'fleet'
+                  | 'synapse'
+                  | 'apparatus'
+                  | 'system',
+              )
+            }
+            variant="pills"
+            size="sm"
+            fill
+            ariaLabel="Settings categories"
+            idPrefix="tab-"
+            panelIdPrefix="panel-"
+            style={{ flexDirection: 'column', gap: '4px' }}
+          />
 
           <div className="mt-10 p-4 bg-ac-card-dark text-white space-y-4">
             <div className="flex items-center gap-2 text-ac-sky-blue">
@@ -555,9 +541,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-tenant"
-                role="tabpanel"
-                aria-labelledby="tab-tenant"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
@@ -789,9 +772,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-policies"
-                role="tabpanel"
-                aria-labelledby="tab-policies"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
@@ -1033,9 +1013,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-automation"
-                role="tabpanel"
-                aria-labelledby="tab-automation"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
@@ -1204,9 +1181,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-fleet"
-                role="tabpanel"
-                aria-labelledby="tab-fleet"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">
@@ -1441,9 +1415,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-synapse"
-                role="tabpanel"
-                aria-labelledby="tab-synapse"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card space-y-6">
@@ -1838,9 +1809,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-apparatus"
-                role="tabpanel"
-                aria-labelledby="tab-apparatus"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -2003,9 +1971,6 @@ const AdminSettingsPage: React.FC = () => {
             <ErrorBoundary>
               <div
                 id="panel-system"
-                role="tabpanel"
-                aria-labelledby="tab-system"
-                tabIndex={0}
                 className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
               >
                 <section className="bg-surface-card border-t-4 border-ac-blue p-8 shadow-card">

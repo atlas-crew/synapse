@@ -270,7 +270,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       </div>
 
       {configTab === 'drift' && (
-        <div role="tabpanel" id="tabpanel-config-drift" aria-labelledby="tab-config-drift">
+        <div id="tabpanel-config-drift">
           <ConfigDriftViewer
             expectedConfig={driftData.expected}
             actualConfig={driftData.actual}
@@ -281,7 +281,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       )}
 
       {configTab === 'pingora' && (
-        <div role="tabpanel" id="tabpanel-config-pingora" aria-labelledby="tab-config-pingora" className="space-y-6">
+        <div id="tabpanel-config-pingora" className="space-y-6">
           {isLoading ? (
             <ConfigPanelSkeleton />
           ) : pingoraError ? (
@@ -330,7 +330,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       )}
 
       {configTab === 'general' && (
-        <div role="tabpanel" id="tabpanel-config-general" aria-labelledby="tab-config-general" className="space-y-4">
+        <div id="tabpanel-config-general" className="space-y-4">
           {!isTunnelActive ? (
             renderTunnelInactive('System configuration')
           ) : isSystemConfigLoading ? (
@@ -415,7 +415,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       )}
 
       {configTab === 'kernel' && (
-        <div role="tabpanel" id="tabpanel-config-kernel" aria-labelledby="tab-config-kernel">
+        <div id="tabpanel-config-kernel">
           {!isTunnelActive ? (
             renderTunnelInactive('Kernel parameters')
           ) : (
@@ -489,7 +489,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       )}
 
       {configTab === 'history' && (
-        <div role="tabpanel" id="tabpanel-config-history" aria-labelledby="tab-config-history" className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
+        <div id="tabpanel-config-history" className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Recent Configuration Changes</h3>
           {isHistoryLoading ? (
             <ConfigPanelSkeleton />

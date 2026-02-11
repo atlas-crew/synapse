@@ -221,7 +221,7 @@ export function SensorDetailPage() {
       </div>
 
       {/* Tab Content */}
-      <div role="tabpanel" id={`tabpanel-${activeTab}`} aria-labelledby={`tab-${activeTab}`}>
+      <div id={`tabpanel-${activeTab}`}>
         {activeTab === 'overview' && (
           <OverviewTab
             sensor={sensor}
