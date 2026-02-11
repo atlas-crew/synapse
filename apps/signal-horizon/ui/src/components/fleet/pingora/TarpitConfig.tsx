@@ -1,8 +1,9 @@
 import { useMemo, memo } from 'react';
-import { Timer, Hourglass, AlertTriangle } from 'lucide-react';
+import { Timer, Hourglass } from 'lucide-react';
 import { clsx } from 'clsx';
 import { parseIntSafe, parseFloatSafe } from '../../../utils/parseNumeric';
 import type { TarpitConfig as SharedTarpitConfig } from '@signal-horizon/shared/types';
+import { Alert } from '@/ui';
 
 /**
  * Tarpit config data used by the UI form.
@@ -72,10 +73,9 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
       {config.enabled && (
         <div className="space-y-4 border-t border-border-subtle pt-6">
           {hasErrors && (
-            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20" role="alert">
-              <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
-              <span className="text-xs text-status-error">Configuration has validation errors</span>
-            </div>
+            <Alert status="error" title="Configuration Error" style={{ padding: '10px 12px' }}>
+              Configuration has validation errors
+            </Alert>
           )}
 
           <div className="grid grid-cols-2 gap-4">
@@ -101,7 +101,9 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 )}
               />
               {validationErrors.base_delay_ms && (
-                <p id="tarpit-base-delay-error" className="text-xs text-status-error" role="alert">{validationErrors.base_delay_ms}</p>
+                <p id="tarpit-base-delay-error" className="text-xs text-status-error" aria-live="polite">
+                  {validationErrors.base_delay_ms}
+                </p>
               )}
             </div>
             <div className="space-y-1">
@@ -126,7 +128,9 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 )}
               />
               {validationErrors.max_delay_ms && (
-                <p id="tarpit-max-delay-error" className="text-xs text-status-error" role="alert">{validationErrors.max_delay_ms}</p>
+                <p id="tarpit-max-delay-error" className="text-xs text-status-error" aria-live="polite">
+                  {validationErrors.max_delay_ms}
+                </p>
               )}
             </div>
             <div className="space-y-1">
@@ -152,7 +156,9 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
                 )}
               />
               {validationErrors.progressive_multiplier && (
-                <p id="tarpit-multiplier-error" className="text-xs text-status-error" role="alert">{validationErrors.progressive_multiplier}</p>
+                <p id="tarpit-multiplier-error" className="text-xs text-status-error" aria-live="polite">
+                  {validationErrors.progressive_multiplier}
+                </p>
               )}
             </div>
             <div className="space-y-1">

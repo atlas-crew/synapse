@@ -1,8 +1,9 @@
 import { useMemo, useCallback, memo } from 'react';
-import { Eye, Zap, AlertTriangle } from 'lucide-react';
+import { Eye, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
 import { parseIntSafe } from '../../../utils/parseNumeric';
 import type { DlpConfig as SharedDlpConfig } from '@signal-horizon/shared/types';
+import { Alert } from '@/ui';
 
 /**
  * DLP config data used by the UI form.
@@ -65,10 +66,9 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
       {config.enabled && (
         <div className="space-y-4 border-t border-border-subtle pt-6">
           {hasErrors && (
-            <div className="flex items-center gap-2 p-3 bg-status-error/10 border border-status-error/20">
-              <AlertTriangle className="w-4 h-4 text-status-error flex-shrink-0" />
-              <span className="text-xs text-status-error">Configuration has validation errors</span>
-            </div>
+            <Alert status="error" title="Configuration Error" style={{ padding: '10px 12px' }}>
+              Configuration has validation errors
+            </Alert>
           )}
 
           {/* Mode toggles */}
@@ -120,7 +120,9 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 )}
               />
               {validationErrors.max_scan_size && (
-                <p id="dlp-max-scan-size-error" className="text-xs text-status-error" role="alert">{validationErrors.max_scan_size}</p>
+                <p id="dlp-max-scan-size-error" className="text-xs text-status-error" aria-live="polite">
+                  {validationErrors.max_scan_size}
+                </p>
               )}
             </div>
             <div className="space-y-1">
@@ -145,7 +147,9 @@ export const DlpConfig = memo(function DlpConfig({ config, onChange }: DlpConfig
                 )}
               />
               {validationErrors.max_body_inspection_bytes && (
-                <p id="dlp-inspect-bytes-error" className="text-xs text-status-error" role="alert">{validationErrors.max_body_inspection_bytes}</p>
+                <p id="dlp-inspect-bytes-error" className="text-xs text-status-error" aria-live="polite">
+                  {validationErrors.max_body_inspection_bytes}
+                </p>
               )}
             </div>
             <div className="space-y-1">
