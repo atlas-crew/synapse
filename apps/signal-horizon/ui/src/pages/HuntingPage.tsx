@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Database, AlertCircle } from 'lucide-react';
+import { Database } from 'lucide-react';
 import {
   BehavioralAnomaliesPanel,
   ClickHouseOpsPanel,

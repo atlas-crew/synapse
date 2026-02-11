@@ -11,15 +11,7 @@ import {
   gridDefaults,
   tooltipDefaults,
 } from '@/ui';
-import {
-  BarChart3,
-  Search,
-  ShieldAlert,
-  FileCode,
-  AlertTriangle,
-  CheckCircle,
-  Filter,
-} from 'lucide-react';
+import { BarChart3, Search, ShieldAlert, FileCode, CheckCircle, Filter } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,

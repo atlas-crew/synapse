@@ -26,7 +26,6 @@ import {
   Fingerprint,
   MapPinned,
 } from 'lucide-react';
-import { clsx } from 'clsx';
 import {
   ResponsiveContainer,
   LineChart,

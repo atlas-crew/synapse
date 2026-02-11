@@ -6,7 +6,7 @@ import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { ResourceBarGroup } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
 import { apiFetch } from '../../lib/api';
-import { Box, SectionHeader, alpha, colors, spacing } from '@/ui';
+import { Box, SectionHeader, alpha, colors } from '@/ui';
 
 interface HealthSummary {
   overallScore: number;
