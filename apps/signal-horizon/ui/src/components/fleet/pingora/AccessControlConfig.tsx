@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from 'react';
 import { Ban, X } from 'lucide-react';
-import { Button } from '@/ui';
+import { Button, Input, Select } from '@/ui';
 
 export interface AccessControlData {
   allow: string[];
@@ -11,6 +11,11 @@ interface AccessControlConfigProps {
   config: AccessControlData;
   onChange: (config: AccessControlData) => void;
 }
+
+const LIST_TYPE_OPTIONS = [
+  { value: 'deny', label: 'Block (Deny)' },
+  { value: 'allow', label: 'Allow' },
+];
 
 export const AccessControlConfig = memo(function AccessControlConfig({ config, onChange }: AccessControlConfigProps) {
   const [newCidr, setNewCidr] = useState('');
@@ -46,22 +51,36 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
 
       <div className="space-y-4 border-t border-border-subtle pt-6">
         {/* Add Form */}
+        <div className="flex gap-2 text-[10px] uppercase tracking-[0.18em] text-ink-muted">
+          <label htmlFor="access-list-type" className="w-full max-w-[180px]">
+            List Type
+          </label>
+          <label htmlFor="access-cidr-input" className="flex-1">
+            CIDR Block
+          </label>
+        </div>
         <div className="flex gap-2">
-          <select 
+          <Select
+            id="access-list-type"
+            aria-label="Access list type"
+            options={LIST_TYPE_OPTIONS}
             value={listType}
             onChange={(e) => setListType(e.target.value as 'allow' | 'deny')}
-            className="bg-surface-base border border-border-subtle px-3 py-2 text-sm focus:border-ac-blue focus:outline-none"
-          >
-            <option value="deny">Block (Deny)</option>
-            <option value="allow">Allow</option>
-          </select>
-          <input
+            size="md"
+            containerStyle={{ width: '100%', maxWidth: '180px' }}
+          />
+          <Input
+            id="access-cidr-input"
+            aria-label="CIDR block"
             type="text"
             placeholder="CIDR (e.g., 10.0.0.0/8)"
             value={newCidr}
             onChange={(e) => setNewCidr(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            className="flex-1 bg-surface-base border border-border-subtle px-3 py-2 text-sm focus:border-ac-blue focus:outline-none font-mono"
+            fill
+            size="md"
+            className="font-mono"
+            containerStyle={{ flex: 1 }}
           />
           <Button
             onClick={handleAdd}

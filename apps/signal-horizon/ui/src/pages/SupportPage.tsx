@@ -18,7 +18,7 @@ import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
-import { Button } from '@/ui';
+import { Button, Input } from '@/ui';
 
 const authHeaders = {
   Authorization: `Bearer ${API_KEY}`,
@@ -1171,7 +1171,13 @@ function ContactSupport() {
       <form className="space-y-8">
         <div>
           <label htmlFor="contact-subject" className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Subject</label>
-          <input id="contact-subject" type="text" className="w-full px-5 py-4 border border-border-subtle bg-surface-inset dark:bg-surface-inset text-ink-primary focus:ring-2 focus:ring-ac-blue focus:border-ac-blue transition-all placeholder:text-ink-muted" placeholder="Brief description of the issue" />
+          <Input
+            id="contact-subject"
+            type="text"
+            placeholder="Brief description of the issue"
+            fill
+            size="lg"
+          />
         </div>
         <div>
           <label htmlFor="contact-message" className="block text-[11px] font-bold text-ac-blue dark:text-ac-blue uppercase tracking-[0.2em] mb-3">Message</label>
