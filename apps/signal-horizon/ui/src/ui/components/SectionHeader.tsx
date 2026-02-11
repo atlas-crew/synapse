@@ -36,7 +36,7 @@ interface SectionHeaderProps {
 
 const headingSizes = {
   h1: { fontSize: '3rem', lineHeight: '56px' },
-  h2: { fontSize: '2rem', lineHeight: '40px' },
+  h2: { fontSize: '1.875rem', lineHeight: '38px' },
   h3: { fontSize: '1.75rem', lineHeight: '36px' },
   h4: { fontSize: '1.5rem', lineHeight: '32px' },
 };

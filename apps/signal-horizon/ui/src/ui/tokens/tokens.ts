@@ -79,7 +79,7 @@ export const colors = {
 
   // Chart-specific
   chart: {
-    grid: '#001E62',        // at 0.3 opacity
+    grid: '#001E62', // at 0.3 opacity
     gridOpacity: 0.3,
     gridOpacitySoft: 0.15,
     baselineOpacity: 0.8,
@@ -91,14 +91,14 @@ export const colors = {
 
 // Ordered chart series palette
 export const chartColors = [
-  colors.blue,       // Primary series
-  colors.skyBlue,    // Secondary series
-  colors.green,      // Success / positive
-  colors.orange,     // Warning / caution
-  colors.red,        // Danger / error
-  colors.magenta,    // Accent
-  colors.cloudBlue,  // Additional
-  colors.purple,     // Additional
+  colors.blue, // Primary series
+  colors.skyBlue, // Secondary series
+  colors.green, // Success / positive
+  colors.orange, // Warning / caution
+  colors.red, // Danger / error
+  colors.magenta, // Accent
+  colors.cloudBlue, // Additional
+  colors.purple, // Additional
 ] as const;
 
 // Semantic chart mapping for allow/block/error type data
@@ -114,8 +114,7 @@ export const semanticChartColors = {
 
 // ─── Typography ──────────────────────────────────────────────────────────────
 
-export const fontFamily =
-  "'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif";
+export const fontFamily = "'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif";
 
 export const fontWeight = {
   light: 300,
@@ -134,7 +133,7 @@ export const typography = {
     letterSpacing: '0.1em',
   },
   h1: { fontSize: '3rem', lineHeight: '56px', fontWeight: fontWeight.light },
-  h2: { fontSize: '2rem', lineHeight: '40px', fontWeight: fontWeight.light },
+  h2: { fontSize: '1.875rem', lineHeight: '38px', fontWeight: fontWeight.light },
   h3: { fontSize: '1.75rem', lineHeight: '36px', fontWeight: fontWeight.light },
   h4: { fontSize: '1.5rem', lineHeight: '32px', fontWeight: fontWeight.light },
   h5: { fontSize: '1.25rem', lineHeight: '28px', fontWeight: fontWeight.medium },
