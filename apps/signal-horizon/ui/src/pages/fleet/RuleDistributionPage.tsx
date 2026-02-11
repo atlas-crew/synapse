@@ -137,7 +137,18 @@ function RuleCard({
       style={cardBorderColor ? { borderColor: cardBorderColor } : undefined}
     >
       <div className="px-5 py-4 flex items-center justify-between">
-        <button onClick={onToggle} className="flex items-center gap-4 flex-1 text-left">
+        <Button
+          onClick={onToggle}
+          variant="ghost"
+          size="sm"
+          style={{
+            flex: 1,
+            justifyContent: 'flex-start',
+            height: 'auto',
+            padding: 0,
+            color: 'inherit',
+          }}
+        >
           <div className="p-2 bg-surface-subtle">
             <Shield className="w-5 h-5" style={{ color: colors.skyBlue }} />
           </div>
@@ -153,7 +164,7 @@ function RuleCard({
             </div>
             <p className="text-xs text-ink-muted mt-0.5">{rule.category}</p>
           </div>
-        </button>
+        </Button>
 
         <div className="flex items-center gap-6">
           <div className="text-right">

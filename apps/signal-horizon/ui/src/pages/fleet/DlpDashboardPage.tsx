@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
+import { Button } from '@/ui';
 
 interface DlpStats {
   totalScans: number;
@@ -114,10 +115,14 @@ export function DlpDashboardPage() {
             Recent Violations
           </h2>
           <div className="flex gap-2">
-            <button className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle flex items-center gap-1.5 transition-colors">
-              <FileSearch className="w-3.5 h-3.5" />
+            <Button
+              variant="outlined"
+              size="sm"
+              icon={<FileSearch className="w-3.5 h-3.5" />}
+              style={{ height: '30px', padding: '0 12px', fontSize: '12px' }}
+            >
               Export CSV
-            </button>
+            </Button>
           </div>
         </div>
 

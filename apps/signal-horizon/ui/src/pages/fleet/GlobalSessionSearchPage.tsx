@@ -10,6 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
+import { Button } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -276,30 +277,42 @@ export function GlobalSessionSearchPage() {
             Search and manage sessions across all sensors in your fleet
           </p>
         </div>
-        <button
-          className="px-4 py-2 bg-surface-raised text-ink-primary text-sm font-medium hover:bg-surface-raised/80 transition-colors"
+        <Button
+          variant="secondary"
+          size="sm"
+          style={{ height: '36px', padding: '0 16px' }}
           onClick={refreshStats}
           disabled={isLoadingStats}
         >
           Refresh Stats
-        </button>
+        </Button>
       </div>
 
       {/* Alerts */}
       {actionError && (
         <div className="p-4 bg-ac-red/10 border border-ac-red/30 text-ac-red text-sm">
           {actionError}
-          <button className="ml-4 underline" onClick={() => setActionError(null)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            style={{ height: '20px', padding: 0, marginLeft: '16px', textDecoration: 'underline' }}
+            onClick={() => setActionError(null)}
+          >
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
       {actionSuccess && (
         <div className="p-4 bg-ac-green/10 border border-ac-green/30 text-ac-green text-sm">
           {actionSuccess}
-          <button className="ml-4 underline" onClick={() => setActionSuccess(null)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            style={{ height: '20px', padding: 0, marginLeft: '16px', textDecoration: 'underline' }}
+            onClick={() => setActionSuccess(null)}
+          >
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 

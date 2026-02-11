@@ -32,7 +32,7 @@ import {
 import { useBeamThreats, type ThreatTimeRange } from '../../../hooks/useBeamThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import { useHorizonStore, useTimeRange } from '../../../stores/horizonStore';
-import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import { Button, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
@@ -579,9 +579,13 @@ export default function ThreatActivityPage() {
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-ink-primary font-medium">Recent Incidents</h3>
-            <button className="text-sm text-horizon-400 hover:text-horizon-300 transition-colors">
+            <Button
+              variant="ghost"
+              size="sm"
+              style={{ height: '28px', padding: 0, fontSize: '14px', color: '#529EEC' }}
+            >
               View all →
-            </button>
+            </Button>
           </div>
           <div className="space-y-3">
             {incidents.map((incident) => (

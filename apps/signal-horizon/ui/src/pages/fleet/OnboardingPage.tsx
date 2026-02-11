@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
+import { Button } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -565,13 +566,14 @@ export function OnboardingPage(): React.ReactElement {
                 <code className="flex-1 text-sm font-mono text-ink-primary break-all">
                   {generatedToken}
                 </code>
-                <button onClick={handleCopyToken} className="btn-ghost p-2" title="Copy token">
-                  {copiedToken ? (
-                    <Check className="w-4 h-4 text-ac-green" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
+                <Button
+                  onClick={handleCopyToken}
+                  variant="ghost"
+                  size="sm"
+                  icon={copiedToken ? <Check className="w-4 h-4 text-ac-green" /> : <Copy className="w-4 h-4" />}
+                  style={{ height: '32px', padding: 0 }}
+                  title="Copy token"
+                />
               </div>
             </div>
             <div className="bg-ac-orange/10 border border-ac-orange/20 p-3 mb-4">
@@ -583,15 +585,16 @@ export function OnboardingPage(): React.ReactElement {
                 </p>
               </div>
             </div>
-            <button
+            <Button
               onClick={() => {
                 setGeneratedToken(null);
                 setIsModalOpen(false);
               }}
-              className="btn-primary w-full"
+              fill
+              size="sm"
             >
               Done
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -614,16 +617,18 @@ export function OnboardingPage(): React.ReactElement {
               registered sensors will not be affected.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setTokenToRevoke(null)} className="btn-ghost flex-1">
+              <Button onClick={() => setTokenToRevoke(null)} variant="ghost" size="sm" fill>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => revokeMutation.mutate(tokenToRevoke)}
-                className="btn-primary flex-1 bg-ac-red hover:bg-ac-red/90"
+                size="sm"
+                fill
+                style={{ background: '#EF3340' }}
                 disabled={revokeMutation.isPending}
               >
                 {revokeMutation.isPending ? 'Revoking...' : 'Revoke Token'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

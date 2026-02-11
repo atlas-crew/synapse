@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
+import { Button } from '@/ui';
 
 type BlockReason =
   | 'sql_injection'
@@ -290,9 +291,14 @@ function DecisionTraceModal({
               <h2 className="text-lg font-semibold text-ink-primary">Decision Trace</h2>
               <p className="text-sm text-ink-secondary">Why was this request blocked?</p>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-surface-subtle transition-colors">
-              <X className="w-5 h-5 text-ink-secondary" />
-            </button>
+            <Button
+              onClick={onClose}
+              variant="ghost"
+              size="sm"
+              icon={<X className="w-5 h-5 text-ink-secondary" />}
+              style={{ height: '32px', padding: 0 }}
+              aria-label="Close decision trace"
+            />
           </div>
 
           {/* Content */}
@@ -498,10 +504,14 @@ export default function BlockedRequestsPage() {
           <h1 className="text-xl font-light text-ink-primary">Blocked Requests</h1>
           <p className="text-ink-secondary mt-1">Review and analyze blocked API requests</p>
         </div>
-        <button className="px-4 py-2 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors flex items-center gap-2">
-          <RefreshCw className="w-4 h-4" />
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<RefreshCw className="w-4 h-4" />}
+          style={{ height: '36px', padding: '0 16px' }}
+        >
           Refresh
-        </button>
+        </Button>
       </div>
 
       {/* Stats Grid */}
@@ -648,13 +658,15 @@ export default function BlockedRequestsPage() {
                     <span className="text-ink-secondary text-sm">{request.ruleMatched}</span>
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <button
+                    <Button
                       onClick={() => setSelectedRequest(request)}
-                      className="px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors inline-flex items-center gap-1"
+                      variant="secondary"
+                      size="sm"
+                      icon={<Eye className="w-4 h-4" />}
+                      style={{ height: '30px', padding: '0 12px' }}
                     >
-                      <Eye className="w-4 h-4" />
                       Trace
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               );
