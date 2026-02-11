@@ -1,11 +1,19 @@
-import { useMemo } from 'react';
+import { type CSSProperties, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Activity, Shield, Star } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb } from '@/ui';
+import {
+  Breadcrumb,
+  Button,
+  EmptyState,
+  SectionHeader,
+  StatusBadge,
+  alpha,
+  colors,
+  spacing,
+} from '@/ui';
 import { CopyButton } from '../../components/ui/CopyButton';
-import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchActorDetail, fetchActorTimeline } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
@@ -52,12 +60,32 @@ const demoTimeline: SocActorTimelineEvent[] = [
   },
 ];
 
-const eventTone: Record<string, string> = {
-  rule_match: 'bg-ac-orange/10 text-ac-orange border-ac-orange/40',
-  block: 'bg-ac-red/15 text-ac-red border-ac-red/40',
-  actor_blocked: 'bg-ac-red/15 text-ac-red border-ac-red/40',
-  session_bind: 'bg-ac-blue/10 text-ac-blue border-ac-blue/40',
-  session_alert: 'bg-ac-purple/10 text-ac-purple border-ac-purple/40',
+const eventToneStyle: Record<string, CSSProperties> = {
+  rule_match: {
+    background: alpha(colors.orange, 0.1),
+    color: colors.orange,
+    borderColor: alpha(colors.orange, 0.4),
+  },
+  block: {
+    background: alpha(colors.red, 0.15),
+    color: colors.red,
+    borderColor: alpha(colors.red, 0.4),
+  },
+  actor_blocked: {
+    background: alpha(colors.red, 0.15),
+    color: colors.red,
+    borderColor: alpha(colors.red, 0.4),
+  },
+  session_bind: {
+    background: alpha(colors.blue, 0.1),
+    color: colors.blue,
+    borderColor: alpha(colors.blue, 0.4),
+  },
+  session_alert: {
+    background: alpha(colors.magenta, 0.1),
+    color: colors.magenta,
+    borderColor: alpha(colors.magenta, 0.4),
+  },
 };
 
 export default function ActorDetailPage() {
@@ -107,48 +135,55 @@ export default function ActorDetailPage() {
 
   if (!actor) {
     return (
-      <div className="p-6">
-        <div className="card p-6 text-center">
-          <AlertTriangle className="w-8 h-8 text-ink-muted mx-auto mb-3" />
-          <p className="text-ink-secondary">Actor not found.</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={<AlertTriangle aria-hidden="true" />}
+        title="Actor Not Found"
+        description="The requested actor could not be found."
+      />
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      <Breadcrumb items={[
-        { label: 'Actors', to: '/actors' },
-        { label: actor.actorId },
-      ]} />
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link to="/actors" className="text-sm text-link hover:text-link-hover">Back to Actors</Link>
-          <div className="flex items-center gap-3 mt-2">
-            <h1 className="text-3xl font-light text-ink-primary">{actor.actorId}</h1>
-            <CopyButton value={actor.actorId} />
-          </div>
-          <p className="text-ink-secondary mt-1">First seen {new Date(actor.firstSeen).toLocaleString()}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="btn-outline h-10 px-4 text-xs"
-            onClick={() => toggleWatch(actor.actorId)}
-          >
-            <Star className={clsx('w-4 h-4 mr-2', watched && 'text-ac-orange')} />
-            {watched ? 'Remove Watch' : 'Add to Watchlist'}
-          </button>
-          <span
-            className={clsx(
-              'px-2 py-1 text-xs border',
-              actor.isBlocked
-                ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                : 'bg-ac-green/10 text-ac-green border-ac-green/40'
-            )}
-          >
-            {actor.isBlocked ? 'Blocked' : 'Active'}
-          </span>
+      <Breadcrumb items={[{ label: 'Actors', to: '/actors' }, { label: actor.actorId }]} />
+      <header className="space-y-2">
+        <Link to="/actors" className="text-sm text-link hover:text-link-hover">
+          Back to Actors
+        </Link>
+        <SectionHeader
+          title={actor.actorId}
+          description={`First seen ${new Date(actor.firstSeen).toLocaleString()}`}
+          size="h3"
+          actions={
+            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+              <Button
+                variant="outlined"
+                size="sm"
+                onClick={() => toggleWatch(actor.actorId)}
+                icon={
+                  <Star
+                    aria-hidden="true"
+                    className="w-4 h-4"
+                    style={{ color: watched ? colors.orange : undefined }}
+                  />
+                }
+              >
+                {watched ? 'Remove Watch' : 'Add to Watchlist'}
+              </Button>
+              <StatusBadge
+                status={actor.isBlocked ? 'error' : 'success'}
+                variant="subtle"
+                size="sm"
+              >
+                {actor.isBlocked ? 'Blocked' : 'Active'}
+              </StatusBadge>
+            </div>
+          }
+        />
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-ink-secondary">Actor ID</div>
+          <div className="font-mono text-sm text-ink-primary">{actor.actorId}</div>
+          <CopyButton value={actor.actorId} />
         </div>
       </header>
 
@@ -166,7 +201,10 @@ export default function ActorDetailPage() {
           <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Associated IPs</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {actor.ips.map((ip) => (
-              <span key={ip} className="px-2 py-1 text-xs border border-border-subtle bg-surface-subtle text-ink-secondary font-mono">
+              <span
+                key={ip}
+                className="px-2 py-1 text-xs border border-border-subtle bg-surface-subtle text-ink-secondary font-mono"
+              >
                 {ip}
               </span>
             ))}
@@ -176,7 +214,10 @@ export default function ActorDetailPage() {
           <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Fingerprints</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {actor.fingerprints.map((fp) => (
-              <span key={fp} className="px-2 py-1 text-xs border border-border-subtle bg-surface-subtle text-ink-secondary font-mono">
+              <span
+                key={fp}
+                className="px-2 py-1 text-xs border border-border-subtle bg-surface-subtle text-ink-secondary font-mono"
+              >
                 {fp}
               </span>
             ))}
@@ -186,7 +227,11 @@ export default function ActorDetailPage() {
           <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Sessions</p>
           <div className="mt-3 space-y-2">
             {actor.sessionIds.map((sessionId) => (
-              <Link key={sessionId} to={`/sessions/${sessionId}`} className="block text-sm text-link hover:text-link-hover font-mono">
+              <Link
+                key={sessionId}
+                to={`/sessions/${sessionId}`}
+                className="block text-sm text-link hover:text-link-hover font-mono"
+              >
                 {sessionId}
               </Link>
             ))}
@@ -200,17 +245,24 @@ export default function ActorDetailPage() {
           <div className="text-xs text-ink-muted">{timeline.length} events</div>
         </div>
         <div className="card-body space-y-3">
-          {timeline.length === 0 && (
-            <div className="text-ink-muted">No timeline events yet.</div>
-          )}
+          {timeline.length === 0 && <div className="text-ink-muted">No timeline events yet.</div>}
           {timeline.map((event, index) => (
             <div key={`${event.eventType}-${index}`} className="flex gap-3">
-              <div className={clsx('px-2 py-1 text-xs border h-fit', eventTone[event.eventType] || 'border-border-subtle text-ink-muted')}>
+              <div
+                className="px-2 py-1 text-xs border h-fit"
+                style={
+                  eventToneStyle[event.eventType] ?? {
+                    borderColor: alpha(colors.gray.mid, 0.4),
+                    color: colors.gray.mid,
+                  }
+                }
+              >
                 {event.eventType.replace('_', ' ')}
               </div>
               <div className="flex-1">
                 <div className="text-sm text-ink-primary">
-                  {event.ruleId && `Rule ${event.ruleId}`} {event.path && `${event.method} ${event.path}`}
+                  {event.ruleId && `Rule ${event.ruleId}`}{' '}
+                  {event.path && `${event.method} ${event.path}`}
                   {event.sessionId && `Session ${event.sessionId}`}
                 </div>
                 <div className="text-xs text-ink-muted">
@@ -233,18 +285,21 @@ export default function ActorDetailPage() {
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card p-4">
           <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
-            <Activity className="w-4 h-4" /> Activity Summary
+            <Activity aria-hidden="true" className="w-4 h-4" /> Activity Summary
           </div>
           <div className="mt-3 text-ink-secondary text-sm">
-            Last seen {new Date(actor.lastSeen).toLocaleString()}. {actor.isBlocked ? 'Actor is currently blocked.' : 'Actor is being monitored.'}
+            Last seen {new Date(actor.lastSeen).toLocaleString()}.{' '}
+            {actor.isBlocked ? 'Actor is currently blocked.' : 'Actor is being monitored.'}
           </div>
         </div>
         <div className="card p-4">
           <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
-            <Shield className="w-4 h-4" /> Response Notes
+            <Shield aria-hidden="true" className="w-4 h-4" /> Response Notes
           </div>
           <div className="mt-3 text-ink-secondary text-sm">
-            {actor.blockReason ? `Block reason: ${actor.blockReason}` : 'No automated block action recorded.'}
+            {actor.blockReason
+              ? `Block reason: ${actor.blockReason}`
+              : 'No automated block action recorded.'}
           </div>
         </div>
       </section>

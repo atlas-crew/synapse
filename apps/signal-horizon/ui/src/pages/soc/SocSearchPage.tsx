@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Search, AlertTriangle } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Search } from 'lucide-react';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchActorDetail, fetchActors, fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import type { SocActor, SocSession } from '../../types/soc';
+import { Alert, Button, Input, SectionHeader, Select, StatusBadge, spacing } from '@/ui';
 
 type SearchType = 'auto' | 'ip' | 'fingerprint' | 'actor' | 'session';
 
@@ -15,6 +15,14 @@ type SearchResult =
   | { kind: 'actors'; actors: SocActor[] }
   | { kind: 'actor'; actor: SocActor }
   | { kind: 'session'; session: SocSession };
+
+const searchTypeOptions = [
+  { value: 'auto', label: 'Auto detect' },
+  { value: 'ip', label: 'IP' },
+  { value: 'fingerprint', label: 'Fingerprint' },
+  { value: 'actor', label: 'Actor' },
+  { value: 'session', label: 'Session' },
+];
 
 const demoActor: SocActor = {
   actorId: 'actor-demo-9',
@@ -110,50 +118,48 @@ export default function SocSearchPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs tracking-[0.3em] uppercase text-ink-muted">Signal Horizon</p>
-          <h1 className="text-3xl font-light text-ink-primary">Global Search</h1>
-          <p className="text-ink-secondary mt-2">Search actors, sessions, IPs, and fingerprints across the fleet.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</label>
-          <input
-            value={sensorId}
-            onChange={(event) => setSensorId(event.target.value)}
-            className="px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
-            placeholder="synapse-pingora-1"
-          />
-        </div>
-      </header>
+      <SectionHeader
+        eyebrow="Signal Horizon"
+        title="Global Search"
+        description="Search actors, sessions, IPs, and fingerprints across the fleet."
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
+            <div style={{ width: 180 }}>
+              <Input
+                value={sensorId}
+                onChange={(event) => setSensorId(event.target.value)}
+                placeholder="synapse-pingora-1"
+                size="sm"
+              />
+            </div>
+          </div>
+        }
+      />
 
-      <form onSubmit={handleSubmit} className="card p-4 flex flex-wrap gap-3 items-center">
+      <form onSubmit={handleSubmit} className="card p-4 flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[220px]">
-          <label className="text-xs uppercase tracking-[0.2em] text-ink-muted">Query</label>
-          <input
+          <Input
+            label="Query"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="IP, actor ID, session ID, fingerprint"
-            className="mt-2 w-full px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
+            size="sm"
+            fill
           />
         </div>
         <div className="min-w-[160px]">
-          <label className="text-xs uppercase tracking-[0.2em] text-ink-muted">Type</label>
-          <select
+          <Select
+            label="Type"
             value={searchType}
             onChange={(event) => setSearchType(event.target.value as SearchType)}
-            className="mt-2 w-full px-3 py-2 text-sm border border-border-subtle bg-surface-base text-ink-primary"
-          >
-            <option value="auto">Auto detect</option>
-            <option value="ip">IP</option>
-            <option value="fingerprint">Fingerprint</option>
-            <option value="actor">Actor</option>
-            <option value="session">Session</option>
-          </select>
+            options={searchTypeOptions}
+            size="sm"
+          />
         </div>
-        <button type="submit" className="btn-primary h-10 px-4 text-xs flex items-center gap-2">
-          <Search className="w-4 h-4" /> Search
-        </button>
+        <Button type="submit" size="sm" icon={<Search aria-hidden="true" className="w-4 h-4" />}>
+          Search
+        </Button>
       </form>
 
       <section className="card">
@@ -168,18 +174,19 @@ export default function SocSearchPage() {
         <div className="card-body">
           {!submitted && <div className="text-ink-muted">Run a search to see results.</div>}
           {isLoading && <div className="text-ink-muted">Searching...</div>}
-          {error && (
-            <div className="flex items-center gap-2 text-ac-red">
-              <AlertTriangle className="w-4 h-4" /> Search failed. Verify the ID and try again.
-            </div>
-          )}
-          {!isLoading && submitted && data && data.kind === 'actors' && (
-            data.actors.length === 0 ? (
+          {error && <Alert status="error">Search failed. Verify the ID and try again.</Alert>}
+          {!isLoading &&
+            submitted &&
+            data &&
+            data.kind === 'actors' &&
+            (data.actors.length === 0 ? (
               <div className="text-ink-muted">No actors matched the query.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="data-table">
-                  <caption className="sr-only">Actor search results with risk and activity details</caption>
+                  <caption className="sr-only">
+                    Actor search results with risk and activity details
+                  </caption>
                   <thead>
                     <tr>
                       <th>Actor</th>
@@ -194,37 +201,41 @@ export default function SocSearchPage() {
                     {data.actors.map((actor) => (
                       <tr key={actor.actorId}>
                         <td className="font-mono text-sm text-ink-primary">
-                          <Link to={`/actors/${actor.actorId}`} className="text-link hover:text-link-hover">
+                          <Link
+                            to={`/actors/${actor.actorId}`}
+                            className="text-link hover:text-link-hover"
+                          >
                             {actor.actorId}
                           </Link>
                         </td>
                         <td className="text-ink-primary">{Math.round(actor.riskScore)}</td>
-                        <td className="text-ink-secondary">{new Date(actor.lastSeen).toLocaleString()}</td>
+                        <td className="text-ink-secondary">
+                          {new Date(actor.lastSeen).toLocaleString()}
+                        </td>
                         <td className="text-ink-secondary">{actor.ips.length}</td>
                         <td className="text-ink-secondary">{actor.fingerprints.length}</td>
                         <td>
-                          <span
-                            className={clsx(
-                              'px-2 py-0.5 text-xs border',
-                              actor.isBlocked
-                                ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                                : 'bg-ac-green/10 text-ac-green border-ac-green/40'
-                            )}
+                          <StatusBadge
+                            status={actor.isBlocked ? 'error' : 'success'}
+                            variant="subtle"
+                            size="sm"
                           >
                             {actor.isBlocked ? 'Blocked' : 'Active'}
-                          </span>
+                          </StatusBadge>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )
-          )}
+            ))}
           {!isLoading && submitted && data && data.kind === 'actor' && (
             <div className="space-y-3">
               <div className="text-sm text-ink-muted uppercase tracking-[0.2em]">Actor</div>
-              <Link to={`/actors/${data.actor.actorId}`} className="text-link hover:text-link-hover text-lg font-mono">
+              <Link
+                to={`/actors/${data.actor.actorId}`}
+                className="text-link hover:text-link-hover text-lg font-mono"
+              >
                 {data.actor.actorId}
               </Link>
               <div className="flex flex-wrap gap-4 text-sm text-ink-secondary">
@@ -238,7 +249,10 @@ export default function SocSearchPage() {
           {!isLoading && submitted && data && data.kind === 'session' && (
             <div className="space-y-3">
               <div className="text-sm text-ink-muted uppercase tracking-[0.2em]">Session</div>
-              <Link to={`/sessions/${data.session.sessionId}`} className="text-link hover:text-link-hover text-lg font-mono">
+              <Link
+                to={`/sessions/${data.session.sessionId}`}
+                className="text-link hover:text-link-hover text-lg font-mono"
+              >
                 {data.session.sessionId}
               </Link>
               <div className="flex flex-wrap gap-4 text-sm text-ink-secondary">

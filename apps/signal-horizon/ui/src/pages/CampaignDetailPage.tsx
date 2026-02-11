@@ -6,7 +6,20 @@
 import { useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { Breadcrumb, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  Breadcrumb,
+  Button,
+  EmptyState,
+  SectionHeader,
+  StatusBadge,
+  alpha,
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  spacing,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 import {
   Target,
   Clock,
@@ -20,7 +33,6 @@ import {
 } from 'lucide-react';
 import { CampaignGraph } from '../components/soc/CampaignGraph';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { clsx } from 'clsx';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -33,11 +45,11 @@ import {
 import { useHorizonStore } from '../stores/horizonStore';
 
 const mockCorrelationSignals = [
-  { name: 'HTTP Fingerprint Match', confidence: 0.98, color: 'bg-ac-green' },
-  { name: 'TLS Fingerprint Match', confidence: 0.95, color: 'bg-ac-blue' },
-  { name: 'Timing Correlation', confidence: 0.89, color: 'bg-ac-orange' },
-  { name: 'Target Endpoint Match', confidence: 0.82, color: 'bg-ac-purple' },
-  { name: 'Network Proximity', confidence: 0.72, color: 'bg-ac-red' },
+  { name: 'HTTP Fingerprint Match', confidence: 0.98, color: colors.green },
+  { name: 'TLS Fingerprint Match', confidence: 0.95, color: colors.blue },
+  { name: 'Timing Correlation', confidence: 0.89, color: colors.orange },
+  { name: 'Target Endpoint Match', confidence: 0.82, color: colors.magenta },
+  { name: 'Network Proximity', confidence: 0.72, color: colors.red },
 ];
 
 const attackTimeline = [
@@ -67,6 +79,12 @@ const affectedCustomers = [
   { name: 'E-commerce-E', attempts: 4102, status: 'PROTECTED' },
 ];
 
+function severityToStatus(severity: string): 'error' | 'warning' | 'info' {
+  if (severity === 'CRITICAL') return 'error';
+  if (severity === 'HIGH' || severity === 'MEDIUM') return 'warning';
+  return 'info';
+}
+
 export default function CampaignDetailPage() {
   useDocumentTitle('SOC - Campaign Detail');
   const { id } = useParams();
@@ -78,103 +96,104 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <div className="p-6">
-        <div className="text-center py-20">
-          <Target className="w-12 h-12 text-ink-muted mx-auto mb-4" />
-          <h2 className="text-xl font-light text-ink-primary mb-2">
-            No Campaign Selected
-          </h2>
-          <p className="text-ink-secondary">
-            Select a campaign from the overview to view details
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        icon={<Target aria-hidden="true" />}
+        title="No Campaign Selected"
+        description="Select a campaign from the overview to view details."
+      />
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      <Breadcrumb items={[
-        { label: 'Campaigns', to: '/campaigns' },
-        { label: campaign.name },
-      ]} />
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <Link to="/campaigns" className="text-sm text-link hover:text-link-hover flex items-center gap-1">
-            <ChevronRight className="w-4 h-4 rotate-180" />
-            Back to Campaigns
-          </Link>
-          <div className="mt-2 flex items-center gap-3 flex-wrap">
-            <h1 className="text-3xl font-light text-ink-primary">{campaign.name}</h1>
-            <span
-              className={clsx(
-                'px-2 py-0.5 text-xs border',
-                campaign.severity === 'CRITICAL' && 'bg-ac-red/15 text-ac-red border-ac-red/40',
-                campaign.severity === 'HIGH' && 'bg-ac-orange/20 text-ac-orange border-ac-orange/40',
-                campaign.severity === 'MEDIUM' && 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
-                campaign.severity === 'LOW' && 'bg-ac-blue/10 text-ac-blue border-ac-blue/30'
-              )}
-            >
-              {campaign.severity}
-            </span>
-            {campaign.isCrossTenant && (
-              <span className="px-2 py-0.5 text-xs border bg-ac-purple/10 text-ac-purple border-ac-purple/30">
-                Cross-Tenant
-              </span>
-            )}
-          </div>
-          <p className="text-ink-secondary mt-2">
-            {campaign.description || 'Coordinated attack campaign detected by Signal Horizon'}
-          </p>
-        </div>
+      <Breadcrumb items={[{ label: 'Campaigns', to: '/campaigns' }, { label: campaign.name }]} />
+      <header className="space-y-2">
+        <Link
+          to="/campaigns"
+          className="text-sm text-link hover:text-link-hover flex items-center gap-1"
+        >
+          <ChevronRight aria-hidden="true" className="w-4 h-4 rotate-180" />
+          Back to Campaigns
+        </Link>
+        <SectionHeader
+          title={campaign.name}
+          description={
+            campaign.description || 'Coordinated attack campaign detected by Signal Horizon'
+          }
+          size="h3"
+          actions={
+            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+              <Button
+                variant="outlined"
+                size="sm"
+                icon={<ExternalLink aria-hidden="true" className="w-4 h-4" />}
+              >
+                Export IOCs
+              </Button>
+              <Button size="sm" icon={<Shield aria-hidden="true" className="w-4 h-4" />}>
+                Open War Room
+              </Button>
+            </div>
+          }
+        />
         <div className="flex items-center gap-2">
-          <button className="btn-outline h-10 px-4 text-xs">
-            <ExternalLink className="w-4 h-4 mr-2" />
-            Export IOCs
-          </button>
-          <button className="btn-primary h-10 px-4 text-xs">
-            <Shield className="w-4 h-4 mr-2" />
-            Open War Room
-          </button>
+          <StatusBadge status={severityToStatus(campaign.severity)} variant="subtle" size="sm">
+            {campaign.severity}
+          </StatusBadge>
+          {campaign.isCrossTenant && (
+            <StatusBadge status="accent" variant="subtle" size="sm">
+              Cross-Tenant
+            </StatusBadge>
+          )}
         </div>
-      </div>
+      </header>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatMini icon={Users} label="Customers" value={campaign.tenantsAffected.toString()} />
-        <StatMini icon={Activity} label="Confidence" value={`${Math.round(campaign.confidence * 100)}%`} />
-        <StatMini icon={Clock} label="First Seen" value={new Date(campaign.firstSeenAt).toLocaleDateString()} />
+        <StatMini
+          icon={Activity}
+          label="Confidence"
+          value={`${Math.round(campaign.confidence * 100)}%`}
+        />
+        <StatMini
+          icon={Clock}
+          label="First Seen"
+          value={new Date(campaign.firstSeenAt).toLocaleDateString()}
+        />
         <StatMini icon={Flame} label="Total Attempts" value="47,832" />
       </div>
 
       {/* Campaign Graph */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-           <ErrorBoundary>
-             <CampaignGraph campaignId={id} />
-           </ErrorBoundary>
+          <ErrorBoundary>
+            <CampaignGraph campaignId={id} />
+          </ErrorBoundary>
         </div>
-        
+
         <div className="space-y-6">
           <div className="card p-6">
             <h3 className="text-sm font-medium text-ink-secondary mb-4">Campaign Intelligence</h3>
-             <div className="space-y-4">
-               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
-                 <span className="text-sm text-ink-muted">Confidence</span>
-                 <span className="text-sm font-medium text-ac-green">98%</span>
-               </div>
-               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
-                 <span className="text-sm text-ink-muted">Attribution</span>
-                 <span className="text-sm font-medium text-ink-primary">APT-29</span>
-               </div>
-               <div className="flex justify-between items-center py-2 border-b border-border-subtle">
-                 <span className="text-sm text-ink-muted">Targeting</span>
-                 <span className="text-sm font-medium text-ink-primary">Finance, Govt</span>
-               </div>
-               <div className="pt-2 text-xs text-ink-muted">
-                 Automated graph correlation identified 3 distinct IP clusters associated with this campaign.
-               </div>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center py-2 border-b border-border-subtle">
+                <span className="text-sm text-ink-muted">Confidence</span>
+                <span className="text-sm font-medium" style={{ color: colors.green }}>
+                  98%
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-border-subtle">
+                <span className="text-sm text-ink-muted">Attribution</span>
+                <span className="text-sm font-medium text-ink-primary">APT-29</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-border-subtle">
+                <span className="text-sm text-ink-muted">Targeting</span>
+                <span className="text-sm font-medium text-ink-primary">Finance, Govt</span>
+              </div>
+              <div className="pt-2 text-xs text-ink-muted">
+                Automated graph correlation identified 3 distinct IP clusters associated with this
+                campaign.
+              </div>
             </div>
           </div>
         </div>
@@ -192,7 +211,13 @@ export default function CampaignDetailPage() {
               <XAxis dataKey="time" {...xAxisNoLine} />
               <YAxis {...axisDefaults.y} />
               <Tooltip {...tooltipDefaults} />
-              <Area type="monotone" dataKey="volume" stroke={colors.red} fill={colors.red} fillOpacity={0.25} />
+              <Area
+                type="monotone"
+                dataKey="volume"
+                stroke={colors.red}
+                fill={colors.red}
+                fillOpacity={0.25}
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -203,7 +228,9 @@ export default function CampaignDetailPage() {
         <section className="card">
           <div className="card-header flex items-center justify-between">
             <h2 className="font-medium text-ink-primary">Participating IPs</h2>
-            <button className="btn-outline h-8 px-3 text-xs">Block All</button>
+            <Button variant="outlined" size="sm">
+              Block All
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -221,16 +248,13 @@ export default function CampaignDetailPage() {
                     <td className="font-mono text-sm text-ink-primary">{ip.ip}</td>
                     <td className="text-ink-secondary">{ip.hits.toLocaleString()}</td>
                     <td>
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 text-xs border',
-                          ip.status === 'BLOCKED'
-                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                            : 'bg-ac-orange/10 text-ac-orange border-ac-orange/30'
-                        )}
+                      <StatusBadge
+                        status={ip.status === 'BLOCKED' ? 'error' : 'warning'}
+                        variant="subtle"
+                        size="sm"
                       >
                         {ip.status}
-                      </span>
+                      </StatusBadge>
                     </td>
                   </tr>
                 ))}
@@ -243,7 +267,9 @@ export default function CampaignDetailPage() {
         <section className="card">
           <div className="card-header flex items-center justify-between">
             <h2 className="font-medium text-ink-primary">Affected Customers</h2>
-            <button className="btn-outline h-8 px-3 text-xs">View All</button>
+            <Button variant="outlined" size="sm">
+              View All
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -261,16 +287,13 @@ export default function CampaignDetailPage() {
                     <td className="text-ink-primary">{customer.name}</td>
                     <td className="text-ink-secondary">{customer.attempts.toLocaleString()}</td>
                     <td>
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 text-xs border',
-                          customer.status === 'ACTIVE'
-                            ? 'bg-ac-red/15 text-ac-red border-ac-red/40'
-                            : 'bg-ac-green/10 text-ac-green border-ac-green/30'
-                        )}
+                      <StatusBadge
+                        status={customer.status === 'ACTIVE' ? 'error' : 'success'}
+                        variant="subtle"
+                        size="sm"
                       >
                         {customer.status}
-                      </span>
+                      </StatusBadge>
                     </td>
                   </tr>
                 ))}
@@ -296,8 +319,8 @@ export default function CampaignDetailPage() {
               </div>
               <div className="h-2 bg-surface-subtle border border-border-subtle">
                 <div
-                  className={clsx('h-2', signal.color)}
-                  style={{ width: `${signal.confidence * 100}%` }}
+                  className="h-2"
+                  style={{ background: signal.color, width: `${signal.confidence * 100}%` }}
                 />
               </div>
             </div>
@@ -307,12 +330,12 @@ export default function CampaignDetailPage() {
 
       {/* Response Actions */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <ActionButton icon={Swords} label="Block All IPs" tone="bg-ac-red" />
-        <ActionButton icon={Shield} label="Block Fingerprint" tone="bg-ac-red" />
-        <ActionButton icon={Activity} label="Block ASN" tone="bg-ac-red" />
-        <ActionButton icon={Flame} label="Challenge Mode" tone="bg-ac-orange" />
-        <ActionButton icon={ExternalLink} label="Export IOCs" tone="bg-ac-blue" />
-        <ActionButton icon={Users} label="Notify Customers" tone="bg-ac-blue" />
+        <ActionButton icon={Swords} label="Block All IPs" tone={colors.red} />
+        <ActionButton icon={Shield} label="Block Fingerprint" tone={colors.red} />
+        <ActionButton icon={Activity} label="Block ASN" tone={colors.red} />
+        <ActionButton icon={Flame} label="Challenge Mode" tone={colors.orange} />
+        <ActionButton icon={ExternalLink} label="Export IOCs" tone={colors.blue} />
+        <ActionButton icon={Users} label="Notify Customers" tone={colors.blue} />
       </section>
     </div>
   );
@@ -329,8 +352,8 @@ function StatMini({
 }) {
   return (
     <div className="card p-4 flex items-center gap-3">
-      <div className="w-10 h-10 border border-border-subtle flex items-center justify-center text-ac-blue">
-        <Icon className="w-5 h-5" />
+      <div className="w-10 h-10 border border-border-subtle flex items-center justify-center">
+        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: colors.blue }} />
       </div>
       <div>
         <div className="text-xs tracking-[0.18em] uppercase text-ink-muted">{label}</div>
@@ -350,9 +373,17 @@ function ActionButton({
   tone: string;
 }) {
   return (
-    <button className={clsx('px-4 py-3 text-sm font-medium text-ac-white flex items-center gap-2 transition-colors hover:brightness-110', tone)}>
-      <Icon className="w-4 h-4" />
+    <Button
+      size="sm"
+      fill
+      icon={<Icon aria-hidden="true" className="w-4 h-4" />}
+      style={{
+        background: tone,
+        border: `1px solid ${alpha(tone, 0.6)}`,
+        color: '#FFFFFF',
+      }}
+    >
       {label}
-    </button>
+    </Button>
   );
 }
