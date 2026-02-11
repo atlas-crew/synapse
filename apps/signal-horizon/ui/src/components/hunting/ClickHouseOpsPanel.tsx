@@ -3,7 +3,7 @@ import { Gauge, RefreshCw, Settings2 } from 'lucide-react';
 import type { ClickHouseOpsSnapshot } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
 import { byOpGauge, formatMs, histogramSumCountByOp, queueDepthByOp } from './clickhouseOpsMetrics';
-import { SectionHeader } from '@/ui';
+import { Alert, SectionHeader } from '@/ui';
 
 interface ClickHouseOpsPanelProps {
   historicalEnabled: boolean;
@@ -140,9 +140,9 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
           </div>
 
           {error && (
-            <div role="alert" className="p-3 bg-ac-red/10 border border-ac-red/30 text-ac-red text-sm">
+            <Alert status="error" title="Load Error" style={{ padding: '12px 16px' }}>
               {error}
-            </div>
+            </Alert>
           )}
 
           {data?.clickhouse.config && (

@@ -4,7 +4,7 @@ import { Clipboard, Clock, RefreshCw } from 'lucide-react';
 import type { RecentRequest } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
 import { LoadingSpinner } from '../LoadingStates';
-import { SectionHeader } from '@/ui';
+import { Alert, SectionHeader } from '@/ui';
 
 interface RecentRequestsPanelProps {
   historicalEnabled: boolean;
@@ -133,9 +133,9 @@ export function RecentRequestsPanel({ historicalEnabled, getRecentRequests }: Re
           </div>
 
           {error && (
-            <div role="alert" className="p-3 bg-ac-red/10 border border-ac-red/30 text-ac-red text-sm">
+            <Alert status="error" title="Load Error" style={{ padding: '12px 16px' }}>
               {error}
-            </div>
+            </Alert>
           )}
 
           {!loading && !error && sorted.length === 0 && (
