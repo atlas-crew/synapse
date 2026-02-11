@@ -8,6 +8,7 @@ import { Download, ChevronDown, ChevronRight, Database, Clock, ExternalLink, Ter
 import { clsx } from 'clsx';
 import type { SignalResult, HuntResult } from '../../hooks/useHunt';
 import { getCyberChefUrl, CyberChefRecipes } from '../../utils/cyberchef';
+import { SectionHeader } from '@/ui';
 
 interface HuntResultsTableProps {
   result: HuntResult | null;
@@ -138,20 +139,28 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
     <div className="card">
       <div className="card-header flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h2 className="font-medium text-ink-primary">Results</h2>
-          <div className="flex items-center gap-3 text-sm text-ink-muted">
-            <span>{result?.total.toLocaleString()} total</span>
-            <span className="text-ink-muted">|</span>
-            <span className="flex items-center gap-1">
-              <Database className="w-3.5 h-3.5" />
-              {result ? getSourceLabel(result.source) : ''}
-            </span>
-            <span className="text-ink-muted">|</span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              {result?.queryTimeMs}ms
-            </span>
-          </div>
+          <SectionHeader
+            title="Results"
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+            actions={(
+              <div className="flex items-center gap-3 text-sm text-ink-muted">
+                <span>{result?.total.toLocaleString()} total</span>
+                <span className="text-ink-muted">|</span>
+                <span className="flex items-center gap-1">
+                  <Database className="w-3.5 h-3.5" />
+                  {result ? getSourceLabel(result.source) : ''}
+                </span>
+                <span className="text-ink-muted">|</span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  {result?.queryTimeMs}ms
+                </span>
+              </div>
+            )}
+          />
         </div>
         <button
           onClick={() => signals.length > 0 && exportToCsv(signals)}

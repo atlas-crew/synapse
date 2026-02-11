@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Fingerprint, RefreshCw } from 'lucide-react';
 import type { FleetFingerprintCandidate } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
+import { SectionHeader } from '@/ui';
 
 type FleetFingerprintMeta = {
   days: number;
@@ -86,13 +87,15 @@ export function FleetIntelligencePanel({
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Fingerprint className="w-4 h-4 text-ac-magenta" />
-            <h2 className="text-lg font-light text-ink-primary">Fleet Intel: Fingerprints</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Cross-tenant anonymized fingerprints spreading across multiple tenants/sensors (admin-only intelligence).
-          </p>
+          <SectionHeader
+            title="Fleet Intel: Fingerprints"
+            description="Cross-tenant anonymized fingerprints spreading across multiple tenants/sensors (admin-only intelligence)."
+            icon={<Fingerprint className="w-4 h-4 text-ac-magenta" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <button

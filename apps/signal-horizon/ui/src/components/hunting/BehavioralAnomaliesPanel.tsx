@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { TenantAnomaly, TenantBaseline } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
+import { SectionHeader } from '@/ui';
 
 type BaselinesMeta = {
   tenantId: string;
@@ -120,13 +121,15 @@ export function BehavioralAnomaliesPanel({
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-ac-orange" />
-            <h2 className="text-lg font-light text-ink-primary">Behavioral Anomalies</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Compare the last complete hour to a 30d baseline (per signal type).
-          </p>
+          <SectionHeader
+            title="Behavioral Anomalies"
+            description="Compare the last complete hour to a 30d baseline (per signal type)."
+            icon={<AlertTriangle className="w-4 h-4 text-ac-orange" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -317,4 +320,3 @@ export function BehavioralAnomaliesPanel({
     </div>
   );
 }
-

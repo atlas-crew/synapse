@@ -19,8 +19,12 @@ type Variant = 'default' | 'bordered' | 'numbered';
 
 interface SectionHeaderProps {
   title: string;
+  /** Optional title element id for aria-labelledby wiring */
+  titleId?: string;
   eyebrow?: string;
   description?: string;
+  /** Optional icon displayed before title */
+  icon?: React.ReactNode;
   /** Right-side actions */
   actions?: React.ReactNode;
   /** Visual variant */
@@ -31,6 +35,8 @@ interface SectionHeaderProps {
   size?: 'h1' | 'h2' | 'h3' | 'h4';
   /** Bottom margin */
   mb?: keyof typeof spacing;
+  /** Optional title style overrides */
+  titleStyle?: React.CSSProperties;
   style?: React.CSSProperties;
 }
 
@@ -43,13 +49,16 @@ const headingSizes = {
 
 export const SectionHeader: React.FC<SectionHeaderProps> = ({
   title,
+  titleId,
   eyebrow,
   description,
+  icon,
   actions,
   variant = 'default',
   number,
   size = 'h2',
   mb = 'lg',
+  titleStyle,
   style,
 }) => {
   if (variant === 'numbered') {
@@ -84,11 +93,13 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
           {number}
         </div>
         <span
+          id={titleId}
           style={{
             fontFamily,
             fontWeight: fontWeight.light,
             ...headingSizes[size],
             color: '#F0F4F8',
+            ...titleStyle,
           }}
         >
           {title}
@@ -129,16 +140,25 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
               {eyebrow}
             </div>
           )}
-          <div
-            style={{
-              fontFamily,
-              fontWeight: fontWeight.light,
-              ...headingSizes[size],
-              color: '#F0F4F8',
-              margin: 0,
-            }}
-          >
-            {title}
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            {icon && (
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                {icon}
+              </span>
+            )}
+            <div
+              id={titleId}
+              style={{
+                fontFamily,
+                fontWeight: fontWeight.light,
+                ...headingSizes[size],
+                color: '#F0F4F8',
+                margin: 0,
+                ...titleStyle,
+              }}
+            >
+              {title}
+            </div>
           </div>
           {description && (
             <div

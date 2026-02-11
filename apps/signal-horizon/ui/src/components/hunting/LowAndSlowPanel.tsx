@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
 import type { LowAndSlowIpCandidate } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
+import { SectionHeader } from '@/ui';
 
 type LowAndSlowMeta = {
   days: number;
@@ -74,13 +75,15 @@ export function LowAndSlowPanel({ historicalEnabled, getLowAndSlowIps }: LowAndS
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-ac-blue" />
-            <h2 className="text-lg font-light text-ink-primary">Low And Slow</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Cross-tenant IPs with long dwell time but low daily volume (admin-only intelligence).
-          </p>
+          <SectionHeader
+            title="Low And Slow"
+            description="Cross-tenant IPs with long dwell time but low daily volume (admin-only intelligence)."
+            icon={<Activity className="w-4 h-4 text-ac-blue" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <button
@@ -210,4 +213,3 @@ export function LowAndSlowPanel({ historicalEnabled, getLowAndSlowIps }: LowAndS
     </div>
   );
 }
-

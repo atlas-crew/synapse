@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Clock, Play, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { SavedQuery } from '../../hooks/useHunt';
+import { SectionHeader } from '@/ui';
 
 interface SavedQueriesProps {
   queries: SavedQuery[];
@@ -65,7 +66,13 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
     return (
       <div className="card">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Saved Queries</h2>
+          <SectionHeader
+            title="Saved Queries"
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+          />
         </div>
         <div className="card-body p-6 text-center text-ink-muted">
           <p className="text-sm">No saved queries yet</p>
@@ -78,8 +85,14 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
   return (
     <div className="card">
       <div className="card-header">
-        <h2 className="font-medium text-ink-primary">Saved Queries</h2>
-        <span className="text-xs text-ink-muted">{queries.length} saved</span>
+        <SectionHeader
+          title="Saved Queries"
+          size="h4"
+          mb="xs"
+          style={{ marginBottom: 0 }}
+          titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+          actions={<span className="text-xs text-ink-muted">{queries.length} saved</span>}
+        />
       </div>
       <div className="card-body space-y-2">
         {queries.map((query) => (

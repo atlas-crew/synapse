@@ -6,6 +6,7 @@
 
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { SectionHeader } from '@/ui';
 
 interface Props {
   children: ReactNode;
@@ -69,9 +70,13 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="p-4 border border-ac-red/40 bg-ac-red/10 mb-4">
             <AlertTriangle className="w-8 h-8 text-ac-red" aria-hidden="true" />
           </div>
-          <h2 className="text-xl font-light text-ink-primary mb-2">
-            Something went wrong
-          </h2>
+          <SectionHeader
+            title="Something went wrong"
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: '8px', display: 'inline-block' }}
+            titleStyle={{ fontSize: '24px', lineHeight: '30px', textAlign: 'center' }}
+          />
           <p className="text-ink-secondary text-center max-w-md mb-4">
             An error occurred while rendering this component. Try refreshing or contact support if the problem persists.
           </p>

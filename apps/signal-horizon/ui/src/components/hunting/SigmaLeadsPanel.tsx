@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { FileSearch, RefreshCw } from 'lucide-react';
 import type { SigmaLead } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
+import { SectionHeader } from '@/ui';
 
 interface SigmaLeadsPanelProps {
   historicalEnabled: boolean;
@@ -82,13 +83,15 @@ export function SigmaLeadsPanel({
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <FileSearch className="w-4 h-4 text-ac-blue" />
-            <h2 className="text-lg font-light text-ink-primary">Sigma Leads</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Background hunting results from saved Sigma rules (ClickHouse).
-          </p>
+          <SectionHeader
+            title="Sigma Leads"
+            description="Background hunting results from saved Sigma rules (ClickHouse)."
+            icon={<FileSearch className="w-4 h-4 text-ac-blue" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <button

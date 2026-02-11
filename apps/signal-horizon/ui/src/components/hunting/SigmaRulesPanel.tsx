@@ -3,6 +3,7 @@ import { ListChecks, RefreshCw, Trash2 } from 'lucide-react';
 import type { SigmaRule } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
 import { LoadingSpinner } from '../LoadingStates';
+import { SectionHeader } from '@/ui';
 
 interface SigmaRulesPanelProps {
   historicalEnabled: boolean;
@@ -99,13 +100,15 @@ export function SigmaRulesPanel({
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <ListChecks className="w-4 h-4 text-ac-blue" />
-            <h2 className="text-lg font-light text-ink-primary">Sigma Rules</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Manage background hunts. Create new rules via "Import Sigma Rule" then "Save Background Hunt".
-          </p>
+          <SectionHeader
+            title="Sigma Rules"
+            description='Manage background hunts. Create new rules via "Import Sigma Rule" then "Save Background Hunt".'
+            icon={<ListChecks className="w-4 h-4 text-ac-blue" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <button

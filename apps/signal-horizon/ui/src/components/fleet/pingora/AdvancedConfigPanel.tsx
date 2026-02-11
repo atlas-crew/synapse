@@ -41,6 +41,7 @@ import {
   DEFAULT_TRAVEL_MAX_SPEED_KMH,
   DEFAULT_TRAVEL_MIN_DISTANCE_KM,
 } from './configDefaults';
+import { SectionHeader } from '@/ui';
 
 export interface AdvancedConfigData {
   dlp: DlpConfigData;
@@ -81,10 +82,18 @@ export function AdvancedConfigPanel({ config, onChange }: AdvancedConfigPanelPro
       {/* Sidebar */}
       <div className="w-56 border-r border-border-subtle bg-surface-subtle/50 flex-shrink-0">
         <div className="p-4 border-b border-border-subtle">
-          <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-ac-blue" />
-            <h2 className="text-sm font-semibold text-ink-primary">Advanced Config</h2>
-          </div>
+          <SectionHeader
+            title="Advanced Config"
+            icon={<Settings className="w-4 h-4 text-ac-blue" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{
+              fontSize: '14px',
+              lineHeight: '20px',
+              fontWeight: 600,
+            }}
+          />
         </div>
         <nav className="p-2">
           {tabs.map((tab) => {

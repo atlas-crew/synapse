@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
+import { SectionHeader } from '@/ui';
 
 interface ThreatTrajectoryFeedProps {
   threats: Threat[];
@@ -38,10 +39,22 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
       aria-labelledby="feed-heading"
     >
       <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
-        <h2 id="feed-heading" className="text-xs font-bold tracking-[0.2em] text-ac-blue dark:text-ac-sky-blue flex items-center gap-2">
-          <span className="w-2 h-2 bg-ac-blue dark:bg-ac-sky-blue status-blink" />
-          Threat Trajectory
-        </h2>
+        <SectionHeader
+          titleId="feed-heading"
+          title="Threat Trajectory"
+          icon={<span className="w-2 h-2 bg-ac-blue dark:bg-ac-sky-blue status-blink" />}
+          size="h4"
+          mb="xs"
+          style={{ marginBottom: 0 }}
+          titleStyle={{
+            fontSize: '12px',
+            lineHeight: '16px',
+            fontWeight: 700,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: '#0057B7',
+          }}
+        />
         <span className="text-[10px] text-ink-muted uppercase tracking-tighter">Diagnostic Feed</span>
       </div>
 

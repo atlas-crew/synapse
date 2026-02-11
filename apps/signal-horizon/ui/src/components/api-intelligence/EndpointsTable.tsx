@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
 import type { ApiEndpoint } from '../../hooks/useApiIntelligence';
+import { SectionHeader } from '@/ui';
 
 export interface EndpointsTableProps {
   endpoints: ApiEndpoint[];
@@ -13,10 +14,16 @@ export function EndpointsTable({ endpoints, totalCount, isLoading, emptyMessage 
   return (
     <div className="card">
       <div className="card-header flex justify-between items-center">
-        <h2 className="font-medium text-ink-primary">Discovered Endpoints</h2>
-        {totalCount !== undefined && (
-          <span className="text-xs text-ink-muted">{totalCount} total</span>
-        )}
+        <SectionHeader
+          title="Discovered Endpoints"
+          size="h4"
+          mb="xs"
+          style={{ marginBottom: 0 }}
+          titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+          actions={totalCount !== undefined ? (
+            <span className="text-xs text-ink-muted">{totalCount} total</span>
+          ) : undefined}
+        />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left" aria-label="Discovered API endpoints">

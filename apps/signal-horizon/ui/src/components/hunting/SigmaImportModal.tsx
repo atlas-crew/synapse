@@ -3,6 +3,7 @@ import { X, ArrowRight, FileText } from 'lucide-react';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import { convertSigmaToSql } from '../../utils/sigmaToSql';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { SectionHeader } from '@/ui';
 
 interface SigmaImportModalProps {
   onImport: (sql: string) => void;
@@ -71,7 +72,14 @@ export function SigmaImportModal({ onImport, onSaveBackgroundHunt, onClose }: Si
               <FileText className="w-5 h-5 text-ac-blue" />
             </div>
             <div>
-              <h2 id="sigma-import-title" className="text-lg font-medium text-ink-primary">Import Sigma Rule</h2>
+              <SectionHeader
+                titleId="sigma-import-title"
+                title="Import Sigma Rule"
+                size="h4"
+                mb="xs"
+                style={{ marginBottom: 0 }}
+                titleStyle={{ fontSize: '18px', lineHeight: '24px', fontWeight: 500 }}
+              />
               <p className="text-xs text-ink-secondary">
                 Convert standard Sigma threat detection rules to ClickHouse SQL
               </p>

@@ -3,6 +3,7 @@ import { Gauge, RefreshCw, Settings2 } from 'lucide-react';
 import type { ClickHouseOpsSnapshot } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
 import { byOpGauge, formatMs, histogramSumCountByOp, queueDepthByOp } from './clickhouseOpsMetrics';
+import { SectionHeader } from '@/ui';
 
 interface ClickHouseOpsPanelProps {
   historicalEnabled: boolean;
@@ -98,13 +99,15 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Gauge className="w-4 h-4 text-ac-magenta" />
-            <h2 className="text-lg font-light text-ink-primary">ClickHouse Ops</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Backpressure, in-flight, error, and latency telemetry for historical analytics queries.
-          </p>
+          <SectionHeader
+            title="ClickHouse Ops"
+            description="Backpressure, in-flight, error, and latency telemetry for historical analytics queries."
+            icon={<Gauge className="w-4 h-4 text-ac-magenta" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <button

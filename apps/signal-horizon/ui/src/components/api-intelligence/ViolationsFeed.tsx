@@ -1,5 +1,6 @@
 import { Clock } from 'lucide-react';
 import type { ApiSignal } from '../../hooks/useApiIntelligence';
+import { SectionHeader } from '@/ui';
 
 export interface ViolationsFeedProps {
   signals: ApiSignal[];
@@ -9,7 +10,13 @@ export function ViolationsFeed({ signals }: ViolationsFeedProps) {
   return (
     <div className="card">
       <div className="card-header">
-        <h2 className="font-medium text-ink-primary">Recent Violations</h2>
+        <SectionHeader
+          title="Recent Violations"
+          size="h4"
+          mb="xs"
+          style={{ marginBottom: 0 }}
+          titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+        />
       </div>
       <div className="card-body space-y-4 max-h-[600px] overflow-y-auto">
         {signals.length === 0 ? (

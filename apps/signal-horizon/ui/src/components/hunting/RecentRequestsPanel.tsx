@@ -4,6 +4,7 @@ import { Clipboard, Clock, RefreshCw } from 'lucide-react';
 import type { RecentRequest } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
 import { LoadingSpinner } from '../LoadingStates';
+import { SectionHeader } from '@/ui';
 
 interface RecentRequestsPanelProps {
   historicalEnabled: boolean;
@@ -66,13 +67,15 @@ export function RecentRequestsPanel({ historicalEnabled, getRecentRequests }: Re
     <div className="border border-border-subtle bg-surface-card">
       <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-ac-blue" />
-            <h2 className="text-lg font-light text-ink-primary">Recent Requests</h2>
-          </div>
-          <p className="text-sm text-ink-secondary mt-1">
-            Latest <span className="font-mono">request_id</span> values (HTTP transactions) for quick pivot into the timeline view.
-          </p>
+          <SectionHeader
+            title="Recent Requests"
+            description="Latest request_id values (HTTP transactions) for quick pivot into the timeline view."
+            icon={<Clock className="w-4 h-4 text-ac-blue" />}
+            size="h4"
+            mb="xs"
+            style={{ marginBottom: 0 }}
+            titleStyle={{ fontSize: '18px', lineHeight: '24px' }}
+          />
         </div>
 
         <button

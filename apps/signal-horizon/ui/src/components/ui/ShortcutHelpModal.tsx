@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Keyboard } from 'lucide-react';
+import { SectionHeader } from '@/ui';
 
 interface ShortcutHelpModalProps {
   isOpen: boolean;
@@ -33,10 +34,19 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
             className="w-full max-w-md bg-surface-card border border-border-strong shadow-2xl relative z-10 overflow-hidden scanlines"
           >
             <div className="flex items-center justify-between p-4 border-b border-border-subtle bg-surface-subtle/50">
-              <div className="flex items-center gap-2">
-                <Keyboard className="w-5 h-5 text-ac-blue" />
-                <h2 className="text-lg font-light text-ink-primary uppercase tracking-tight">Keyboard Shortcuts</h2>
-              </div>
+              <SectionHeader
+                title="Keyboard Shortcuts"
+                icon={<Keyboard className="w-5 h-5 text-ac-blue" />}
+                size="h4"
+                mb="xs"
+                style={{ marginBottom: 0 }}
+                titleStyle={{
+                  fontSize: '18px',
+                  lineHeight: '24px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.02em',
+                }}
+              />
               <button
                 onClick={onClose}
                 className="p-1 text-ink-muted hover:text-ink-primary transition-colors"
