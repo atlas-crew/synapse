@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 12:20_
+_Generated: 2026-02-11 12:27_
 
 ## Summary
 
-**Total findings: 609**
+**Total findings: 608**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 487 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 486 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 | Box | 33 | Raw styled div → use <Box> primitive |
 | Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
@@ -48,9 +48,9 @@ Priority files to migrate first (most raw patterns):
 | 9 | `pages/beam/BeamDashboardPage.tsx` |
 | 9 | `components/ui/CommandPalette.tsx` |
 | 9 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
-| 9 | `components/fleet/RolloutManager.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
+| 8 | `components/fleet/RolloutManager.tsx` |
 | 7 | `pages/hunting/RequestTimelinePage.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |

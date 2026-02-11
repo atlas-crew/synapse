@@ -614,9 +614,6 @@ export const RolloutManager = memo(function RolloutManager({
         {/* Cancel confirmation dialog */}
         {showConfirmCancel && (
           <Modal open onClose={() => setShowConfirmCancel(false)} size="520px" title="Cancel Rollout?">
-            <div className="flex items-center gap-3 mb-4">
-              <AlertTriangle className="w-6 h-6 text-status-warning" />
-            </div>
             <p className="text-sm text-ink-secondary mb-6">
               This will stop the rollout immediately. Sensors that have already been updated will
               remain on the new version. This action cannot be undone.
