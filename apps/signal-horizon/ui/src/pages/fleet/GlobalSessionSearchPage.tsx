@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
-import { Button } from '@/ui';
+import { Button, Modal } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -551,136 +551,148 @@ export function GlobalSessionSearchPage() {
 
       {/* Revoke Modal */}
       {revokeModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="card w-full max-w-md p-6">
-            <h3 className="text-lg font-medium text-ink-primary mb-4">Revoke Session</h3>
-            <p className="text-sm text-ink-secondary mb-4">
-              This will terminate the session and force the client to re-authenticate.
-            </p>
+        <Modal
+          open
+          onClose={() => setRevokeModal(initialRevokeModalState)}
+          size="520px"
+          title="Revoke Session"
+        >
+          <p className="text-sm text-ink-secondary mb-4">
+            This will terminate the session and force the client to re-authenticate.
+          </p>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">
-                Session ID
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary"
-                value={revokeModal.sessionId}
-                disabled
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">
-                Reason (optional)
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
-                placeholder="Suspicious activity detected"
-                value={revokeModal.reason}
-                onChange={(e) => setRevokeModal((s) => ({ ...s, reason: e.target.value }))}
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 text-ac-blue bg-surface-raised border border-border-default focus:ring-ac-blue"
-                  checked={revokeModal.global}
-                  onChange={(e) => setRevokeModal((s) => ({ ...s, global: e.target.checked }))}
-                />
-                <span className="text-sm text-ink-primary">Revoke globally (all sensors)</span>
-              </label>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                className="flex-1 px-4 py-2 bg-ac-orange text-white font-medium hover:bg-ac-orange/90 transition-colors disabled:opacity-50"
-                onClick={handleRevokeSession}
-                disabled={isActionPending}
-              >
-                {isActionPending ? 'Revoking...' : 'Revoke Session'}
-              </button>
-              <button
-                className="flex-1 px-4 py-2 bg-surface-raised text-ink-primary font-medium hover:bg-surface-raised/80 transition-colors"
-                onClick={() => setRevokeModal(initialRevokeModalState)}
-                disabled={isActionPending}
-              >
-                Cancel
-              </button>
-            </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              Session ID
+            </label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary"
+              value={revokeModal.sessionId}
+              disabled
+            />
           </div>
-        </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              Reason (optional)
+            </label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
+              placeholder="Suspicious activity detected"
+              value={revokeModal.reason}
+              onChange={(e) => setRevokeModal((s) => ({ ...s, reason: e.target.value }))}
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 text-ac-blue bg-surface-raised border border-border-default focus:ring-ac-blue"
+                checked={revokeModal.global}
+                onChange={(e) => setRevokeModal((s) => ({ ...s, global: e.target.checked }))}
+              />
+              <span className="text-sm text-ink-primary">Revoke globally (all sensors)</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Button
+              className="flex-1"
+              size="sm"
+              onClick={handleRevokeSession}
+              disabled={isActionPending}
+              style={{ background: '#F59E0B', color: '#FFFFFF' }}
+            >
+              {isActionPending ? 'Revoking...' : 'Revoke Session'}
+            </Button>
+            <Button
+              className="flex-1"
+              size="sm"
+              variant="outlined"
+              onClick={() => setRevokeModal(initialRevokeModalState)}
+              disabled={isActionPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {/* Ban Modal */}
       {banModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="card w-full max-w-md p-6">
-            <h3 className="text-lg font-medium text-ink-primary mb-4">Ban Actor</h3>
-            <p className="text-sm text-ink-secondary mb-4">
-              This will block all current and future sessions from this actor across all sensors.
-            </p>
+        <Modal
+          open
+          onClose={() => setBanModal(initialBanModalState)}
+          size="520px"
+          title="Ban Actor"
+        >
+          <p className="text-sm text-ink-secondary mb-4">
+            This will block all current and future sessions from this actor across all sensors.
+          </p>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Actor ID</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary"
-                value={banModal.actorId}
-                disabled
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">
-                Reason <span className="text-ac-red">*</span>
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
-                placeholder="Malicious activity detected"
-                value={banModal.reason}
-                onChange={(e) => setBanModal((s) => ({ ...s, reason: e.target.value }))}
-                required
-              />
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">
-                Duration (hours, leave empty for permanent)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="8760"
-                className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
-                placeholder="24"
-                value={banModal.durationHours}
-                onChange={(e) => setBanModal((s) => ({ ...s, durationHours: e.target.value }))}
-              />
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                className="flex-1 px-4 py-2 bg-ac-red text-white font-medium hover:bg-ac-red/90 transition-colors disabled:opacity-50"
-                onClick={handleBanActor}
-                disabled={isActionPending || !banModal.reason}
-              >
-                {isActionPending ? 'Banning...' : 'Ban Actor'}
-              </button>
-              <button
-                className="flex-1 px-4 py-2 bg-surface-raised text-ink-primary font-medium hover:bg-surface-raised/80 transition-colors"
-                onClick={() => setBanModal(initialBanModalState)}
-                disabled={isActionPending}
-              >
-                Cancel
-              </button>
-            </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">Actor ID</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary"
+              value={banModal.actorId}
+              disabled
+            />
           </div>
-        </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              Reason <span className="text-ac-red">*</span>
+            </label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
+              placeholder="Malicious activity detected"
+              value={banModal.reason}
+              onChange={(e) => setBanModal((s) => ({ ...s, reason: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              Duration (hours, leave empty for permanent)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="8760"
+              className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
+              placeholder="24"
+              value={banModal.durationHours}
+              onChange={(e) => setBanModal((s) => ({ ...s, durationHours: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Button
+              className="flex-1"
+              size="sm"
+              onClick={handleBanActor}
+              disabled={isActionPending || !banModal.reason}
+              style={{ background: '#EF3340', color: '#FFFFFF' }}
+            >
+              {isActionPending ? 'Banning...' : 'Ban Actor'}
+            </Button>
+            <Button
+              className="flex-1"
+              size="sm"
+              variant="outlined"
+              onClick={() => setBanModal(initialBanModalState)}
+              disabled={isActionPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );
