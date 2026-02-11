@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { TenantAnomaly, TenantBaseline } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
-import { SectionHeader } from '@/ui';
+import { SectionHeader, Stack } from '@/ui';
 
 type BaselinesMeta = {
   tenantId: string;
@@ -119,7 +119,13 @@ export function BehavioralAnomaliesPanel({
 
   return (
     <div className="border border-border-subtle bg-surface-card">
-      <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
+      <Stack
+        direction="row"
+        align="flex-start"
+        justify="space-between"
+        gap="md"
+        className="p-4 border-b border-border-subtle"
+      >
         <div className="min-w-0">
           <SectionHeader
             title="Behavioral Anomalies"
@@ -144,7 +150,7 @@ export function BehavioralAnomaliesPanel({
             Refresh
           </button>
         </div>
-      </div>
+      </Stack>
 
       {!historicalEnabled && (
         <div className="p-4 text-sm text-ink-secondary">
@@ -235,7 +241,7 @@ export function BehavioralAnomaliesPanel({
           )}
 
           <div className="pt-2 border-t border-border-subtle">
-            <div className="flex items-center justify-between gap-3">
+            <Stack direction="row" align="center" justify="space-between" style={{ gap: '12px' }}>
               <button
                 type="button"
                 onClick={() => setShowBaselines((v) => !v)}
@@ -271,7 +277,7 @@ export function BehavioralAnomaliesPanel({
                   </div>
                 )}
               </div>
-            </div>
+            </Stack>
 
             {showBaselines && baselinesError && (
               <div className="mt-3 p-3 bg-ac-red/10 border border-ac-red/30 text-ac-red text-sm">

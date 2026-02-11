@@ -3,7 +3,7 @@ import { Gauge, RefreshCw, Settings2 } from 'lucide-react';
 import type { ClickHouseOpsSnapshot } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
 import { byOpGauge, formatMs, histogramSumCountByOp, queueDepthByOp } from './clickhouseOpsMetrics';
-import { Alert, SectionHeader } from '@/ui';
+import { Alert, SectionHeader, Stack } from '@/ui';
 
 interface ClickHouseOpsPanelProps {
   historicalEnabled: boolean;
@@ -97,7 +97,13 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
 
   return (
     <div className="border border-border-subtle bg-surface-card">
-      <div className="flex items-start justify-between gap-4 p-4 border-b border-border-subtle">
+      <Stack
+        direction="row"
+        align="flex-start"
+        justify="space-between"
+        gap="md"
+        className="p-4 border-b border-border-subtle"
+      >
         <div className="min-w-0">
           <SectionHeader
             title="ClickHouse Ops"
@@ -120,7 +126,7 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
-      </div>
+      </Stack>
 
       {!historicalEnabled && (
         <div className="p-4 text-sm text-ink-secondary">

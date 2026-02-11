@@ -1,16 +1,16 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 13:25_
+_Generated: 2026-02-11 13:59_
 
 ## Summary
 
-**Total findings: 509**
+**Total findings: 497**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 476 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
-| Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
+| Stack (row+align+gap) | 474 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+justify+gap) | 17 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 6 | Tailwind flex-col + gap → use <Stack direction=column> |
 
 ### Files by Hit Count (Work Order)
@@ -32,7 +32,6 @@ Priority files to migrate first (most raw patterns):
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `components/ui/CommandPalette.tsx` |
-| 9 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
 | 9 | `components/fleet/LogViewer.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
@@ -50,6 +49,7 @@ Priority files to migrate first (most raw patterns):
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
 | 6 | `pages/WarRoomPage.tsx` |
 | 6 | `components/soc/CampaignGraph.tsx` |
+| 6 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
 | 6 | `components/fleet/WebTerminal.tsx` |
 | 6 | `components/AuthCoverageMap/AuthCoverageMap.tsx` |
 | 5 | `pages/hunting/RequestTimelinePage.tsx` |
@@ -57,8 +57,8 @@ Priority files to migrate first (most raw patterns):
 | 5 | `pages/fleet/FleetHealthPage.tsx` |
 | 5 | `pages/beam/analytics/ResponseTimesPage.tsx` |
 | 5 | `pages/OverviewPage.tsx` |
-| 5 | `components/hunting/RequestTimelineGraph.tsx` |
 | 5 | `components/fleet/pingora/CrawlerConfig.tsx` |
+| 4 | `pages/soc/SessionDetailPage.tsx` |
 
 ---
 
@@ -119,16 +119,6 @@ Tailwind flex + justify-between + gap → use <Stack direction=row justify=space
 |------|------|-------|
 | `components/soc/CampaignGraph.tsx` | 344 | `<div key={key} className="flex justify-between gap-4 text-[11px]">` |
 | `components/warroom/PlaybookRunner.tsx` | 125 | `<div className="flex-1 flex items-center justify-between gap-4">` |
-| `components/hunting/SigmaLeadsPanel.tsx` | 84 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/SigmaRulesPanel.tsx` | 101 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 122 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/BehavioralAnomaliesPanel.tsx` | 238 | `<div className="flex items-center justify-between gap-3">` |
-| `components/hunting/ClickHouseOpsPanel.tsx` | 100 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/RecentRequestsPanel.tsx` | 68 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/LowAndSlowPanel.tsx` | 76 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/FleetIntelligencePanel.tsx` | 88 | `<div className="flex items-start justify-between gap-4 p-4 border-b border-borde` |
-| `components/hunting/RequestTimelineGraph.tsx` | 111 | `<div className="flex items-center justify-between gap-3">` |
-| `components/hunting/RequestTimelineGraph.tsx` | 227 | `<div className="flex items-start justify-between gap-3">` |
 | `components/AuthCoverageMap/AuthCoverageMap.tsx` | 148 | `<div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:i` |
 | `components/fleet/ServiceControlPanel.tsx` | 454 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
 | `components/fleet/FileBrowser.tsx` | 377 | `<div className="flex items-center justify-between gap-2">` |

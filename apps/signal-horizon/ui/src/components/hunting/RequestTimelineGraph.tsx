@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import type { RequestTimelineEvent } from '../../hooks/useHunt';
+import { Stack } from '@/ui';
 
 type EventKind = RequestTimelineEvent['kind'];
 
@@ -108,7 +109,7 @@ export function RequestTimelineGraph({ events }: { events: RequestTimelineEvent[
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      <Stack direction="row" align="center" justify="space-between" style={{ gap: '12px' }}>
         <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-ink-muted">
           {LANES.map((lane) => (
             <span
@@ -123,7 +124,7 @@ export function RequestTimelineGraph({ events }: { events: RequestTimelineEvent[
         <div className="text-[10px] font-mono text-ink-muted whitespace-nowrap">
           {model.duration < 1_000 ? `${model.duration}ms` : `${(model.duration / 1_000).toFixed(2)}s`}
         </div>
-      </div>
+      </Stack>
 
       <div className="overflow-x-auto">
         <div className="min-w-[900px]">
@@ -224,7 +225,7 @@ export function RequestTimelineGraph({ events }: { events: RequestTimelineEvent[
 
       {selected && (
         <div className="border border-border-subtle bg-surface-subtle/40 p-3">
-          <div className="flex items-start justify-between gap-3">
+          <Stack direction="row" align="flex-start" justify="space-between" style={{ gap: '12px' }}>
             <div className="min-w-0">
               <div className="text-xs font-mono text-ink-primary truncate">
                 {getEventLabel(selected)}
@@ -236,7 +237,7 @@ export function RequestTimelineGraph({ events }: { events: RequestTimelineEvent[
             <span className="px-2 py-1 border border-border-subtle bg-surface-inset text-[10px] font-mono text-ink-secondary whitespace-nowrap">
               {selected.kind}
             </span>
-          </div>
+          </Stack>
 
           <pre className="mt-3 text-[10px] font-mono text-ink-secondary whitespace-pre-wrap bg-surface-inset border border-border-subtle p-3 overflow-auto">
             {JSON.stringify(selected, null, 2)}
