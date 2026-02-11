@@ -5,13 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import {
-  AlertCircle,
-  TrendingUp,
-  TrendingDown,
-  Server,
-  ShieldAlert,
-} from 'lucide-react';
+import { AlertCircle, TrendingUp, TrendingDown, Server, ShieldAlert } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
@@ -100,7 +94,7 @@ function TimeRangeSelector({
             'px-3 py-1.5 text-sm font-medium transition-colors',
             value === range.value
               ? 'bg-horizon-600 text-ink-primary'
-              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle',
           )}
         >
           {range.label}
@@ -150,7 +144,7 @@ function StatCard({
             <div
               className={clsx(
                 'mt-2 flex items-center gap-1 text-sm',
-                trend.isGood ? 'text-green-400' : 'text-red-400'
+                trend.isGood ? 'text-green-400' : 'text-red-400',
               )}
             >
               {trend.isGood ? (
@@ -212,16 +206,9 @@ function ErrorTimelineChart({ data }: { data: typeof DEMO_ERROR_TIMELINE }) {
               </linearGradient>
             </defs>
             <CartesianGrid {...gridDefaultsSoft} />
-            <XAxis
-              dataKey="time"
-              {...xAxisNoLine}
-            />
-            <YAxis
-              {...axisDefaults.y}
-            />
-            <Tooltip
-              {...tooltipDefaults}
-            />
+            <XAxis dataKey="time" {...xAxisNoLine} />
+            <YAxis {...axisDefaults.y} />
+            <Tooltip {...tooltipDefaults} />
             <Area
               type="monotone"
               dataKey="errors4xx"
@@ -290,10 +277,7 @@ function ErrorCategoryChart({ data }: { data: typeof DEMO_ERROR_CATEGORIES }) {
         {data.map((item) => (
           <div key={item.name} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div
-                className="w-3 h-3"
-                style={{ backgroundColor: item.color }}
-              />
+              <div className="w-3 h-3" style={{ backgroundColor: item.color }} />
               <span className="text-sm text-ink-secondary">{item.name}</span>
             </div>
             <span className="text-sm font-medium text-ink-primary">
@@ -327,8 +311,8 @@ function ErrorTypesTable({ data }: { data: typeof DEMO_ERROR_TYPES }) {
                   item.type.startsWith('5')
                     ? 'bg-red-500'
                     : item.type.startsWith('4')
-                    ? 'bg-sky-500'
-                    : 'bg-blue-500'
+                      ? 'bg-sky-500'
+                      : 'bg-blue-500',
                 )}
                 style={{ width: `${item.percentage}%` }}
               />
@@ -386,8 +370,8 @@ function HighErrorEndpointsTable({ data }: { data: typeof DEMO_ERROR_ENDPOINTS }
                       item.rate < 2
                         ? 'text-green-400 bg-green-500/20'
                         : item.rate < 3
-                        ? 'text-sky-400 bg-sky-500/20'
-                        : 'text-red-400 bg-red-500/20'
+                          ? 'text-sky-400 bg-sky-500/20'
+                          : 'text-red-400 bg-red-500/20',
                     )}
                   >
                     {item.rate.toFixed(1)}%
@@ -423,7 +407,7 @@ export default function ErrorAnalysisPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Error Analysis</h1>
+          <h1 className="text-xl font-light text-ink-primary">Error Analysis</h1>
           <p className="text-ink-secondary mt-1">Loading error data...</p>
         </div>
         <StatsGridSkeleton />
@@ -437,7 +421,7 @@ export default function ErrorAnalysisPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Error Analysis</h1>
+          <h1 className="text-xl font-light text-ink-primary">Error Analysis</h1>
           <p className="text-ink-secondary mt-1">Error rates and patterns</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />

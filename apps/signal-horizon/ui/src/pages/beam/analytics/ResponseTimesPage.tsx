@@ -5,13 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import {
-  Clock,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  Zap,
-} from 'lucide-react';
+import { Clock, TrendingUp, TrendingDown, AlertTriangle, Zap } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
@@ -90,7 +84,7 @@ function TimeRangeSelector({
             'px-3 py-1.5 text-sm font-medium transition-colors',
             value === range.value
               ? 'bg-horizon-600 text-ink-primary'
-              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle',
           )}
         >
           {range.label}
@@ -140,7 +134,7 @@ function StatCard({
             <div
               className={clsx(
                 'mt-2 flex items-center gap-1 text-sm',
-                trend.isGood ? 'text-green-400' : 'text-red-400'
+                trend.isGood ? 'text-green-400' : 'text-red-400',
               )}
             >
               {trend.isGood ? (
@@ -188,20 +182,11 @@ function LatencyPercentileChart({ data }: { data: typeof DEMO_LATENCY_TIMELINE }
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid {...gridDefaultsSoft} />
-            <XAxis
-              dataKey="time"
-              {...xAxisNoLine}
-            />
-            <YAxis
-              {...axisDefaults.y}
-              tickFormatter={(v) => `${v}ms`}
-            />
+            <XAxis dataKey="time" {...xAxisNoLine} />
+            <YAxis {...axisDefaults.y} tickFormatter={(v) => `${v}ms`} />
             <Tooltip
               {...tooltipDefaults}
-              formatter={(value: number, name: string) => [
-                `${value}ms`,
-                name.toUpperCase(),
-              ]}
+              formatter={(value: number, name: string) => [`${value}ms`, name.toUpperCase()]}
             />
             <Line
               type="monotone"
@@ -243,10 +228,7 @@ function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBU
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ left: 10, right: 20 }}>
             <CartesianGrid {...gridDefaultsSoft} />
-            <XAxis
-              dataKey="range"
-              {...xAxisNoLine}
-            />
+            <XAxis dataKey="range" {...xAxisNoLine} />
             <YAxis
               {...axisDefaults.y}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
@@ -255,11 +237,7 @@ function LatencyDistributionChart({ data }: { data: typeof DEMO_LATENCY_DISTRIBU
               {...tooltipDefaults}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
-            <Bar
-              dataKey="count"
-              fill={CHART_COLORS.distribution}
-              radius={[0, 0, 0, 0]}
-            />
+            <Bar dataKey="count" fill={CHART_COLORS.distribution} radius={[0, 0, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -316,10 +294,12 @@ function SlowestEndpointsTable({ data }: { data: typeof DEMO_SLOWEST_ENDPOINTS }
                   <span className="text-sky-400 font-medium">{item.p95}ms</span>
                 </td>
                 <td className="px-5 py-3 text-right">
-                  <span className={clsx(
-                    'font-medium',
-                    item.p99 > 1000 ? 'text-red-400' : 'text-orange-400'
-                  )}>
+                  <span
+                    className={clsx(
+                      'font-medium',
+                      item.p99 > 1000 ? 'text-red-400' : 'text-orange-400',
+                    )}
+                  >
                     {item.p99}ms
                   </span>
                 </td>
@@ -343,18 +323,13 @@ export default function ResponseTimesPage() {
   // Calculate summary stats from demo data
   const stats = useMemo(() => {
     const latestData = DEMO_LATENCY_TIMELINE;
-    const avgP50 = Math.round(
-      latestData.reduce((sum, d) => sum + d.p50, 0) / latestData.length
+    const avgP50 = Math.round(latestData.reduce((sum, d) => sum + d.p50, 0) / latestData.length);
+    const avgP95 = Math.round(latestData.reduce((sum, d) => sum + d.p95, 0) / latestData.length);
+    const avgP99 = Math.round(latestData.reduce((sum, d) => sum + d.p99, 0) / latestData.length);
+    const slowRequests = DEMO_LATENCY_DISTRIBUTION.filter((d) => d.range === '500ms+').reduce(
+      (sum, d) => sum + d.count,
+      0,
     );
-    const avgP95 = Math.round(
-      latestData.reduce((sum, d) => sum + d.p95, 0) / latestData.length
-    );
-    const avgP99 = Math.round(
-      latestData.reduce((sum, d) => sum + d.p99, 0) / latestData.length
-    );
-    const slowRequests = DEMO_LATENCY_DISTRIBUTION
-      .filter((d) => d.range === '500ms+')
-      .reduce((sum, d) => sum + d.count, 0);
 
     return { avgP50, avgP95, avgP99, slowRequests };
   }, []);
@@ -363,7 +338,7 @@ export default function ResponseTimesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Response Times</h1>
+          <h1 className="text-xl font-light text-ink-primary">Response Times</h1>
           <p className="text-ink-secondary mt-1">Loading performance data...</p>
         </div>
         <StatsGridSkeleton />
@@ -377,7 +352,7 @@ export default function ResponseTimesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Response Times</h1>
+          <h1 className="text-xl font-light text-ink-primary">Response Times</h1>
           <p className="text-ink-secondary mt-1">Performance metrics and latency analysis</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />

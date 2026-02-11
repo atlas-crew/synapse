@@ -104,13 +104,13 @@ function StatCard({ icon: Icon, label, value, subValue, trend, color, bgColor }:
           {subValue && <p className="text-sm text-ink-muted mt-1">{subValue}</p>}
           {trend && (
             <div
-              className={clsx(
-                'mt-2 flex items-center gap-1 text-sm',
-              )}
+              className={clsx('mt-2 flex items-center gap-1 text-sm')}
               style={{ color: trend.value >= 0 ? colors.green : colors.red }}
             >
               <TrendingUp className={clsx('w-4 h-4', trend.value < 0 && 'rotate-180')} />
-              <span>{Math.abs(trend.value)}% {trend.label}</span>
+              <span>
+                {Math.abs(trend.value)}% {trend.label}
+              </span>
             </div>
           )}
         </div>
@@ -143,7 +143,7 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
         ingressMB: d.bytesIn / (1024 * 1024),
         egressMB: d.bytesOut / (1024 * 1024),
       })),
-    [data]
+    [data],
   );
 
   return (
@@ -175,15 +175,8 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
                 <stop offset="95%" stopColor={COLORS.egress} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis
-              dataKey="time"
-              {...axisDefaults.x}
-              axisLine={false}
-            />
-            <YAxis
-              {...axisDefaults.y}
-              tickFormatter={(v) => `${v.toFixed(0)} MB`}
-            />
+            <XAxis dataKey="time" {...axisDefaults.x} axisLine={false} />
+            <YAxis {...axisDefaults.y} tickFormatter={(v) => `${v.toFixed(0)} MB`} />
             <Tooltip
               {...tooltipDefaults}
               formatter={(value: number, name: string) => [
@@ -254,7 +247,10 @@ function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
                   </code>
                   <div className="mt-1 flex gap-1">
                     {ep.methods.map((m) => (
-                      <span key={m} className="text-xs text-ink-muted bg-surface-subtle px-1.5 py-0.5">
+                      <span
+                        key={m}
+                        className="text-xs text-ink-muted bg-surface-subtle px-1.5 py-0.5"
+                      >
                         {m}
                       </span>
                     ))}
@@ -333,14 +329,18 @@ function BillingPanel({
             <Download className="w-4 h-4" />
             Total Transfer
           </div>
-          <div className="text-2xl font-bold text-ink-primary mt-1">{formatBytes(totalTransfer)}</div>
+          <div className="text-2xl font-bold text-ink-primary mt-1">
+            {formatBytes(totalTransfer)}
+          </div>
         </div>
         <div className="bg-surface-subtle p-3">
           <div className="flex items-center gap-2 text-ink-secondary text-sm">
             <DollarSign className="w-4 h-4" />
             Estimated Cost
           </div>
-          <div className="text-2xl font-bold mt-1" style={{ color: colors.green }}>{formatCurrency(estimatedCost)}</div>
+          <div className="text-2xl font-bold mt-1" style={{ color: colors.green }}>
+            {formatCurrency(estimatedCost)}
+          </div>
           <div className="text-xs text-ink-muted mt-1">@ {formatCurrency(costPerGb)}/GB</div>
         </div>
       </div>
@@ -359,10 +359,7 @@ function BillingPanel({
               nameKey="name"
             >
               {pieData.map((_, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={index === 0 ? COLORS.ingress : COLORS.egress}
-                />
+                <Cell key={`cell-${index}`} fill={index === 0 ? COLORS.ingress : COLORS.egress} />
               ))}
             </Pie>
             <Legend
@@ -403,7 +400,7 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
         bytes: s.bytes / (1024 * 1024 * 1024), // Convert to GB
         requests: s.requestCount,
       })),
-    [sensors]
+    [sensors],
   );
 
   return (
@@ -455,17 +452,23 @@ export default function BandwidthDashboardPage() {
   const [timelineGranularity, setTimelineGranularity] = useState<'1m' | '5m' | '1h'>('5m');
   const [timelineDuration, setTimelineDuration] = useState(60);
 
-  const { fleetStats, timeline, endpoints, billing, isLoading, isError, error } = useBandwidthDashboard({
-    timelineGranularity,
-    timelineDuration,
-  });
+  const { fleetStats, timeline, endpoints, billing, isLoading, isError, error } =
+    useBandwidthDashboard({
+      timelineGranularity,
+      timelineDuration,
+    });
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading bandwidth dashboard">
+      <div
+        className="p-6 space-y-6"
+        role="main"
+        aria-busy="true"
+        aria-label="Loading bandwidth dashboard"
+      >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-light text-ink-primary">Bandwidth Dashboard</h1>
+            <h1 className="text-xl font-light text-ink-primary">Bandwidth Dashboard</h1>
             <p className="text-ink-secondary mt-1">Loading bandwidth metrics...</p>
           </div>
         </div>
@@ -495,8 +498,12 @@ export default function BandwidthDashboardPage() {
             borderColor: alpha(colors.red, 0.5),
           }}
         >
-          <h2 className="text-lg font-semibold" style={{ color: colors.red }}>Error Loading Dashboard</h2>
-          <p className="text-ink-secondary mt-1">{error instanceof Error ? error.message : 'Unknown error'}</p>
+          <h2 className="text-lg font-semibold" style={{ color: colors.red }}>
+            Error Loading Dashboard
+          </h2>
+          <p className="text-ink-secondary mt-1">
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </p>
         </div>
       </div>
     );
@@ -519,9 +526,12 @@ export default function BandwidthDashboardPage() {
             borderColor: alpha(colors.orange, 0.5),
           }}
         >
-          <h2 className="text-lg font-semibold" style={{ color: colors.orange }}>No Data Available</h2>
+          <h2 className="text-lg font-semibold" style={{ color: colors.orange }}>
+            No Data Available
+          </h2>
           <p className="text-ink-secondary mt-1">
-            Bandwidth data is not currently available. This may be because no sensors are connected or reporting metrics.
+            Bandwidth data is not currently available. This may be because no sensors are connected
+            or reporting metrics.
           </p>
         </div>
       </div>
@@ -533,8 +543,10 @@ export default function BandwidthDashboardPage() {
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Bandwidth Dashboard</h1>
-          <p className="text-ink-secondary mt-1">Fleet-wide bandwidth metrics and billing analysis</p>
+          <h1 className="text-xl font-light text-ink-primary">Bandwidth Dashboard</h1>
+          <p className="text-ink-secondary mt-1">
+            Fleet-wide bandwidth metrics and billing analysis
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <select
@@ -558,7 +570,11 @@ export default function BandwidthDashboardPage() {
             <option value={1440}>Last 24 hours</option>
           </select>
           <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
-            <span className="w-2 h-2 animate-pulse" aria-hidden="true" style={{ backgroundColor: colors.green }} />
+            <span
+              className="w-2 h-2 animate-pulse"
+              aria-hidden="true"
+              style={{ backgroundColor: colors.green }}
+            />
             <span style={{ color: colors.green }}>Live</span>
           </div>
         </div>

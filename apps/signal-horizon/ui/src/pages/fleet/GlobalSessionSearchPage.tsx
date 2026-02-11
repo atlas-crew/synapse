@@ -113,7 +113,8 @@ export function GlobalSessionSearchPage() {
     if (formState.userAgent.trim()) query.userAgent = formState.userAgent.trim();
     if (formState.riskScoreMin.trim()) query.riskScoreMin = parseInt(formState.riskScoreMin, 10);
     if (formState.blockedOnly) query.blockedOnly = true;
-    if (formState.limitPerSensor.trim()) query.limitPerSensor = parseInt(formState.limitPerSensor, 10);
+    if (formState.limitPerSensor.trim())
+      query.limitPerSensor = parseInt(formState.limitPerSensor, 10);
 
     if (formState.timeRangeEnabled && formState.timeRangeStart) {
       query.timeRange = {
@@ -126,17 +127,20 @@ export function GlobalSessionSearchPage() {
   }, [formState]);
 
   // Handle search
-  const handleSearch = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionError(null);
-    setActionSuccess(null);
+  const handleSearch = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setActionError(null);
+      setActionSuccess(null);
 
-    try {
-      await search(buildQuery());
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Search failed');
-    }
-  }, [search, buildQuery]);
+      try {
+        await search(buildQuery());
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : 'Search failed');
+      }
+    },
+    [search, buildQuery],
+  );
 
   // Handle clear
   const handleClear = useCallback(() => {
@@ -157,11 +161,11 @@ export function GlobalSessionSearchPage() {
       const result = await revokeSession(
         revokeModal.sessionId,
         revokeModal.reason || undefined,
-        revokeModal.global ? undefined : [revokeModal.sensorId]
+        revokeModal.global ? undefined : [revokeModal.sensorId],
       );
 
       setActionSuccess(
-        `Session revoked on ${result.successCount} of ${result.totalSensors} sensors`
+        `Session revoked on ${result.successCount} of ${result.totalSensors} sensors`,
       );
       setRevokeModal(initialRevokeModalState);
 
@@ -189,7 +193,7 @@ export function GlobalSessionSearchPage() {
       const result = await banActor(banModal.actorId, banModal.reason, durationSeconds);
 
       setActionSuccess(
-        `Actor banned on ${result.successCount} of ${result.totalSensors} sensors. ${result.totalSessionsTerminated} sessions terminated.`
+        `Actor banned on ${result.successCount} of ${result.totalSensors} sensors. ${result.totalSessionsTerminated} sessions terminated.`,
       );
       setBanModal(initialBanModalState);
 
@@ -227,14 +231,38 @@ export function GlobalSessionSearchPage() {
   const riskTierData = useMemo(() => {
     if (!stats) return [];
     const { sessionsByRiskTier } = stats;
-    const total = sessionsByRiskTier.low + sessionsByRiskTier.medium + sessionsByRiskTier.high + sessionsByRiskTier.critical;
+    const total =
+      sessionsByRiskTier.low +
+      sessionsByRiskTier.medium +
+      sessionsByRiskTier.high +
+      sessionsByRiskTier.critical;
     if (total === 0) return [];
 
     return [
-      { label: 'Low', value: sessionsByRiskTier.low, color: 'bg-ac-green', pct: (sessionsByRiskTier.low / total * 100).toFixed(1) },
-      { label: 'Medium', value: sessionsByRiskTier.medium, color: 'bg-ac-yellow', pct: (sessionsByRiskTier.medium / total * 100).toFixed(1) },
-      { label: 'High', value: sessionsByRiskTier.high, color: 'bg-ac-orange', pct: (sessionsByRiskTier.high / total * 100).toFixed(1) },
-      { label: 'Critical', value: sessionsByRiskTier.critical, color: 'bg-ac-red', pct: (sessionsByRiskTier.critical / total * 100).toFixed(1) },
+      {
+        label: 'Low',
+        value: sessionsByRiskTier.low,
+        color: 'bg-ac-green',
+        pct: ((sessionsByRiskTier.low / total) * 100).toFixed(1),
+      },
+      {
+        label: 'Medium',
+        value: sessionsByRiskTier.medium,
+        color: 'bg-ac-yellow',
+        pct: ((sessionsByRiskTier.medium / total) * 100).toFixed(1),
+      },
+      {
+        label: 'High',
+        value: sessionsByRiskTier.high,
+        color: 'bg-ac-orange',
+        pct: ((sessionsByRiskTier.high / total) * 100).toFixed(1),
+      },
+      {
+        label: 'Critical',
+        value: sessionsByRiskTier.critical,
+        color: 'bg-ac-red',
+        pct: ((sessionsByRiskTier.critical / total) * 100).toFixed(1),
+      },
     ];
   }, [stats]);
 
@@ -243,7 +271,7 @@ export function GlobalSessionSearchPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-light text-ink-primary">Global Session Search</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Global Session Search</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Search and manage sessions across all sensors in your fleet
           </p>
@@ -285,16 +313,14 @@ export function GlobalSessionSearchPage() {
         <MetricCard
           label="Blocked Sessions"
           value={stats?.totalBlockedSessions ?? 0}
-          className={stats?.totalBlockedSessions && stats.totalBlockedSessions > 0 ? 'border-ac-orange/40' : ''}
+          className={
+            stats?.totalBlockedSessions && stats.totalBlockedSessions > 0
+              ? 'border-ac-orange/40'
+              : ''
+          }
         />
-        <MetricCard
-          label="Unique Actors"
-          value={stats?.uniqueActors ?? 0}
-        />
-        <MetricCard
-          label="Avg Risk Score"
-          value={stats?.averageRiskScore?.toFixed(1) ?? '0'}
-        />
+        <MetricCard label="Unique Actors" value={stats?.uniqueActors ?? 0} />
+        <MetricCard label="Avg Risk Score" value={stats?.averageRiskScore?.toFixed(1) ?? '0'} />
       </div>
 
       {/* Risk Distribution */}
@@ -364,7 +390,9 @@ export function GlobalSessionSearchPage() {
 
           {/* JA4 Fingerprint */}
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">JA4 Fingerprint</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              JA4 Fingerprint
+            </label>
             <input
               type="text"
               className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
@@ -376,7 +404,9 @@ export function GlobalSessionSearchPage() {
 
           {/* User Agent */}
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">User Agent (contains)</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              User Agent (contains)
+            </label>
             <input
               type="text"
               className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"
@@ -388,7 +418,9 @@ export function GlobalSessionSearchPage() {
 
           {/* Min Risk Score */}
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">Min Risk Score</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              Min Risk Score
+            </label>
             <input
               type="number"
               min="0"
@@ -402,7 +434,9 @@ export function GlobalSessionSearchPage() {
 
           {/* Limit Per Sensor */}
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">Limit Per Sensor</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-1">
+              Limit Per Sensor
+            </label>
             <input
               type="number"
               min="1"
@@ -434,7 +468,9 @@ export function GlobalSessionSearchPage() {
                 type="checkbox"
                 className="w-4 h-4 text-ac-blue bg-surface-raised border border-border-default focus:ring-ac-blue"
                 checked={formState.timeRangeEnabled}
-                onChange={(e) => setFormState((s) => ({ ...s, timeRangeEnabled: e.target.checked }))}
+                onChange={(e) =>
+                  setFormState((s) => ({ ...s, timeRangeEnabled: e.target.checked }))
+                }
               />
               <span className="text-sm text-ink-primary">Filter by time range</span>
             </label>
@@ -445,7 +481,9 @@ export function GlobalSessionSearchPage() {
         {formState.timeRangeEnabled && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
             <div>
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Start Time</label>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">
+                Start Time
+              </label>
               <input
                 type="datetime-local"
                 className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary focus:outline-none focus:border-ac-blue"
@@ -454,7 +492,9 @@ export function GlobalSessionSearchPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-ink-secondary mb-1">End Time (optional)</label>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">
+                End Time (optional)
+              </label>
               <input
                 type="datetime-local"
                 className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary focus:outline-none focus:border-ac-blue"
@@ -483,9 +523,7 @@ export function GlobalSessionSearchPage() {
           </button>
         </div>
 
-        {searchError && (
-          <p className="mt-4 text-sm text-ac-red">{searchError.message}</p>
-        )}
+        {searchError && <p className="mt-4 text-sm text-ac-red">{searchError.message}</p>}
       </form>
 
       {/* Search Results */}
@@ -508,7 +546,9 @@ export function GlobalSessionSearchPage() {
             </p>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Session ID</label>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">
+                Session ID
+              </label>
               <input
                 type="text"
                 className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary"
@@ -518,7 +558,9 @@ export function GlobalSessionSearchPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Reason (optional)</label>
+              <label className="block text-sm font-medium text-ink-secondary mb-1">
+                Reason (optional)
+              </label>
               <input
                 type="text"
                 className="w-full px-3 py-2 bg-surface-raised border border-border-default text-ink-primary placeholder-ink-tertiary focus:outline-none focus:border-ac-blue"

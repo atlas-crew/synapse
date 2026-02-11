@@ -22,7 +22,13 @@ import {
 import { clsx } from 'clsx';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
 
-type BlockReason = 'sql_injection' | 'xss' | 'rate_limit' | 'bot' | 'path_traversal' | 'credential_stuffing';
+type BlockReason =
+  | 'sql_injection'
+  | 'xss'
+  | 'rate_limit'
+  | 'bot'
+  | 'path_traversal'
+  | 'credential_stuffing';
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 
 // Demo data - blocked requests
@@ -40,7 +46,7 @@ const DEMO_BLOCKED_REQUESTS = [
     userAgent: 'curl/7.64.1',
     country: 'US',
     requestSize: 1240,
-    matchedPatterns: ["UNION SELECT", "' OR '1'='1"],
+    matchedPatterns: ['UNION SELECT', "' OR '1'='1"],
   },
   {
     id: 'blk-002',
@@ -155,7 +161,11 @@ const REASON_CONFIG: Record<BlockReason, { label: string; color: string; bg: str
   rate_limit: { label: 'Rate Limited', color: 'text-blue-400', bg: 'bg-blue-500/20' },
   bot: { label: 'Bot Detected', color: 'text-purple-400', bg: 'bg-purple-500/20' },
   path_traversal: { label: 'Path Traversal', color: 'text-sky-400', bg: 'bg-sky-500/20' },
-  credential_stuffing: { label: 'Credential Stuffing', color: 'text-pink-400', bg: 'bg-pink-500/20' },
+  credential_stuffing: {
+    label: 'Credential Stuffing',
+    color: 'text-pink-400',
+    bg: 'bg-pink-500/20',
+  },
 };
 
 const RISK_CONFIG: Record<RiskLevel, { color: string; bg: string }> = {
@@ -234,10 +244,28 @@ function DecisionTraceModal({
 
   // Demo decision trace data
   const decisionTrace = [
-    { step: 1, rule: 'IP Reputation Check', result: 'pass', score: 0, detail: 'IP not in blocklist' },
-    { step: 2, rule: 'Rate Limit Check', result: 'pass', score: 0, detail: 'Under threshold (100/min)' },
+    {
+      step: 1,
+      rule: 'IP Reputation Check',
+      result: 'pass',
+      score: 0,
+      detail: 'IP not in blocklist',
+    },
+    {
+      step: 2,
+      rule: 'Rate Limit Check',
+      result: 'pass',
+      score: 0,
+      detail: 'Under threshold (100/min)',
+    },
     { step: 3, rule: 'Bot Detection', result: 'pass', score: 5, detail: 'Low bot probability' },
-    { step: 4, rule: request.ruleMatched, result: 'fail', score: request.riskScore, detail: `Matched: ${request.matchedPatterns.join(', ')}` },
+    {
+      step: 4,
+      rule: request.ruleMatched,
+      result: 'fail',
+      score: request.riskScore,
+      detail: `Matched: ${request.matchedPatterns.join(', ')}`,
+    },
   ];
 
   return (
@@ -262,10 +290,7 @@ function DecisionTraceModal({
               <h2 className="text-lg font-semibold text-ink-primary">Decision Trace</h2>
               <p className="text-sm text-ink-secondary">Why was this request blocked?</p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-surface-subtle transition-colors"
-            >
+            <button onClick={onClose} className="p-2 hover:bg-surface-subtle transition-colors">
               <X className="w-5 h-5 text-ink-secondary" />
             </button>
           </div>
@@ -279,7 +304,12 @@ function DecisionTraceModal({
                 <div>
                   <p className="text-xs text-ink-muted">Endpoint</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className={clsx('px-2 py-0.5 text-xs font-medium', METHOD_COLORS[request.method])}>
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 text-xs font-medium',
+                        METHOD_COLORS[request.method],
+                      )}
+                    >
                       {request.method}
                     </span>
                     <code className="text-blue-400 text-sm">{request.path}</code>
@@ -294,7 +324,9 @@ function DecisionTraceModal({
                 </div>
                 <div>
                   <p className="text-xs text-ink-muted">Timestamp</p>
-                  <p className="text-ink-primary mt-1">{new Date(request.timestamp).toLocaleString()}</p>
+                  <p className="text-ink-primary mt-1">
+                    {new Date(request.timestamp).toLocaleString()}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-ink-muted">User Agent</p>
@@ -310,10 +342,16 @@ function DecisionTraceModal({
                 <div>
                   <h3 className="text-ink-primary font-medium">Request Blocked</h3>
                   <p className="text-sm text-ink-secondary mt-1">
-                    Reason: <span className={clsx('font-medium', reasonConfig.color)}>{reasonConfig.label}</span>
+                    Reason:{' '}
+                    <span className={clsx('font-medium', reasonConfig.color)}>
+                      {reasonConfig.label}
+                    </span>
                   </p>
                   <p className="text-sm text-ink-secondary">
-                    Risk Score: <span className={clsx('font-medium', riskConfig.color)}>{request.riskScore}/100</span>
+                    Risk Score:{' '}
+                    <span className={clsx('font-medium', riskConfig.color)}>
+                      {request.riskScore}/100
+                    </span>
                   </p>
                 </div>
               </div>
@@ -330,15 +368,19 @@ function DecisionTraceModal({
                       'p-4 border',
                       step.result === 'fail'
                         ? 'bg-red-500/10 border-red-500/30'
-                        : 'bg-surface-subtle border-border-subtle'
+                        : 'bg-surface-subtle border-border-subtle',
                     )}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className={clsx(
-                          'w-6 h-6 flex items-center justify-center text-xs font-medium',
-                          step.result === 'fail' ? 'bg-red-500 text-white' : 'bg-surface-subtle text-ink-secondary'
-                        )}>
+                        <span
+                          className={clsx(
+                            'w-6 h-6 flex items-center justify-center text-xs font-medium',
+                            step.result === 'fail'
+                              ? 'bg-red-500 text-white'
+                              : 'bg-surface-subtle text-ink-secondary',
+                          )}
+                        >
                           {step.step}
                         </span>
                         <div>
@@ -347,10 +389,14 @@ function DecisionTraceModal({
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className={clsx(
-                          'px-2 py-0.5 text-xs font-medium',
-                          step.result === 'fail' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
-                        )}>
+                        <span
+                          className={clsx(
+                            'px-2 py-0.5 text-xs font-medium',
+                            step.result === 'fail'
+                              ? 'bg-red-500/20 text-red-400'
+                              : 'bg-green-500/20 text-green-400',
+                          )}
+                        >
                           {step.result === 'fail' ? 'BLOCKED' : 'PASS'}
                         </span>
                         {step.score > 0 && (
@@ -393,7 +439,9 @@ export default function BlockedRequestsPage() {
   useDocumentTitle('Beam - Blocked Requests');
   const [search, setSearch] = useState('');
   const [reasonFilter, setReasonFilter] = useState<string>('');
-  const [selectedRequest, setSelectedRequest] = useState<(typeof DEMO_BLOCKED_REQUESTS)[0] | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<(typeof DEMO_BLOCKED_REQUESTS)[0] | null>(
+    null,
+  );
   const isLoading = false;
 
   // Filter requests
@@ -406,7 +454,7 @@ export default function BlockedRequestsPage() {
         (r) =>
           r.path.toLowerCase().includes(term) ||
           r.sourceIp.includes(term) ||
-          r.ruleMatched.toLowerCase().includes(term)
+          r.ruleMatched.toLowerCase().includes(term),
       );
     }
 
@@ -423,7 +471,7 @@ export default function BlockedRequestsPage() {
     const critical = DEMO_BLOCKED_REQUESTS.filter((r) => r.riskLevel === 'critical').length;
     const uniqueIps = new Set(DEMO_BLOCKED_REQUESTS.map((r) => r.sourceIp)).size;
     const avgRisk = Math.round(
-      DEMO_BLOCKED_REQUESTS.reduce((sum, r) => sum + r.riskScore, 0) / total
+      DEMO_BLOCKED_REQUESTS.reduce((sum, r) => sum + r.riskScore, 0) / total,
     );
 
     return { total, critical, uniqueIps, avgRisk };
@@ -433,7 +481,7 @@ export default function BlockedRequestsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Blocked Requests</h1>
+          <h1 className="text-xl font-light text-ink-primary">Blocked Requests</h1>
           <p className="text-ink-secondary mt-1">Loading blocked requests...</p>
         </div>
         <StatsGridSkeleton />
@@ -447,7 +495,7 @@ export default function BlockedRequestsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Blocked Requests</h1>
+          <h1 className="text-xl font-light text-ink-primary">Blocked Requests</h1>
           <p className="text-ink-secondary mt-1">Review and analyze blocked API requests</p>
         </div>
         <button className="px-4 py-2 bg-surface-subtle hover:bg-surface-card text-ink-primary text-sm font-medium transition-colors flex items-center gap-2">
@@ -458,10 +506,30 @@ export default function BlockedRequestsPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Blocked" value={stats.total.toString()} icon={ShieldX} color="text-red-400" />
-        <StatCard label="Critical" value={stats.critical.toString()} icon={AlertTriangle} color="text-orange-400" />
-        <StatCard label="Unique IPs" value={stats.uniqueIps.toString()} icon={MapPin} color="text-blue-400" />
-        <StatCard label="Avg Risk Score" value={stats.avgRisk.toString()} icon={Target} color="text-sky-400" />
+        <StatCard
+          label="Total Blocked"
+          value={stats.total.toString()}
+          icon={ShieldX}
+          color="text-red-400"
+        />
+        <StatCard
+          label="Critical"
+          value={stats.critical.toString()}
+          icon={AlertTriangle}
+          color="text-orange-400"
+        />
+        <StatCard
+          label="Unique IPs"
+          value={stats.uniqueIps.toString()}
+          icon={MapPin}
+          color="text-blue-400"
+        />
+        <StatCard
+          label="Avg Risk Score"
+          value={stats.avgRisk.toString()}
+          icon={Target}
+          color="text-sky-400"
+        />
       </div>
 
       {/* Search and Filters */}
@@ -501,7 +569,9 @@ export default function BlockedRequestsPage() {
         className="bg-surface-card border border-border-subtle overflow-hidden"
       >
         <table className="w-full">
-          <caption className="sr-only">Blocked requests with threat details and rule matches</caption>
+          <caption className="sr-only">
+            Blocked requests with threat details and rule matches
+          </caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary bg-surface-subtle">
               <th className="px-5 py-3 font-medium">Time</th>
@@ -537,14 +607,27 @@ export default function BlockedRequestsPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className={clsx('px-2 py-0.5 text-xs font-medium', METHOD_COLORS[request.method])}>
+                      <span
+                        className={clsx(
+                          'px-2 py-0.5 text-xs font-medium',
+                          METHOD_COLORS[request.method],
+                        )}
+                      >
                         {request.method}
                       </span>
-                      <code className="text-blue-400 text-sm truncate max-w-[200px]">{request.path}</code>
+                      <code className="text-blue-400 text-sm truncate max-w-[200px]">
+                        {request.path}
+                      </code>
                     </div>
                   </td>
                   <td className="px-5 py-4">
-                    <span className={clsx('px-2 py-0.5 text-xs font-medium', reasonConfig.bg, reasonConfig.color)}>
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 text-xs font-medium',
+                        reasonConfig.bg,
+                        reasonConfig.color,
+                      )}
+                    >
                       {reasonConfig.label}
                     </span>
                   </td>
@@ -556,7 +639,9 @@ export default function BlockedRequestsPage() {
                           style={{ width: `${request.riskScore}%` }}
                         />
                       </div>
-                      <span className={clsx('text-xs font-medium', riskConfig.color)}>{request.riskScore}</span>
+                      <span className={clsx('text-xs font-medium', riskConfig.color)}>
+                        {request.riskScore}
+                      </span>
                     </div>
                   </td>
                   <td className="px-5 py-4">

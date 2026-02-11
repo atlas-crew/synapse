@@ -83,7 +83,8 @@ function formatDateTime(dateString: string): string {
 }
 
 function validateSemver(version: string): boolean {
-  const semverRegex = /^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(\+[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$/;
+  const semverRegex =
+    /^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(\+[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$/;
   return semverRegex.test(version);
 }
 
@@ -229,13 +230,15 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               placeholder="2.4.2"
               className={clsx(
                 'w-full px-3 py-2 text-sm bg-surface-inset border text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
-                validationErrors.version ? 'border-status-error' : 'border-border-subtle'
+                validationErrors.version ? 'border-status-error' : 'border-border-subtle',
               )}
             />
             {validationErrors.version && (
               <p className="mt-1 text-xs text-status-error">{validationErrors.version}</p>
             )}
-            <p className="mt-1 text-xs text-ink-muted">Semantic version (e.g., 2.4.2, 2.5.0-beta.1)</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Semantic version (e.g., 2.4.2, 2.5.0-beta.1)
+            </p>
           </div>
 
           {/* Changelog */}
@@ -250,7 +253,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               rows={6}
               className={clsx(
                 'w-full px-3 py-2 text-sm bg-surface-inset border text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50 font-mono',
-                validationErrors.changelog ? 'border-status-error' : 'border-border-subtle'
+                validationErrors.changelog ? 'border-status-error' : 'border-border-subtle',
               )}
             />
             {validationErrors.changelog && (
@@ -261,7 +264,9 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
 
           {/* Upload mode toggle */}
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1.5">Binary Source</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-1.5">
+              Binary Source
+            </label>
             <div className="flex gap-2">
               <button
                 onClick={() => setUploadMode('url')}
@@ -269,7 +274,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                   'flex-1 px-4 py-2 text-sm font-medium border transition-colors',
                   uploadMode === 'url'
                     ? 'bg-ac-blue text-white border-ac-blue'
-                    : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted'
+                    : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted',
                 )}
               >
                 URL
@@ -280,7 +285,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                   'flex-1 px-4 py-2 text-sm font-medium border transition-colors',
                   uploadMode === 'file'
                     ? 'bg-ac-blue text-white border-ac-blue'
-                    : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted'
+                    : 'bg-surface-subtle text-ink-secondary border-border-subtle hover:border-ink-muted',
                 )}
               >
                 Upload File
@@ -301,7 +306,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                 placeholder="https://releases.example.com/sensor-2.4.2.tar.gz"
                 className={clsx(
                   'w-full px-3 py-2 text-sm bg-surface-inset border text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-ac-blue/50',
-                  validationErrors.binaryUrl ? 'border-status-error' : 'border-border-subtle'
+                  validationErrors.binaryUrl ? 'border-status-error' : 'border-border-subtle',
                 )}
               />
               {validationErrors.binaryUrl && (
@@ -331,7 +336,7 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
                     ? 'border-status-success bg-status-success/5'
                     : validationErrors.binaryFile
                       ? 'border-status-error'
-                      : 'border-border-subtle hover:border-ink-muted'
+                      : 'border-border-subtle hover:border-ink-muted',
                 )}
               >
                 {binaryFile ? (
@@ -356,7 +361,9 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
 
           {/* SHA-256 */}
           <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1.5">SHA-256 Checksum</label>
+            <label className="block text-sm font-medium text-ink-secondary mb-1.5">
+              SHA-256 Checksum
+            </label>
             <div className="relative">
               <input
                 type="text"
@@ -373,7 +380,9 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
               )}
             </div>
             <p className="mt-1 text-xs text-ink-muted">
-              {uploadMode === 'file' ? 'Auto-calculated from uploaded file' : 'Optional verification checksum'}
+              {uploadMode === 'file'
+                ? 'Auto-calculated from uploaded file'
+                : 'Optional verification checksum'}
             </p>
           </div>
         </div>
@@ -410,7 +419,13 @@ function UploadReleaseModal({ isOpen, onClose, onSubmit, isSubmitting }: UploadR
 }
 
 /** Confirm Delete Modal */
-function ConfirmDeleteModal({ isOpen, release, onClose, onConfirm, isDeleting }: ConfirmDeleteModalProps) {
+function ConfirmDeleteModal({
+  isOpen,
+  release,
+  onClose,
+  onConfirm,
+  isDeleting,
+}: ConfirmDeleteModalProps) {
   if (!isOpen || !release) return null;
 
   return (
@@ -426,7 +441,8 @@ function ConfirmDeleteModal({ isOpen, release, onClose, onConfirm, isDeleting }:
         </div>
 
         <p className="text-sm text-ink-secondary mb-2">
-          Are you sure you want to delete release <span className="font-semibold">v{release.version}</span>?
+          Are you sure you want to delete release{' '}
+          <span className="font-semibold">v{release.version}</span>?
         </p>
         <p className="text-sm text-ink-muted mb-6">
           This action cannot be undone. Sensors currently using this version will not be affected.
@@ -502,7 +518,9 @@ function ReleaseRow({
         </td>
         <td className="px-6 py-4 text-sm text-ink-secondary">{formatDate(release.createdAt)}</td>
         <td className="px-6 py-4 text-sm text-ink-secondary">{formatBytes(release.size)}</td>
-        <td className="px-6 py-4 text-sm text-ink-muted truncate max-w-[200px]">{release.createdBy}</td>
+        <td className="px-6 py-4 text-sm text-ink-muted truncate max-w-[200px]">
+          {release.createdBy}
+        </td>
         <td className="px-6 py-4">
           <div className="flex items-center justify-end gap-2">
             <button
@@ -639,9 +657,7 @@ export function ReleasesPage() {
 
   // Recent rollouts (completed)
   const recentRollouts = useMemo(() => {
-    return safeRollouts
-      .filter((r) => r.status === 'completed')
-      .slice(0, 5);
+    return safeRollouts.filter((r) => r.status === 'completed').slice(0, 5);
   }, [safeRollouts]);
 
   // Handlers
@@ -650,7 +666,7 @@ export function ReleasesPage() {
       await createRelease(data);
       setShowUploadModal(false);
     },
-    [createRelease]
+    [createRelease],
   );
 
   const handleDeleteRelease = useCallback(async () => {
@@ -671,14 +687,14 @@ export function ReleasesPage() {
       setDeployingRelease(null);
       return rollout;
     },
-    [startRollout]
+    [startRollout],
   );
 
   const handleRolloutCancel = useCallback(
     async (rolloutId: string) => {
       await cancelRollout(rolloutId);
     },
-    [cancelRollout]
+    [cancelRollout],
   );
 
   return (
@@ -686,7 +702,7 @@ export function ReleasesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-light text-ink-primary">Release Management</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Release Management</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Manage and deploy sensor releases across your fleet
           </p>
@@ -838,7 +854,11 @@ export function ReleasesPage() {
                   <div>
                     <div className="font-medium text-ink-primary">v{rollout.release.version}</div>
                     <div className="text-sm text-ink-muted">
-                      {(Array.isArray(rollout.progress) ? rollout.progress : []).filter((p) => p.status === 'activated').length}{' '}
+                      {
+                        (Array.isArray(rollout.progress) ? rollout.progress : []).filter(
+                          (p) => p.status === 'activated',
+                        ).length
+                      }{' '}
                       sensors updated
                     </div>
                   </div>

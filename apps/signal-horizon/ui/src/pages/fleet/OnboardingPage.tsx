@@ -66,7 +66,10 @@ export function OnboardingPage(): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tokenToRevoke, setTokenToRevoke] = useState<string | null>(null);
   // Note: sensorToProcess reserved for future modal-based approval with confirmation
-  const [_sensorToProcess, _setSensorToProcess] = useState<{ id: string; action: 'approve' | 'reject' } | null>(null);
+  const [_sensorToProcess, _setSensorToProcess] = useState<{
+    id: string;
+    action: 'approve' | 'reject';
+  } | null>(null);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
 
@@ -81,7 +84,11 @@ export function OnboardingPage(): React.ReactElement {
   });
 
   // Fetch tokens
-  const { data: tokensData, isLoading: tokensLoading, error: tokensError } = useQuery({
+  const {
+    data: tokensData,
+    isLoading: tokensLoading,
+    error: tokensError,
+  } = useQuery({
     queryKey: ['registration-tokens'],
     queryFn: async () => {
       return apiFetch('/onboarding/tokens');
@@ -90,7 +97,11 @@ export function OnboardingPage(): React.ReactElement {
   });
 
   // Fetch pending sensors
-  const { data: pendingData, isLoading: pendingLoading, error: pendingError } = useQuery({
+  const {
+    data: pendingData,
+    isLoading: pendingLoading,
+    error: pendingError,
+  } = useQuery({
     queryKey: ['pending-sensors'],
     queryFn: async () => {
       return apiFetch('/onboarding/pending');
@@ -127,7 +138,15 @@ export function OnboardingPage(): React.ReactElement {
 
   // Approve/reject sensor mutation
   const approvalMutation = useMutation({
-    mutationFn: async ({ sensorId, action, assignedName }: { sensorId: string; action: 'approve' | 'reject'; assignedName?: string }) => {
+    mutationFn: async ({
+      sensorId,
+      action,
+      assignedName,
+    }: {
+      sensorId: string;
+      action: 'approve' | 'reject';
+      assignedName?: string;
+    }) => {
       return apiFetch(`/onboarding/pending/${sensorId}`, {
         method: 'POST',
         body: { action, assignedName },
@@ -154,8 +173,10 @@ export function OnboardingPage(): React.ReactElement {
     const request: NewTokenRequest = {
       name: formData.get('name') as string,
       maxUses: parseInt(formData.get('maxUses') as string) || 1,
-      expiresIn: formData.get('expiresIn') ? parseInt(formData.get('expiresIn') as string) : undefined,
-      region: formData.get('region') as string || undefined,
+      expiresIn: formData.get('expiresIn')
+        ? parseInt(formData.get('expiresIn') as string)
+        : undefined,
+      region: (formData.get('region') as string) || undefined,
     };
     generateMutation.mutate(request);
   };
@@ -168,7 +189,9 @@ export function OnboardingPage(): React.ReactElement {
       REVOKED: 'bg-ac-red/10 text-ac-red border-ac-red/20',
     };
     return (
-      <span className={`px-2 py-0.5 text-xs font-medium border ${styles[status] || 'bg-ink-muted/10'}`}>
+      <span
+        className={`px-2 py-0.5 text-xs font-medium border ${styles[status] || 'bg-ink-muted/10'}`}
+      >
         {status}
       </span>
     );
@@ -189,7 +212,7 @@ export function OnboardingPage(): React.ReactElement {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Sensor Onboarding</h1>
+          <h1 className="text-xl font-light text-ink-primary">Sensor Onboarding</h1>
           <p className="text-sm text-ink-secondary mt-1">
             Manage registration tokens and approve pending sensors
           </p>
@@ -209,7 +232,9 @@ export function OnboardingPage(): React.ReactElement {
           label="Pending Approvals"
           value={statsData?.pendingApprovals || 0}
           icon={<Clock className="w-5 h-5" />}
-          trend={statsData?.pendingApprovals > 0 ? { value: 1, label: 'needs attention' } : undefined}
+          trend={
+            statsData?.pendingApprovals > 0 ? { value: 1, label: 'needs attention' } : undefined
+          }
         />
         <MetricCard
           label="Active Tokens"
@@ -276,29 +301,51 @@ export function OnboardingPage(): React.ReactElement {
             <table className="w-full">
               <thead className="bg-surface-subtle border-b border-border-subtle">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Prefix</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Uses</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Region</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Expires</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Created</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-muted uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Prefix
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Uses
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Region
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Expires
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Created
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-muted uppercase">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
                 {tokens.map((token) => (
                   <tr key={token.id} className="hover:bg-surface-subtle/50">
                     <td className="px-4 py-3 text-sm font-medium text-ink-primary">{token.name}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-ink-secondary">{token.tokenPrefix}...</td>
+                    <td className="px-4 py-3 text-sm font-mono text-ink-secondary">
+                      {token.tokenPrefix}...
+                    </td>
                     <td className="px-4 py-3">{getStatusBadge(token.status)}</td>
                     <td className="px-4 py-3 text-sm text-ink-secondary">
                       {token.usedCount} / {token.maxUses}
                       <span className="text-ink-muted ml-1">({token.remainingUses} left)</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-ink-secondary">{token.region || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-ink-secondary">{formatDate(token.expiresAt)}</td>
-                    <td className="px-4 py-3 text-sm text-ink-secondary">{formatDate(token.createdAt)}</td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">
+                      {formatDate(token.expiresAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">
+                      {formatDate(token.createdAt)}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       {token.status === 'ACTIVE' && (
                         <button
@@ -338,12 +385,24 @@ export function OnboardingPage(): React.ReactElement {
             <table className="w-full">
               <thead className="bg-surface-subtle border-b border-border-subtle">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Hostname</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">System</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">IP Address</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Region</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">Registered</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-muted uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Hostname
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    System
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    IP Address
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Region
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase">
+                    Registered
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-muted uppercase">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
@@ -352,12 +411,16 @@ export function OnboardingPage(): React.ReactElement {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Server className="w-4 h-4 text-ink-muted" />
-                        <span className="text-sm font-medium text-ink-primary">{sensor.hostname}</span>
+                        <span className="text-sm font-medium text-ink-primary">
+                          {sensor.hostname}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-ink-secondary">
                       {sensor.os || 'Unknown'} {sensor.architecture && `(${sensor.architecture})`}
-                      {sensor.version && <span className="text-ink-muted ml-1">v{sensor.version}</span>}
+                      {sensor.version && (
+                        <span className="text-ink-muted ml-1">v{sensor.version}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-ink-secondary">
                       {sensor.publicIp || sensor.privateIp || '—'}
@@ -366,10 +429,14 @@ export function OnboardingPage(): React.ReactElement {
                       <Globe className="w-3 h-3 inline-block mr-1" />
                       {sensor.region || '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-ink-secondary">{formatDate(sensor.createdAt)}</td>
+                    <td className="px-4 py-3 text-sm text-ink-secondary">
+                      {formatDate(sensor.createdAt)}
+                    </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <button
-                        onClick={() => approvalMutation.mutate({ sensorId: sensor.id, action: 'approve' })}
+                        onClick={() =>
+                          approvalMutation.mutate({ sensorId: sensor.id, action: 'approve' })
+                        }
                         className="btn-ghost p-1.5 text-ac-green hover:bg-ac-green/10"
                         title="Approve sensor"
                         disabled={approvalMutation.isPending}
@@ -377,7 +444,9 @@ export function OnboardingPage(): React.ReactElement {
                         <CheckCircle className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => approvalMutation.mutate({ sensorId: sensor.id, action: 'reject' })}
+                        onClick={() =>
+                          approvalMutation.mutate({ sensorId: sensor.id, action: 'reject' })
+                        }
                         className="btn-ghost p-1.5 text-ac-red hover:bg-ac-red/10"
                         title="Reject sensor"
                         disabled={approvalMutation.isPending}
@@ -397,10 +466,14 @@ export function OnboardingPage(): React.ReactElement {
       {isModalOpen && !generatedToken && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-card border border-border-subtle p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold text-ink-primary mb-4">Create Registration Token</h2>
+            <h2 className="text-lg font-semibold text-ink-primary mb-4">
+              Create Registration Token
+            </h2>
             <form onSubmit={handleCreateToken} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Token Name</label>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">
+                  Token Name
+                </label>
                 <input
                   name="name"
                   type="text"
@@ -410,7 +483,9 @@ export function OnboardingPage(): React.ReactElement {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Max Uses</label>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">
+                  Max Uses
+                </label>
                 <input
                   name="maxUses"
                   type="number"
@@ -419,10 +494,14 @@ export function OnboardingPage(): React.ReactElement {
                   defaultValue="10"
                   className="w-full px-3 py-2 bg-surface-base border border-border-subtle text-ink-primary focus:border-link focus:outline-none"
                 />
-                <p className="text-xs text-ink-muted mt-1">Number of sensors that can use this token</p>
+                <p className="text-xs text-ink-muted mt-1">
+                  Number of sensors that can use this token
+                </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Expires In (days)</label>
+                <label className="block text-sm font-medium text-ink-secondary mb-1">
+                  Expires In (days)
+                </label>
                 <input
                   name="expiresIn"
                   type="number"
@@ -476,17 +555,17 @@ export function OnboardingPage(): React.ReactElement {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-ink-primary">Token Created</h2>
-                <p className="text-sm text-ink-secondary">Copy this token now. It won't be shown again.</p>
+                <p className="text-sm text-ink-secondary">
+                  Copy this token now. It won't be shown again.
+                </p>
               </div>
             </div>
             <div className="bg-surface-subtle border border-border-subtle p-4 mb-4">
               <div className="flex items-center gap-2">
-                <code className="flex-1 text-sm font-mono text-ink-primary break-all">{generatedToken}</code>
-                <button
-                  onClick={handleCopyToken}
-                  className="btn-ghost p-2"
-                  title="Copy token"
-                >
+                <code className="flex-1 text-sm font-mono text-ink-primary break-all">
+                  {generatedToken}
+                </code>
+                <button onClick={handleCopyToken} className="btn-ghost p-2" title="Copy token">
                   {copiedToken ? (
                     <Check className="w-4 h-4 text-ac-green" />
                   ) : (
@@ -499,7 +578,8 @@ export function OnboardingPage(): React.ReactElement {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-ac-orange flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-ac-orange">
-                  This token grants sensor registration access. Store it securely and don't share it publicly.
+                  This token grants sensor registration access. Store it securely and don't share it
+                  publicly.
                 </p>
               </div>
             </div>
@@ -530,14 +610,11 @@ export function OnboardingPage(): React.ReactElement {
               </div>
             </div>
             <p className="text-sm text-ink-secondary mb-4">
-              Sensors that haven't registered yet will no longer be able to use this token.
-              Already registered sensors will not be affected.
+              Sensors that haven't registered yet will no longer be able to use this token. Already
+              registered sensors will not be affected.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setTokenToRevoke(null)}
-                className="btn-ghost flex-1"
-              >
+              <button onClick={() => setTokenToRevoke(null)} className="btn-ghost flex-1">
                 Cancel
               </button>
               <button

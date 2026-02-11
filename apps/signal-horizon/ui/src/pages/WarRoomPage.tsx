@@ -119,7 +119,7 @@ export default function WarRoomPage() {
                 className="w-2.5 h-2.5 animate-pulse"
                 style={{ background: colors.red, boxShadow: `0 0 10px ${alpha(colors.red, 0.8)}` }}
               />
-              <h1 className="text-2xl font-light text-white tracking-tight uppercase">
+              <h1 className="text-xl font-light text-white tracking-tight uppercase">
                 {id ? `WAR ROOM: ${id}` : 'SIGNAL HORIZON: TACTICAL HUB'}
               </h1>
             </div>

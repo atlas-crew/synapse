@@ -5,13 +5,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import {
-  Activity,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  Clock,
-} from 'lucide-react';
+import { Activity, TrendingUp, ArrowUpRight, ArrowDownRight, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
@@ -97,7 +91,7 @@ function TimeRangeSelector({
             'px-3 py-1.5 text-sm font-medium transition-colors',
             value === range.value
               ? 'bg-horizon-600 text-ink-primary'
-              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle',
           )}
         >
           {range.label}
@@ -136,7 +130,7 @@ function StatCard({
             <div
               className={clsx(
                 'mt-2 flex items-center gap-1 text-sm',
-                isPositive ? 'text-green-400' : 'text-red-400'
+                isPositive ? 'text-green-400' : 'text-red-400',
               )}
             >
               <TrendIcon className="w-4 h-4" />
@@ -161,7 +155,9 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-xl font-light text-ink-primary">Traffic Over Time</h3>
-          <p className="text-sm text-ink-secondary mt-1">Allowed + Blocked requests per hour (total implied)</p>
+          <p className="text-sm text-ink-secondary mt-1">
+            Allowed + Blocked requests per hour (total implied)
+          </p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-2">
@@ -188,10 +184,7 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
               </linearGradient>
             </defs>
             <CartesianGrid {...gridDefaultsSoft} />
-            <XAxis
-              dataKey="time"
-              {...xAxisNoLine}
-            />
+            <XAxis dataKey="time" {...xAxisNoLine} />
             <YAxis
               {...axisDefaults.y}
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
@@ -208,7 +201,12 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
               fill="url(#allowedGrad)"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 3.5, fill: colors.gray.light, stroke: CHART_COLORS.allowed, strokeWidth: 2 }}
+              activeDot={{
+                r: 3.5,
+                fill: colors.gray.light,
+                stroke: CHART_COLORS.allowed,
+                strokeWidth: 2,
+              }}
               name="Allowed"
               style={{ filter: `drop-shadow(0 0 6px ${alpha(CHART_COLORS.allowed, 0.35)})` }}
             />
@@ -220,7 +218,12 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
               fill="url(#blockedGrad)"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 3.5, fill: colors.gray.light, stroke: CHART_COLORS.blocked, strokeWidth: 2 }}
+              activeDot={{
+                r: 3.5,
+                fill: colors.gray.light,
+                stroke: CHART_COLORS.blocked,
+                strokeWidth: 2,
+              }}
               name="Blocked"
               style={{ filter: `drop-shadow(0 0 6px ${alpha(CHART_COLORS.blocked, 0.28)})` }}
             />
@@ -352,8 +355,8 @@ function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
                         parseFloat(blockRate) < 1
                           ? 'text-green-400 bg-green-500/20'
                           : parseFloat(blockRate) < 3
-                          ? 'text-sky-400 bg-sky-500/20'
-                          : 'text-red-400 bg-red-500/20'
+                            ? 'text-sky-400 bg-sky-500/20'
+                            : 'text-red-400 bg-red-500/20',
                       )}
                     >
                       {blockRate}%
@@ -380,7 +383,10 @@ export default function TrafficAnalyticsPage() {
   const displayData = useMemo(() => {
     if (trafficData.length > 0) {
       return trafficData.map((d) => ({
-        time: new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        time: new Date(d.timestamp).toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
         requests: d.requests,
         blocked: d.blocked,
         allowed: d.requests - d.blocked,
@@ -393,11 +399,11 @@ export default function TrafficAnalyticsPage() {
   // Calculate summary stats
   const totalRequests = useMemo(
     () => displayData.reduce((sum, d) => sum + d.requests, 0),
-    [displayData]
+    [displayData],
   );
   const totalBlocked = useMemo(
     () => displayData.reduce((sum, d) => sum + d.blocked, 0),
-    [displayData]
+    [displayData],
   );
   const avgRequestsPerHour = Math.round(totalRequests / displayData.length);
 
@@ -405,7 +411,7 @@ export default function TrafficAnalyticsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Traffic Analytics</h1>
+          <h1 className="text-xl font-light text-ink-primary">Traffic Analytics</h1>
           <p className="text-ink-secondary mt-1">Loading traffic data...</p>
         </div>
         <StatsGridSkeleton />
@@ -419,7 +425,7 @@ export default function TrafficAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Traffic Analytics</h1>
+          <h1 className="text-xl font-light text-ink-primary">Traffic Analytics</h1>
           <p className="text-ink-secondary mt-1">API traffic patterns and trends</p>
         </div>
         <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
@@ -455,7 +461,7 @@ export default function TrafficAnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Traffic Timeline */}
         <TrafficTimelineChart data={displayData} />
-        
+
         {/* Geo Distribution */}
         <GeoTrafficMap />
       </div>

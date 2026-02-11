@@ -166,7 +166,7 @@ export function SensorDetailPage() {
             >
               Back to Fleet
             </Button>
-            <h1 className="text-2xl font-light text-ink-primary">{sensor.name}</h1>
+            <h1 className="text-xl font-light text-ink-primary">{sensor.name}</h1>
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs uppercase tracking-[0.18em] text-ink-secondary">
               <SensorStatusBadge status={status} />
               <span>ID {sensor.id.slice(0, 8)}...</span>

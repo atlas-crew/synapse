@@ -31,7 +31,13 @@ import {
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import { axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
 
-type PatternCategory = 'injection' | 'authentication' | 'bot' | 'rate_abuse' | 'data_exposure' | 'protocol';
+type PatternCategory =
+  | 'injection'
+  | 'authentication'
+  | 'bot'
+  | 'rate_abuse'
+  | 'data_exposure'
+  | 'protocol';
 type TrendDirection = 'up' | 'down' | 'stable';
 
 // Demo data - attack patterns
@@ -218,7 +224,7 @@ function StatCard({
             <p
               className={clsx(
                 'text-xs mt-1 flex items-center gap-1',
-                change.trend === 'up' ? 'text-red-400' : 'text-green-400'
+                change.trend === 'up' ? 'text-red-400' : 'text-green-400',
               )}
             >
               {change.trend === 'up' ? (
@@ -268,10 +274,14 @@ function PatternCard({
           <div className="text-left">
             <h3 className="text-ink-primary font-medium">{pattern.name}</h3>
             <div className="flex items-center gap-2 mt-1">
-              <span className={clsx('px-2 py-0.5 text-xs', categoryConfig.bg, categoryConfig.color)}>
+              <span
+                className={clsx('px-2 py-0.5 text-xs', categoryConfig.bg, categoryConfig.color)}
+              >
                 {categoryConfig.label}
               </span>
-              <span className={clsx('px-2 py-0.5 text-xs', severityConfig.bg, severityConfig.color)}>
+              <span
+                className={clsx('px-2 py-0.5 text-xs', severityConfig.bg, severityConfig.color)}
+              >
                 {pattern.severity}
               </span>
             </div>
@@ -296,8 +306,8 @@ function PatternCard({
                 pattern.trend === 'up'
                   ? 'text-red-400'
                   : pattern.trend === 'down'
-                  ? 'text-green-400'
-                  : 'text-ink-secondary'
+                    ? 'text-green-400'
+                    : 'text-ink-secondary',
               )}
             >
               {pattern.trend === 'up' ? (
@@ -322,7 +332,9 @@ function PatternCard({
         <div className="px-5 py-4 border-t border-border-subtle bg-surface-subtle">
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <h4 className="text-sm font-medium text-ink-secondary mb-2">Top Targeted Endpoints</h4>
+              <h4 className="text-sm font-medium text-ink-secondary mb-2">
+                Top Targeted Endpoints
+              </h4>
               <div className="space-y-2">
                 {pattern.topTargets.map((target, idx) => (
                   <div key={idx} className="flex items-center gap-2">
@@ -338,11 +350,7 @@ function PatternCard({
                 {pattern.signatures.map((sig, idx) => (
                   <code
                     key={idx}
-                    className={clsx(
-                      'px-2 py-1 text-xs',
-                      categoryConfig.bg,
-                      categoryConfig.color
-                    )}
+                    className={clsx('px-2 py-1 text-xs', categoryConfig.bg, categoryConfig.color)}
                   >
                     {sig}
                   </code>
@@ -394,7 +402,7 @@ export default function AttackPatternsPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Attack Patterns</h1>
+          <h1 className="text-xl font-light text-ink-primary">Attack Patterns</h1>
           <p className="text-ink-secondary mt-1">Loading pattern data...</p>
         </div>
         <StatsGridSkeleton />
@@ -407,7 +415,7 @@ export default function AttackPatternsPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-light text-ink-primary">Attack Patterns</h1>
+        <h1 className="text-xl font-light text-ink-primary">Attack Patterns</h1>
         <p className="text-ink-secondary mt-1">Pattern detection and threat intelligence</p>
       </div>
 
@@ -458,10 +466,7 @@ export default function AttackPatternsPage() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={DEMO_PATTERN_TIMELINE}>
-                <XAxis
-                  dataKey="day"
-                  {...xAxisNoLine}
-                />
+                <XAxis dataKey="day" {...xAxisNoLine} />
                 <YAxis {...axisDefaults.y} />
                 <Tooltip {...tooltipDefaults} />
                 <Line
@@ -541,7 +546,9 @@ export default function AttackPatternsPage() {
                   <span className="text-ink-secondary">{item.name}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-ink-primary font-medium">{item.value.toLocaleString()}</span>
+                  <span className="text-ink-primary font-medium">
+                    {item.value.toLocaleString()}
+                  </span>
                   <span className="text-xs text-ink-muted ml-1">
                     ({((item.value / CATEGORY_TOTAL) * 100).toFixed(0)}%)
                   </span>
@@ -562,12 +569,7 @@ export default function AttackPatternsPage() {
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={DEMO_ATTACK_PATTERNS.slice(0, 6)} layout="vertical">
-              <XAxis
-                type="number"
-                axisLine={false}
-                tickLine={false}
-                tick={axisDefaults.x.tick}
-              />
+              <XAxis type="number" axisLine={false} tickLine={false} tick={axisDefaults.x.tick} />
               <YAxis
                 type="category"
                 dataKey="name"

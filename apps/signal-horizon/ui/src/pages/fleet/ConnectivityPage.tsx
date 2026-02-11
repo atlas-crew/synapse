@@ -71,20 +71,90 @@ interface SensorConnectivity {
 // Connectivity tests
 const connectivityTests: ConnectivityTest[] = [
   { id: 'ping', name: 'Ping Test', description: 'Test basic network connectivity', icon: Activity },
-  { id: 'dns', name: 'DNS Resolution', description: 'Verify DNS lookup functionality', icon: Globe },
-  { id: 'tls', name: 'TLS Handshake', description: 'Test secure connection establishment', icon: Lock },
-  { id: 'traceroute', name: 'Traceroute', description: 'Map network path to endpoints', icon: Route },
-  { id: 'http1', name: 'HTTP/1 Echo', description: 'GET /echo over HTTP/1.1 (Apparatus port 80)', icon: Globe },
-  { id: 'http2', name: 'HTTP/2 Echo', description: 'GET /echo over HTTP/2 TLS (Apparatus port 443)', icon: Lock },
-  { id: 'h2c', name: 'H2C Echo', description: 'GET /echo over HTTP/2 cleartext (Apparatus port 81)', icon: Route },
-  { id: 'tcp', name: 'TCP Echo', description: 'TCP echo round-trip (Apparatus port 9000)', icon: Server },
-  { id: 'udp', name: 'UDP Echo', description: 'UDP echo round-trip (Apparatus port 9001)', icon: Radio },
-  { id: 'grpc', name: 'gRPC Probe', description: 'HTTP/2 preface/settings probe (Apparatus port 50051)', icon: Route },
-  { id: 'mqtt', name: 'MQTT Connect', description: 'CONNECT/CONNACK handshake (Apparatus port 1883)', icon: Radio },
-  { id: 'redis', name: 'Redis PING', description: 'RESP PING/PONG (Apparatus port 6379)', icon: Database },
-  { id: 'smtp', name: 'SMTP EHLO', description: 'SMTP greeting + EHLO (Apparatus port 2525)', icon: Mail },
-  { id: 'icap', name: 'ICAP OPTIONS', description: 'ICAP OPTIONS probe (Apparatus port 1344)', icon: Lock },
-  { id: 'syslog', name: 'Syslog Send', description: 'UDP syslog send (Apparatus port 5140)', icon: Activity },
+  {
+    id: 'dns',
+    name: 'DNS Resolution',
+    description: 'Verify DNS lookup functionality',
+    icon: Globe,
+  },
+  {
+    id: 'tls',
+    name: 'TLS Handshake',
+    description: 'Test secure connection establishment',
+    icon: Lock,
+  },
+  {
+    id: 'traceroute',
+    name: 'Traceroute',
+    description: 'Map network path to endpoints',
+    icon: Route,
+  },
+  {
+    id: 'http1',
+    name: 'HTTP/1 Echo',
+    description: 'GET /echo over HTTP/1.1 (Apparatus port 80)',
+    icon: Globe,
+  },
+  {
+    id: 'http2',
+    name: 'HTTP/2 Echo',
+    description: 'GET /echo over HTTP/2 TLS (Apparatus port 443)',
+    icon: Lock,
+  },
+  {
+    id: 'h2c',
+    name: 'H2C Echo',
+    description: 'GET /echo over HTTP/2 cleartext (Apparatus port 81)',
+    icon: Route,
+  },
+  {
+    id: 'tcp',
+    name: 'TCP Echo',
+    description: 'TCP echo round-trip (Apparatus port 9000)',
+    icon: Server,
+  },
+  {
+    id: 'udp',
+    name: 'UDP Echo',
+    description: 'UDP echo round-trip (Apparatus port 9001)',
+    icon: Radio,
+  },
+  {
+    id: 'grpc',
+    name: 'gRPC Probe',
+    description: 'HTTP/2 preface/settings probe (Apparatus port 50051)',
+    icon: Route,
+  },
+  {
+    id: 'mqtt',
+    name: 'MQTT Connect',
+    description: 'CONNECT/CONNACK handshake (Apparatus port 1883)',
+    icon: Radio,
+  },
+  {
+    id: 'redis',
+    name: 'Redis PING',
+    description: 'RESP PING/PONG (Apparatus port 6379)',
+    icon: Database,
+  },
+  {
+    id: 'smtp',
+    name: 'SMTP EHLO',
+    description: 'SMTP greeting + EHLO (Apparatus port 2525)',
+    icon: Mail,
+  },
+  {
+    id: 'icap',
+    name: 'ICAP OPTIONS',
+    description: 'ICAP OPTIONS probe (Apparatus port 1344)',
+    icon: Lock,
+  },
+  {
+    id: 'syslog',
+    name: 'Syslog Send',
+    description: 'UDP syslog send (Apparatus port 5140)',
+    icon: Activity,
+  },
 ];
 
 interface TestResult {
@@ -147,31 +217,46 @@ export function ConnectivityPage(): React.ReactElement {
         ...(data.sensors?.DISCONNECTED || []),
         ...(data.sensors?.RECONNECTING || []),
       ];
-      return allSensors.map((s: { id: string; name: string; connectionState: string; lastHeartbeat: string | null }) => {
-        const status =
-          s.connectionState === 'CONNECTED'
-            ? 'connected'
-            : s.connectionState === 'RECONNECTING'
-              ? 'degraded'
-              : 'disconnected';
+      return allSensors.map(
+        (s: {
+          id: string;
+          name: string;
+          connectionState: string;
+          lastHeartbeat: string | null;
+        }) => {
+          const status =
+            s.connectionState === 'CONNECTED'
+              ? 'connected'
+              : s.connectionState === 'RECONNECTING'
+                ? 'degraded'
+                : 'disconnected';
 
-        return ({
-        sensorId: s.id,
-        sensorName: s.name,
-        status,
-        latency: Math.floor(Math.random() * 100),
-        lastHeartbeat: s.lastHeartbeat,
-        reconnects: Math.floor(Math.random() * 5),
-        packetLoss: Math.random() * 2,
-      });
-      });
+          return {
+            sensorId: s.id,
+            sensorName: s.name,
+            status,
+            latency: Math.floor(Math.random() * 100),
+            lastHeartbeat: s.lastHeartbeat,
+            reconnects: Math.floor(Math.random() * 5),
+            packetLoss: Math.random() * 2,
+          };
+        },
+      );
     },
     refetchInterval: 15000,
   });
 
   // Run connectivity test mutation with AbortController support
   const testMutation = useMutation({
-    mutationFn: async ({ testId, target, signal }: { testId: string; target?: string; signal: AbortSignal }) => {
+    mutationFn: async ({
+      testId,
+      target,
+      signal,
+    }: {
+      testId: string;
+      target?: string;
+      signal: AbortSignal;
+    }) => {
       return apiFetch<any>('/management/connectivity/test', {
         method: 'POST',
         body: target ? { testType: testId, target } : { testType: testId },
@@ -180,85 +265,91 @@ export function ConnectivityPage(): React.ReactElement {
     },
   });
 
-  const buildTarget = useCallback((testId: string): string | undefined => {
-    const host = targetHost.trim();
-    if (!host) return undefined;
+  const buildTarget = useCallback(
+    (testId: string): string | undefined => {
+      const host = targetHost.trim();
+      if (!host) return undefined;
 
-    switch (testId) {
-      case 'http1':
-        return `http://${host}:80/echo`;
-      case 'http2':
-        return `https://${host}:443/echo`;
-      case 'h2c':
-        return `http://${host}:81/echo`;
-      case 'tcp':
-        return `${host}:9000`;
-      case 'udp':
-        return `${host}:9001`;
-      case 'grpc':
-        return `${host}:50051`;
-      case 'mqtt':
-        return `${host}:1883`;
-      case 'redis':
-        return `${host}:6379`;
-      case 'smtp':
-        return `${host}:2525`;
-      case 'icap':
-        return `${host}:1344`;
-      case 'syslog':
-        return `${host}:5140`;
-      case 'ping':
-      case 'dns':
-      case 'tls':
-      case 'traceroute':
-      default:
-        return host;
-    }
-  }, [targetHost]);
-
-  const handleRunTest = useCallback(async (testId: string) => {
-    // Abort any previous test
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setRunningTest(testId);
-    try {
-      const response = await testMutation.mutateAsync({
-        testId,
-        target: buildTarget(testId),
-        signal: controller.signal,
-      });
-      if (response.result) {
-        setTestResults(prev => ({ ...prev, [testId]: response.result }));
+      switch (testId) {
+        case 'http1':
+          return `http://${host}:80/echo`;
+        case 'http2':
+          return `https://${host}:443/echo`;
+        case 'h2c':
+          return `http://${host}:81/echo`;
+        case 'tcp':
+          return `${host}:9000`;
+        case 'udp':
+          return `${host}:9001`;
+        case 'grpc':
+          return `${host}:50051`;
+        case 'mqtt':
+          return `${host}:1883`;
+        case 'redis':
+          return `${host}:6379`;
+        case 'smtp':
+          return `${host}:2525`;
+        case 'icap':
+          return `${host}:1344`;
+        case 'syslog':
+          return `${host}:5140`;
+        case 'ping':
+        case 'dns':
+        case 'tls':
+        case 'traceroute':
+        default:
+          return host;
       }
-    } catch (error) {
-      // Don't update state if aborted
-      if (error instanceof Error && error.name === 'AbortError') {
-        return;
+    },
+    [targetHost],
+  );
+
+  const handleRunTest = useCallback(
+    async (testId: string) => {
+      // Abort any previous test
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-      // Store error result
-      setTestResults(prev => ({
-        ...prev,
-        [testId]: {
-          testType: testId,
-          status: 'error',
-          target: 'N/A',
-          latencyMs: null,
-          details: {},
-          error: error instanceof Error ? error.message : 'Test failed',
-          timestamp: new Date().toISOString(),
-        },
-      }));
-    } finally {
-      if (!controller.signal.aborted) {
-        setRunningTest(null);
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      setRunningTest(testId);
+      try {
+        const response = await testMutation.mutateAsync({
+          testId,
+          target: buildTarget(testId),
+          signal: controller.signal,
+        });
+        if (response.result) {
+          setTestResults((prev) => ({ ...prev, [testId]: response.result }));
+        }
+      } catch (error) {
+        // Don't update state if aborted
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        // Store error result
+        setTestResults((prev) => ({
+          ...prev,
+          [testId]: {
+            testType: testId,
+            status: 'error',
+            target: 'N/A',
+            latencyMs: null,
+            details: {},
+            error: error instanceof Error ? error.message : 'Test failed',
+            timestamp: new Date().toISOString(),
+          },
+        }));
+      } finally {
+        if (!controller.signal.aborted) {
+          setRunningTest(null);
+        }
       }
-    }
-  }, [testMutation, buildTarget]);
+    },
+    [testMutation, buildTarget],
+  );
 
   // Generate mock chart data
   const latencyTrendData = useMemo(() => {
@@ -275,7 +366,7 @@ export function ConnectivityPage(): React.ReactElement {
 
   const connectionEventsData = useMemo(() => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return days.map(day => ({
+    return days.map((day) => ({
       day,
       reconnections: Math.floor(Math.random() * 15),
     }));
@@ -315,7 +406,7 @@ export function ConnectivityPage(): React.ReactElement {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-light text-ink-primary">Connectivity Monitor</h1>
+        <h1 className="text-xl font-light text-ink-primary">Connectivity Monitor</h1>
         <p className="text-ink-secondary mt-1">
           Real-time network connectivity status and diagnostics
         </p>
@@ -358,10 +449,15 @@ export function ConnectivityPage(): React.ReactElement {
         aria-labelledby="diagnostic-tests-heading"
         className="bg-surface-card border border-border-subtle p-6"
       >
-        <h2 id="diagnostic-tests-heading" className="text-lg font-semibold text-ink-primary mb-4">Network Diagnostic Tests</h2>
+        <h2 id="diagnostic-tests-heading" className="text-lg font-semibold text-ink-primary mb-4">
+          Network Diagnostic Tests
+        </h2>
         <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
           <div className="space-y-1">
-            <label htmlFor="connectivity-target-host" className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
+            <label
+              htmlFor="connectivity-target-host"
+              className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary"
+            >
               Target Host
             </label>
             <input
@@ -373,17 +469,22 @@ export function ConnectivityPage(): React.ReactElement {
             />
           </div>
           <div className="text-xs text-ink-muted">
-            Apparatus ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt, 6379 redis, 2525 smtp, 1344 icap, 5140 syslog
+            Apparatus ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt,
+            6379 redis, 2525 smtp, 1344 icap, 5140 syslog
           </div>
         </div>
         {/* Live region for screen reader announcements */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {runningTest && `Running ${runningTest} test...`}
-          {Object.values(testResults).length > 0 && !runningTest && (
-            `Last test: ${Object.values(testResults)[Object.values(testResults).length - 1]?.testType} ${Object.values(testResults)[Object.values(testResults).length - 1]?.status}`
-          )}
+          {Object.values(testResults).length > 0 &&
+            !runningTest &&
+            `Last test: ${Object.values(testResults)[Object.values(testResults).length - 1]?.testType} ${Object.values(testResults)[Object.values(testResults).length - 1]?.status}`}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" role="list" aria-label="Available network tests">
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+          role="list"
+          aria-label="Available network tests"
+        >
           {connectivityTests.map((test) => {
             const Icon = test.icon;
             const isRunning = runningTest === test.id;
@@ -400,7 +501,9 @@ export function ConnectivityPage(): React.ReactElement {
                   <div className="flex items-start gap-3 flex-1">
                     <Icon className="w-5 h-5 text-ink-muted mt-0.5" aria-hidden="true" />
                     <div className="flex-1">
-                      <h3 id={`test-name-${test.id}`} className="font-medium text-ink-primary mb-1">{test.name}</h3>
+                      <h3 id={`test-name-${test.id}`} className="font-medium text-ink-primary mb-1">
+                        {test.name}
+                      </h3>
                       <p className="text-sm text-ink-secondary">{test.description}</p>
                     </div>
                   </div>
@@ -422,12 +525,13 @@ export function ConnectivityPage(): React.ReactElement {
                     role="status"
                     aria-label={`${test.name} result: ${result.status}`}
                     className={`mt-4 p-3  border ${
-                    result.status === 'passed'
-                      ? 'bg-status-success/10 border-status-success/20'
-                      : result.status === 'failed'
-                      ? 'bg-status-error/10 border-status-error/20'
-                      : 'bg-status-warning/10 border-status-warning/20'
-                  }`}>
+                      result.status === 'passed'
+                        ? 'bg-status-success/10 border-status-success/20'
+                        : result.status === 'failed'
+                          ? 'bg-status-error/10 border-status-error/20'
+                          : 'bg-status-warning/10 border-status-warning/20'
+                    }`}
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         {result.status === 'passed' ? (
@@ -437,10 +541,15 @@ export function ConnectivityPage(): React.ReactElement {
                         ) : (
                           <AlertTriangle className="w-4 h-4 text-status-warning" />
                         )}
-                        <span className={`text-sm font-medium capitalize ${
-                          result.status === 'passed' ? 'text-status-success' :
-                          result.status === 'failed' ? 'text-status-error' : 'text-status-warning'
-                        }`}>
+                        <span
+                          className={`text-sm font-medium capitalize ${
+                            result.status === 'passed'
+                              ? 'text-status-success'
+                              : result.status === 'failed'
+                                ? 'text-status-error'
+                                : 'text-status-warning'
+                          }`}
+                        >
                           {result.status}
                         </span>
                       </div>
@@ -451,83 +560,176 @@ export function ConnectivityPage(): React.ReactElement {
                       )}
                     </div>
                     <div className="text-xs text-ink-secondary space-y-1">
-                      <div>Target: <span className="text-ink-primary font-mono">{result.target}</span></div>
+                      <div>
+                        Target: <span className="text-ink-primary font-mono">{result.target}</span>
+                      </div>
                       {result.error && (
                         <div className="text-status-error">Error: {result.error}</div>
                       )}
                       {/* Show relevant details based on test type */}
                       {result.testType === 'ping' && result.details && (
                         <div className="mt-2 space-y-0.5">
-                          <div>Packet Loss: <span className="text-ink-primary">{String(result.details.packetLoss)}</span></div>
-                          <div>Avg RTT: <span className="text-ink-primary">{String(result.details.avgRoundTrip)}</span></div>
-                          {result.details.ttl != null && <div>TTL: <span className="text-ink-primary">{String(result.details.ttl)}</span></div>}
+                          <div>
+                            Packet Loss:{' '}
+                            <span className="text-ink-primary">
+                              {String(result.details.packetLoss)}
+                            </span>
+                          </div>
+                          <div>
+                            Avg RTT:{' '}
+                            <span className="text-ink-primary">
+                              {String(result.details.avgRoundTrip)}
+                            </span>
+                          </div>
+                          {result.details.ttl != null && (
+                            <div>
+                              TTL:{' '}
+                              <span className="text-ink-primary">{String(result.details.ttl)}</span>
+                            </div>
+                          )}
                         </div>
                       )}
                       {result.testType === 'dns' && result.details && (
                         <div className="mt-2 space-y-0.5">
-                          <div>Resolved: <span className="text-ink-primary font-mono">{(result.details.resolvedAddresses as string[])?.join(', ')}</span></div>
-                          <div>Records: <span className="text-ink-primary">{String(result.details.recordCount)}</span></div>
+                          <div>
+                            Resolved:{' '}
+                            <span className="text-ink-primary font-mono">
+                              {(result.details.resolvedAddresses as string[])?.join(', ')}
+                            </span>
+                          </div>
+                          <div>
+                            Records:{' '}
+                            <span className="text-ink-primary">
+                              {String(result.details.recordCount)}
+                            </span>
+                          </div>
                         </div>
                       )}
                       {result.testType === 'tls' && result.details && (
                         <div className="mt-2 space-y-0.5">
-                          <div>Protocol: <span className="text-ink-primary">{String(result.details.protocol)}</span></div>
-                          <div>Cipher: <span className="text-ink-primary">{String(result.details.cipher)}</span></div>
+                          <div>
+                            Protocol:{' '}
+                            <span className="text-ink-primary">
+                              {String(result.details.protocol)}
+                            </span>
+                          </div>
+                          <div>
+                            Cipher:{' '}
+                            <span className="text-ink-primary">
+                              {String(result.details.cipher)}
+                            </span>
+                          </div>
                           {result.details.certificate != null && (
-                            <div>Subject: <span className="text-ink-primary">{String((result.details.certificate as Record<string, unknown>).subject)}</span></div>
+                            <div>
+                              Subject:{' '}
+                              <span className="text-ink-primary">
+                                {String(
+                                  (result.details.certificate as Record<string, unknown>).subject,
+                                )}
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
                       {result.testType === 'traceroute' && result.details && (
                         <div className="mt-2 space-y-0.5">
-                          <div>Hops: <span className="text-ink-primary">{String(result.details.hopCount)}</span></div>
-                          <div>Reached Target: <span className="text-ink-primary">{result.details.reachedTarget ? 'Yes' : 'No'}</span></div>
+                          <div>
+                            Hops:{' '}
+                            <span className="text-ink-primary">
+                              {String(result.details.hopCount)}
+                            </span>
+                          </div>
+                          <div>
+                            Reached Target:{' '}
+                            <span className="text-ink-primary">
+                              {result.details.reachedTarget ? 'Yes' : 'No'}
+                            </span>
+                          </div>
                           {Array.isArray(result.details.hops) && result.details.hops.length > 0 && (
                             <div className="mt-2 font-mono text-[10px] max-h-24 overflow-y-auto bg-surface-base/50 p-2">
-                              {(result.details.hops as Array<{ hop: number; host: string; ip: string | null; latency: string }>).slice(0, 8).map((hop, i) => (
-                                <div key={i} className="text-ink-muted">
-                                  {String(hop.hop)}. {hop.ip || hop.host} ({hop.latency})
-                                </div>
-                              ))}
+                              {(
+                                result.details.hops as Array<{
+                                  hop: number;
+                                  host: string;
+                                  ip: string | null;
+                                  latency: string;
+                                }>
+                              )
+                                .slice(0, 8)
+                                .map((hop, i) => (
+                                  <div key={i} className="text-ink-muted">
+                                    {String(hop.hop)}. {hop.ip || hop.host} ({hop.latency})
+                                  </div>
+                                ))}
                               {(result.details.hops as Array<unknown>).length > 8 && (
-                                <div className="text-ink-muted">... and {String((result.details.hops as Array<unknown>).length - 8)} more</div>
+                                <div className="text-ink-muted">
+                                  ... and{' '}
+                                  {String((result.details.hops as Array<unknown>).length - 8)} more
+                                </div>
                               )}
                             </div>
                           )}
                         </div>
                       )}
-                      {(result.testType === 'http1' || result.testType === 'http2' || result.testType === 'h2c') && (
+                      {(result.testType === 'http1' ||
+                        result.testType === 'http2' ||
+                        result.testType === 'h2c') && (
                         <div className="mt-2 space-y-0.5">
                           {'statusCode' in (result.details as any) && (
-                            <div>Status: <span className="text-ink-primary">{String((result.details as any).statusCode)}</span></div>
+                            <div>
+                              Status:{' '}
+                              <span className="text-ink-primary">
+                                {String((result.details as any).statusCode)}
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
                       {(result.testType === 'tcp' || result.testType === 'udp') && (
                         <div className="mt-2 space-y-0.5">
                           {'echoed' in (result.details as any) && (
-                            <div>Echoed: <span className="text-ink-primary">{String((result.details as any).echoed)}</span></div>
+                            <div>
+                              Echoed:{' '}
+                              <span className="text-ink-primary">
+                                {String((result.details as any).echoed)}
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
                       {result.testType === 'grpc' && (
                         <div className="mt-2 space-y-0.5">
                           {'http2SettingsFrame' in (result.details as any) && (
-                            <div>HTTP/2: <span className="text-ink-primary">{String((result.details as any).http2SettingsFrame)}</span></div>
+                            <div>
+                              HTTP/2:{' '}
+                              <span className="text-ink-primary">
+                                {String((result.details as any).http2SettingsFrame)}
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
                       {result.testType === 'mqtt' && (
                         <div className="mt-2 space-y-0.5">
                           {'connack' in (result.details as any) && (
-                            <div>CONNACK: <span className="text-ink-primary">{String((result.details as any).connack)}</span></div>
+                            <div>
+                              CONNACK:{' '}
+                              <span className="text-ink-primary">
+                                {String((result.details as any).connack)}
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
                       {result.testType === 'redis' && (
                         <div className="mt-2 space-y-0.5">
                           {'pong' in (result.details as any) && (
-                            <div>PONG: <span className="text-ink-primary">{String((result.details as any).pong)}</span></div>
+                            <div>
+                              PONG:{' '}
+                              <span className="text-ink-primary">
+                                {String((result.details as any).pong)}
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
@@ -550,15 +752,29 @@ export function ConnectivityPage(): React.ReactElement {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <caption className="sr-only">Sensor connectivity status with latency and packet loss</caption>
+            <caption className="sr-only">
+              Sensor connectivity status with latency and packet loss
+            </caption>
             <thead className="bg-surface-subtle">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Sensor</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Latency</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Last Heartbeat</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Reconnects (24h)</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">Packet Loss</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">
+                  Sensor
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">
+                  Latency
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">
+                  Last Heartbeat
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">
+                  Reconnects (24h)
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider">
+                  Packet Loss
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
@@ -585,12 +801,16 @@ export function ConnectivityPage(): React.ReactElement {
                       : 'Never'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${sensor.reconnects > 5 ? 'text-status-warning' : 'text-ink-primary'}`}>
+                    <span
+                      className={`text-sm ${sensor.reconnects > 5 ? 'text-status-warning' : 'text-ink-primary'}`}
+                    >
                       {sensor.reconnects}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${sensor.packetLoss > 1 ? 'text-status-error' : 'text-ink-primary'}`}>
+                    <span
+                      className={`text-sm ${sensor.packetLoss > 1 ? 'text-status-error' : 'text-ink-primary'}`}
+                    >
                       {sensor.packetLoss.toFixed(1)}%
                     </span>
                   </td>
@@ -639,7 +859,9 @@ export function ConnectivityPage(): React.ReactElement {
 
         {/* Connection Events Chart */}
         <div className="bg-surface-card border border-border-subtle p-6">
-          <h2 className="text-lg font-semibold text-ink-primary mb-4">Connection Events (Weekly)</h2>
+          <h2 className="text-lg font-semibold text-ink-primary mb-4">
+            Connection Events (Weekly)
+          </h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={connectionEventsData}>
               <defs>
@@ -651,11 +873,13 @@ export function ConnectivityPage(): React.ReactElement {
               <CartesianGrid {...gridDefaultsSoft} />
               <XAxis dataKey="day" {...xAxisSmall} />
               <YAxis {...yAxisSmall} />
-              <Tooltip
-                {...tooltipDefaults}
-                cursor={{ fill: alpha(colors.blue, 0.1) }}
+              <Tooltip {...tooltipDefaults} cursor={{ fill: alpha(colors.blue, 0.1) }} />
+              <Bar
+                dataKey="reconnections"
+                fill="url(#reconnectGradient)"
+                name="Reconnections"
+                radius={[0, 0, 0, 0]}
               />
-              <Bar dataKey="reconnections" fill="url(#reconnectGradient)" name="Reconnections" radius={[0, 0, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

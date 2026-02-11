@@ -261,19 +261,18 @@ function SortableHeader({
     <th
       className={clsx(
         'px-5 py-3 font-medium cursor-pointer hover:text-white transition-colors',
-        align === 'right' && 'text-right'
+        align === 'right' && 'text-right',
       )}
       onClick={() => onSort(field)}
     >
       <div className={clsx('flex items-center gap-1', align === 'right' && 'justify-end')}>
         <span>{label}</span>
-        {isActive && (
-          sortDirection === 'asc' ? (
+        {isActive &&
+          (sortDirection === 'asc' ? (
             <ChevronUp className="w-4 h-4" />
           ) : (
             <ChevronDown className="w-4 h-4" />
-          )
-        )}
+          ))}
       </div>
     </th>
   );
@@ -300,7 +299,7 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 // Endpoint Table Row
-function EndpointRow({ endpoint }: { endpoint: typeof DEMO_ENDPOINTS[0] }) {
+function EndpointRow({ endpoint }: { endpoint: (typeof DEMO_ENDPOINTS)[0] }) {
   return (
     <tr className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors">
       <td className="px-5 py-4">
@@ -330,8 +329,8 @@ function EndpointRow({ endpoint }: { endpoint: typeof DEMO_ENDPOINTS[0] }) {
             endpoint.errorRate < 1
               ? 'text-green-400 bg-green-500/20'
               : endpoint.errorRate < 2
-              ? 'text-sky-400 bg-sky-500/20'
-              : 'text-red-400 bg-red-500/20'
+                ? 'text-sky-400 bg-sky-500/20'
+                : 'text-red-400 bg-red-500/20',
           )}
         >
           {endpoint.errorRate.toFixed(1)}%
@@ -386,7 +385,7 @@ export default function ApiCatalogPage() {
   // Transform API endpoints to expected shape, fall back to demo data
   const endpoints = useMemo(() => {
     if (apiEndpoints.length > 0) {
-      return apiEndpoints.map(ep => ({
+      return apiEndpoints.map((ep) => ({
         id: ep.id,
         method: ep.method,
         path: ep.path,
@@ -421,7 +420,7 @@ export default function ApiCatalogPage() {
       result = result.filter(
         (e) =>
           e.path.toLowerCase().includes(lowerSearch) ||
-          e.service.toLowerCase().includes(lowerSearch)
+          e.service.toLowerCase().includes(lowerSearch),
       );
     }
 
@@ -478,7 +477,7 @@ export default function ApiCatalogPage() {
     const totalEndpoints = endpoints.length;
     const totalRequests = endpoints.reduce((sum, e) => sum + e.requestCount, 0);
     const avgLatency = Math.round(
-      endpoints.reduce((sum, e) => sum + e.avgLatencyMs, 0) / endpoints.length
+      endpoints.reduce((sum, e) => sum + e.avgLatencyMs, 0) / endpoints.length,
     );
     const withSchema = endpoints.filter((e) => e.hasSchema).length;
 
@@ -498,7 +497,7 @@ export default function ApiCatalogPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">API Catalog</h1>
+          <h1 className="text-xl font-light text-ink-primary">API Catalog</h1>
           <p className="text-ink-secondary mt-1">Loading endpoint data...</p>
         </div>
         <StatsGridSkeleton />
@@ -512,7 +511,7 @@ export default function ApiCatalogPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">API Catalog</h1>
+          <h1 className="text-xl font-light text-ink-primary">API Catalog</h1>
           <p className="text-ink-secondary mt-1">Discovered endpoints and API inventory</p>
         </div>
         <div className="flex items-center gap-4">
@@ -568,7 +567,9 @@ export default function ApiCatalogPage() {
       <div className="bg-surface-card border border-border-subtle overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <caption className="sr-only">API catalog endpoints with traffic and error metrics</caption>
+            <caption className="sr-only">
+              API catalog endpoints with traffic and error metrics
+            </caption>
             <thead>
               <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle bg-surface-subtle">
                 <SortableHeader
@@ -614,9 +615,7 @@ export default function ApiCatalogPage() {
           </table>
         </div>
         {filteredEndpoints.length === 0 && (
-          <div className="p-8 text-center text-ink-secondary">
-            No endpoints match your filters
-          </div>
+          <div className="p-8 text-center text-ink-secondary">No endpoints match your filters</div>
         )}
       </div>
     </div>

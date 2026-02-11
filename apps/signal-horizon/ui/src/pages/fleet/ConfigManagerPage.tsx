@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard } from '../../components/fleet';
-import { SynapseConfigEditor, getDefaultConfigYaml } from '../../components/fleet/SynapseConfigEditor';
+import {
+  SynapseConfigEditor,
+  getDefaultConfigYaml,
+} from '../../components/fleet/SynapseConfigEditor';
 import {
   AdvancedConfigPanel,
   defaultAdvancedConfig,
@@ -92,7 +95,9 @@ function parseYamlConfig(yamlText: string): Record<string, unknown> {
 function extractAdvancedConfig(fullConfig: Record<string, unknown>): AdvancedConfigData {
   return {
     dlp: (fullConfig.dlp as AdvancedConfigData['dlp']) || defaultAdvancedConfig.dlp,
-    block_page: (fullConfig.block_page as AdvancedConfigData['block_page']) || defaultAdvancedConfig.block_page,
+    block_page:
+      (fullConfig.block_page as AdvancedConfigData['block_page']) ||
+      defaultAdvancedConfig.block_page,
     crawler: (fullConfig.crawler as AdvancedConfigData['crawler']) || defaultAdvancedConfig.crawler,
     tarpit: (fullConfig.tarpit as AdvancedConfigData['tarpit']) || defaultAdvancedConfig.tarpit,
     entity: (fullConfig.entity as AdvancedConfigData['entity']) || defaultAdvancedConfig.entity,
@@ -102,16 +107,31 @@ function extractAdvancedConfig(fullConfig: Record<string, unknown>): AdvancedCon
 
 function mergeAdvancedConfig(
   fullConfig: Record<string, unknown>,
-  advancedConfig: AdvancedConfigData
+  advancedConfig: AdvancedConfigData,
 ): Record<string, unknown> {
   return {
     ...fullConfig,
     dlp: deepMergeConfig((fullConfig.dlp as Record<string, unknown>) || {}, advancedConfig.dlp),
-    block_page: deepMergeConfig((fullConfig.block_page as Record<string, unknown>) || {}, advancedConfig.block_page),
-    crawler: deepMergeConfig((fullConfig.crawler as Record<string, unknown>) || {}, advancedConfig.crawler),
-    tarpit: deepMergeConfig((fullConfig.tarpit as Record<string, unknown>) || {}, advancedConfig.tarpit),
-    entity: deepMergeConfig((fullConfig.entity as Record<string, unknown>) || {}, advancedConfig.entity),
-    travel: deepMergeConfig((fullConfig.travel as Record<string, unknown>) || {}, advancedConfig.travel),
+    block_page: deepMergeConfig(
+      (fullConfig.block_page as Record<string, unknown>) || {},
+      advancedConfig.block_page,
+    ),
+    crawler: deepMergeConfig(
+      (fullConfig.crawler as Record<string, unknown>) || {},
+      advancedConfig.crawler,
+    ),
+    tarpit: deepMergeConfig(
+      (fullConfig.tarpit as Record<string, unknown>) || {},
+      advancedConfig.tarpit,
+    ),
+    entity: deepMergeConfig(
+      (fullConfig.entity as Record<string, unknown>) || {},
+      advancedConfig.entity,
+    ),
+    travel: deepMergeConfig(
+      (fullConfig.travel as Record<string, unknown>) || {},
+      advancedConfig.travel,
+    ),
   };
 }
 
@@ -144,7 +164,7 @@ export function ConfigManagerPage() {
   const [showPushModal, setShowPushModal] = useState(false);
   const [pushTemplateId, setPushTemplateId] = useState<string | null>(null);
   const [pushSelectedSensors, setPushSelectedSensors] = useState<Set<string>>(new Set());
-  
+
   // Create Modal State
   const [newName, setNewName] = useState('');
   const [newEnv, setNewEnv] = useState<'production' | 'staging' | 'dev'>('production');
@@ -152,7 +172,8 @@ export function ConfigManagerPage() {
   const [newConfig, setNewConfig] = useState(getDefaultConfigYaml);
   const [templateConfigJson, setTemplateConfigJson] = useState('{\n}\n');
   const [templateConfigObject, setTemplateConfigObject] = useState<Record<string, unknown>>({});
-  const [templateAdvancedConfig, setTemplateAdvancedConfig] = useState<AdvancedConfigData>(defaultAdvancedConfig);
+  const [templateAdvancedConfig, setTemplateAdvancedConfig] =
+    useState<AdvancedConfigData>(defaultAdvancedConfig);
 
   // Pingora upstream preset: Apparatus echo
   const { data: sensors = [] } = useSensors();
@@ -232,7 +253,8 @@ export function ConfigManagerPage() {
       description?: string;
       environment: 'production' | 'staging' | 'dev';
       config: Record<string, unknown>;
-    }) => apiFetch<ConfigTemplateDetail>('/fleet/config/templates', { method: 'POST', body: input }),
+    }) =>
+      apiFetch<ConfigTemplateDetail>('/fleet/config/templates', { method: 'POST', body: input }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet', 'config', 'templates'] });
       toast.success('Template created.');
@@ -319,7 +341,9 @@ export function ConfigManagerPage() {
   };
 
   const resolveChangeCount = (log: ConfigAuditLog) => {
-    const details = log.details as { details?: { changeCount?: number; changes?: unknown[] } } | undefined;
+    const details = log.details as
+      | { details?: { changeCount?: number; changes?: unknown[] } }
+      | undefined;
     return details?.details?.changeCount ?? details?.details?.changes?.length ?? 0;
   };
 
@@ -377,7 +401,7 @@ export function ConfigManagerPage() {
 
     if (isDemoMode) {
       const demoTemplate: any = (getDemoData(scenario).fleet.configTemplates || []).find(
-        (t: any) => t.id === id
+        (t: any) => t.id === id,
       );
       if (!demoTemplate) {
         setTemplateDetailLoading(false);
@@ -541,7 +565,7 @@ export function ConfigManagerPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-light text-ink-primary">Configuration Manager</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Configuration Manager</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Manage and deploy configuration templates across your fleet
           </p>
@@ -593,7 +617,9 @@ export function ConfigManagerPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-medium text-ink-primary">Fleet Sync Status</h3>
-            <span className="text-sm text-ink-secondary">{Math.round(syncStatus.syncPercentage)}%</span>
+            <span className="text-sm text-ink-secondary">
+              {Math.round(syncStatus.syncPercentage)}%
+            </span>
           </div>
           <div className="w-full h-3 bg-surface-subtle">
             <div
@@ -665,7 +691,9 @@ export function ConfigManagerPage() {
               }}
               className="h-11 w-full px-4 text-xs font-bold uppercase tracking-[0.2em] border-2 border-ac-magenta text-ac-magenta hover:bg-ac-magenta hover:text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
             >
-              {echoPresetMutation.isPending ? 'Pushing...' : `Push To Selected (${echoSelectedIds.length})`}
+              {echoPresetMutation.isPending
+                ? 'Pushing...'
+                : `Push To Selected (${echoSelectedIds.length})`}
             </button>
 
             {isDemoMode && <div className="text-xs text-ink-muted">Disabled in demo mode.</div>}
@@ -774,7 +802,9 @@ export function ConfigManagerPage() {
           <div className="p-12 text-center text-ink-muted">Loading templates...</div>
         ) : templatesIsError ? (
           <div className="p-6">
-            <div className="text-sm text-ac-red">Templates unavailable: {templatesErrorMessage}</div>
+            <div className="text-sm text-ac-red">
+              Templates unavailable: {templatesErrorMessage}
+            </div>
             <button
               type="button"
               onClick={() => refetchTemplates()}
@@ -957,7 +987,9 @@ export function ConfigManagerPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setPushSelectedSensors(new Set(sensors.map((s: any) => String(s.id))))}
+                  onClick={() =>
+                    setPushSelectedSensors(new Set(sensors.map((s: any) => String(s.id))))
+                  }
                   className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                 >
                   Select All
@@ -1036,9 +1068,7 @@ export function ConfigManagerPage() {
               </button>
               <button
                 type="button"
-                disabled={
-                  pushMutation.isPending || sensors.length === 0 || selectedPushCount === 0
-                }
+                disabled={pushMutation.isPending || sensors.length === 0 || selectedPushCount === 0}
                 onClick={submitPushModal}
                 className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
               >
@@ -1059,7 +1089,9 @@ export function ConfigManagerPage() {
         >
           <div className="bg-surface-base border border-border-subtle p-6 w-full max-w-4xl h-[80vh] flex flex-col relative">
             <h2 id="template-modal-title" className="text-xl font-light text-ink-primary mb-4">
-              {templateModalMode === 'create' ? 'Create Configuration Template' : 'Edit Configuration Template'}
+              {templateModalMode === 'create'
+                ? 'Create Configuration Template'
+                : 'Edit Configuration Template'}
             </h2>
 
             {templateDetailError && templateModalMode === 'edit' && (
@@ -1067,7 +1099,7 @@ export function ConfigManagerPage() {
                 {templateDetailError}
               </div>
             )}
-            
+
             <div
               className={`grid grid-cols-3 gap-6 flex-1 overflow-hidden ${
                 templateDetailLoading ? 'opacity-60 pointer-events-none' : ''
@@ -1087,8 +1119,10 @@ export function ConfigManagerPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-ink-secondary mb-1">Environment</label>
-                  <select 
+                  <label className="block text-sm font-medium text-ink-secondary mb-1">
+                    Environment
+                  </label>
+                  <select
                     value={newEnv}
                     onChange={(e) => setNewEnv(e.target.value as any)}
                     disabled={templateDetailLoading}
@@ -1100,7 +1134,9 @@ export function ConfigManagerPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-ink-secondary mb-1">Description</label>
+                  <label className="block text-sm font-medium text-ink-secondary mb-1">
+                    Description
+                  </label>
                   <textarea
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
@@ -1114,7 +1150,9 @@ export function ConfigManagerPage() {
               {/* Right Column: Config Editor */}
               <div className="col-span-2 flex flex-col h-full overflow-hidden">
                 <div className="flex items-center justify-between gap-4 mb-2">
-                  <label className="block text-sm font-medium text-ink-secondary">Sensor Configuration</label>
+                  <label className="block text-sm font-medium text-ink-secondary">
+                    Sensor Configuration
+                  </label>
                   <div className="flex items-center bg-surface-subtle p-1">
                     <button
                       type="button"
@@ -1167,7 +1205,10 @@ export function ConfigManagerPage() {
 
                 {templateConfigView === 'advanced' && (
                   <div className="flex-1 overflow-auto min-h-0 border border-border-subtle bg-surface-base">
-                    <AdvancedConfigPanel config={templateAdvancedConfig} onChange={handleAdvancedConfigChange} />
+                    <AdvancedConfigPanel
+                      config={templateAdvancedConfig}
+                      onChange={handleAdvancedConfigChange}
+                    />
                   </div>
                 )}
 

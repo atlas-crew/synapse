@@ -11,16 +11,17 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  Calendar,
-  Server
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Calendar, Server } from 'lucide-react';
 import { clsx } from 'clsx';
 import { linearRegression, predict, daysUntilThreshold } from '../../utils/math';
-import { axisDefaults, colors, gridDefaultsSoft, legendDefaults, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  legendDefaults,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 
 // =============================================================================
 // Mock Data Generation
@@ -40,16 +41,16 @@ interface DailyMetric {
 function generateRegionData(baseLoad: number, growthRate: number): DailyMetric[] {
   const data: DailyMetric[] = [];
   const now = new Date();
-  
+
   for (let i = HISTORY_DAYS; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    
+
     // Linear trend + Random Noise + Weekly Seasonality (sine wave)
-    const trend = baseLoad + (growthRate * (HISTORY_DAYS - i));
+    const trend = baseLoad + growthRate * (HISTORY_DAYS - i);
     const noise = (Math.random() - 0.5) * 5;
     const seasonality = Math.sin((i / 7) * Math.PI * 2) * 3;
-    
+
     data.push({
       day: -i, // -30 to 0
       date: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
@@ -63,42 +64,45 @@ export default function CapacityForecastPage() {
   const [selectedRegion, setSelectedRegion] = useState(REGIONS[0]);
 
   // Generate data per region
-  const regionData = useMemo(() => ({
-    'US-East': generateRegionData(45, 0.8), // Fast growth
-    'EU-West': generateRegionData(60, 0.1), // Stable
-    'AP-South': generateRegionData(30, 1.2), // Very fast growth
-  }), []);
+  const regionData = useMemo(
+    () => ({
+      'US-East': generateRegionData(45, 0.8), // Fast growth
+      'EU-West': generateRegionData(60, 0.1), // Stable
+      'AP-South': generateRegionData(30, 1.2), // Very fast growth
+    }),
+    [],
+  );
 
   // Calculate Forecast
   const { combinedData, forecastStats } = useMemo(() => {
     const currentHistory = regionData[selectedRegion as keyof typeof regionData];
-    
+
     // Prepare points for regression (x=day index, y=usage)
     const points = currentHistory.map((d, i) => ({ x: i, y: d.usage }));
     const { slope, intercept } = linearRegression(points);
-    
+
     const lastDayIndex = points.length - 1;
     const currentUsage = currentHistory[lastDayIndex].usage;
-    
+
     // Generate Forecast Points
     const forecastPoints = [];
     const now = new Date();
-    
+
     for (let i = 1; i <= FORECAST_DAYS; i++) {
       const date = new Date(now);
       date.setDate(date.getDate() + i);
-      
+
       // Project using the linear model (x extends beyond history)
       const projectedX = lastDayIndex + i;
       const predictedUsage = predict(projectedX, slope, intercept);
-      
+
       forecastPoints.push({
         day: i,
         date: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
         forecast: Math.max(0, Math.min(100, predictedUsage)),
         // Confidence interval (simple widening cone)
-        ciHigh: Math.min(100, predictedUsage + (i * 0.5)), 
-        ciLow: Math.max(0, predictedUsage - (i * 0.5)),
+        ciHigh: Math.min(100, predictedUsage + i * 0.5),
+        ciLow: Math.max(0, predictedUsage - i * 0.5),
       });
     }
 
@@ -109,8 +113,8 @@ export default function CapacityForecastPage() {
 
     return {
       combinedData: [
-        ...currentHistory.map(d => ({ ...d, forecast: null, ciHigh: null, ciLow: null })),
-        ...forecastPoints.map(d => ({ ...d, usage: null })),
+        ...currentHistory.map((d) => ({ ...d, forecast: null, ciHigh: null, ciLow: null })),
+        ...forecastPoints.map((d) => ({ ...d, usage: null })),
       ],
       forecastStats: {
         slope,
@@ -118,7 +122,7 @@ export default function CapacityForecastPage() {
         daysToSaturation,
         daysToWarning,
         trendDirection: slope > 0 ? 'increasing' : slope < 0 ? 'decreasing' : 'stable',
-      }
+      },
     };
   }, [selectedRegion, regionData]);
 
@@ -127,23 +131,23 @@ export default function CapacityForecastPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-light text-ink-primary">Capacity Forecasting</h1>
+          <h1 className="text-2xl font-light text-ink-primary">Capacity Forecasting</h1>
           <p className="text-ink-secondary mt-1">
             Predictive resource planning based on historical trends
           </p>
         </div>
-        
+
         {/* Region Selector */}
         <div className="flex bg-surface-subtle p-1 border border-border-subtle">
-          {REGIONS.map(region => (
+          {REGIONS.map((region) => (
             <button
               key={region}
               onClick={() => setSelectedRegion(region)}
               className={clsx(
-                "px-4 py-2 text-sm font-medium transition-colors ",
+                'px-4 py-2 text-sm font-medium transition-colors ',
                 selectedRegion === region
-                  ? "bg-surface-base text-ink-primary shadow-sm"
-                  : "text-ink-secondary hover:text-ink-primary"
+                  ? 'bg-surface-base text-ink-primary shadow-sm'
+                  : 'text-ink-secondary hover:text-ink-primary',
               )}
             >
               {region}
@@ -154,15 +158,15 @@ export default function CapacityForecastPage() {
 
       {/* Insight Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <InsightCard 
+        <InsightCard
           label="Current Utilization"
           value={`${forecastStats.currentUsage.toFixed(1)}%`}
           trend={forecastStats.slope * 7} // Weekly trend
           subtext="Avg. CPU Load"
           icon={Server}
         />
-        
-        <InsightCard 
+
+        <InsightCard
           label="Growth Trend"
           value={`${(forecastStats.slope * 30).toFixed(1)}%`}
           valueSuffix="/ mo"
@@ -171,14 +175,21 @@ export default function CapacityForecastPage() {
           icon={TrendingUp}
         />
 
-        <InsightCard 
+        <InsightCard
           label="Time to Saturation"
-          value={forecastStats.daysToSaturation === Infinity ? '> 1 Year' : `${forecastStats.daysToSaturation} Days`}
+          value={
+            forecastStats.daysToSaturation === Infinity
+              ? '> 1 Year'
+              : `${forecastStats.daysToSaturation} Days`
+          }
           subtext="Until 100% capacity reached"
           icon={Calendar}
           alertLevel={
-            forecastStats.daysToSaturation < 14 ? 'critical' : 
-            forecastStats.daysToSaturation < 30 ? 'warning' : 'good'
+            forecastStats.daysToSaturation < 14
+              ? 'critical'
+              : forecastStats.daysToSaturation < 30
+                ? 'warning'
+                : 'good'
           }
         />
       </div>
@@ -203,32 +214,50 @@ export default function CapacityForecastPage() {
             <ComposedChart data={combinedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="usageGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={colors.skyBlue} stopOpacity={0.5}/>
-                  <stop offset="50%" stopColor={colors.blue} stopOpacity={0.25}/>
-                  <stop offset="100%" stopColor={colors.blue} stopOpacity={0.05}/>
+                  <stop offset="0%" stopColor={colors.skyBlue} stopOpacity={0.5} />
+                  <stop offset="50%" stopColor={colors.blue} stopOpacity={0.25} />
+                  <stop offset="100%" stopColor={colors.blue} stopOpacity={0.05} />
                 </linearGradient>
                 <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.3}/>
-                  <stop offset="100%" stopColor={colors.magenta} stopOpacity={0.05}/>
+                  <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={colors.magenta} stopOpacity={0.05} />
                 </linearGradient>
               </defs>
 
               <CartesianGrid {...gridDefaultsSoft} />
-              <XAxis
-                dataKey="date"
-                {...xAxisNoLine}
-                minTickGap={30}
-              />
+              <XAxis dataKey="date" {...xAxisNoLine} minTickGap={30} />
               <YAxis {...axisDefaults.y} unit="%" domain={[0, 100]} />
               <Tooltip
                 {...tooltipDefaults}
-                formatter={(val: number) => typeof val === 'number' ? val.toFixed(1) + '%' : val}
+                formatter={(val: number) => (typeof val === 'number' ? val.toFixed(1) + '%' : val)}
               />
               <Legend {...legendDefaults} verticalAlign="top" height={36} />
 
               {/* Threshold Lines */}
-              <ReferenceLine y={80} stroke={colors.orange} strokeDasharray="3 3" strokeWidth={1.5} label={{ position: 'right', value: 'Warning (80%)', fill: colors.orange, fontSize: 10 }} />
-              <ReferenceLine y={100} stroke={colors.red} strokeDasharray="3 3" strokeWidth={1.5} label={{ position: 'right', value: 'Capacity (100%)', fill: colors.red, fontSize: 10 }} />
+              <ReferenceLine
+                y={80}
+                stroke={colors.orange}
+                strokeDasharray="3 3"
+                strokeWidth={1.5}
+                label={{
+                  position: 'right',
+                  value: 'Warning (80%)',
+                  fill: colors.orange,
+                  fontSize: 10,
+                }}
+              />
+              <ReferenceLine
+                y={100}
+                stroke={colors.red}
+                strokeDasharray="3 3"
+                strokeWidth={1.5}
+                label={{
+                  position: 'right',
+                  value: 'Capacity (100%)',
+                  fill: colors.red,
+                  fontSize: 10,
+                }}
+              />
 
               {/* Historical Usage Area */}
               <Area
@@ -275,14 +304,14 @@ export default function CapacityForecastPage() {
 // Helper Components
 // =============================================================================
 
-function InsightCard({ 
-  label, 
-  value, 
-  valueSuffix = '', 
-  trend, 
-  subtext, 
+function InsightCard({
+  label,
+  value,
+  valueSuffix = '',
+  trend,
+  subtext,
   icon: Icon,
-  alertLevel
+  alertLevel,
 }: any) {
   let trendColor = 'text-ink-muted';
   let TrendIcon = null;
@@ -305,11 +334,16 @@ function InsightCard({
   if (alertLevel === 'good') trendColor = 'text-ac-green';
 
   return (
-    <div className={clsx("card p-5 border-l-4", 
-      alertLevel === 'critical' ? 'border-l-ac-red' : 
-      alertLevel === 'warning' ? 'border-l-ac-orange' : 
-      'border-l-ac-blue'
-    )}>
+    <div
+      className={clsx(
+        'card p-5 border-l-4',
+        alertLevel === 'critical'
+          ? 'border-l-ac-red'
+          : alertLevel === 'warning'
+            ? 'border-l-ac-orange'
+            : 'border-l-ac-blue',
+      )}
+    >
       <div className="flex justify-between items-start">
         <div>
           <p className="text-sm font-medium text-ink-secondary">{label}</p>
@@ -318,14 +352,14 @@ function InsightCard({
             {valueSuffix && <span className="text-sm text-ink-secondary">{valueSuffix}</span>}
           </div>
         </div>
-        <div className={clsx("p-2  bg-surface-subtle", trendColor)}>
+        <div className={clsx('p-2  bg-surface-subtle', trendColor)}>
           <Icon className="w-5 h-5" />
         </div>
       </div>
-      
+
       <div className="mt-3 flex items-center gap-2 text-xs">
         {TrendIcon && trend !== undefined && (
-          <span className={clsx("flex items-center gap-1 font-medium", trendColor)}>
+          <span className={clsx('flex items-center gap-1 font-medium', trendColor)}>
             <TrendIcon className="w-3 h-3" />
             {Math.abs(trend).toFixed(1)}% {trend > 0 ? 'Increase' : 'Decrease'}
           </span>

@@ -7,7 +7,17 @@
 
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Key, Plus, RotateCw, Trash2, Copy, Check, AlertTriangle, Clock, Shield } from 'lucide-react';
+import {
+  Key,
+  Plus,
+  RotateCw,
+  Trash2,
+  Copy,
+  Check,
+  AlertTriangle,
+  Clock,
+  Shield,
+} from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
 
@@ -56,7 +66,11 @@ export function SensorKeysPage(): React.ReactElement {
   const queryClient = useQueryClient();
 
   // Fetch keys
-  const { data: keysData, isLoading, error } = useQuery({
+  const {
+    data: keysData,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['sensor-keys'],
     queryFn: async () => {
       return apiFetch('/management/keys');
@@ -115,7 +129,9 @@ export function SensorKeysPage(): React.ReactElement {
     const expired = keys.filter((k) => k.status === 'EXPIRED').length;
     const expiringSoon = keys.filter((k) => {
       if (!k.expiresAt || k.status !== 'ACTIVE') return false;
-      const daysLeft = Math.floor((new Date(k.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      const daysLeft = Math.floor(
+        (new Date(k.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
       return daysLeft <= 30 && daysLeft > 0;
     }).length;
     return { total, active, expired, expiringSoon };
@@ -170,9 +186,7 @@ export function SensorKeysPage(): React.ReactElement {
       REVOKED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
     };
     return (
-      <span className={`px-2 py-1 text-xs font-medium  border ${styles[status]}`}>
-        {status}
-      </span>
+      <span className={`px-2 py-1 text-xs font-medium  border ${styles[status]}`}>{status}</span>
     );
   };
 
@@ -199,7 +213,7 @@ export function SensorKeysPage(): React.ReactElement {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-light text-white">API Key Management</h1>
+          <h1 className="text-xl font-light text-white">API Key Management</h1>
           <p className="text-gray-400 mt-1">Manage sensor authentication keys and permissions</p>
         </div>
         <button

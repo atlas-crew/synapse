@@ -76,45 +76,174 @@ const DEMO_SERVICES = [
   },
 ];
 
-const DEMO_SERVICE_ENDPOINTS: Record<string, Array<{
-  method: string;
-  path: string;
-  requestCount: number;
-  avgLatencyMs: number;
-  errorRate: number;
-}>> = {
+const DEMO_SERVICE_ENDPOINTS: Record<
+  string,
+  Array<{
+    method: string;
+    path: string;
+    requestCount: number;
+    avgLatencyMs: number;
+    errorRate: number;
+  }>
+> = {
   'user-service': [
-    { method: 'GET', path: '/api/v1/users', requestCount: 850000, avgLatencyMs: 45, errorRate: 0.5 },
-    { method: 'POST', path: '/api/v1/users', requestCount: 120000, avgLatencyMs: 85, errorRate: 1.2 },
-    { method: 'GET', path: '/api/v1/users/:id', requestCount: 650000, avgLatencyMs: 38, errorRate: 0.3 },
-    { method: 'PUT', path: '/api/v1/users/:id', requestCount: 95000, avgLatencyMs: 72, errorRate: 0.8 },
-    { method: 'DELETE', path: '/api/v1/users/:id', requestCount: 25000, avgLatencyMs: 55, errorRate: 0.4 },
+    {
+      method: 'GET',
+      path: '/api/v1/users',
+      requestCount: 850000,
+      avgLatencyMs: 45,
+      errorRate: 0.5,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/users',
+      requestCount: 120000,
+      avgLatencyMs: 85,
+      errorRate: 1.2,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/users/:id',
+      requestCount: 650000,
+      avgLatencyMs: 38,
+      errorRate: 0.3,
+    },
+    {
+      method: 'PUT',
+      path: '/api/v1/users/:id',
+      requestCount: 95000,
+      avgLatencyMs: 72,
+      errorRate: 0.8,
+    },
+    {
+      method: 'DELETE',
+      path: '/api/v1/users/:id',
+      requestCount: 25000,
+      avgLatencyMs: 55,
+      errorRate: 0.4,
+    },
   ],
   'product-service': [
-    { method: 'GET', path: '/api/v1/products', requestCount: 4200000, avgLatencyMs: 32, errorRate: 0.2 },
-    { method: 'GET', path: '/api/v1/products/:id', requestCount: 2800000, avgLatencyMs: 28, errorRate: 0.3 },
-    { method: 'POST', path: '/api/v1/products', requestCount: 85000, avgLatencyMs: 95, errorRate: 1.1 },
-    { method: 'PUT', path: '/api/v1/products/:id', requestCount: 62000, avgLatencyMs: 88, errorRate: 0.9 },
+    {
+      method: 'GET',
+      path: '/api/v1/products',
+      requestCount: 4200000,
+      avgLatencyMs: 32,
+      errorRate: 0.2,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/products/:id',
+      requestCount: 2800000,
+      avgLatencyMs: 28,
+      errorRate: 0.3,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/products',
+      requestCount: 85000,
+      avgLatencyMs: 95,
+      errorRate: 1.1,
+    },
+    {
+      method: 'PUT',
+      path: '/api/v1/products/:id',
+      requestCount: 62000,
+      avgLatencyMs: 88,
+      errorRate: 0.9,
+    },
   ],
   'order-service': [
-    { method: 'POST', path: '/api/v1/orders', requestCount: 320000, avgLatencyMs: 180, errorRate: 3.2 },
-    { method: 'GET', path: '/api/v1/orders', requestCount: 450000, avgLatencyMs: 95, errorRate: 1.5 },
-    { method: 'GET', path: '/api/v1/orders/:id', requestCount: 210000, avgLatencyMs: 65, errorRate: 0.8 },
+    {
+      method: 'POST',
+      path: '/api/v1/orders',
+      requestCount: 320000,
+      avgLatencyMs: 180,
+      errorRate: 3.2,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/orders',
+      requestCount: 450000,
+      avgLatencyMs: 95,
+      errorRate: 1.5,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/orders/:id',
+      requestCount: 210000,
+      avgLatencyMs: 65,
+      errorRate: 0.8,
+    },
   ],
   'search-service': [
-    { method: 'GET', path: '/api/v1/search', requestCount: 3800000, avgLatencyMs: 220, errorRate: 0.5 },
-    { method: 'POST', path: '/api/v1/search/advanced', requestCount: 400000, avgLatencyMs: 320, errorRate: 1.2 },
+    {
+      method: 'GET',
+      path: '/api/v1/search',
+      requestCount: 3800000,
+      avgLatencyMs: 220,
+      errorRate: 0.5,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/search/advanced',
+      requestCount: 400000,
+      avgLatencyMs: 320,
+      errorRate: 1.2,
+    },
   ],
   'auth-service': [
-    { method: 'POST', path: '/api/v1/auth/login', requestCount: 850000, avgLatencyMs: 95, errorRate: 3.5 },
-    { method: 'POST', path: '/api/v1/auth/logout', requestCount: 420000, avgLatencyMs: 25, errorRate: 0.2 },
-    { method: 'POST', path: '/api/v1/auth/refresh', requestCount: 380000, avgLatencyMs: 45, errorRate: 2.1 },
-    { method: 'POST', path: '/api/v1/auth/verify', requestCount: 150000, avgLatencyMs: 35, errorRate: 4.8 },
+    {
+      method: 'POST',
+      path: '/api/v1/auth/login',
+      requestCount: 850000,
+      avgLatencyMs: 95,
+      errorRate: 3.5,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/auth/logout',
+      requestCount: 420000,
+      avgLatencyMs: 25,
+      errorRate: 0.2,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/auth/refresh',
+      requestCount: 380000,
+      avgLatencyMs: 45,
+      errorRate: 2.1,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/auth/verify',
+      requestCount: 150000,
+      avgLatencyMs: 35,
+      errorRate: 4.8,
+    },
   ],
   'payment-service': [
-    { method: 'POST', path: '/api/v1/payments', requestCount: 180000, avgLatencyMs: 250, errorRate: 1.2 },
-    { method: 'GET', path: '/api/v1/payments/:id', requestCount: 220000, avgLatencyMs: 65, errorRate: 0.3 },
-    { method: 'POST', path: '/api/v1/payments/:id/refund', requestCount: 15000, avgLatencyMs: 180, errorRate: 0.5 },
+    {
+      method: 'POST',
+      path: '/api/v1/payments',
+      requestCount: 180000,
+      avgLatencyMs: 250,
+      errorRate: 1.2,
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/payments/:id',
+      requestCount: 220000,
+      avgLatencyMs: 65,
+      errorRate: 0.3,
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/payments/:id/refund',
+      requestCount: 15000,
+      avgLatencyMs: 180,
+      errorRate: 0.5,
+    },
   ],
 };
 
@@ -162,10 +291,10 @@ function ServiceCard({
   onToggle,
   endpoints,
 }: {
-  service: typeof DEMO_SERVICES[0];
+  service: (typeof DEMO_SERVICES)[0];
   isExpanded: boolean;
   onToggle: () => void;
-  endpoints: typeof DEMO_SERVICE_ENDPOINTS['user-service'];
+  endpoints: (typeof DEMO_SERVICE_ENDPOINTS)['user-service'];
 }) {
   const statusConfig = {
     healthy: { color: 'text-green-400', icon: CheckCircle, label: 'Healthy' },
@@ -219,8 +348,8 @@ function ServiceCard({
                 service.errorRate < 1
                   ? 'text-green-400'
                   : service.errorRate < 2
-                  ? 'text-sky-400'
-                  : 'text-red-400'
+                    ? 'text-sky-400'
+                    : 'text-red-400',
               )}
             >
               {service.errorRate.toFixed(1)}%
@@ -262,7 +391,7 @@ function ServiceCard({
                       <span
                         className={clsx(
                           'px-2 py-0.5 text-xs font-medium',
-                          METHOD_COLORS[endpoint.method]
+                          METHOD_COLORS[endpoint.method],
                         )}
                       >
                         {endpoint.method}
@@ -283,8 +412,8 @@ function ServiceCard({
                         endpoint.errorRate < 1
                           ? 'text-green-400 bg-green-500/20'
                           : endpoint.errorRate < 2
-                          ? 'text-sky-400 bg-sky-500/20'
-                          : 'text-red-400 bg-red-500/20'
+                            ? 'text-sky-400 bg-sky-500/20'
+                            : 'text-red-400 bg-red-500/20',
                       )}
                     >
                       {endpoint.errorRate.toFixed(1)}%
@@ -333,7 +462,7 @@ export default function ServicesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Services</h1>
+          <h1 className="text-xl font-light text-ink-primary">Services</h1>
           <p className="text-ink-secondary mt-1">Loading service data...</p>
         </div>
         <StatsGridSkeleton />
@@ -346,7 +475,7 @@ export default function ServicesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-light text-ink-primary">Services</h1>
+        <h1 className="text-xl font-light text-ink-primary">Services</h1>
         <p className="text-ink-secondary mt-1">Endpoints grouped by service</p>
       </div>
 

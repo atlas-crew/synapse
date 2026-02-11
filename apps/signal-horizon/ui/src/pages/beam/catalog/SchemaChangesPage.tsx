@@ -68,11 +68,18 @@ function formatFieldType(oldValue: string | null, newValue: string | null): stri
   return newValue ?? oldValue ?? 'n/a';
 }
 
-const CHANGE_TYPE_CONFIG: Record<ChangeType, { icon: React.ElementType; color: string; label: string }> = {
+const CHANGE_TYPE_CONFIG: Record<
+  ChangeType,
+  { icon: React.ElementType; color: string; label: string }
+> = {
   added: { icon: Plus, color: 'text-green-400 bg-green-500/20', label: 'Added' },
   removed: { icon: Minus, color: 'text-red-400 bg-red-500/20', label: 'Removed' },
   modified: { icon: RefreshCw, color: 'text-sky-400 bg-sky-500/20', label: 'Modified' },
-  deprecated: { icon: AlertTriangle, color: 'text-orange-400 bg-orange-500/20', label: 'Deprecated' },
+  deprecated: {
+    icon: AlertTriangle,
+    color: 'text-orange-400 bg-orange-500/20',
+    label: 'Deprecated',
+  },
 };
 
 const METHOD_COLORS: Record<string, string> = {
@@ -152,7 +159,7 @@ function SchemaChangeCard({
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
         'bg-surface-card border overflow-hidden transition-colors',
-        change.breaking ? 'border-red-500/50' : 'border-border-subtle'
+        change.breaking ? 'border-red-500/50' : 'border-border-subtle',
       )}
     >
       <button
@@ -252,7 +259,7 @@ export default function SchemaChangesPage() {
         breaking: change.breaking,
         riskLevel: change.riskLevel,
       })),
-    [schemaChanges]
+    [schemaChanges],
   );
 
   // Filter changes
@@ -274,7 +281,9 @@ export default function SchemaChangesPage() {
   const stats = useMemo(() => {
     const total = allChanges.length;
     const breaking = allChanges.filter((c) => c.breaking).length;
-    const highRisk = allChanges.filter((c) => ['high', 'critical'].includes(c.riskLevel.toLowerCase())).length;
+    const highRisk = allChanges.filter((c) =>
+      ['high', 'critical'].includes(c.riskLevel.toLowerCase()),
+    ).length;
     const thisWeek = allChanges.filter((c) => {
       const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       return new Date(c.detectedAt).getTime() > weekAgo;
@@ -287,7 +296,7 @@ export default function SchemaChangesPage() {
 
   const trendLabels = useMemo(
     () => topEndpointTrends.map((trend) => `${trend.method} ${trend.endpoint}`),
-    [topEndpointTrends]
+    [topEndpointTrends],
   );
 
   const trendChartData = useMemo(() => {
@@ -302,7 +311,9 @@ export default function SchemaChangesPage() {
       });
     });
 
-    return Array.from(dateMap.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    return Array.from(dateMap.values()).sort((a, b) =>
+      String(a.date).localeCompare(String(b.date)),
+    );
   }, [topEndpointTrends]);
 
   const toggleChange = (changeId: string) => {
@@ -319,7 +330,7 @@ export default function SchemaChangesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Schema Changes</h1>
+          <h1 className="text-xl font-light text-ink-primary">Schema Changes</h1>
           <p className="text-ink-secondary mt-1">Loading schema change data...</p>
         </div>
         <StatsGridSkeleton />
@@ -332,7 +343,7 @@ export default function SchemaChangesPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-light text-ink-primary">Schema Changes</h1>
+        <h1 className="text-xl font-light text-ink-primary">Schema Changes</h1>
         <p className="text-ink-secondary mt-1">API schema drift detection and versioning</p>
       </div>
 

@@ -188,7 +188,7 @@ function StatCard({
             <p
               className={clsx(
                 'text-xs mt-1',
-                change.trend === 'up' ? 'text-red-400' : 'text-green-400'
+                change.trend === 'up' ? 'text-red-400' : 'text-green-400',
               )}
             >
               {change.trend === 'up' ? '↑' : '↓'} {Math.abs(change.value)}% vs last period
@@ -245,7 +245,7 @@ function TimeRangeSelector({
             'px-3 py-1.5 text-sm font-medium transition-colors',
             value === option.value
               ? 'bg-horizon-600 text-ink-primary'
-              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
+              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle',
           )}
         >
           {option.label}
@@ -275,11 +275,7 @@ function ThreatTimelineChart() {
               </linearGradient>
             </defs>
             <CartesianGrid {...gridDefaultsSoft} />
-            <XAxis
-              dataKey="time"
-              {...xAxisNoLine}
-              tick={tickSmallX}
-            />
+            <XAxis dataKey="time" {...xAxisNoLine} tick={tickSmallX} />
             <YAxis {...axisDefaults.y} tick={tickSmallY} />
             <Tooltip {...tooltipDefaults} />
             <Area
@@ -390,7 +386,7 @@ function IncidentCard({ incident }: { incident: (typeof DEMO_INCIDENTS)[0] }) {
 
 export default function ThreatActivityPage() {
   const timeRange = useTimeRange() as TimeRange;
-  const setTimeRange = useHorizonStore(s => s.setTimeRange);
+  const setTimeRange = useHorizonStore((s) => s.setTimeRange);
 
   // Fetch threats from API
   const {
@@ -409,12 +405,16 @@ export default function ThreatActivityPage() {
   // Transform blocks to incidents format
   const incidents = useMemo(() => {
     if (blocks.length > 0) {
-      return blocks.slice(0, 6).map(block => ({
+      return blocks.slice(0, 6).map((block) => ({
         id: block.id,
         type: block.threatType.replace(/_/g, ' '),
-        severity: (block.riskScore >= 80 ? 'critical' :
-                   block.riskScore >= 60 ? 'high' :
-                   block.riskScore >= 40 ? 'medium' : 'low') as ThreatSeverity,
+        severity: (block.riskScore >= 80
+          ? 'critical'
+          : block.riskScore >= 60
+            ? 'high'
+            : block.riskScore >= 40
+              ? 'medium'
+              : 'low') as ThreatSeverity,
         sourceIp: block.sourceIp,
         targetEndpoint: block.endpoint,
         timestamp: block.timestamp,
@@ -432,7 +432,8 @@ export default function ThreatActivityPage() {
         totalThreats: apiStats.total,
         totalBlocked: apiStats.blocked,
         criticalCount: apiStats.criticalCount,
-        blockRate: apiStats.total > 0 ? ((apiStats.blocked / apiStats.total) * 100).toFixed(1) : '0.0',
+        blockRate:
+          apiStats.total > 0 ? ((apiStats.blocked / apiStats.total) * 100).toFixed(1) : '0.0',
       };
     }
     const totalThreats = DEMO_THREAT_TIMELINE.reduce((sum, d) => sum + d.threats, 0);
@@ -447,7 +448,7 @@ export default function ThreatActivityPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Threat Activity</h1>
+          <h1 className="text-xl font-light text-ink-primary">Threat Activity</h1>
           <p className="text-ink-secondary mt-1">Loading threat data...</p>
         </div>
         <StatsGridSkeleton />
@@ -461,8 +462,10 @@ export default function ThreatActivityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-light text-ink-primary">Threat Activity</h1>
-          <p className="text-ink-secondary mt-1">Real-time threat monitoring and incident response</p>
+          <h1 className="text-xl font-light text-ink-primary">Threat Activity</h1>
+          <p className="text-ink-secondary mt-1">
+            Real-time threat monitoring and incident response
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
@@ -522,7 +525,6 @@ export default function ThreatActivityPage() {
       <div className="grid grid-cols-3 gap-4">
         {/* Threat Timeline */}
         <ThreatTimelineChart />
-
 
         {/* Severity Distribution - Horizontal Stacked Bar */}
         <motion.div
