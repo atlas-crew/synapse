@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 14:11_
+_Generated: 2026-02-11 14:20_
 
 ## Summary
 
-**Total findings: 463**
+**Total findings: 456**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 463 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 456 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -52,11 +52,11 @@ Priority files to migrate first (most raw patterns):
 | 5 | `pages/beam/analytics/ResponseTimesPage.tsx` |
 | 5 | `pages/WarRoomPage.tsx` |
 | 5 | `pages/OverviewPage.tsx` |
-| 5 | `components/soc/CampaignGraph.tsx` |
 | 5 | `components/fleet/pingora/CrawlerConfig.tsx` |
 | 4 | `pages/soc/SessionDetailPage.tsx` |
 | 4 | `pages/soc/LiveMapPage.tsx` |
 | 4 | `pages/soc/CampaignsPage.tsx` |
+| 4 | `pages/fleet/SensorKeysPage.tsx` |
 
 ---
 
@@ -91,10 +91,10 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/ui/CommandPalette.tsx` | 682 | `<div className="flex items-center gap-1.5">` |
 | `components/ui/CommandPalette.tsx` | 689 | `<div className="flex items-center gap-1.5">` |
 | `components/ui/ShortcutHelpModal.tsx` | 37 | `<div className="flex items-center gap-1">` |
-| `components/soc/CampaignGraph.tsx` | 314 | `<div className="flex items-center gap-3 text-ink-muted">` |
-| `components/soc/CampaignGraph.tsx` | 357 | `<div className="flex items-center gap-1.5">` |
-| `components/soc/CampaignGraph.tsx` | 361 | `<div className="flex items-center gap-1.5">` |
-| `components/soc/CampaignGraph.tsx` | 365 | `<div className="flex items-center gap-1.5">` |
-| `components/soc/CampaignGraph.tsx` | 369 | `<div className="flex items-center gap-1.5">` |
 | `components/soc/ActiveCampaignList.tsx` | 85 | `<div className="flex items-center gap-3 mb-1">` |
+| `components/soc/ActiveCampaignList.tsx` | 101 | `<div className="flex items-center gap-4 text-[10px] text-ink-muted group-hover:t` |
+| `components/soc/ActiveCampaignList.tsx` | 104 | `<span className="flex items-center gap-1">` |
+| `components/soc/ActiveCampaignList.tsx` | 111 | `<div className="flex items-center gap-4">` |
+| `components/soc/LiveAttackMap.tsx` | 256 | `<div className="flex items-center gap-3">` |
+| `components/soc/ThreatTrajectoryFeed.tsx` | 113 | `<div className="mt-2 flex items-center gap-3">` |
 

@@ -311,10 +311,10 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
 
       {!isLayoutComplete && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-surface-base/95 backdrop-blur-sm">
-          <div className="flex items-center gap-3 text-ink-muted">
+          <Stack direction="row" align="center" style={{ gap: '12px' }} className="text-ink-muted">
             <Spinner size={20} color="#7F7F7F" />
             <span className="text-sm font-medium">Analyzing correlations...</span>
-          </div>
+          </Stack>
         </div>
       )}
 
@@ -354,22 +354,22 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
 
       <div className="absolute bottom-3 right-3 p-2.5 bg-surface-base/90 backdrop-blur border border-border-subtle text-[10px] z-10">
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-          <div className="flex items-center gap-1.5">
+          <Stack direction="row" align="center" style={{ gap: '6px' }}>
             <div className="w-3 h-3 rotate-45" style={{ background: colors.campaign.bg }} />
             <span className="text-ink-secondary">Campaign</span>
-          </div>
-          <div className="flex items-center gap-1.5">
+          </Stack>
+          <Stack direction="row" align="center" style={{ gap: '6px' }}>
             <div className="w-3 h-3" style={{ background: colors.actor.bg, clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
             <span className="text-ink-secondary">Fingerprint</span>
-          </div>
-          <div className="flex items-center gap-1.5">
+          </Stack>
+          <Stack direction="row" align="center" style={{ gap: '6px' }}>
             <div className="w-2.5 h-2.5" style={{ background: colors.ip.bg }} />
             <span className="text-ink-secondary">IP Source</span>
-          </div>
-          <div className="flex items-center gap-1.5">
+          </Stack>
+          <Stack direction="row" align="center" style={{ gap: '6px' }}>
             <div className="w-2.5 h-2.5" style={{ background: colors.token.bg }} />
             <span className="text-ink-secondary">Auth Token</span>
-          </div>
+          </Stack>
         </div>
       </div>
     </div>

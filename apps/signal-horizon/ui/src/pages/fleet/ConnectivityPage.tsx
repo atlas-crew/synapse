@@ -478,10 +478,9 @@ export function ConnectivityPage(): React.ReactElement {
           style={{ marginBottom: '16px' }}
           titleStyle={SECTION_HEADER_TITLE_STYLE}
         />
-        <Stack
-          direction="column"
-          className="mb-4 md:!flex-row md:!items-end"
-          style={{ gap: '12px' }}
+        <div
+          className="mb-4 flex md:flex-row md:items-end"
+          style={{ flexDirection: 'column', gap: '12px' }}
         >
           <div className="space-y-1">
             <label
@@ -502,7 +501,7 @@ export function ConnectivityPage(): React.ReactElement {
             Apparatus ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt,
             6379 redis, 2525 smtp, 1344 icap, 5140 syslog
           </div>
-        </Stack>
+        </div>
         {/* Live region for screen reader announcements */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {runningTest && `Running ${runningTest} test...`}
@@ -568,7 +567,7 @@ export function ConnectivityPage(): React.ReactElement {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
+                      <Stack direction="row" align="center" gap="sm">
                         {result.status === 'passed' ? (
                           <CheckCircle className="w-4 h-4 text-status-success" />
                         ) : result.status === 'failed' ? (
@@ -587,7 +586,7 @@ export function ConnectivityPage(): React.ReactElement {
                         >
                           {result.status}
                         </span>
-                      </div>
+                      </Stack>
                       {result.latencyMs !== null && (
                         <span className="text-sm text-ink-secondary">
                           {result.latencyMs.toFixed(1)}ms
@@ -825,12 +824,12 @@ export function ConnectivityPage(): React.ReactElement {
                     <div className="text-xs text-ink-muted">{sensor.sensorId}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
+                    <Stack direction="row" align="center" gap="sm">
                       {getStatusIcon(sensor.status)}
                       <span className={`text-sm capitalize ${getStatusColor(sensor.status)}`}>
                         {sensor.status}
                       </span>
-                    </div>
+                    </Stack>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-primary">
                     {sensor.latency !== null ? `${sensor.latency}ms` : 'N/A'}
