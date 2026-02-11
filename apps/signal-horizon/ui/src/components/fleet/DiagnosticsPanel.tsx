@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useDiagnostics, type DiagnosticsData } from '../../hooks/fleet/useDiagnostics';
 import { ResourceBar } from './ResourceBar';
+import { Spinner } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -530,7 +531,11 @@ export function DiagnosticsPanel({
             }`}
             title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 text-ink-secondary ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? (
+              <Spinner size={16} color="#7F7F7F" />
+            ) : (
+              <RefreshCw className="w-4 h-4 text-ink-secondary" />
+            )}
           </button>
 
           {/* Close button */}
@@ -551,7 +556,7 @@ export function DiagnosticsPanel({
         {/* Loading State */}
         {isLoading && !data && (
           <div className="flex flex-col items-center justify-center py-12">
-            <RefreshCw className="w-8 h-8 text-ink-muted animate-spin mb-3" />
+            <Spinner size={32} color="#7F7F7F" style={{ marginBottom: '12px' }} />
             <p className="text-sm text-ink-muted">Loading diagnostics...</p>
           </div>
         )}

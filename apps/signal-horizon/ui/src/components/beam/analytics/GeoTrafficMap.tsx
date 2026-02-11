@@ -3,6 +3,7 @@ import DeckGL from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
 import { scaleThreshold } from 'd3-scale';
 import { feature } from 'topojson-client';
+import { Spinner } from '@/ui';
 
 // Aggressively suppress luma.gl/deck.gl debug output
 if (typeof window !== 'undefined') {
@@ -129,7 +130,7 @@ export function GeoTrafficMap() {
 
       {isLoading ? (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue" />
+          <Spinner size={32} color="#0057B7" />
         </div>
       ) : (
         <div

@@ -1,6 +1,7 @@
 import { useState, useCallback, memo } from 'react';
 import { RefreshCw, Play, RotateCw } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Spinner } from '@/ui';
 
 interface ServiceControlsProps {
   onAction: (action: 'test' | 'reload' | 'restart') => Promise<void>;
@@ -54,7 +55,11 @@ export const ServiceControls = memo(function ServiceControls({ onAction }: Servi
           disabled={status === 'running'}
           className="btn-primary h-8 px-3 text-xs flex items-center gap-2"
         >
-          <RefreshCw className={clsx("w-3 h-3", status === 'running' && lastAction === 'reload' && "animate-spin")} />
+          {status === 'running' && lastAction === 'reload' ? (
+            <Spinner size={12} color="#0057B7" />
+          ) : (
+            <RefreshCw className="w-3 h-3" />
+          )}
           Reload
         </button>
         <button

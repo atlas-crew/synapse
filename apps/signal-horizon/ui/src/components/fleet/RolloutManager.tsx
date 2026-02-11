@@ -14,7 +14,6 @@ import {
   Users,
   ClipboardCheck,
   AlertTriangle,
-  Loader2,
   Download,
   CheckCircle2,
   XCircle,
@@ -38,6 +37,7 @@ import type {
   RolloutProgressStatus,
 } from '../../hooks/fleet/useReleases';
 import { useSensors } from '../../hooks/fleet/useSensors';
+import { Spinner } from '@/ui';
 
 // ============================================================================
 // Types
@@ -556,7 +556,7 @@ export const RolloutManager = memo(function RolloutManager({
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-status-error bg-status-error/10 border border-status-error/30 hover:bg-status-error/20 transition-colors disabled:opacity-50"
           >
             {isCancellingRollout ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Spinner size={16} color="#EF3340" />
             ) : (
               <Square className="w-4 h-4" />
             )}
@@ -636,7 +636,7 @@ export const RolloutManager = memo(function RolloutManager({
                   disabled={isCancellingRollout}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
                 >
-                  {isCancellingRollout && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isCancellingRollout && <Spinner size={16} color="#FFFFFF" />}
                   Cancel Rollout
                 </button>
               </div>
@@ -909,7 +909,7 @@ export const RolloutManager = memo(function RolloutManager({
           >
             {isStartingRollout ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size={16} color="#FFFFFF" />
                 Starting...
               </>
             ) : (

@@ -8,7 +8,7 @@ import { Download, ChevronDown, ChevronRight, Database, Clock, ExternalLink, Ter
 import { clsx } from 'clsx';
 import type { SignalResult, HuntResult } from '../../hooks/useHunt';
 import { getCyberChefUrl, CyberChefRecipes } from '../../utils/cyberchef';
-import { SectionHeader } from '@/ui';
+import { SectionHeader, Spinner } from '@/ui';
 
 interface HuntResultsTableProps {
   result: HuntResult | null;
@@ -122,7 +122,9 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
     return (
       <div className="card">
         <div className="p-8 text-center text-ink-muted">
-          <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent mx-auto mb-3" />
+          <div className="mx-auto mb-3 w-fit">
+            <Spinner size={32} color="#0057B7" />
+          </div>
           <p>Searching...</p>
         </div>
       </div>

@@ -5,6 +5,7 @@ import fcose from 'cytoscape-fcose';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch, API_KEY } from '../../lib/api';
+import { Spinner } from '@/ui';
 
 cytoscape.use(fcose);
 
@@ -311,7 +312,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
       {!isLayoutComplete && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-surface-base/95 backdrop-blur-sm">
           <div className="flex items-center gap-3 text-ink-muted">
-            <div className="w-5 h-5 border-2 border-ink-muted/20 border-t-ink-muted animate-spin" />
+            <Spinner size={20} color="#7F7F7F" />
             <span className="text-sm font-medium">Analyzing correlations...</span>
           </div>
         </div>

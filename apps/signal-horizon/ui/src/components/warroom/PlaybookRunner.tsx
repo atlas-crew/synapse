@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, Circle, Loader2, X, Play } from 'lucide-react';
+import { CheckCircle, Circle, X, Play } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { Playbook } from './PlaybookSelector';
+import { Spinner } from '@/ui';
 
 interface PlaybookRunnerProps {
   playbook: Playbook;
@@ -12,22 +13,39 @@ interface PlaybookRunnerProps {
 export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunnerProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isWaitingForApproval, setIsWaitingForApproval] = useState(false);
 
   useEffect(() => {
     if (isExecuting && currentStep < playbook.steps.length) {
-      // Simulate step execution
-      const timer = setTimeout(() => {
-        setCurrentStep((prev) => prev + 1);
-      }, 2000); // 2 seconds per step
-      return () => clearTimeout(timer);
+      const step = playbook.steps[currentStep];
+
+      // If this is an approval step and we haven't paused yet
+      if (step.type === 'approval' && !isWaitingForApproval) {
+        setIsWaitingForApproval(true);
+        return;
+      }
+
+      // Simulate step execution (only if not waiting for approval)
+      if (!isWaitingForApproval) {
+        const timer = setTimeout(() => {
+          setCurrentStep((prev) => prev + 1);
+        }, 2000); // 2 seconds per step
+        return () => clearTimeout(timer);
+      }
     } else if (isExecuting && currentStep === playbook.steps.length) {
       setIsExecuting(false);
       onComplete();
     }
-  }, [isExecuting, currentStep, playbook.steps.length, onComplete]);
+  }, [isExecuting, currentStep, isWaitingForApproval, playbook.steps, onComplete]);
 
   const handleStart = () => {
     setIsExecuting(true);
+    setIsWaitingForApproval(false);
+  };
+
+  const handleApprove = () => {
+    setIsWaitingForApproval(false);
+    setCurrentStep((prev) => prev + 1);
   };
 
   return (
@@ -50,25 +68,60 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
         {playbook.steps.map((step, index) => {
           const isCompleted = index < currentStep;
           const isCurrent = index === currentStep && isExecuting;
+          const isApproval = step.type === 'approval';
 
           return (
-            <div key={index} className="flex items-center gap-3">
-              {isCompleted ? (
-                <CheckCircle className="w-5 h-5 text-ac-green" />
-              ) : isCurrent ? (
-                <Loader2 className="w-5 h-5 text-ac-blue animate-spin" />
-              ) : (
-                <Circle className="w-5 h-5 text-ink-muted" />
+            <div key={index} className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                {isCompleted ? (
+                  <CheckCircle className="w-5 h-5 text-ac-green" />
+                ) : isCurrent ? (
+                  isWaitingForApproval ? (
+                    <Circle className="w-5 h-5 text-ac-orange fill-ac-orange/20 animate-pulse" />
+                  ) : (
+                    <Spinner size={20} color="#0057B7" />
+                  )
+                ) : (
+                  <Circle className="w-5 h-5 text-ink-muted" />
+                )}
+                
+                <div className="flex-1 flex items-center justify-between gap-4">
+                  <span className={clsx(
+                    "text-sm transition-colors",
+                    isCompleted ? "text-ink-primary" :
+                    isCurrent ? "text-ac-blue font-medium" :
+                    "text-ink-muted"
+                  )}>
+                    {step.name}
+                  </span>
+                  
+                  <span className={clsx(
+                    "text-[10px] px-1.5 py-0.5 rounded border uppercase font-semibold",
+                    isCompleted ? "bg-surface-subtle text-ink-muted border-border-subtle" :
+                    isCurrent ? (
+                      isApproval ? "bg-ac-orange/10 text-ac-orange border-ac-orange/30" :
+                      "bg-ac-blue/10 text-ac-blue border-ac-blue/30"
+                    ) : "bg-surface-base text-ink-muted border-border-subtle opacity-50"
+                  )}>
+                    {step.type}
+                  </span>
+                </div>
+              </div>
+
+              {isCurrent && isWaitingForApproval && (
+                <div className="ml-8 mt-1 p-3 bg-surface-subtle border border-border-subtle rounded space-y-3">
+                  <p className="text-xs text-ink-secondary">
+                    This step requires manual authorization to proceed. 
+                    Please review the security implications before approving.
+                  </p>
+                  <button
+                    onClick={handleApprove}
+                    className="w-full bg-ac-orange text-white text-xs font-bold py-2 rounded hover:bg-ac-orange/90 transition-colors uppercase tracking-wider"
+                  >
+                    Approve and Continue
+                  </button>
+                </div>
               )}
-              
-              <span className={clsx(
-                "text-sm transition-colors",
-                isCompleted ? "text-ink-primary" :
-                isCurrent ? "text-ac-blue font-medium" :
-                "text-ink-muted"
-              )}>
-                {step.name}
-              </span>
             </div>
           );
         })}

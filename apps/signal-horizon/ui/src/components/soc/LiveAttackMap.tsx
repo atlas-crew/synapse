@@ -6,6 +6,7 @@ import type { PickingInfo } from '@deck.gl/core';
 import { feature } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
 import { useLiveAttacks, type Attack, type SensorLocation } from '../../hooks/useLiveAttacks';
+import { Spinner } from '@/ui';
 
 // Hide shader debug text that luma.gl injects into the DOM
 function hideShaderDebugText() {
@@ -220,7 +221,7 @@ export function LiveAttackMap({ isDemo = true }: LiveAttackMapProps) {
     <div className="relative w-full h-[600px] bg-surface-base overflow-hidden border border-border-subtle" role="img" aria-label="Live attack map showing global threat activity with attack arcs and sensor locations">
       {isLoading ? (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="animate-spin h-8 w-8 border-b-2 border-ac-blue" />
+          <Spinner size={32} color="#0057B7" />
         </div>
       ) : webglFailed ? (
         <FallbackMap />

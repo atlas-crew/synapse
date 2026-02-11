@@ -20,7 +20,6 @@ import { motion, AnimatePresence } from 'framer-motion';
   RefreshCw,
   PanelLeft,
   Search as SearchIcon,
-  Loader2,
   Cpu,
   History,
   Code,
@@ -41,6 +40,7 @@ import { fetchActors, fetchSessions } from '../../hooks/soc/api';
 import { apiFetch } from '../../lib/api';
 import { useToast } from './Toast';
 import type { SocActor, SocSession } from '../../types/soc';
+import { Spinner } from '@/ui';
 
 interface CommandItem {
   id: string;
@@ -550,7 +550,7 @@ export function CommandPalette({
             >
               <div className="flex items-center px-4 border-b border-border-subtle bg-surface-subtle/50">
                 {isSearching ? (
-                  <Loader2 className="w-5 h-5 text-ac-blue animate-spin" />
+                  <Spinner size={20} color="#0057B7" />
                 ) : (
                   <Search className="w-5 h-5 text-ink-muted" />
                 )}

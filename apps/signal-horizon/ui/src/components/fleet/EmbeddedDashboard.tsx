@@ -9,6 +9,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { Spinner } from '@/ui';
 
 export interface EmbeddedDashboardProps {
   sensorId: string;
@@ -173,7 +174,11 @@ export function EmbeddedDashboard({
             className="p-2 hover:bg-surface-subtle disabled:opacity-50"
             title="Refresh Dashboard"
           >
-            <RefreshCw className={clsx('h-4 w-4', state.loading && 'animate-spin')} />
+            {state.loading ? (
+              <Spinner size={16} color="#7F7F7F" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
           </button>
 
           <button
@@ -225,7 +230,7 @@ export function EmbeddedDashboard({
             style={{ height: normalizedHeight }}
           >
             <div className="flex flex-col items-center gap-3">
-              <RefreshCw className="h-8 w-8 animate-spin text-ink-secondary" />
+              <Spinner size={32} color="#7F7F7F" />
               <p className="text-sm text-ink-secondary">Loading dashboard...</p>
             </div>
           </div>
