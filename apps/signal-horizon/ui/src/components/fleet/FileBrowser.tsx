@@ -35,7 +35,7 @@ import {
   type FileInfo,
   type DownloadProgress,
 } from '../../hooks/fleet/useFileTransfer';
-import { Modal, Spinner } from '@/ui';
+import { Modal, Spinner, Stack } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -373,7 +373,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
   const filename = download.path.split('/').pop() || 'file';
 
   return (
-    <div className="flex flex-col gap-1 p-2 bg-surface-subtle">
+    <Stack direction="column" gap="xs" className="p-2 bg-surface-subtle">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-ink-primary truncate" title={download.path}>
           {filename}
@@ -443,7 +443,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
           <span>{formatEta(download.eta)} remaining</span>
         )}
       </div>
-    </div>
+    </Stack>
   );
 });
 

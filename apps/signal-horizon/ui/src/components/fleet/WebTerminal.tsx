@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Activity, WifiOff, AlertCircle } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 export interface WebTerminalProps {
   sensorId: string;
@@ -261,20 +261,25 @@ export function WebTerminal({
         {/* Overlays */}
         {connectionState === 'connecting' && (
           <div className="absolute inset-0 bg-surface-card/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
+            <Stack direction="column" align="center" style={{ gap: '12px' }}>
               <Spinner size={32} color="#7F7F7F" />
               <p className="text-sm text-ink-secondary">Establishing connection...</p>
-            </div>
+            </Stack>
           </div>
         )}
 
         {connectionState === 'error' && (
           <div className="absolute inset-0 bg-surface-card/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 max-w-md text-center">
+            <Stack
+              direction="column"
+              align="center"
+              style={{ gap: '12px' }}
+              className="max-w-md text-center"
+            >
               <AlertCircle className="w-8 h-8 text-status-error" />
               <p className="text-sm text-ink-primary font-medium">Connection Error</p>
               <p className="text-xs text-ink-secondary">{errorMessage}</p>
-            </div>
+            </Stack>
           </div>
         )}
       </div>

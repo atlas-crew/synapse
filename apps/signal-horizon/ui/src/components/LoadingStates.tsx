@@ -4,7 +4,7 @@
  */
 
 import { clsx } from 'clsx';
-import { Spinner as UiSpinner } from '@/ui';
+import { Spinner as UiSpinner, Stack } from '@/ui';
 
 /**
  * Skeleton loading placeholder
@@ -164,10 +164,14 @@ export function LoadingSpinner({
   size?: 'sm' | 'md' | 'lg';
 }) {
   return (
-    <div
+    <Stack
+      direction="column"
+      align="center"
+      justify="center"
+      style={{ gap: '12px' }}
       role="status"
       aria-live="polite"
-      className="flex flex-col items-center justify-center gap-3 py-8"
+      className="py-8"
     >
       <UiSpinner
         size={size === 'sm' ? 16 : size === 'md' ? 32 : 48}
@@ -176,7 +180,7 @@ export function LoadingSpinner({
       />
       <span className="text-ink-secondary text-sm" aria-hidden="true">{message}</span>
       <span className="sr-only">{message}</span>
-    </div>
+    </Stack>
   );
 }
 

@@ -1,17 +1,17 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 13:21_
+_Generated: 2026-02-11 13:25_
 
 ## Summary
 
-**Total findings: 528**
+**Total findings: 509**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 483 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 476 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 | Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
-| Stack (col+gap) | 18 | Tailwind flex-col + gap → use <Stack direction=column> |
+| Stack (col+gap) | 6 | Tailwind flex-col + gap → use <Stack direction=column> |
 
 ### Files by Hit Count (Work Order)
 
@@ -20,7 +20,7 @@ Priority files to migrate first (most raw patterns):
 | Hits | File |
 |------|------|
 | 21 | `pages/AdminSettingsPage.tsx` |
-| 21 | `components/fleet/FileBrowser.tsx` |
+| 20 | `components/fleet/FileBrowser.tsx` |
 | 19 | `pages/fleet/ReleasesPage.tsx` |
 | 16 | `App.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
@@ -28,10 +28,7 @@ Priority files to migrate first (most raw patterns):
 | 11 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
-| 11 | `components/fleet/RemoteShell.tsx` |
-| 10 | `components/fleet/WebTerminal.tsx` |
 | 10 | `components/fleet/ServiceControlPanel.tsx` |
-| 10 | `components/LoadingStates.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 9 | `components/ui/CommandPalette.tsx` |
@@ -41,24 +38,27 @@ Priority files to migrate first (most raw patterns):
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
 | 8 | `pages/beam/BeamDashboardPage.tsx` |
 | 8 | `components/fleet/RolloutManager.tsx` |
+| 8 | `components/LoadingStates.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
 | 7 | `components/hunting/HuntResultsTable.tsx` |
 | 7 | `components/hunting/HuntQueryBuilder.tsx` |
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
+| 7 | `components/fleet/RemoteShell.tsx` |
 | 6 | `pages/soc/SessionsPage.tsx` |
 | 6 | `pages/fleet/SensorConfigPage.tsx` |
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
 | 6 | `pages/WarRoomPage.tsx` |
-| 6 | `pages/SupportPage.tsx` |
 | 6 | `components/soc/CampaignGraph.tsx` |
+| 6 | `components/fleet/WebTerminal.tsx` |
 | 6 | `components/AuthCoverageMap/AuthCoverageMap.tsx` |
 | 5 | `pages/hunting/RequestTimelinePage.tsx` |
 | 5 | `pages/fleet/OnboardingPage.tsx` |
 | 5 | `pages/fleet/FleetHealthPage.tsx` |
-| 5 | `pages/fleet/ConfigManagerPage.tsx` |
 | 5 | `pages/beam/analytics/ResponseTimesPage.tsx` |
 | 5 | `pages/OverviewPage.tsx` |
+| 5 | `components/hunting/RequestTimelineGraph.tsx` |
+| 5 | `components/fleet/pingora/CrawlerConfig.tsx` |
 
 ---
 
@@ -70,23 +70,11 @@ Tailwind flex-col + gap → use <Stack direction=column>
 | File | Line | Match |
 |------|------|-------|
 | `App.tsx` | 551 | `<div className="flex flex-col items-center gap-2">` |
-| `components/ui/Toast.tsx` | 86 | `className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none"` |
 | `components/AdminSettingsSkeleton.tsx` | 12 | `<div className="flex flex-col lg:flex-row gap-8">` |
-| `components/warroom/PlaybookRunner.tsx` | 109 | `<div key={index} className="flex flex-col gap-2">` |
 | `components/AuthCoverageMap/AuthCoverageMap.tsx` | 148 | `<div className="p-4 border-b border-border-subtle flex flex-col md:flex-row md:i` |
-| `components/fleet/WebTerminal.tsx` | 264 | `<div className="flex flex-col items-center gap-3">` |
-| `components/fleet/WebTerminal.tsx` | 273 | `<div className="flex flex-col items-center gap-3 max-w-md text-center">` |
 | `components/fleet/ServiceControlPanel.tsx` | 454 | `<div className={clsx('flex items-center justify-between', compact && 'flex-col i` |
-| `components/fleet/RemoteShell.tsx` | 386 | `<div className="flex flex-col items-center gap-3">` |
-| `components/fleet/RemoteShell.tsx` | 400 | `<div className="flex flex-col items-center gap-3 max-w-md text-center">` |
-| `components/fleet/EmbeddedDashboard.tsx` | 233 | `<div className="flex flex-col items-center gap-3">` |
-| `components/fleet/FileBrowser.tsx` | 376 | `<div className="flex flex-col gap-1 p-2 bg-surface-subtle">` |
-| `components/LoadingStates.tsx` | 170 | `className="flex flex-col items-center justify-center gap-3 py-8"` |
-| `pages/SupportPage.tsx` | 997 | `<div className="flex flex-col items-center justify-center h-64 gap-4">` |
 | `pages/AdminSettingsPage.tsx` | 487 | `<div className="flex flex-col lg:flex-row gap-8">` |
-| `pages/fleet/sensor-detail/NetworkTab.tsx` | 26 | `<div key={idx} className="flex-1 flex flex-col gap-px">` |
 | `pages/fleet/ConnectivityPage.tsx` | 480 | `<div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">` |
-| `pages/fleet/ConfigManagerPage.tsx` | 1239 | `<div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">` |
 
 ### Stack (row+align+gap)
 Tailwind flex + items-center + gap → use <Stack direction=row align=center>

@@ -9,7 +9,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 export interface EmbeddedDashboardProps {
   sensorId: string;
@@ -230,10 +230,10 @@ export function EmbeddedDashboard({
             className="flex items-center justify-center bg-surface-subtle"
             style={{ height: normalizedHeight }}
           >
-            <div className="flex flex-col items-center gap-3">
+            <Stack direction="column" align="center" style={{ gap: '12px' }}>
               <Spinner size={32} color="#7F7F7F" />
               <p className="text-sm text-ink-secondary">Loading dashboard...</p>
-            </div>
+            </Stack>
           </div>
         )}
 

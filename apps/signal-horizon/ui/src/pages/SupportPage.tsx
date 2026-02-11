@@ -18,7 +18,7 @@ import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
-import { Button, Input, SectionHeader, Spinner } from '@/ui';
+import { Button, Input, SectionHeader, Spinner, Stack } from '@/ui';
 import type { CSSProperties } from 'react';
 
 const authHeaders = {
@@ -994,10 +994,10 @@ Track these metrics:
         <div className="flex-1 p-16 overflow-y-auto" ref={containerRef}>
           <div className="max-w-3xl mx-auto">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-64 gap-4">
+              <Stack direction="column" align="center" justify="center" gap="md" className="h-64">
                 <Spinner size={40} color="#0057B7" />
                 <p className="text-xs font-bold text-ink-muted uppercase tracking-widest">Retrieving Tactical Intel...</p>
-              </div>
+              </Stack>
             ) : (
               <>
                 <div className="flex items-center gap-2 text-[10px] font-bold text-ink-muted uppercase tracking-widest mb-6">

@@ -1,4 +1,5 @@
 import { MetricCard } from '../../../components/fleet';
+import { Stack } from '@/ui';
 import { InfoRow, formatDuration } from './shared';
 
 interface NetworkTabProps {
@@ -23,7 +24,7 @@ export function NetworkTab({ data }: NetworkTabProps) {
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Network Traffic (Last Hour)</h3>
         <div className="h-48 flex items-end gap-1">
           {data.history.slice(-60).map((point: any, idx: number) => (
-            <div key={idx} className="flex-1 flex flex-col gap-px">
+            <Stack key={idx} direction="column" className="flex-1" style={{ gap: '1px' }}>
               <div
                 className="bg-ac-blue"
                 style={{ height: `${(point.inboundMbps / 150) * 100}%` }}
@@ -34,7 +35,7 @@ export function NetworkTab({ data }: NetworkTabProps) {
                 style={{ height: `${(point.outboundMbps / 150) * 100}%` }}
                 title={`Out: ${point.outboundMbps.toFixed(1)} Mbps`}
               />
-            </div>
+            </Stack>
           ))}
         </div>
         <div className="flex justify-between text-xs text-ink-secondary mt-2">

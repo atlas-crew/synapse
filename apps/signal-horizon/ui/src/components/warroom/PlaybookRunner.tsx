@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import { CheckCircle, Circle, X, Play, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { Playbook } from './PlaybookSelector';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 interface PlaybookRunnerProps {
   playbook: Playbook;
@@ -106,7 +106,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
           const isApprovalType = step.type === 'approval';
 
           return (
-            <div key={index} className="flex flex-col gap-2">
+            <Stack key={index} direction="column" gap="sm">
               <div className="flex items-center gap-3">
                 <div className="flex-shrink-0">
                   {isCompleted ? (
@@ -164,7 +164,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
                   </button>
                 </div>
               )}
-            </div>
+            </Stack>
           );
         })}
       </div>

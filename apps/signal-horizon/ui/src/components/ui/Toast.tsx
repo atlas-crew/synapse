@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useContext, createContext } from 'react';
 import { createPortal } from 'react-dom';
+import { Stack } from '@/ui';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -81,14 +82,16 @@ function ToastContainer({ toasts, dismiss }: { toasts: ToastEntry[]; dismiss: (i
   if (toasts.length === 0) return null;
 
   return createPortal(
-    <div
+    <Stack
+      direction="column"
+      gap="sm"
       aria-label="Notifications"
-      className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none"
+      className="fixed top-4 right-4 z-[9999] pointer-events-none"
     >
       {toasts.map((entry) => (
         <ToastItem key={entry.id} entry={entry} onDismiss={dismiss} />
       ))}
-    </div>,
+    </Stack>,
     document.body,
   );
 }

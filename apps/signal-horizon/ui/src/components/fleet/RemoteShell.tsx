@@ -8,7 +8,7 @@ import { X, Activity, WifiOff, AlertCircle, Clock, RefreshCw } from 'lucide-reac
 import '@xterm/xterm/css/xterm.css';
 import { useRemoteShell } from '../../hooks/fleet/useRemoteShell';
 import type { ShellSessionStatus } from '../../types/shell';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 /** Tokyo Night inspired terminal theme */
 const TERMINAL_THEME = {
@@ -383,21 +383,26 @@ export function RemoteShell({
         {/* Connecting Overlay */}
         {status === 'connecting' && (
           <div className="absolute inset-0 bg-surface-card/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
+            <Stack direction="column" align="center" style={{ gap: '12px' }}>
               <Spinner size={32} color="#0057B7" />
               <p className="text-sm text-ink-secondary">
                 {isReconnecting
                   ? `Reconnecting to ${sensorName}... (attempt ${reconnectAttempt}/${maxReconnectAttempts})`
                   : `Establishing connection to ${sensorName}...`}
               </p>
-            </div>
+            </Stack>
           </div>
         )}
 
         {/* Error Overlay */}
         {status === 'error' && !error && (
           <div className="absolute inset-0 bg-surface-card/80 backdrop-blur-sm flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 max-w-md text-center">
+            <Stack
+              direction="column"
+              align="center"
+              style={{ gap: '12px' }}
+              className="max-w-md text-center"
+            >
               <AlertCircle className="w-8 h-8 text-status-error" />
               <p className="text-sm text-ink-primary font-medium">Connection Error</p>
               <p className="text-xs text-ink-secondary">
@@ -409,7 +414,7 @@ export function RemoteShell({
               >
                 Retry Connection
               </button>
-            </div>
+            </Stack>
           </div>
         )}
 

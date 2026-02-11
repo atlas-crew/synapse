@@ -18,7 +18,7 @@ import { useSensors } from '../../hooks/fleet';
 import { useToast } from '../../components/ui/Toast';
 import { deepMergeConfig } from '../../utils';
 import YAML from 'yaml';
-import { Modal, SectionHeader } from '@/ui';
+import { Modal, SectionHeader, Stack } from '@/ui';
 
 interface ConfigTemplate {
   id: string;
@@ -1236,7 +1236,11 @@ export function ConfigManagerPage() {
                 )}
 
                 {templateConfigView === 'json' && (
-                  <div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
+                  <Stack
+                    direction="column"
+                    className="flex-1 overflow-hidden min-h-0"
+                    style={{ gap: '12px' }}
+                  >
                     <div className="border border-ac-magenta/30 bg-ac-magenta/10 px-4 py-3 text-xs text-ink-secondary">
                       <div className="text-xs font-bold uppercase tracking-[0.2em] text-ac-magenta mb-1">
                         Raw Config
@@ -1259,7 +1263,7 @@ export function ConfigManagerPage() {
                         className="h-full font-mono text-sm"
                       />
                     </div>
-                  </div>
+                  </Stack>
                 )}
               </div>
             </div>
