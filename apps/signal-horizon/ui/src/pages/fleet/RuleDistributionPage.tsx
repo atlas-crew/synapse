@@ -77,7 +77,7 @@ function StatCard({
           <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
         </div>
         <div className="p-3 bg-surface-subtle/50">
-          <Icon className="w-6 h-6" style={{ color: accentColor }} />
+          <Icon aria-hidden="true" className="w-6 h-6" style={{ color: accentColor }} />
         </div>
       </div>
     </motion.div>
@@ -198,9 +198,9 @@ function RuleCard({
           </button>
           <button onClick={onToggle}>
             {isExpanded ? (
-              <ChevronDown className="w-5 h-5 text-ink-secondary" />
+              <ChevronDown aria-hidden="true" className="w-5 h-5 text-ink-secondary" />
             ) : (
-              <ChevronRight className="w-5 h-5 text-ink-secondary" />
+              <ChevronRight aria-hidden="true" className="w-5 h-5 text-ink-secondary" />
             )}
           </button>
         </div>
@@ -222,26 +222,23 @@ function RuleCard({
                 </p>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="w-32 h-2 bg-surface-base overflow-hidden border border-border-subtle">
-                    <div
-                      className={clsx(
-                        'h-full',
-                        rule.deployedSensors === rule.totalSensors
-                          ? 'bg-status-success'
-                          : rule.deployedSensors > 0
-                            ? 'bg-surface-elevated'
-                            : 'bg-surface-elevated',
-                      )}
-                      style={
-                        rule.deployedSensors === rule.totalSensors
-                          ? { width: `${(rule.deployedSensors / rule.totalSensors) * 100}%` }
-                          : rule.deployedSensors > 0
-                            ? {
-                                width: `${(rule.deployedSensors / rule.totalSensors) * 100}%`,
-                                background: colors.blue,
-                              }
-                            : { width: `${(rule.deployedSensors / rule.totalSensors) * 100}%` }
-                      }
-                    />
+                    {(() => {
+                      const pct = (rule.deployedSensors / rule.totalSensors) * 100;
+                      const isComplete = rule.deployedSensors === rule.totalSensors;
+                      const isPartial = rule.deployedSensors > 0 && !isComplete;
+                      return (
+                        <div
+                          className={clsx(
+                            'h-full',
+                            isComplete ? 'bg-status-success' : 'bg-surface-elevated',
+                          )}
+                          style={{
+                            width: `${pct}%`,
+                            background: isPartial ? colors.blue : undefined,
+                          }}
+                        />
+                      );
+                    })()}
                   </div>
                   <span className="text-ink-secondary text-xs font-mono">
                     {rule.deployedSensors}/{rule.totalSensors} online
@@ -531,7 +528,10 @@ export function RuleDistributionPage() {
       <div className="space-y-4">
         {rules.length === 0 ? (
           <div className="text-center py-20 bg-surface-subtle border border-dashed border-border-subtle">
-            <ShieldOff className="w-12 h-12 mx-auto text-ink-muted mb-4 opacity-20" />
+            <ShieldOff
+              aria-hidden="true"
+              className="w-12 h-12 mx-auto text-ink-muted mb-4 opacity-20"
+            />
             <p className="text-ink-secondary uppercase tracking-widest font-bold">
               No rules found in tenant policy
             </p>
