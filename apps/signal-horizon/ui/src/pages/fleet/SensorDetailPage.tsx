@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Alert, Breadcrumb, Button, EmptyState, colors } from '@/ui';
+import { Alert, Breadcrumb, Button, EmptyState, Tabs, colors } from '@/ui';
 import { SensorStatusBadge } from '../../components/fleet';
 import { SensorDetailSkeleton } from '../../components/LoadingStates';
 import { RemoteShell } from '../../components/fleet/RemoteShell';
@@ -143,6 +143,8 @@ export function SensorDetailPage() {
     { key: 'remote-shell', label: 'Remote Shell' },
     { key: 'files', label: 'Files' },
   ];
+  const tabOptions = tabs.map((tab) => ({ key: tab.key, label: tab.label }));
+  const isTabType = (key: string): key is TabType => tabs.some((tab) => tab.key === key);
 
   return (
     <div className="space-y-6 p-6">
@@ -191,29 +193,19 @@ export function SensorDetailPage() {
 
       {/* Tabs — WCAG 1.3.1 ARIA tab pattern */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-navy">
-        <nav
-          role="tablist"
-          aria-label="Sensor details"
-          className="flex flex-wrap gap-6 px-6 py-3 bg-surface-inset border-b border-border-subtle"
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              role="tab"
-              id={`tab-${tab.key}`}
-              aria-selected={activeTab === tab.key}
-              aria-controls={`tabpanel-${tab.key}`}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-1 py-2 text-xs uppercase tracking-[0.2em] border-b-2 transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                activeTab === tab.key
-                  ? 'border-ac-blue text-ac-blue'
-                  : 'border-transparent text-ink-secondary hover:text-ink-primary hover:border-border-subtle'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <div className="px-6 py-3 bg-surface-inset border-b border-border-subtle">
+          <Tabs
+            tabs={tabOptions}
+            active={activeTab}
+            onChange={(key) => {
+              if (isTabType(key)) setActiveTab(key);
+            }}
+            size="sm"
+            ariaLabel="Sensor details"
+            idPrefix="tab-"
+            panelIdPrefix="tabpanel-"
+          />
+        </div>
       </div>
 
       {/* Tab Content */}

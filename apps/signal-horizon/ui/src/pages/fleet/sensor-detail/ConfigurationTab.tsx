@@ -23,10 +23,24 @@ import {
   updatePingoraConfig,
   runPingoraAction,
 } from './shared';
+import { Tabs } from '@/ui';
 
 interface ConfigurationTabProps {
   sensor: any;
 }
+
+type ConfigTab = 'general' | 'kernel' | 'pingora' | 'drift' | 'history';
+
+const CONFIG_TABS: { key: ConfigTab; label: string }[] = [
+  { key: 'general', label: 'General' },
+  { key: 'kernel', label: 'Kernel' },
+  { key: 'pingora', label: 'Synapse-Pingora' },
+  { key: 'drift', label: 'Drift Analysis' },
+  { key: 'history', label: 'History' },
+];
+
+const isConfigTab = (key: string): key is ConfigTab =>
+  CONFIG_TABS.some((tab) => tab.key === key);
 
 export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
   const id = sensor.id;
@@ -34,7 +48,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [configTab, setConfigTab] = useState<'general' | 'kernel' | 'pingora' | 'drift' | 'history'>('general');
+  const [configTab, setConfigTab] = useState<ConfigTab>('general');
 
   const {
     data: systemConfig,
@@ -211,30 +225,23 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       </div>
     </div>
   );
-
   return (
     <div className="space-y-6">
       {/* Config Tabs — ARIA tab pattern */}
       <div className="card border border-border-subtle border-t-2 border-t-ac-blue">
         <div className="flex justify-between items-center gap-4 p-4 bg-surface-inset">
-          <div role="tablist" aria-label="Configuration sections" className="flex gap-2">
-          {(['general', 'kernel', 'pingora', 'drift', 'history'] as const).map((tab) => (
-            <button
-              key={tab}
-              role="tab"
-              id={`tab-config-${tab}`}
-              aria-selected={configTab === tab}
-              aria-controls={`tabpanel-config-${tab}`}
-              onClick={() => setConfigTab(tab)}
-              className={`px-4 py-2 text-xs uppercase tracking-[0.2em] border transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                configTab === tab
-                  ? 'border-ac-blue text-ac-blue bg-ac-blue/10'
-                  : 'border-border-subtle text-ink-secondary hover:border-ac-blue/50 hover:text-ink-primary'
-              }`}
-            >
-              {tab === 'pingora' ? 'Synapse-Pingora' : tab === 'drift' ? 'Drift Analysis' : tab}
-            </button>
-          ))}
+          <div className="min-w-0 flex-1">
+            <Tabs
+              tabs={CONFIG_TABS}
+              active={configTab}
+              onChange={(key) => {
+                if (isConfigTab(key)) setConfigTab(key);
+              }}
+              size="sm"
+              ariaLabel="Configuration sections"
+              idPrefix="tab-config-"
+              panelIdPrefix="tabpanel-config-"
+            />
           </div>
 
           <div className="flex gap-3">
@@ -263,16 +270,18 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       </div>
 
       {configTab === 'drift' && (
-        <ConfigDriftViewer
-          expectedConfig={driftData.expected}
-          actualConfig={driftData.actual}
-          lastSync="Just now"
-          driftDetected={false}
-        />
+        <div role="tabpanel" id="tabpanel-config-drift" aria-labelledby="tab-config-drift">
+          <ConfigDriftViewer
+            expectedConfig={driftData.expected}
+            actualConfig={driftData.actual}
+            lastSync="Just now"
+            driftDetected={false}
+          />
+        </div>
       )}
 
       {configTab === 'pingora' && (
-        <div className="space-y-6">
+        <div role="tabpanel" id="tabpanel-config-pingora" aria-labelledby="tab-config-pingora" className="space-y-6">
           {isLoading ? (
             <ConfigPanelSkeleton />
           ) : pingoraError ? (
@@ -317,7 +326,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       )}
 
       {configTab === 'general' && (
-        <div className="space-y-4">
+        <div role="tabpanel" id="tabpanel-config-general" aria-labelledby="tab-config-general" className="space-y-4">
           {!isTunnelActive ? (
             renderTunnelInactive('System configuration')
           ) : isSystemConfigLoading ? (
@@ -398,79 +407,81 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       )}
 
       {configTab === 'kernel' && (
-        !isTunnelActive ? (
-          renderTunnelInactive('Kernel parameters')
-        ) : (
-          <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-xs text-ink-secondary">
-                  <input
-                    type="checkbox"
-                    checked={persistKernel}
-                    onChange={(event) => setPersistKernel(event.target.checked)}
-                  />
-                  Persist changes
-                </label>
-                <button
-                  className="px-3 py-1.5 text-xs border border-border-subtle text-ink-secondary hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                  onClick={() => refetchKernel()}
-                  disabled={isKernelFetching}
-                >
-                  Refresh
-                </button>
-                <button
-                  className="px-3 py-1.5 text-xs bg-accent-primary text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
-                  onClick={() => updateKernelMutation.mutate(kernelDraft)}
-                  disabled={updateKernelMutation.isPending || isKernelLoading}
-                >
-                  Save Changes
-                </button>
+        <div role="tabpanel" id="tabpanel-config-kernel" aria-labelledby="tab-config-kernel">
+          {!isTunnelActive ? (
+            renderTunnelInactive('Kernel parameters')
+          ) : (
+            <div className="card border border-border-subtle border-t-2 border-t-ac-blue p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-ink-primary">Kernel Parameters (sysctl)</h3>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={persistKernel}
+                      onChange={(event) => setPersistKernel(event.target.checked)}
+                    />
+                    Persist changes
+                  </label>
+                  <button
+                    className="px-3 py-1.5 text-xs border border-border-subtle text-ink-secondary hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+                    onClick={() => refetchKernel()}
+                    disabled={isKernelFetching}
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    className="px-3 py-1.5 text-xs bg-accent-primary text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+                    onClick={() => updateKernelMutation.mutate(kernelDraft)}
+                    disabled={updateKernelMutation.isPending || isKernelLoading}
+                  >
+                    Save Changes
+                  </button>
+                </div>
               </div>
+              {kernelError && (
+                <div className="text-sm text-ink-primary border-l-2 border-l-ac-red pl-2">Failed to load kernel config.</div>
+              )}
+              <table className="w-full text-sm">
+                <caption className="sr-only">Kernel parameters and their current values</caption>
+                <thead className="bg-surface-inset text-ink-secondary border-b border-ac-blue/20">
+                  <tr className="text-left">
+                    <th className="pb-2">Parameter</th>
+                    <th className="pb-2">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(kernelDraft).map(([key, value]) => (
+                    <tr key={key} className="border-t border-border-subtle">
+                      <td className="py-3 font-mono text-ink-secondary">{key}</td>
+                      <td className="py-3">
+                        <input
+                          className="w-full border border-border-subtle bg-surface-subtle px-2 py-1 text-sm font-mono text-ink-primary"
+                          value={value ?? ''}
+                          aria-label={`Value for ${key}`}
+                          onChange={(event) =>
+                            setKernelDraft((current) => ({ ...current, [key]: event.target.value }))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {Object.keys(kernelDraft).length === 0 && !isKernelLoading && (
+                    <tr>
+                      <td className="py-4 text-sm text-ink-secondary" colSpan={2}>
+                        No kernel parameters available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            {kernelError && (
-              <div className="text-sm text-ink-primary border-l-2 border-l-ac-red pl-2">Failed to load kernel config.</div>
-            )}
-            <table className="w-full text-sm">
-              <caption className="sr-only">Kernel parameters and their current values</caption>
-              <thead className="bg-surface-inset text-ink-secondary border-b border-ac-blue/20">
-                <tr className="text-left">
-                  <th className="pb-2">Parameter</th>
-                  <th className="pb-2">Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(kernelDraft).map(([key, value]) => (
-                  <tr key={key} className="border-t border-border-subtle">
-                    <td className="py-3 font-mono text-ink-secondary">{key}</td>
-                    <td className="py-3">
-                      <input
-                        className="w-full border border-border-subtle bg-surface-subtle px-2 py-1 text-sm font-mono text-ink-primary"
-                        value={value ?? ''}
-                        aria-label={`Value for ${key}`}
-                        onChange={(event) =>
-                          setKernelDraft((current) => ({ ...current, [key]: event.target.value }))
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-                {Object.keys(kernelDraft).length === 0 && !isKernelLoading && (
-                  <tr>
-                    <td className="py-4 text-sm text-ink-secondary" colSpan={2}>
-                      No kernel parameters available.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )
+          )}
+        </div>
       )}
 
       {configTab === 'history' && (
-        <div className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
+        <div role="tabpanel" id="tabpanel-config-history" aria-labelledby="tab-config-history" className="card border border-border-subtle border-t-2 border-t-ac-navy p-6">
           <h3 className="text-lg font-semibold text-ink-primary mb-4">Recent Configuration Changes</h3>
           {isHistoryLoading ? (
             <ConfigPanelSkeleton />

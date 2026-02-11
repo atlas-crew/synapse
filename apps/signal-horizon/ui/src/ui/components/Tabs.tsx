@@ -34,6 +34,9 @@ interface TabsProps {
   variant?: TabVariant;
   size?: TabSize;
   fill?: boolean;
+  ariaLabel?: string;
+  idPrefix?: string;
+  panelIdPrefix?: string;
   style?: React.CSSProperties;
 }
 
@@ -50,12 +53,29 @@ export const Tabs: React.FC<TabsProps> = ({
   variant = 'underline',
   size = 'md',
   fill,
+  ariaLabel,
+  idPrefix,
+  panelIdPrefix,
   style,
 }) => {
   const s = sizeMap[size];
+  const enabledTabs = tabs.filter((tab) => !tab.disabled);
+
+  const handleArrowNavigation = (currentKey: string, key: string) => {
+    if (key !== 'ArrowRight' && key !== 'ArrowLeft') return;
+    if (enabledTabs.length === 0) return;
+    const currentIndex = enabledTabs.findIndex((tab) => tab.key === currentKey);
+    if (currentIndex === -1) return;
+
+    const delta = key === 'ArrowRight' ? 1 : -1;
+    const nextIndex = (currentIndex + delta + enabledTabs.length) % enabledTabs.length;
+    onChange(enabledTabs[nextIndex].key);
+  };
 
   return (
     <div
+      role="tablist"
+      aria-label={ariaLabel}
       style={{
         display: 'flex',
         gap: variant === 'pills' ? spacing.xs : '0',
@@ -72,7 +92,13 @@ export const Tabs: React.FC<TabsProps> = ({
             <button
               key={tab.key}
               onClick={() => !tab.disabled && onChange(tab.key)}
+              onKeyDown={(e) => handleArrowNavigation(tab.key, e.key)}
               disabled={tab.disabled}
+              role="tab"
+              id={idPrefix ? `${idPrefix}${tab.key}` : undefined}
+              aria-selected={isActive}
+              aria-controls={panelIdPrefix ? `${panelIdPrefix}${tab.key}` : undefined}
+              tabIndex={isActive ? 0 : -1}
               style={{
                 fontFamily,
                 fontWeight: isActive ? fontWeight.medium : fontWeight.regular,
@@ -119,7 +145,13 @@ export const Tabs: React.FC<TabsProps> = ({
           <button
             key={tab.key}
             onClick={() => !tab.disabled && onChange(tab.key)}
+            onKeyDown={(e) => handleArrowNavigation(tab.key, e.key)}
             disabled={tab.disabled}
+            role="tab"
+            id={idPrefix ? `${idPrefix}${tab.key}` : undefined}
+            aria-selected={isActive}
+            aria-controls={panelIdPrefix ? `${panelIdPrefix}${tab.key}` : undefined}
+            tabIndex={isActive ? 0 : -1}
             style={{
               fontFamily,
               fontWeight: isActive ? fontWeight.medium : fontWeight.regular,
