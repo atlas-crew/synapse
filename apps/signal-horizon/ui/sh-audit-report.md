@@ -1,9 +1,9 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 13:16_
+_Generated: 2026-02-11 13:19_
 
 ## Summary
 
-**Total findings: 547**
+**Total findings: 539**
 
 ### Findings by Component
 
@@ -12,9 +12,6 @@ _Generated: 2026-02-11 13:16_
 | Stack (row+align+gap) | 487 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 | Stack (row+justify+gap) | 27 | Tailwind flex + justify-between + gap → use <Stack direction=row justify=space-between> |
 | Stack (col+gap) | 25 | Tailwind flex-col + gap → use <Stack direction=column> |
-| Text | 6 | Raw styled text elements → use <Text> primitive |
-| Stack (inline) | 1 | Inline flex style → use <Stack> primitive |
-| Box | 1 | Raw styled div → use <Box> primitive |
 
 ### Files by Hit Count (Work Order)
 
@@ -27,27 +24,27 @@ Priority files to migrate first (most raw patterns):
 | 19 | `pages/fleet/ReleasesPage.tsx` |
 | 17 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 16 | `App.tsx` |
-| 13 | `pages/fleet/BandwidthDashboardPage.tsx` |
+| 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 12 | `components/fleet/DiagnosticsPanel.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
 | 11 | `components/fleet/RemoteShell.tsx` |
 | 10 | `components/fleet/WebTerminal.tsx` |
 | 10 | `components/fleet/ServiceControlPanel.tsx` |
-| 10 | `components/fleet/LogViewer.tsx` |
 | 10 | `components/LoadingStates.tsx` |
 | 9 | `pages/fleet/SensorConfigPage.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
-| 9 | `pages/beam/BeamDashboardPage.tsx` |
 | 9 | `components/ui/CommandPalette.tsx` |
 | 9 | `components/hunting/BehavioralAnomaliesPanel.tsx` |
+| 9 | `components/fleet/LogViewer.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
-| 8 | `pages/OverviewPage.tsx` |
+| 8 | `pages/beam/BeamDashboardPage.tsx` |
 | 8 | `components/fleet/RolloutManager.tsx` |
 | 7 | `pages/fleet/RuleDistributionPage.tsx` |
 | 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
+| 7 | `pages/OverviewPage.tsx` |
 | 7 | `components/hunting/HuntResultsTable.tsx` |
 | 7 | `components/hunting/HuntQueryBuilder.tsx` |
 | 7 | `components/fleet/SynapseConfigEditor.tsx` |
@@ -66,32 +63,6 @@ Priority files to migrate first (most raw patterns):
 ---
 
 ## Detailed Findings
-
-### Box
-Raw styled div → use <Box> primitive
-
-| File | Line | Match |
-|------|------|-------|
-| `components/fleet/LogViewer.tsx` | 120 | `<div style={style} className="group">` |
-
-### Text
-Raw styled text elements → use <Text> primitive
-
-| File | Line | Match |
-|------|------|-------|
-| `components/ui/PersistentTooltip.tsx` | 152 | `<p style={{ ...tooltipDefaults.labelStyle, margin: '0 0 4px' }}>` |
-| `components/beam/analytics/StatusCodesDonut.tsx` | 68 | `<span style={{ fontFamily, fontSize: 12 }} className="text-ink-secondary">` |
-| `pages/OverviewPage.tsx` | 447 | `<span style={{ color: colors.orange }}>Elevated</span>` |
-| `pages/IntelPage.tsx` | 240 | `<span style={{ color: colors.red }}>{fp.hits.toLocaleString()} hits</span>` |
-| `pages/beam/BeamDashboardPage.tsx` | 597 | `<span style={{ color: colors.green, fontSize: '14px' }}>Protected</span>` |
-| `pages/fleet/BandwidthDashboardPage.tsx` | 607 | `<span style={{ color: colors.green }}>Live</span>` |
-
-### Stack (inline)
-Inline flex style → use <Stack> primitive
-
-| File | Line | Match |
-|------|------|-------|
-| `components/ui/PersistentTooltip.tsx` | 162 | `display: 'flex',` |
 
 ### Stack (col+gap)
 Tailwind flex-col + gap → use <Stack direction=column>

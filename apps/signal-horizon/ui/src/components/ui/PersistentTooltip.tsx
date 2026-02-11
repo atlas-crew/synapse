@@ -22,7 +22,7 @@ import type {
   ValueType,
   NameType,
 } from 'recharts/types/component/DefaultTooltipContent';
-import { colors, tooltipDefaults } from '@/ui';
+import { Text, colors, tooltipDefaults } from '@/ui';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -149,9 +149,9 @@ export function PersistentTooltip({
       }}
     >
       {lastLabel.current != null && (
-        <p style={{ ...tooltipDefaults.labelStyle, margin: '0 0 4px' }}>
+        <Text as="p" style={{ ...tooltipDefaults.labelStyle, margin: '0 0 4px' }} noMargin>
           {lastLabel.current}
-        </p>
+        </Text>
       )}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {items.map((entry, idx) => (
@@ -159,23 +159,19 @@ export function PersistentTooltip({
             key={entry.dataKey?.toString() ?? idx}
             style={{
               ...tooltipDefaults.itemStyle,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
               padding: '2px 0',
             }}
           >
             <span
+              className="inline-block align-middle mr-1.5"
               style={{
-                display: 'inline-block',
                 width: 10,
                 height: 10,
                 backgroundColor:
                   (entry.color as string) ?? colors.skyBlue,
-                flexShrink: 0,
               }}
             />
-            <span>
+            <span className="align-middle">
               {entry.name}: {typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}
             </span>
           </li>

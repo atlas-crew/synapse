@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { colors, fontFamily, legendDefaults, tooltipDefaults } from '@/ui';
+import { Text, colors, fontFamily, legendDefaults, tooltipDefaults } from '@/ui';
 
 interface StatusCodeData {
   name: string;
@@ -65,9 +65,9 @@ export const StatusCodesDonut = memo(function StatusCodesDonut({
               const item = data.find((d) => d.name === value);
               const percentage = item ? ((item.value / total) * 100).toFixed(1) : '0';
               return (
-                <span style={{ fontFamily, fontSize: 12 }} className="text-ink-secondary">
+                <Text as="span" style={{ fontFamily, fontSize: 12 }} className="text-ink-secondary">
                   {value} ({percentage}%)
-                </span>
+                </Text>
               );
             }}
           />

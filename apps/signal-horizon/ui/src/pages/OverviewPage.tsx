@@ -444,7 +444,7 @@ export default function OverviewPage() {
                 style={{ color: 'rgba(255,255,255,0.5)' }}
               >
                 <span>Threat Level</span>
-                <span style={{ color: colors.orange }}>Elevated</span>
+                <span className="text-ac-orange">Elevated</span>
               </div>
               <div
                 className="h-1 w-full overflow-hidden"

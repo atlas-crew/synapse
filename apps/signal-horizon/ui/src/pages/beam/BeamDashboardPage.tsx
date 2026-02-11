@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Box, SectionHeader, alpha, axisDefaults, colors, spacing } from '@/ui';
+import { Box, SectionHeader, Text, alpha, axisDefaults, colors, spacing } from '@/ui';
 import {
   useBeamStats,
   useBlockedRequests,
@@ -594,7 +594,9 @@ export default function BeamDashboardPage() {
               aria-hidden="true"
               style={{ width: 8, height: 8, background: colors.green, display: 'inline-block' }}
             />
-            <span style={{ color: colors.green, fontSize: '14px' }}>Protected</span>
+            <Text as="span" color={colors.green} style={{ fontSize: '14px' }} noMargin>
+              Protected
+            </Text>
           </Box>
         }
       />

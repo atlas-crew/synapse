@@ -32,6 +32,7 @@ import {
 } from 'recharts';
 import {
   SectionHeader,
+  Text,
   alpha,
   axisDefaults,
   barDefaults,
@@ -604,7 +605,9 @@ export default function BandwidthDashboardPage() {
               aria-hidden="true"
               style={{ backgroundColor: colors.green }}
             />
-            <span style={{ color: colors.green }}>Live</span>
+            <Text as="span" color={colors.green} noMargin>
+              Live
+            </Text>
           </div>
         </div>
       </header>

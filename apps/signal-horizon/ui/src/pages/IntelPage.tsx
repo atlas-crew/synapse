@@ -10,6 +10,7 @@ import {
   CARD_HEADER_TITLE_STYLE,
   SectionHeader,
   Tabs,
+  Text,
   alpha,
   axisDefaults,
   colors,
@@ -237,7 +238,9 @@ export default function IntelPage() {
             {newFingerprints.map((fp) => (
               <div key={fp.label} className="flex items-center justify-between text-sm">
                 <span className="text-ink-secondary">{fp.label}</span>
-                <span style={{ color: colors.red }}>{fp.hits.toLocaleString()} hits</span>
+                <Text as="span" color={colors.red} noMargin>
+                  {fp.hits.toLocaleString()} hits
+                </Text>
               </div>
             ))}
             <div>

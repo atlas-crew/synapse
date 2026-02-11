@@ -26,6 +26,7 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import { useLogStream } from '../../hooks/fleet/useLogStream';
+import { Box } from '@/ui';
 import type {
   LogEntry,
   LogFilter,
@@ -117,7 +118,7 @@ const LogRow = memo(function LogRow({ entry, style, isExpanded, onToggle }: LogR
   const levelColors = LOG_LEVEL_COLORS[entry.level];
 
   return (
-    <div style={style} className="group">
+    <Box style={style} className="group">
       {/* Main row */}
       <div
         className={`
@@ -225,7 +226,7 @@ const LogRow = memo(function LogRow({ entry, style, isExpanded, onToggle }: LogR
           )}
         </div>
       )}
-    </div>
+    </Box>
   );
 });
 
