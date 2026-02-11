@@ -29,9 +29,23 @@ import {
 } from 'recharts';
 import { useApiIntelligence } from '../../../hooks/useApiIntelligence';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  CARD_HEADER_TITLE_STYLE,
+  SectionHeader,
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 
 type ChangeType = 'added' | 'removed' | 'modified' | 'deprecated';
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 type SchemaChangeView = {
   id: string;
@@ -329,10 +343,13 @@ export default function SchemaChangesPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Schema Changes</h1>
-          <p className="text-ink-secondary mt-1">Loading schema change data...</p>
-        </div>
+        <SectionHeader
+          title="Schema Changes"
+          description="Loading schema change data..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <CardSkeleton />
       </div>
@@ -342,10 +359,13 @@ export default function SchemaChangesPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-light text-ink-primary">Schema Changes</h1>
-        <p className="text-ink-secondary mt-1">API schema drift detection and versioning</p>
-      </div>
+      <SectionHeader
+        title="Schema Changes"
+        description="API schema drift detection and versioning"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
@@ -373,7 +393,12 @@ export default function SchemaChangesPage() {
       {/* Endpoint Drift Trends */}
       <div className="card h-[320px]">
         <div className="card-header">
-          <h2 className="font-medium text-ink-primary">Schema Drift Trends (Top Endpoints)</h2>
+          <SectionHeader
+            title="Schema Drift Trends (Top Endpoints)"
+            size="h4"
+            style={{ marginBottom: 0 }}
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
         </div>
         <div className="card-body h-full">
           {trendChartData.length > 0 ? (

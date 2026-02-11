@@ -29,7 +29,7 @@ import {
   Line,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
+import { SectionHeader, axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type PatternCategory =
   | 'injection'
@@ -39,6 +39,12 @@ type PatternCategory =
   | 'data_exposure'
   | 'protocol';
 type TrendDirection = 'up' | 'down' | 'stable';
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 // Demo data - attack patterns
 const DEMO_ATTACK_PATTERNS = [
@@ -401,10 +407,13 @@ export default function AttackPatternsPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Attack Patterns</h1>
-          <p className="text-ink-secondary mt-1">Loading pattern data...</p>
-        </div>
+        <SectionHeader
+          title="Attack Patterns"
+          description="Loading pattern data..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <CardSkeleton />
       </div>
@@ -414,10 +423,13 @@ export default function AttackPatternsPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-light text-ink-primary">Attack Patterns</h1>
-        <p className="text-ink-secondary mt-1">Pattern detection and threat intelligence</p>
-      </div>
+      <SectionHeader
+        title="Attack Patterns"
+        description="Pattern detection and threat intelligence"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-5 gap-4">

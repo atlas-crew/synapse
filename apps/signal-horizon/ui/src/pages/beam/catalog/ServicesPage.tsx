@@ -17,8 +17,16 @@ import {
 import { clsx } from 'clsx';
 // import { useBeamEndpoints } from '../../../stores/beamStore';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
+import { SectionHeader } from '@/ui';
 
 // Demo data - services with endpoints
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
+
 const DEMO_SERVICES = [
   {
     name: 'user-service',
@@ -461,10 +469,13 @@ export default function ServicesPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Services</h1>
-          <p className="text-ink-secondary mt-1">Loading service data...</p>
-        </div>
+        <SectionHeader
+          title="Services"
+          description="Loading service data..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <CardSkeleton />
       </div>
@@ -474,10 +485,13 @@ export default function ServicesPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-light text-ink-primary">Services</h1>
-        <p className="text-ink-secondary mt-1">Endpoints grouped by service</p>
-      </div>
+      <SectionHeader
+        title="Services"
+        description="Endpoints grouped by service"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">

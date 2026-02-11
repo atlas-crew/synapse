@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { Button } from '@/ui';
+import { Button, CARD_HEADER_TITLE_STYLE, SectionHeader } from '@/ui';
 
 type BlockReason =
   | 'sql_injection'
@@ -31,6 +31,12 @@ type BlockReason =
   | 'path_traversal'
   | 'credential_stuffing';
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 // Demo data - blocked requests
 const DEMO_BLOCKED_REQUESTS = [
@@ -287,17 +293,22 @@ function DecisionTraceModal({
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-ink-primary">Decision Trace</h2>
-              <p className="text-sm text-ink-secondary">Why was this request blocked?</p>
-            </div>
-            <Button
-              onClick={onClose}
-              variant="ghost"
-              size="sm"
-              icon={<X className="w-5 h-5 text-ink-secondary" />}
-              style={{ height: '32px', padding: 0 }}
-              aria-label="Close decision trace"
+            <SectionHeader
+              title="Decision Trace"
+              description="Why was this request blocked?"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Button
+                  onClick={onClose}
+                  variant="ghost"
+                  size="sm"
+                  icon={<X className="w-5 h-5 text-ink-secondary" />}
+                  style={{ height: '32px', padding: 0 }}
+                  aria-label="Close decision trace"
+                />
+              }
             />
           </div>
 
@@ -486,10 +497,13 @@ export default function BlockedRequestsPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Blocked Requests</h1>
-          <p className="text-ink-secondary mt-1">Loading blocked requests...</p>
-        </div>
+        <SectionHeader
+          title="Blocked Requests"
+          description="Loading blocked requests..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <TableSkeleton />
       </div>
@@ -499,20 +513,23 @@ export default function BlockedRequestsPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Blocked Requests</h1>
-          <p className="text-ink-secondary mt-1">Review and analyze blocked API requests</p>
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={<RefreshCw className="w-4 h-4" />}
-          style={{ height: '36px', padding: '0 16px' }}
-        >
-          Refresh
-        </Button>
-      </div>
+      <SectionHeader
+        title="Blocked Requests"
+        description="Review and analyze blocked API requests"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<RefreshCw className="w-4 h-4" />}
+            style={{ height: '36px', padding: '0 16px' }}
+          >
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">

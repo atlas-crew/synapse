@@ -21,9 +21,16 @@ import {
 import { clsx } from 'clsx';
 import { useBeamEndpoints } from '../../../hooks/useBeamEndpoints';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
+import { SectionHeader } from '@/ui';
 
 type SortField = 'path' | 'method' | 'requestCount' | 'lastSeenAt' | 'avgLatencyMs';
 type SortDirection = 'asc' | 'desc';
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 // Demo data - discovered endpoints
 const DEMO_ENDPOINTS = [
@@ -496,10 +503,13 @@ export default function ApiCatalogPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">API Catalog</h1>
-          <p className="text-ink-secondary mt-1">Loading endpoint data...</p>
-        </div>
+        <SectionHeader
+          title="API Catalog"
+          description="Loading endpoint data..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <TableSkeleton />
       </div>
@@ -509,32 +519,35 @@ export default function ApiCatalogPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">API Catalog</h1>
-          <p className="text-ink-secondary mt-1">Discovered endpoints and API inventory</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
-            {isConnected ? (
-              <Wifi className="w-4 h-4 text-green-400" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-ink-secondary" />
-            )}
-            <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
-              {isConnected ? 'Live' : 'Demo Data'}
-            </span>
+      <SectionHeader
+        title="API Catalog"
+        description="Discovered endpoints and API inventory"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm">
+              {isConnected ? (
+                <Wifi className="w-4 h-4 text-green-400" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-ink-secondary" />
+              )}
+              <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
+                {isConnected ? 'Live' : 'Demo Data'}
+              </span>
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-subtle/80 text-sm text-ink-secondary transition-colors"
+              disabled={hookLoading}
+            >
+              <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
+              Refresh
+            </button>
           </div>
-          <button
-            onClick={() => refetch()}
-            className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-subtle/80 text-sm text-ink-secondary transition-colors"
-            disabled={hookLoading}
-          >
-            <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
-            Refresh
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">

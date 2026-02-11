@@ -32,13 +32,27 @@ import {
 import { useBeamThreats, type ThreatTimeRange } from '../../../hooks/useBeamThreats';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
 import { useHorizonStore, useTimeRange } from '../../../stores/horizonStore';
-import { Button, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
+import {
+  Button,
+  SectionHeader,
+  axisDefaults,
+  colors,
+  gridDefaultsSoft,
+  tooltipDefaults,
+  xAxisNoLine,
+} from '@/ui';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
 type TimeRange = ThreatTimeRange;
 
 const tickSmallX = { ...axisDefaults.x.tick, fontSize: 11 };
 const tickSmallY = { ...axisDefaults.y.tick, fontSize: 11 };
+const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const PAGE_HEADER_TITLE_STYLE = {
+  fontSize: '20px',
+  lineHeight: '28px',
+  color: 'var(--text-primary)',
+};
 
 // Demo data - threat activity timeline
 const DEMO_THREAT_TIMELINE = [
@@ -447,10 +461,13 @@ export default function ThreatActivityPage() {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Threat Activity</h1>
-          <p className="text-ink-secondary mt-1">Loading threat data...</p>
-        </div>
+        <SectionHeader
+          title="Threat Activity"
+          description="Loading threat data..."
+          size="h1"
+          style={PAGE_HEADER_STYLE}
+          titleStyle={PAGE_HEADER_TITLE_STYLE}
+        />
         <StatsGridSkeleton />
         <CardSkeleton />
       </div>
@@ -460,35 +477,36 @@ export default function ThreatActivityPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-light text-ink-primary">Threat Activity</h1>
-          <p className="text-ink-secondary mt-1">
-            Real-time threat monitoring and incident response
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm">
-            {isConnected ? (
-              <Wifi className="w-4 h-4 text-green-400" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-ink-secondary" />
-            )}
-            <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
-              {isConnected ? 'Live' : 'Demo Data'}
-            </span>
+      <SectionHeader
+        title="Threat Activity"
+        description="Real-time threat monitoring and incident response"
+        size="h1"
+        style={PAGE_HEADER_STYLE}
+        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        actions={
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm">
+              {isConnected ? (
+                <Wifi className="w-4 h-4 text-green-400" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-ink-secondary" />
+              )}
+              <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
+                {isConnected ? 'Live' : 'Demo Data'}
+              </span>
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
+              disabled={hookLoading}
+            >
+              <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
+              Refresh
+            </button>
+            <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
           </div>
-          <button
-            onClick={() => refetch()}
-            className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-card text-sm text-ink-secondary transition-colors"
-            disabled={hookLoading}
-          >
-            <RefreshCw className={clsx('w-4 h-4', hookLoading && 'animate-spin')} />
-            Refresh
-          </button>
-          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-        </div>
-      </div>
+        }
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
