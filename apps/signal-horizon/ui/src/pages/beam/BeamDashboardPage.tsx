@@ -20,15 +20,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import { alpha, axisDefaults, colors } from '@/ui';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Box, SectionHeader, alpha, axisDefaults, colors, spacing } from '@/ui';
 import {
   useBeamStats,
   useBlockedRequests,
@@ -78,13 +71,21 @@ interface StatCardProps {
   label: string;
   value: string | number;
   trend?: { value: number; period: string };
-  color: string;
-  bgColor: string;
+  accentColor: string;
+  iconBg: string;
   description?: string;
 }
 
-function StatCard({ icon: Icon, label, value, trend, color, bgColor, description }: StatCardProps) {
-  const trendColor = trend && trend.value >= 0 ? 'text-ac-green' : 'text-ac-red';
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  trend,
+  accentColor,
+  iconBg,
+  description,
+}: StatCardProps) {
+  const trendColor = trend && trend.value >= 0 ? colors.green : colors.red;
   const TrendIcon = trend && trend.value >= 0 ? TrendingUp : TrendingDown;
 
   return (
@@ -95,18 +96,20 @@ function StatCard({ icon: Icon, label, value, trend, color, bgColor, description
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <p className="text-sm font-medium text-ink-secondary" title={description}>{label}</p>
+          <p className="text-sm font-medium text-ink-secondary" title={description}>
+            {label}
+          </p>
           <p className="mt-2 text-3xl font-light text-ink-primary">{value.toLocaleString()}</p>
           {trend && (
-            <div className={clsx('mt-2 flex items-center gap-1 text-sm', trendColor)}>
+            <div className="mt-2 flex items-center gap-1 text-sm" style={{ color: trendColor }}>
               <TrendIcon className="w-4 h-4" />
               <span>{Math.abs(trend.value)}%</span>
               <span className="text-ink-muted">{trend.period}</span>
             </div>
           )}
         </div>
-        <div className={clsx('p-3', bgColor)}>
-          <Icon className={clsx('w-6 h-6', color)} />
+        <div className="p-3" style={{ background: iconBg }}>
+          <Icon className="w-6 h-6" style={{ color: accentColor }} />
         </div>
       </div>
     </motion.div>
@@ -119,11 +122,13 @@ interface TrafficChartProps {
 }
 
 function TrafficChart({ data }: TrafficChartProps) {
-  const formattedData = useMemo(() =>
-    data.map(d => ({
-      ...d,
-      time: new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    })), [data]
+  const formattedData = useMemo(
+    () =>
+      data.map((d) => ({
+        ...d,
+        time: new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      })),
+    [data],
   );
 
   return (
@@ -154,14 +159,10 @@ function TrafficChart({ data }: TrafficChartProps) {
                 <stop offset="95%" stopColor={COLORS.blocked} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis
-              dataKey="time"
-              {...axisDefaults.x}
-              axisLine={false}
-            />
+            <XAxis dataKey="time" {...axisDefaults.x} axisLine={false} />
             <YAxis
               {...axisDefaults.y}
-              tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
+              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v)}
             />
             <Tooltip content={<PersistentTooltip />} />
             <Area
@@ -194,7 +195,9 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
   const getBarGradient = (color: string, isHovered = false) => {
     const opacity = isHovered ? 1 : 0.9;
     return `linear-gradient(180deg,
-      ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0%,
+      ${color}${Math.round(opacity * 255)
+        .toString(16)
+        .padStart(2, '0')} 0%,
       ${color}cc 50%,
       ${color}99 100%)`;
   };
@@ -211,7 +214,9 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
 
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-ink-primary tracking-wide">ATTACK DISTRIBUTION</h3>
+          <h3 className="text-lg font-semibold text-ink-primary tracking-wide">
+            ATTACK DISTRIBUTION
+          </h3>
           <span className="text-xs text-ink-muted font-mono">{total} TOTAL</span>
         </div>
 
@@ -219,7 +224,8 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
         <div
           className="h-10 flex overflow-hidden border border-border-subtle relative"
           style={{
-            boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3), inset 0 -1px 2px rgba(255, 255, 255, 0.05)',
+            boxShadow:
+              'inset 0 2px 4px rgba(0, 0, 0, 0.3), inset 0 -1px 2px rgba(255, 255, 255, 0.05)',
           }}
         >
           {data.map((item, index) => {
@@ -275,7 +281,9 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-ink-muted font-mono text-xs">{item.count}</span>
-                    <span className="text-ink-primary font-medium font-mono w-10 text-right">{item.percentage}%</span>
+                    <span className="text-ink-primary font-medium font-mono w-10 text-right">
+                      {item.percentage}%
+                    </span>
                   </div>
                 </div>
                 {/* Individual progress bar with gradient */}
@@ -321,7 +329,9 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
-          <caption className="sr-only">Recently blocked requests with threat classification</caption>
+          <caption className="sr-only">
+            Recently blocked requests with threat classification
+          </caption>
           <thead>
             <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
               <th className="px-5 py-3 font-medium">Time</th>
@@ -359,7 +369,7 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
                   <span
                     className={clsx(
                       'px-2 py-1 text-xs font-medium',
-                      actionColors[req.action] || actionColors.blocked
+                      actionColors[req.action] || actionColors.blocked,
                     )}
                   >
                     {req.action}
@@ -412,7 +422,7 @@ function AlertsFeed({ alerts }: { alerts: ProtectionAlert[] }) {
               animate={{ opacity: 1, x: 0 }}
               className={clsx(
                 'px-5 py-4 border-l-4',
-                severityColors[alert.severity] || severityColors.low
+                severityColors[alert.severity] || severityColors.low,
               )}
             >
               <div className="flex items-start gap-3">
@@ -519,24 +529,28 @@ export default function BeamDashboardPage() {
   const blockedRequests = storeBlockedRequests.length > 0 ? storeBlockedRequests : apiBlocks;
 
   // Use demo data as fallback when no real data available
-  const displayTraffic = trafficTimeline.length > 0
-    ? trafficTimeline
-    : dashboardData?.trafficTimeline?.length
-      ? dashboardData.trafficTimeline
-      : DEMO_TRAFFIC;
+  const displayTraffic =
+    trafficTimeline.length > 0
+      ? trafficTimeline
+      : dashboardData?.trafficTimeline?.length
+        ? dashboardData.trafficTimeline
+        : DEMO_TRAFFIC;
   const displayBlocked = blockedRequests.length > 0 ? blockedRequests : DEMO_BLOCKED;
   const displayAlerts = alerts.length > 0 ? alerts : DEMO_ALERTS;
 
   // Show loading skeletons while initial data loads
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6" role="main" aria-busy="true" aria-label="Loading Beam dashboard">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-light text-ink-primary">Beam Protection Dashboard</h1>
-            <p className="text-ink-secondary mt-1">Loading protection status...</p>
-          </div>
-        </div>
+      <div
+        className="p-6 space-y-6"
+        role="main"
+        aria-busy="true"
+        aria-label="Loading Beam dashboard"
+      >
+        <SectionHeader
+          title="Beam Protection Dashboard"
+          description="Loading protection status..."
+        />
         <StatsGridSkeleton />
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2">
@@ -553,26 +567,37 @@ export default function BeamDashboardPage() {
   const totalRequests = dashboardData?.summary?.requests?.value || stats.blockedRequests24h || 1247;
   const blockedCount = dashboardData?.summary?.blocked?.value || stats.blockedRequests24h || 89;
   const endpointCount = dashboardData?.endpointCount || stats.totalEndpoints || 45;
-  const coveragePercent = dashboardData?.summary?.coverage?.value
-    || (stats.protectedEndpoints
+  const coveragePercent =
+    dashboardData?.summary?.coverage?.value ||
+    (stats.protectedEndpoints
       ? Math.round((stats.protectedEndpoints / Math.max(stats.totalEndpoints, 1)) * 100)
       : 94);
 
   return (
     <div className="p-6 space-y-6" role="main" aria-label="Beam protection dashboard">
       {/* Header */}
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-light text-ink-primary">Beam Protection Dashboard</h1>
-          <p className="text-ink-secondary mt-1">Real-time API security overview</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm" role="status" aria-live="polite">
-            <span className="w-2 h-2 bg-ac-green animate-pulse" aria-hidden="true" />
-            <span className="text-ac-green">Protected</span>
-          </div>
-        </div>
-      </header>
+      <SectionHeader
+        title="Beam Protection Dashboard"
+        description="Real-time API security overview"
+        actions={
+          <Box
+            bg="card"
+            border="subtle"
+            flex
+            direction="row"
+            align="center"
+            gap="sm"
+            style={{ padding: `${spacing.xs} ${spacing.md}` }}
+          >
+            <span
+              className="animate-pulse"
+              aria-hidden="true"
+              style={{ width: 8, height: 8, background: colors.green, display: 'inline-block' }}
+            />
+            <span style={{ color: colors.green, fontSize: '14px' }}>Protected</span>
+          </Box>
+        }
+      />
 
       {/* Stats Grid */}
       <section aria-label="Key metrics" className="grid grid-cols-4 gap-4">
@@ -581,8 +606,8 @@ export default function BeamDashboardPage() {
           label="Requests (24h)"
           value={`${(totalRequests / 1000).toFixed(1)}k`}
           trend={{ value: 12, period: 'vs yesterday' }}
-          color="text-ac-blue"
-          bgColor="bg-ac-blue/10"
+          accentColor={colors.blue}
+          iconBg={alpha(colors.blue, 0.1)}
           description="Total API requests processed across all monitored endpoints in the last 24 hours"
         />
         <StatCard
@@ -590,8 +615,8 @@ export default function BeamDashboardPage() {
           label="Blocked"
           value={blockedCount}
           trend={{ value: -8, period: 'vs yesterday' }}
-          color="text-ac-red"
-          bgColor="bg-ac-red/10"
+          accentColor={colors.red}
+          iconBg={alpha(colors.red, 0.1)}
           description="Requests blocked by WAF rules including SQL injection, XSS, and bot traffic"
         />
         <StatCard
@@ -599,16 +624,16 @@ export default function BeamDashboardPage() {
           label="Endpoints"
           value={endpointCount}
           trend={{ value: 3, period: 'new this week' }}
-          color="text-ac-purple"
-          bgColor="bg-ac-purple/10"
+          accentColor={colors.purple}
+          iconBg={alpha(colors.purple, 0.1)}
           description="Distinct API endpoints discovered and monitored by the profiler"
         />
         <StatCard
           icon={Shield}
           label="Coverage"
           value={`${coveragePercent}%`}
-          color="text-ac-green"
-          bgColor="bg-ac-green/10"
+          accentColor={colors.green}
+          iconBg={alpha(colors.green, 0.1)}
           description="Percentage of discovered endpoints protected by at least one WAF rule"
         />
       </section>
