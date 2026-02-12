@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 18:43_
+_Generated: 2026-02-12 18:47_
 
 ## Summary
 
-**Total findings: 160**
+**Total findings: 142**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 160 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 142 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -17,8 +17,6 @@ Priority files to migrate first (most raw patterns):
 
 | Hits | File |
 |------|------|
-| 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
-| 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
 | 8 | `pages/beam/catalog/SchemaChangesPage.tsx` |
 | 8 | `pages/beam/catalog/ApiCatalogPage.tsx` |
 | 8 | `pages/beam/BeamDashboardPage.tsx` |

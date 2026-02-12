@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { Button, Modal, SectionHeader } from '@/ui';
+import { Button, Modal, SectionHeader, Stack } from '@/ui';
 
 type BlockReason =
   | 'sql_injection'
@@ -284,7 +284,7 @@ function DecisionTraceModal({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-ink-muted">Endpoint</p>
-                  <div className="flex items-center gap-2 mt-1">
+                  <Stack direction="row" align="center" gap="sm" className="mt-1">
                     <span
                       className={clsx(
                         'px-2 py-0.5 text-xs font-medium',
@@ -294,13 +294,15 @@ function DecisionTraceModal({
                       {request.method}
                     </span>
                     <code className="text-blue-400 text-sm">{request.path}</code>
-                  </div>
+                  </Stack>
                 </div>
                 <div>
                   <p className="text-xs text-ink-muted">Source</p>
-                  <p className="text-ink-primary mt-1 flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-ink-secondary" />
-                    {request.sourceIp} ({request.country})
+                  <p className="text-ink-primary mt-1">
+                    <Stack as="span" direction="row" inline align="center" gap="sm">
+                      <MapPin className="w-4 h-4 text-ink-secondary" />
+                      {request.sourceIp} ({request.country})
+                    </Stack>
                   </p>
                 </div>
                 <div>
@@ -348,7 +350,7 @@ function DecisionTraceModal({
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                  <Stack direction="row" align="center" gap="smPlus">
                     <span
                       className={clsx(
                         'w-6 h-6 flex items-center justify-center text-xs font-medium',
@@ -363,7 +365,7 @@ function DecisionTraceModal({
                       <p className="text-ink-primary font-medium">{step.rule}</p>
                       <p className="text-sm text-ink-secondary">{step.detail}</p>
                     </div>
-                  </div>
+                  </Stack>
                   <div className="text-right">
                     <span
                       className={clsx(
@@ -515,7 +517,7 @@ export default function BlockedRequestsPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex items-center gap-4">
+      <Stack direction="row" align="center" gap="md">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-secondary" />
           <input
@@ -527,7 +529,7 @@ export default function BlockedRequestsPage() {
             className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <Filter className="w-4 h-4 text-ink-secondary" />
           <select
             value={reasonFilter}
@@ -541,8 +543,8 @@ export default function BlockedRequestsPage() {
               </option>
             ))}
           </select>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* Blocked Requests Table */}
       <motion.div
@@ -576,19 +578,26 @@ export default function BlockedRequestsPage() {
                   className="border-t border-border-subtle hover:bg-surface-subtle transition-colors"
                 >
                   <td className="px-5 py-4">
-                    <span className="text-ink-secondary text-sm flex items-center gap-1">
+                    <Stack
+                      as="span"
+                      direction="row"
+                      inline
+                      align="center"
+                      gap="xs"
+                      className="text-ink-secondary text-sm"
+                    >
                       <Clock className="w-3 h-3" />
                       {formatRelativeTime(request.timestamp)}
-                    </span>
+                    </Stack>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
+                    <Stack direction="row" align="center" gap="sm">
                       <span className="text-ink-primary font-mono text-sm">{request.sourceIp}</span>
                       <span className="text-xs text-ink-muted">({request.country})</span>
-                    </div>
+                    </Stack>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
+                    <Stack direction="row" align="center" gap="sm">
                       <span
                         className={clsx(
                           'px-2 py-0.5 text-xs font-medium',
@@ -600,7 +609,7 @@ export default function BlockedRequestsPage() {
                       <code className="text-blue-400 text-sm truncate max-w-[200px]">
                         {request.path}
                       </code>
-                    </div>
+                    </Stack>
                   </td>
                   <td className="px-5 py-4">
                     <span
@@ -614,7 +623,7 @@ export default function BlockedRequestsPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
+                    <Stack direction="row" align="center" gap="sm">
                       <div className="w-16 h-2 bg-surface-subtle overflow-hidden">
                         <div
                           className={clsx('h-full', riskConfig.bg.replace('/20', ''))}
@@ -624,7 +633,7 @@ export default function BlockedRequestsPage() {
                       <span className={clsx('text-xs font-medium', riskConfig.color)}>
                         {request.riskScore}
                       </span>
-                    </div>
+                    </Stack>
                   </td>
                   <td className="px-5 py-4">
                     <span className="text-ink-secondary text-sm">{request.ruleMatched}</span>

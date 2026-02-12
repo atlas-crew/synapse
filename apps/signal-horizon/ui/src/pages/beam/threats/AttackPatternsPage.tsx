@@ -29,7 +29,7 @@ import {
   Line,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader, axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
+import { SectionHeader, Stack, axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 type PatternCategory =
   | 'injection'
@@ -229,16 +229,18 @@ function StatCard({
           {change && (
             <p
               className={clsx(
-                'text-xs mt-1 flex items-center gap-1',
+                'text-xs mt-1',
                 change.trend === 'up' ? 'text-red-400' : 'text-green-400',
               )}
             >
-              {change.trend === 'up' ? (
-                <TrendingUp className="w-3 h-3" />
-              ) : (
-                <TrendingDown className="w-3 h-3" />
-              )}
-              {Math.abs(change.value)}% vs last week
+              <Stack as="span" direction="row" inline align="center" gap="xs">
+                {change.trend === 'up' ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                {Math.abs(change.value)}% vs last week
+              </Stack>
             </p>
           )}
         </div>
@@ -273,13 +275,13 @@ function PatternCard({
         onClick={onToggle}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-subtle transition-colors"
       >
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" gap="md">
           <div className={clsx('p-2', categoryConfig.bg)}>
             <Target className={clsx('w-5 h-5', categoryConfig.color)} />
           </div>
           <div className="text-left">
             <h3 className="text-ink-primary font-medium">{pattern.name}</h3>
-            <div className="flex items-center gap-2 mt-1">
+            <Stack direction="row" align="center" gap="sm" className="mt-1">
               <span
                 className={clsx('px-2 py-0.5 text-xs', categoryConfig.bg, categoryConfig.color)}
               >
@@ -290,10 +292,10 @@ function PatternCard({
               >
                 {pattern.severity}
               </span>
-            </div>
+            </Stack>
           </div>
-        </div>
-        <div className="flex items-center gap-6">
+        </Stack>
+        <Stack direction="row" align="center" gap="lg">
           <div className="text-right">
             <p className="text-sm text-ink-secondary">Detections</p>
             <p className="text-ink-primary font-medium">{pattern.count.toLocaleString()}</p>
@@ -308,7 +310,7 @@ function PatternCard({
             <p className="text-sm text-ink-secondary">Trend</p>
             <p
               className={clsx(
-                'font-medium flex items-center gap-1 justify-end',
+                'font-medium text-right',
                 pattern.trend === 'up'
                   ? 'text-red-400'
                   : pattern.trend === 'down'
@@ -316,14 +318,16 @@ function PatternCard({
                     : 'text-ink-secondary',
               )}
             >
-              {pattern.trend === 'up' ? (
-                <TrendingUp className="w-4 h-4" />
-              ) : pattern.trend === 'down' ? (
-                <TrendingDown className="w-4 h-4" />
-              ) : (
-                <Activity className="w-4 h-4" />
-              )}
-              {pattern.trendPercent}%
+              <Stack as="span" direction="row" inline align="center" gap="xs">
+                {pattern.trend === 'up' ? (
+                  <TrendingUp className="w-4 h-4" />
+                ) : pattern.trend === 'down' ? (
+                  <TrendingDown className="w-4 h-4" />
+                ) : (
+                  <Activity className="w-4 h-4" />
+                )}
+                {pattern.trendPercent}%
+              </Stack>
             </p>
           </div>
           {isExpanded ? (
@@ -331,7 +335,7 @@ function PatternCard({
           ) : (
             <ChevronRight className="w-5 h-5 text-ink-secondary" />
           )}
-        </div>
+        </Stack>
       </button>
 
       {isExpanded && (
@@ -343,10 +347,10 @@ function PatternCard({
               </h4>
               <div className="space-y-2">
                 {pattern.topTargets.map((target, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
+                  <Stack key={idx} direction="row" align="center" gap="sm">
                     <span className="text-ink-muted">{idx + 1}.</span>
                     <code className="text-blue-400 text-sm">{target}</code>
-                  </div>
+                  </Stack>
                 ))}
               </div>
             </div>
@@ -516,14 +520,14 @@ export default function AttackPatternsPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex items-center justify-center gap-6 mt-4">
+          <Stack direction="row" align="center" justify="center" gap="lg" className="mt-4">
             {Object.entries(CHART_COLORS).map(([key, color]) => (
-              <div key={key} className="flex items-center gap-2">
+              <Stack key={key} direction="row" align="center" gap="sm">
                 <div className="w-3 h-3" style={{ backgroundColor: color }} />
                 <span className="text-sm text-ink-secondary capitalize">{key}</span>
-              </div>
+              </Stack>
             ))}
-          </div>
+          </Stack>
         </motion.div>
 
         {/* Category Distribution - Horizontal Stacked Bar */}
@@ -553,10 +557,10 @@ export default function AttackPatternsPage() {
           <div className="space-y-3 mt-4">
             {DEMO_CATEGORY_DIST.map((item) => (
               <div key={item.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
+                <Stack direction="row" align="center" gap="sm">
                   <div className="w-3 h-3" style={{ backgroundColor: item.color }} />
                   <span className="text-ink-secondary">{item.name}</span>
-                </div>
+                </Stack>
                 <div className="text-right">
                   <span className="text-ink-primary font-medium">
                     {item.value.toLocaleString()}
@@ -598,8 +602,8 @@ export default function AttackPatternsPage() {
       </motion.div>
 
       {/* Filter */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+      <Stack direction="row" align="center" gap="md">
+        <Stack direction="row" align="center" gap="sm">
           <BarChart3 className="w-4 h-4 text-ink-secondary" />
           <select
             value={categoryFilter}
@@ -613,11 +617,11 @@ export default function AttackPatternsPage() {
               </option>
             ))}
           </select>
-        </div>
+        </Stack>
         <span className="text-sm text-ink-secondary">
           Showing {filteredPatterns.length} of {DEMO_ATTACK_PATTERNS.length} patterns
         </span>
-      </div>
+      </Stack>
 
       {/* Patterns List */}
       <div className="space-y-3">
