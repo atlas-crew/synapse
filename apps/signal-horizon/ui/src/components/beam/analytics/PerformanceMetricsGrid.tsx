@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { Stack } from '@/ui';
 
 interface PerformanceMetric {
   label: string;
@@ -21,8 +22,11 @@ export const PerformanceMetricsGrid = memo(function PerformanceMetricsGrid({
   className = '',
 }: PerformanceMetricsGridProps) {
   return (
-    <div
-      className={`flex flex-wrap items-center gap-x-8 gap-y-2 py-4 px-6 bg-gray-50 border border-gray-200 ${className}`}
+    <Stack
+      direction="row"
+      align="center"
+      gap="sm"
+      className={`flex-wrap gap-x-8 gap-y-2 py-4 px-6 bg-gray-50 border border-gray-200 ${className}`}
     >
       {metrics.map((metric, index) => (
         <div
@@ -46,7 +50,7 @@ export const PerformanceMetricsGrid = memo(function PerformanceMetricsGrid({
           </span>
         </div>
       ))}
-    </div>
+    </Stack>
   );
 });
 

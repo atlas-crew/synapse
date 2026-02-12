@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Globe2 } from 'lucide-react';
 import { ProgressBar } from '../../ctrlx/ProgressBar';
+import { Stack } from '@/ui';
 
 interface RegionTraffic {
   code: string;
@@ -30,7 +31,7 @@ export const TrafficByRegionList = memo(function TrafficByRegionList({
   return (
     <div className={`space-y-3 ${className}`}>
       {displayData.map((region) => (
-        <div key={region.code} className="flex items-center gap-3">
+        <Stack key={region.code} direction="row" align="center" gap="md">
           {/* Flag */}
           <span
             className="inline-flex h-6 w-6 items-center justify-center border border-border-subtle bg-surface-subtle"
@@ -56,7 +57,7 @@ export const TrafficByRegionList = memo(function TrafficByRegionList({
               size="sm"
             />
           </div>
-        </div>
+        </Stack>
       ))}
     </div>
   );

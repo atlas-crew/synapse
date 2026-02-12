@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, CheckCircle, ArrowRight, GitCommit } from 'lucide-react';
 import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
-import { Button } from '@/ui';
+import { Button, Stack } from '@/ui';
 
 interface ConfigDriftViewerProps {
   expectedConfig: string;
@@ -28,7 +28,7 @@ export function ConfigDriftViewer({
           ? "bg-ac-orange/10 border-ac-orange/30 text-ac-orange" 
           : "bg-ac-green/10 border-ac-green/30 text-ac-green"
       )}>
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           {driftDetected ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
           <div>
             <h3 className="font-medium text-sm">
@@ -38,7 +38,7 @@ export function ConfigDriftViewer({
               <p className="text-xs opacity-80 mt-0.5">Last check: {lastSync}</p>
             )}
           </div>
-        </div>
+        </Stack>
         
         {driftDetected && (
           <Button
@@ -78,10 +78,10 @@ export function ConfigDriftViewer({
         {/* Expected Config */}
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-xs font-semibold text-ink-secondary uppercase tracking-wider flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm" className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
               <GitCommit className="w-3 h-3" />
-              Expected (Template)
-            </span>
+              <span>Expected (Template)</span>
+            </Stack>
           </div>
           <div className="flex-1 border border-border-subtle overflow-hidden">
             <CodeEditor
@@ -99,10 +99,10 @@ export function ConfigDriftViewer({
         {viewMode === 'split' && (
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-xs font-semibold text-ink-secondary uppercase tracking-wider flex items-center gap-2">
+              <Stack direction="row" align="center" gap="sm" className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
                 <ArrowRight className="w-3 h-3 text-ac-orange" />
-                Actual (Sensor)
-              </span>
+                <span>Actual (Sensor)</span>
+              </Stack>
             </div>
             <div className={clsx(
               "flex-1 border  overflow-hidden",

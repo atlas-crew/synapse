@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 13:13_
+_Generated: 2026-02-12 13:16_
 
 ## Summary
 
-**Total findings: 387**
+**Total findings: 375**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 387 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 375 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -88,13 +88,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
-| `components/beam/DemoModeControls.tsx` | 49 | `<div className="flex items-center gap-2" ref={dropdownRef}>` |
-| `components/beam/DemoModeControls.tsx` | 111 | `<div className="flex items-center gap-2">` |
-| `components/beam/analytics/TopEndpointsTable.tsx` | 51 | `<div className="flex items-center gap-2">` |
-| `components/beam/analytics/TrafficByRegionList.tsx` | 33 | `<div key={region.code} className="flex items-center gap-3">` |
-| `components/beam/analytics/PerformanceMetricsGrid.tsx` | 25 | `className={`flex flex-wrap items-center gap-x-8 gap-y-2 py-4 px-6 bg-gray-50 bor` |
-| `components/fleet/ConfigDriftViewer.tsx` | 31 | `<div className="flex items-center gap-3">` |
-| `components/fleet/ConfigDriftViewer.tsx` | 81 | `<span className="text-xs font-semibold text-ink-secondary uppercase tracking-wid` |
-| `components/fleet/ConfigDriftViewer.tsx` | 102 | `<span className="text-xs font-semibold text-ink-secondary uppercase tracking-wid` |
-| `components/fleet/PolicyConfigEditor.tsx` | 52 | `<div className="flex items-center gap-3">` |
+| `components/fleet/WebTerminal.tsx` | 196 | `<div className="flex items-center gap-2 text-status-success">` |
+| `components/fleet/WebTerminal.tsx` | 203 | `<div className="flex items-center gap-2 text-ink-secondary">` |
+| `components/fleet/WebTerminal.tsx` | 210 | `<div className="flex items-center gap-2 text-status-warning">` |
+| `components/fleet/WebTerminal.tsx` | 219 | `<div className="flex items-center gap-2 text-status-error">` |
+| `components/fleet/WebTerminal.tsx` | 231 | `<div className="flex items-center gap-3">` |
+| `components/fleet/WebTerminal.tsx` | 243 | `<div className="flex items-center gap-2 text-status-error text-sm">` |
+| `components/fleet/SensorStatusBadge.tsx` | 21 | `<span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medi` |
+| `components/fleet/DiagnosticsPanel.tsx` | 159 | `<div className="flex items-center gap-3">` |
+| `components/fleet/DiagnosticsPanel.tsx` | 191 | `className={`inline-flex items-center gap-2 px-3 py-1.5  text-sm font-medium bord` |
 

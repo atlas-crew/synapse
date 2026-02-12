@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { MethodBadge, type HttpMethod } from '../../ctrlx/MethodBadge';
 import { ProgressBar } from '../../ctrlx/ProgressBar';
+import { Stack } from '@/ui';
 
 interface EndpointStats {
   method: HttpMethod;
@@ -48,7 +49,7 @@ export const TopEndpointsTable = memo(function TopEndpointsTable({
               </td>
               <td className="font-mono text-sm">{endpoint.path}</td>
               <td>
-                <div className="flex items-center gap-2">
+                <Stack direction="row" align="center" gap="sm">
                   <ProgressBar
                     value={endpoint.requests}
                     max={maxRequests}
@@ -59,7 +60,7 @@ export const TopEndpointsTable = memo(function TopEndpointsTable({
                   <span className="text-xs text-gray-500 min-w-[4rem] text-right">
                     {(endpoint.requests / 1000).toFixed(0)}K
                   </span>
-                </div>
+                </Stack>
               </td>
               <td className="text-right">
                 <span

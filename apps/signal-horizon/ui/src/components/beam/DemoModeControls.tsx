@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { useDemoMode, useDemoActions, type DemoScenario } from '../../stores/demoModeStore';
 import { SCENARIO_PROFILES } from '../../lib/demoData/scenarios';
 import { invalidateDemoCache } from '../../lib/demoData';
+import { Stack } from '@/ui';
 
 const SCENARIO_ICONS: Record<DemoScenario, typeof AlertTriangle> = {
   'high-threat': AlertTriangle,
@@ -46,28 +47,29 @@ export function DemoModeControls() {
   const ScenarioIcon = SCENARIO_ICONS[scenario];
 
   return (
-    <div className="flex items-center gap-2" ref={dropdownRef}>
+    <div ref={dropdownRef}>
+      <Stack direction="row" align="center" gap="sm">
       {/* Demo Mode Toggle Button */}
       <button
         type="button"
         onClick={toggleDemo}
         className={clsx(
-          'flex items-center gap-2 h-8 px-3 text-xs font-medium transition-colors border',
+          'h-8 px-3 text-xs font-medium transition-colors border',
           isEnabled
             ? 'bg-ac-magenta/10 border-ac-magenta text-ac-magenta hover:bg-ac-magenta/20'
             : 'border-border-subtle text-ink-secondary hover:text-ink-primary hover:bg-surface-card'
         )}
       >
         {isEnabled ? (
-          <>
+          <Stack direction="row" align="center" gap="sm">
             <Square className="w-3 h-3" />
             <span>Exit Demo</span>
-          </>
+          </Stack>
         ) : (
-          <>
+          <Stack direction="row" align="center" gap="sm">
             <Play className="w-3 h-3" />
             <span>Demo Mode</span>
-          </>
+          </Stack>
         )}
       </button>
 
@@ -78,14 +80,16 @@ export function DemoModeControls() {
             type="button"
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className={clsx(
-              'flex items-center gap-2 h-8 px-3 text-xs border transition-colors',
+              'h-8 px-3 text-xs border transition-colors',
               'border-border-subtle bg-surface-card hover:bg-surface-subtle',
               SCENARIO_COLORS[scenario]
             )}
           >
-            <ScenarioIcon className="w-3 h-3" />
-            <span className="text-ink-primary">{currentProfile.label}</span>
-            <ChevronDown className={clsx('w-3 h-3 transition-transform', dropdownOpen && 'rotate-180')} />
+            <Stack direction="row" align="center" gap="sm">
+              <ScenarioIcon className="w-3 h-3" />
+              <span className="text-ink-primary">{currentProfile.label}</span>
+              <ChevronDown className={clsx('w-3 h-3 transition-transform', dropdownOpen && 'rotate-180')} />
+            </Stack>
           </button>
 
           {/* Dropdown Menu */}
@@ -105,15 +109,15 @@ export function DemoModeControls() {
                       'w-full flex items-start gap-3 px-3 py-2 text-left transition-colors',
                       isSelected ? 'bg-surface-subtle' : 'hover:bg-surface-subtle'
                     )}
-                  >
-                    <Icon className={clsx('w-4 h-4 mt-0.5 flex-shrink-0', SCENARIO_COLORS[key])} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-ink-primary">{profile.label}</span>
-                        {isSelected && (
-                          <span className="text-[10px] tracking-wider uppercase text-ac-magenta">Active</span>
-                        )}
-                      </div>
+                    >
+                      <Icon className={clsx('w-4 h-4 mt-0.5 flex-shrink-0', SCENARIO_COLORS[key])} />
+                      <div className="flex-1 min-w-0">
+                        <Stack direction="row" align="center" gap="sm">
+                          <span className="text-sm font-medium text-ink-primary">{profile.label}</span>
+                          {isSelected && (
+                            <span className="text-[10px] tracking-wider uppercase text-ac-magenta">Active</span>
+                          )}
+                        </Stack>
                       <p className="text-xs text-ink-muted mt-0.5">{profile.description}</p>
                     </div>
                   </button>
@@ -123,6 +127,7 @@ export function DemoModeControls() {
           )}
         </div>
       )}
+      </Stack>
     </div>
   );
 }

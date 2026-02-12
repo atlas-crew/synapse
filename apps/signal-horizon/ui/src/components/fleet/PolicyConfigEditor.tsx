@@ -17,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import type { PolicyConfig, EnforcementMode } from '@signal-horizon/shared/types';
-import { Button } from '@/ui';
+import { Button, Stack } from '@/ui';
 
 export interface PolicyConfigEditorProps {
   value: PolicyConfig;
@@ -49,13 +49,13 @@ const Section = memo(function Section({
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between px-4 py-3 bg-surface-subtle hover:bg-surface-elevated transition-colors"
       >
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           <Icon className="w-4 h-4 text-ac-blue" />
           <div className="text-left">
             <span className="text-sm font-bold text-ink-primary uppercase tracking-widest">{title}</span>
             {description && <p className="text-[10px] text-ink-muted uppercase tracking-tighter mt-0.5">{description}</p>}
           </div>
-        </div>
+        </Stack>
         {isOpen ? (
           <ChevronDown className="w-4 h-4 text-ink-muted" />
         ) : (
@@ -212,31 +212,37 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
     <div className="space-y-6">
       {/* Mode Switcher */}
       <div className="flex justify-between items-center bg-ac-card-dark p-4 border-l-4 border-ac-magenta shadow-lg">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           <Layers className="w-5 h-5 text-ac-sky-blue" />
           <div>
             <h3 className="text-white text-sm font-bold uppercase tracking-widest">Policy Engine Interface</h3>
             <p className="text-white/40 text-[10px] uppercase tracking-tighter">Configuration Mode: {editorMode === 'visual' ? 'GRAPHICAL_OVERRIDE' : 'RAW_SOURCE_JSON'}</p>
           </div>
-        </div>
+        </Stack>
         <div className="flex gap-1 bg-white/5 p-1 border border-white/10">
           <button
             onClick={() => { setMode('visual'); syncJsonToVisual(); }}
             className={clsx(
-              "px-4 py-2 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all",
+              "px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all",
               editorMode === 'visual' ? "bg-ac-sky-blue text-ac-navy" : "text-white/60 hover:text-white hover:bg-white/5"
             )}
           >
-            <Layout className="w-3.5 h-3.5" /> Visual
+            <Stack direction="row" align="center" gap="sm">
+              <Layout className="w-3.5 h-3.5" />
+              <span>Visual</span>
+            </Stack>
           </button>
           <button
             onClick={() => setMode('json')}
             className={clsx(
-              "px-4 py-2 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all",
+              "px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all",
               editorMode === 'json' ? "bg-ac-sky-blue text-ac-navy" : "text-white/60 hover:text-white hover:bg-white/5"
             )}
           >
-            <FileCode className="w-3.5 h-3.5" /> JSON
+            <Stack direction="row" align="center" gap="sm">
+              <FileCode className="w-3.5 h-3.5" />
+              <span>JSON</span>
+            </Stack>
           </button>
         </div>
       </div>
@@ -244,10 +250,10 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
       {editorMode === 'json' ? (
         <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
           {jsonError && (
-            <div className="p-3 bg-status-error/10 border-l-4 border-status-error flex items-center gap-3">
+            <Stack direction="row" align="center" gap="md" className="p-3 bg-status-error/10 border-l-4 border-status-error">
               <AlertTriangle className="w-4 h-4 text-status-error" />
               <span className="text-xs font-mono text-status-error">LINT_FAILURE: {jsonError}</span>
-            </div>
+            </Stack>
           )}
           <CodeEditor
             value={jsonValue}
@@ -256,10 +262,10 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
             height="600px"
             className="font-mono text-xs"
           />
-          <div className="flex items-center gap-2 text-[10px] text-ink-muted uppercase tracking-widest font-bold px-2">
+          <Stack direction="row" align="center" gap="sm" className="text-[10px] text-ink-muted uppercase tracking-widest font-bold px-2">
             <Info className="w-3 h-3" />
             Direct JSON manipulation bypasses UI validation. Use with caution.
-          </div>
+          </Stack>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
