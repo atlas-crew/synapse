@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { RiskBadge } from './RiskBadge.js';
-import { Button, SectionHeader } from '@/ui';
+import { Button, SectionHeader, Stack } from '@/ui';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 
@@ -41,7 +41,7 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
   return (
     <div className="bg-danger/5 border border-danger/20">
       <div className="p-4 border-b border-danger/10 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <ShieldAlert className="w-5 h-5 text-danger" />
           <SectionHeader
             title={`Critical Authorization Gaps (${endpoints.length})`}
@@ -57,10 +57,16 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
               color: '#EF3340',
             }}
           />
-        </div>
-        <div className="flex items-center gap-1 text-[10px] bg-danger/10 text-danger px-2 py-0.5 font-bold uppercase status-blink">
-          <Zap className="w-3 h-3" /> Action Required
-        </div>
+        </Stack>
+        <Stack
+          direction="row"
+          align="center"
+          gap="xs"
+          className="text-[10px] bg-danger/10 text-danger px-2 py-0.5 font-bold uppercase status-blink"
+        >
+          <Zap className="w-3 h-3" />
+          <span>Action Required</span>
+        </Stack>
       </div>
       
       <div className="p-4">
@@ -70,20 +76,23 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
         
         <div className="space-y-2">
           {displayEndpoints.map((ep) => (
-            <div 
+            <Stack
               key={ep.endpoint} 
-              className="group flex items-center gap-4 p-3 bg-surface-card border border-border-subtle hover:border-danger/40 transition-colors cursor-pointer"
+              direction="row"
+              align="center"
+              gap="md"
+              className="group p-3 bg-surface-card border border-border-subtle hover:border-danger/40 transition-colors cursor-pointer"
               onClick={() => onViewEndpoint?.(ep.endpoint)}
             >
               <RiskBadge level={ep.riskLevel} />
               
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <Stack direction="row" align="center" gap="sm">
                   <span className="text-xs font-bold font-mono text-ac-blue min-w-[40px]">{ep.method}</span>
                   <span className="text-sm font-mono truncate text-ink-primary">
                     {ep.endpoint.replace(`${ep.method} `, '')}
                   </span>
-                </div>
+                </Stack>
               </div>
               
               <div className="text-right whitespace-nowrap">
@@ -103,7 +112,7 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
               <div className="pl-2 border-l border-border-subtle opacity-0 group-hover:opacity-100 transition-opacity">
                 <ChevronRight className="w-4 h-4 text-ac-blue" />
               </div>
-            </div>
+            </Stack>
           ))}
         </div>
         

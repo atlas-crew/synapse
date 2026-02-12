@@ -166,7 +166,7 @@ export const AuthCoverageMap: React.FC = () => {
             }}
           />
           
-          <div className="flex flex-wrap items-center gap-3">
+          <Stack direction="row" align="center" gap="md" className="flex-wrap">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
@@ -181,7 +181,12 @@ export const AuthCoverageMap: React.FC = () => {
             </div>
             
             {/* Filter */}
-            <div className="flex items-center gap-2 bg-surface-base border border-border-subtle px-3 py-2">
+            <Stack
+              direction="row"
+              align="center"
+              gap="sm"
+              className="bg-surface-base border border-border-subtle px-3 py-2"
+            >
               <Filter className="w-4 h-4 text-ink-muted" />
               <select
                 value={riskFilter}
@@ -194,10 +199,15 @@ export const AuthCoverageMap: React.FC = () => {
                 <option value="low">Low Risk</option>
                 <option value="unknown">No Data</option>
               </select>
-            </div>
+            </Stack>
             
             {/* Sort */}
-            <div className="flex items-center gap-2 bg-surface-base border border-border-subtle px-3 py-2">
+            <Stack
+              direction="row"
+              align="center"
+              gap="sm"
+              className="bg-surface-base border border-border-subtle px-3 py-2"
+            >
               <ArrowUpDown className="w-4 h-4 text-ink-muted" />
               <select
                 value={sortBy}
@@ -209,8 +219,8 @@ export const AuthCoverageMap: React.FC = () => {
                 <option value="denial_rate">Sort: Denial %</option>
                 <option value="endpoint">Sort: Name</option>
               </select>
-            </div>
-          </div>
+            </Stack>
+          </Stack>
         </Stack>
         
         {endpointsLoading ? (

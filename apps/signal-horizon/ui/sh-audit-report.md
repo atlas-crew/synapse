@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 13:05_
+_Generated: 2026-02-12 13:11_
 
 ## Summary
 
-**Total findings: 400**
+**Total findings: 391**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 400 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 391 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -88,13 +88,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
-| `components/hunting/RequestTimelineGraph.tsx` | 113 | `<div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-ink` |
-| `components/hunting/RequestTimelineGraph.tsx` | 117 | `className={clsx('inline-flex items-center gap-2 border border-border-subtle bg-s` |
-| `components/AuthCoverageMap/AuthCoverageMap.tsx` | 169 | `<div className="flex flex-wrap items-center gap-3">` |
-| `components/AuthCoverageMap/AuthCoverageMap.tsx` | 184 | `<div className="flex items-center gap-2 bg-surface-base border border-border-sub` |
-| `components/AuthCoverageMap/AuthCoverageMap.tsx` | 200 | `<div className="flex items-center gap-2 bg-surface-base border border-border-sub` |
-| `components/AuthCoverageMap/GapsPanel.tsx` | 44 | `<div className="flex items-center gap-2">` |
-| `components/AuthCoverageMap/GapsPanel.tsx` | 61 | `<div className="flex items-center gap-1 text-[10px] bg-danger/10 text-danger px-` |
-| `components/AuthCoverageMap/GapsPanel.tsx` | 75 | `className="group flex items-center gap-4 p-3 bg-surface-card border border-borde` |
-| `components/AuthCoverageMap/GapsPanel.tsx` | 81 | `<div className="flex items-center gap-2">` |
+| `components/AuthCoverageMap/EndpointsTable.tsx` | 55 | `<div className="flex items-center gap-3">` |
+| `components/ctrlx/ProgressBar.tsx` | 53 | `<div className={`flex items-center gap-2 ${className}`}>` |
+| `components/ctrlx/TrendIndicator.tsx` | 46 | `className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium ${c` |
+| `components/ctrlx/ActivityFeed.tsx` | 71 | `<div className="flex items-center gap-2">` |
+| `components/beam/DemoModeControls.tsx` | 49 | `<div className="flex items-center gap-2" ref={dropdownRef}>` |
+| `components/beam/DemoModeControls.tsx` | 111 | `<div className="flex items-center gap-2">` |
+| `components/beam/analytics/TopEndpointsTable.tsx` | 51 | `<div className="flex items-center gap-2">` |
+| `components/beam/analytics/TrafficByRegionList.tsx` | 33 | `<div key={region.code} className="flex items-center gap-3">` |
+| `components/beam/analytics/PerformanceMetricsGrid.tsx` | 25 | `className={`flex flex-wrap items-center gap-x-8 gap-y-2 py-4 px-6 bg-gray-50 bor` |
 

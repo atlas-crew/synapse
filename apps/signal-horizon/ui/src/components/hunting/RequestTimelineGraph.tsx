@@ -110,17 +110,20 @@ export function RequestTimelineGraph({ events }: { events: RequestTimelineEvent[
   return (
     <div className="space-y-3">
       <Stack direction="row" align="center" justify="space-between" style={{ gap: '12px' }}>
-        <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-ink-muted">
+        <Stack direction="row" align="center" gap="sm" className="flex-wrap text-[10px] font-mono text-ink-muted">
           {LANES.map((lane) => (
-            <span
+            <Stack
               key={lane.kind}
-              className={clsx('inline-flex items-center gap-2 border border-border-subtle bg-surface-inset px-2 py-1', lane.colorClass)}
+              direction="row"
+              align="center"
+              gap="sm"
+              className={clsx('border border-border-subtle bg-surface-inset px-2 py-1', lane.colorClass)}
             >
               <span className="inline-block w-2 h-2 bg-current" aria-hidden="true" />
-              {lane.label}
-            </span>
+              <span>{lane.label}</span>
+            </Stack>
           ))}
-        </div>
+        </Stack>
         <div className="text-[10px] font-mono text-ink-muted whitespace-nowrap">
           {model.duration < 1_000 ? `${model.duration}ms` : `${(model.duration / 1_000).toFixed(2)}s`}
         </div>
