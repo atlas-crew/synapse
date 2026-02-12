@@ -21,7 +21,7 @@ import {
 import { clsx } from 'clsx';
 import { useBeamEndpoints } from '../../../hooks/useBeamEndpoints';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader, Spinner } from '@/ui';
+import { SectionHeader, Spinner, Stack } from '@/ui';
 
 type SortField = 'path' | 'method' | 'requestCount' | 'lastSeenAt' | 'avgLatencyMs';
 type SortDirection = 'asc' | 'desc';
@@ -204,7 +204,7 @@ function SearchFilterBar({
   services: string[];
 }) {
   return (
-    <div className="flex items-center gap-4">
+    <Stack direction="row" align="center" gap="md">
       <div className="relative flex-1 max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-secondary" />
         <input
@@ -216,7 +216,7 @@ function SearchFilterBar({
           className="w-full pl-10 pr-4 py-2 bg-surface-card border border-border-subtle text-ink-primary placeholder-ink-muted focus:outline-none focus:ring-2 focus:ring-horizon-500 focus:border-transparent"
         />
       </div>
-      <div className="flex items-center gap-2">
+      <Stack direction="row" align="center" gap="sm">
         <Filter className="w-4 h-4 text-ink-secondary" />
         <select
           value={methodFilter}
@@ -242,8 +242,8 @@ function SearchFilterBar({
             </option>
           ))}
         </select>
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -272,7 +272,12 @@ function SortableHeader({
       )}
       onClick={() => onSort(field)}
     >
-      <div className={clsx('flex items-center gap-1', align === 'right' && 'justify-end')}>
+      <Stack
+        direction="row"
+        align="center"
+        gap="xs"
+        justify={align === 'right' ? 'flex-end' : undefined}
+      >
         <span>{label}</span>
         {isActive &&
           (sortDirection === 'asc' ? (
@@ -280,7 +285,7 @@ function SortableHeader({
           ) : (
             <ChevronDown className="w-4 h-4" />
           ))}
-      </div>
+      </Stack>
     </th>
   );
 }
@@ -310,7 +315,7 @@ function EndpointRow({ endpoint }: { endpoint: (typeof DEMO_ENDPOINTS)[0] }) {
   return (
     <tr className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors">
       <td className="px-5 py-4">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           <span className={clsx('px-2 py-0.5 text-xs font-medium', METHOD_COLORS[endpoint.method])}>
             {endpoint.method}
           </span>
@@ -318,7 +323,7 @@ function EndpointRow({ endpoint }: { endpoint: (typeof DEMO_ENDPOINTS)[0] }) {
             <code className="text-blue-400 text-sm">{endpoint.pathTemplate}</code>
             <p className="text-xs text-ink-muted mt-0.5">{endpoint.service}</p>
           </div>
-        </div>
+        </Stack>
       </td>
       <td className="px-5 py-4 text-right text-ink-secondary">
         {endpoint.requestCount.toLocaleString()}
@@ -347,7 +352,7 @@ function EndpointRow({ endpoint }: { endpoint: (typeof DEMO_ENDPOINTS)[0] }) {
         {formatRelativeTime(endpoint.lastSeenAt)}
       </td>
       <td className="px-5 py-4">
-        <div className="flex items-center justify-end gap-2">
+        <Stack direction="row" align="center" justify="flex-end" gap="sm">
           {endpoint.authRequired && (
             <span className="text-sky-400" title="Auth Required">
               <Shield className="w-4 h-4" />
@@ -363,7 +368,7 @@ function EndpointRow({ endpoint }: { endpoint: (typeof DEMO_ENDPOINTS)[0] }) {
               <Activity className="w-4 h-4" />
             </span>
           )}
-        </div>
+        </Stack>
       </td>
     </tr>
   );
@@ -526,8 +531,8 @@ export default function ApiCatalogPage() {
         style={PAGE_HEADER_STYLE}
         titleStyle={PAGE_HEADER_TITLE_STYLE}
         actions={
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
+          <Stack direction="row" align="center" gap="md">
+            <Stack direction="row" align="center" gap="sm" className="text-sm">
               {isConnected ? (
                 <Wifi className="w-4 h-4 text-green-400" />
               ) : (
@@ -536,16 +541,22 @@ export default function ApiCatalogPage() {
               <span className={isConnected ? 'text-green-400' : 'text-ink-secondary'}>
                 {isConnected ? 'Live' : 'Demo Data'}
               </span>
-            </div>
+            </Stack>
             <button
               onClick={() => refetch()}
-              className="flex items-center gap-2 px-3 py-1.5 bg-surface-subtle hover:bg-surface-subtle/80 text-sm text-ink-secondary transition-colors"
+              className="px-3 py-1.5 bg-surface-subtle hover:bg-surface-subtle/80 text-sm text-ink-secondary transition-colors"
               disabled={hookLoading}
             >
-              {hookLoading ? <Spinner size={16} color="#7F7F7F" /> : <RefreshCw className="w-4 h-4" />}
-              Refresh
+              <Stack as="span" direction="row" inline align="center" gap="sm">
+                {hookLoading ? (
+                  <Spinner size={16} color="#7F7F7F" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Refresh
+              </Stack>
             </button>
-          </div>
+          </Stack>
         }
       />
 

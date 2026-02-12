@@ -32,6 +32,7 @@ import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStat
 import {
   CARD_HEADER_TITLE_STYLE,
   SectionHeader,
+  Stack,
   axisDefaults,
   colors,
   gridDefaultsSoft,
@@ -180,40 +181,47 @@ function SchemaChangeCard({
         onClick={onToggle}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-subtle transition-colors"
       >
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" gap="md">
           <div className={clsx('p-2', config.color)}>
             <ChangeIcon className="w-4 h-4" />
           </div>
           <div className="text-left">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <span className={clsx('text-sm font-medium', METHOD_COLORS[change.method])}>
                 {change.method}
               </span>
               <code className="text-blue-400 text-sm">{change.endpoint}</code>
-            </div>
+            </Stack>
             <p className="text-sm text-ink-secondary mt-0.5">
               <span className="font-mono text-ink-secondary">{change.field}</span>
               <span className="mx-2">→</span>
               <span className="text-ink-muted">{change.fieldType}</span>
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
+        </Stack>
+        <Stack direction="row" align="center" gap="md">
           {change.breaking && (
             <span className="px-2 py-0.5 text-xs font-medium text-red-400 bg-red-500/20">
               Breaking
             </span>
           )}
-          <span className="text-sm text-ink-secondary flex items-center gap-1">
+          <Stack
+            as="span"
+            direction="row"
+            inline
+            align="center"
+            gap="xs"
+            className="text-sm text-ink-secondary"
+          >
             <Clock className="w-4 h-4" />
             {formatRelativeTime(change.detectedAt)}
-          </span>
+          </Stack>
           {isExpanded ? (
             <ChevronDown className="w-5 h-5 text-ink-secondary" />
           ) : (
             <ChevronRight className="w-5 h-5 text-ink-secondary" />
           )}
-        </div>
+        </Stack>
       </button>
 
       {isExpanded && (
@@ -223,7 +231,7 @@ function SchemaChangeCard({
               <p className="text-sm text-ink-secondary">Description</p>
               <p className="text-ink-primary mt-1">{change.description}</p>
             </div>
-            <div className="flex items-center gap-6">
+            <Stack direction="row" align="center" gap="lg">
               <div>
                 <p className="text-sm text-ink-secondary">Service</p>
                 <p className="text-ink-primary mt-1">{change.service}</p>
@@ -242,7 +250,7 @@ function SchemaChangeCard({
                   {new Date(change.detectedAt).toLocaleString()}
                 </p>
               </div>
-            </div>
+            </Stack>
           </div>
         </div>
       )}
@@ -429,8 +437,8 @@ export default function SchemaChangesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+      <Stack direction="row" align="center" gap="md">
+        <Stack direction="row" align="center" gap="sm">
           <Filter className="w-4 h-4 text-ink-secondary" />
           <select
             value={typeFilter}
@@ -443,8 +451,8 @@ export default function SchemaChangesPage() {
             <option value="modified">Modified</option>
             <option value="deprecated">Deprecated</option>
           </select>
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer">
+        </Stack>
+        <Stack as="label" direction="row" align="center" gap="sm" className="cursor-pointer">
           <input
             type="checkbox"
             checked={showBreakingOnly}
@@ -452,8 +460,8 @@ export default function SchemaChangesPage() {
             className="w-4 h-4 border-border-subtle bg-surface-card text-horizon-600 focus:ring-horizon-500"
           />
           <span className="text-sm text-ink-secondary">Breaking only</span>
-        </label>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* Changes Timeline */}
       <div className="space-y-3">
