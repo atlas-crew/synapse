@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useDiagnostics, type DiagnosticsData } from '../../hooks/fleet/useDiagnostics';
 import { ResourceBar } from './ResourceBar';
-import { Spinner } from '@/ui';
+import { Spinner, Stack } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -156,10 +156,10 @@ const Section = memo(function Section({
         onClick={onToggle}
         className="w-full flex items-center justify-between px-4 py-3 bg-surface-raised hover:bg-surface-subtle transition-colors"
       >
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           <span className="text-ac-blue">{icon}</span>
           <span className="text-sm font-medium text-ink-primary">{title}</span>
-        </div>
+        </Stack>
         {isExpanded ? (
           <ChevronDown className="w-4 h-4 text-ink-muted" />
         ) : (
@@ -187,21 +187,24 @@ const HealthSection = memo(function HealthSection({ health }: HealthSectionProps
       {/* Status Badge */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-secondary">Status</span>
-        <span
-          className={`inline-flex items-center gap-2 px-3 py-1.5  text-sm font-medium border ${statusColors.bg} ${statusColors.text} ${statusColors.border}`}
+        <Stack
+          direction="row"
+          align="center"
+          gap="sm"
+          className={`inline-flex px-3 py-1.5 text-sm font-medium border ${statusColors.bg} ${statusColors.text} ${statusColors.border}`}
         >
           {statusColors.icon}
           <span className="capitalize">{health.status}</span>
-        </span>
+        </Stack>
       </div>
 
       {/* Uptime */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-ink-secondary">Uptime</span>
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <Clock className="w-4 h-4 text-ink-muted" />
           <span className="text-sm font-medium text-ink-primary">{formatUptime(health.uptime)}</span>
-        </div>
+        </Stack>
       </div>
 
       {/* Version */}
@@ -261,11 +264,11 @@ const MemorySection = memo(function MemorySection({ memory }: MemorySectionProps
       {/* Memory Distribution Legend */}
       <div className="flex flex-wrap gap-3 pt-2 border-t border-border-subtle">
         {categories.map(({ label, value, color }) => (
-          <div key={label} className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <Stack key={label} direction="row" align="center" className="text-xs text-ink-muted" style={{ gap: '0.375rem' }}>
             <span className={`w-2.5 h-2.5  ${color}`} />
             <span>{label}</span>
             <span className="text-ink-secondary">({((value / totalMemory) * 100).toFixed(1)}%)</span>
-          </div>
+          </Stack>
         ))}
       </div>
     </div>
@@ -285,10 +288,10 @@ const ConnectionsSection = memo(function ConnectionsSection({ connections }: Con
     <div className="space-y-4">
       {/* Active Clients */}
       <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <Users className="w-4 h-4 text-ink-muted" />
           <span className="text-sm text-ink-secondary">Active Clients</span>
-        </div>
+        </Stack>
         <span className="text-lg font-semibold text-ink-primary">{connections.activeClients.toLocaleString()}</span>
       </div>
 
@@ -302,14 +305,14 @@ const ConnectionsSection = memo(function ConnectionsSection({ connections }: Con
               className="flex items-center justify-between p-3 bg-surface-subtle"
             >
               <span className="text-sm font-medium text-ink-primary">{pool.name}</span>
-              <div className="flex items-center gap-4 text-sm">
+              <Stack direction="row" align="center" gap="md" className="text-sm">
                 <span className="text-ac-green">
                   <span className="text-ink-muted">Active:</span> {pool.active}
                 </span>
                 <span className="text-ink-secondary">
                   <span className="text-ink-muted">Idle:</span> {pool.idle}
                 </span>
-              </div>
+              </Stack>
             </div>
           ))}
         </div>
@@ -318,15 +321,15 @@ const ConnectionsSection = memo(function ConnectionsSection({ connections }: Con
       {/* Horizon Tunnel */}
       <div className="pt-3 border-t border-border-subtle">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             {connections.horizonTunnel.connected ? (
               <Wifi className="w-4 h-4 text-ac-green" />
             ) : (
               <WifiOff className="w-4 h-4 text-ac-red" />
             )}
             <span className="text-sm text-ink-secondary">Horizon Tunnel</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <span
               className={`px-2.5 py-1  text-xs font-medium ${
                 connections.horizonTunnel.connected
@@ -341,7 +344,7 @@ const ConnectionsSection = memo(function ConnectionsSection({ connections }: Con
                 {formatUptime(connections.horizonTunnel.uptime)}
               </span>
             )}
-          </div>
+          </Stack>
         </div>
       </div>
     </div>
@@ -431,10 +434,10 @@ const ActorsSection = memo(function ActorsSection({ actors }: ActorsSectionProps
 
       {/* Evictions */}
       <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <Zap className="w-4 h-4 text-ink-muted" />
           <span className="text-sm text-ink-secondary">Evictions (1h)</span>
-        </div>
+        </Stack>
         <span
           className={`text-sm font-medium ${
             actors.evictions1h > 100 ? 'text-ac-orange' : 'text-ink-primary'
@@ -490,19 +493,22 @@ export function DiagnosticsPanel({
     <div className={`flex flex-col bg-surface-base  border border-border-subtle overflow-hidden ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-surface-raised">
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           <Activity className="w-5 h-5 text-ac-blue" />
           <div>
             <h3 className="text-sm font-semibold text-ink-primary">{sensorName}</h3>
             <p className="text-xs text-ink-muted">Diagnostics</p>
           </div>
-        </div>
+        </Stack>
 
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="md">
           {/* Connection/Live indicator */}
           {live && (
-            <span
-              className={`flex items-center gap-1.5 text-xs ${
+            <Stack
+              direction="row"
+              align="center"
+              style={{ gap: '0.375rem' }}
+              className={`text-xs ${
                 isConnected ? 'text-ac-green' : 'text-ac-red'
               }`}
             >
@@ -512,7 +518,7 @@ export function DiagnosticsPanel({
                 }`}
               />
               {isConnected ? 'Live' : 'Disconnected'}
-            </span>
+            </Stack>
           )}
 
           {/* Last updated */}
@@ -548,7 +554,7 @@ export function DiagnosticsPanel({
               <XCircle className="w-4 h-4 text-ink-muted hover:text-ink-primary" />
             </button>
           )}
-        </div>
+        </Stack>
       </div>
 
       {/* Content */}

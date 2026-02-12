@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 13:30_
+_Generated: 2026-02-12 14:06_
 
 ## Summary
 
-**Total findings: 359**
+**Total findings: 343**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 359 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 343 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -21,7 +21,6 @@ Priority files to migrate first (most raw patterns):
 | 18 | `components/fleet/FileBrowser.tsx` |
 | 17 | `pages/AdminSettingsPage.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
-| 12 | `components/fleet/DiagnosticsPanel.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
 | 11 | `components/fleet/SessionSearchResults.tsx` |
 | 9 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
@@ -55,8 +54,9 @@ Priority files to migrate first (most raw patterns):
 | 4 | `pages/beam/catalog/ServicesPage.tsx` |
 | 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
 | 4 | `pages/SupportPage.tsx` |
-| 4 | `components/fleet/pingora/ServiceControls.tsx` |
 | 4 | `components/fleet/pingora/EntityConfig.tsx` |
+| 4 | `components/fleet/pingora/DlpConfig.tsx` |
+| 3 | `pages/soc/CampaignDetailPage.tsx` |
 
 ---
 
@@ -79,22 +79,22 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/warroom/PlaybookRunner.tsx` | 81 | `<h3 className="font-medium text-ac-blue flex items-center gap-2">` |
 | `components/warroom/PlaybookRunner.tsx` | 110 | `<div className="flex items-center gap-3">` |
 | `components/warroom/PlaybookSelector.tsx` | 20 | `<div className="flex items-center gap-2">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 159 | `<div className="flex items-center gap-3">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 191 | `className={`inline-flex items-center gap-2 px-3 py-1.5  text-sm font-medium bord` |
-| `components/fleet/DiagnosticsPanel.tsx` | 201 | `<div className="flex items-center gap-2">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 264 | `<div key={label} className="flex items-center gap-1.5 text-xs text-ink-muted">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 288 | `<div className="flex items-center gap-2">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 305 | `<div className="flex items-center gap-4 text-sm">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 321 | `<div className="flex items-center gap-2">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 329 | `<div className="flex items-center gap-2">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 434 | `<div className="flex items-center gap-2">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 493 | `<div className="flex items-center gap-3">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 501 | `<div className="flex items-center gap-3">` |
-| `components/fleet/DiagnosticsPanel.tsx` | 505 | `className={`flex items-center gap-1.5 text-xs ${` |
 | `components/fleet/LogViewer.tsx` | 389 | `<div className="flex items-center gap-3">` |
 | `components/fleet/LogViewer.tsx` | 394 | `<div className="flex items-center gap-1.5">` |
 | `components/fleet/LogViewer.tsx` | 409 | `<div className="flex items-center gap-2">` |
 | `components/fleet/LogViewer.tsx` | 435 | `<div className="flex items-center gap-3">` |
 | `components/fleet/LogViewer.tsx` | 485 | `<div className="flex items-center gap-4 mt-2 pt-2 border-t border-border-subtle"` |
 | `components/fleet/LogViewer.tsx` | 489 | `className="flex items-center gap-1.5 cursor-pointer select-none"` |
+| `components/fleet/LogViewer.tsx` | 507 | `<div className="flex items-center gap-2">` |
+| `components/fleet/LogViewer.tsx` | 533 | `className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-se` |
+| `components/fleet/LogViewer.tsx` | 543 | `className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-se` |
+| `components/fleet/ServiceControlPanel.tsx` | 152 | `<div className="flex items-center gap-2">` |
+| `components/fleet/ServiceControlPanel.tsx` | 181 | `<div className="flex items-center justify-center gap-1 text-xs text-ink-muted">` |
+| `components/fleet/ServiceControlPanel.tsx` | 188 | `<div className="flex items-center justify-end gap-2 w-full">` |
+| `components/fleet/ServiceControlPanel.tsx` | 472 | `<div className="flex items-center gap-1.5 text-xs text-ink-secondary">` |
+| `components/fleet/ServiceControlPanel.tsx` | 482 | `<div className="flex items-center gap-2">` |
+| `components/fleet/ServiceControlPanel.tsx` | 493 | `<div className="flex items-center gap-2">` |
+| `components/fleet/ServiceControlPanel.tsx` | 622 | `<div className="flex items-center justify-center gap-2 py-2 px-3 bg-status-warni` |
+| `components/fleet/SensorTable.tsx` | 79 | `<div className="flex items-center gap-2">` |
+| `components/fleet/SynapseConfigEditor.tsx` | 364 | `<div className="flex items-center gap-2 mb-4">` |
 
