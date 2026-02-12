@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Box, SectionHeader, Text, alpha, axisDefaults, colors, spacing } from '@/ui';
+import { Box, SectionHeader, Stack, Text, alpha, axisDefaults, colors, spacing } from '@/ui';
 import {
   useBeamStats,
   useBlockedRequests,
@@ -101,11 +101,17 @@ function StatCard({
           </p>
           <p className="mt-2 text-3xl font-light text-ink-primary">{value.toLocaleString()}</p>
           {trend && (
-            <div className="mt-2 flex items-center gap-1 text-sm" style={{ color: trendColor }}>
+            <Stack
+              direction="row"
+              align="center"
+              gap="xs"
+              className="mt-2 text-sm"
+              style={{ color: trendColor }}
+            >
               <TrendIcon className="w-4 h-4" />
               <span>{Math.abs(trend.value)}%</span>
               <span className="text-ink-muted">{trend.period}</span>
-            </div>
+            </Stack>
           )}
         </div>
         <div className="p-3" style={{ background: iconBg }}>
@@ -135,16 +141,16 @@ function TrafficChart({ data }: TrafficChartProps) {
     <div className="bg-surface-card border border-border-subtle p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-ink-primary">Traffic Overview</h3>
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="md" className="text-sm">
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ background: COLORS.requests }} />
             <span className="text-ink-secondary">Requests</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </Stack>
+          <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ background: COLORS.blocked }} />
             <span className="text-ink-secondary">Blocked</span>
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       </div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
@@ -269,7 +275,7 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
             return (
               <div key={item.type} className="group">
                 <div className="flex items-center justify-between text-sm mb-1.5">
-                  <div className="flex items-center gap-2">
+                  <Stack direction="row" align="center" gap="sm">
                     <div
                       className="w-2.5 h-2.5"
                       style={{
@@ -278,13 +284,13 @@ function AttackTypesChart({ data }: { data: typeof DEMO_ATTACK_TYPES }) {
                       }}
                     />
                     <span className="text-ink-secondary">{item.type}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
+                  </Stack>
+                  <Stack direction="row" align="center" gap="smPlus">
                     <span className="text-ink-muted font-mono text-xs">{item.count}</span>
                     <span className="text-ink-primary font-medium font-mono w-10 text-right">
                       {item.percentage}%
                     </span>
-                  </div>
+                  </Stack>
                 </div>
                 {/* Individual progress bar with gradient */}
                 <div
@@ -348,10 +354,10 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
                 className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
               >
                 <td className="px-5 py-3 text-sm text-ink-secondary">
-                  <div className="flex items-center gap-2">
+                  <Stack direction="row" align="center" gap="sm">
                     <Clock className="w-4 h-4" />
                     {new Date(req.timestamp).toLocaleTimeString()}
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-5 py-3 text-sm">
                   <code className="text-ac-blue bg-ac-blue/10 px-2 py-0.5">
@@ -359,10 +365,10 @@ function RecentBlockedTable({ requests }: { requests: BlockedRequest[] }) {
                   </code>
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-secondary">
-                  <div className="flex items-center gap-2">
+                  <Stack direction="row" align="center" gap="sm">
                     <Globe className="w-4 h-4 text-ink-muted" />
                     {req.sourceIp}
-                  </div>
+                  </Stack>
                 </td>
                 <td className="px-5 py-3 text-sm text-ink-secondary">{req.threatType}</td>
                 <td className="px-5 py-3">
