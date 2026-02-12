@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Activity } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Stack } from '@/ui';
 
 export interface RateLimitData {
   enabled: boolean;
@@ -17,13 +18,13 @@ export const RateLimitConfig = memo(function RateLimitConfig({ config, onChange 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Activity className={clsx("w-5 h-5", config.enabled ? "text-ac-blue" : "text-ink-muted")} />
+        <Stack direction="row" align="center" gap="sm">
+          <Activity className={clsx("w-5 h-5", config.enabled ? "text-ac-blue" : "text-ink-muted")} aria-hidden="true" />
           <div>
             <h3 className="text-sm font-medium text-ink-primary">Rate Limiting</h3>
             <p className="text-xs text-ink-secondary">Global request throttling</p>
           </div>
-        </div>
+        </Stack>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"

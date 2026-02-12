@@ -1,7 +1,7 @@
 import { useCallback, memo } from 'react';
 import { Shield } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Button } from '@/ui';
+import { Button, Stack } from '@/ui';
 
 export interface WafConfigData {
   enabled: boolean;
@@ -32,13 +32,13 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Shield className={clsx("w-5 h-5", config.enabled ? "text-ac-green" : "text-ink-muted")} />
+        <Stack direction="row" align="center" gap="sm">
+          <Shield className={clsx("w-5 h-5", config.enabled ? "text-ac-green" : "text-ink-muted")} aria-hidden="true" />
           <div>
             <h3 className="text-sm font-medium text-ink-primary">WAF Protection</h3>
             <p className="text-xs text-ink-secondary">Web Application Firewall engine</p>
           </div>
-        </div>
+        </Stack>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -106,7 +106,7 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
                 {Object.entries(config.rule_overrides).map(([id, override]) => (
                   <div key={id} className="flex items-center justify-between p-2 bg-surface-subtle border border-border-subtle text-sm">
                     <span className="font-mono text-xs">{id}</span>
-                    <div className="flex items-center gap-3">
+                    <Stack direction="row" align="center" gap="smPlus">
                       <select
                         value={override.action}
                         onChange={(e) => handleRuleOverride(id, { ...override, action: e.target.value })}
@@ -124,7 +124,7 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
                       >
                         Remove
                       </Button>
-                    </div>
+                    </Stack>
                   </div>
                 ))}
               </div>

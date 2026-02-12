@@ -8,6 +8,7 @@ import {
   DEFAULT_CRAWLER_DNS_TIMEOUT_MS,
   DEFAULT_CRAWLER_MAX_CONCURRENT_DNS_LOOKUPS,
 } from './configDefaults';
+import { Stack } from '@/ui';
 
 export interface CrawlerConfigData {
   enabled: boolean;
@@ -29,13 +30,13 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot className={clsx("w-5 h-5", config.enabled ? "text-ac-purple" : "text-ink-muted")} />
+        <Stack direction="row" align="center" gap="sm">
+          <Bot className={clsx("w-5 h-5", config.enabled ? "text-ac-purple" : "text-ink-muted")} aria-hidden="true" />
           <div>
             <h3 className="text-sm font-medium text-ink-primary">Crawler/Bot Detection</h3>
             <p className="text-xs text-ink-secondary">Verify legitimate crawlers, block bad bots</p>
           </div>
-        </div>
+        </Stack>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -52,30 +53,36 @@ export const CrawlerConfig = memo(function CrawlerConfig({ config, onChange }: C
         <div className="space-y-4 border-t border-border-subtle pt-6">
           {/* Feature toggles */}
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <Stack direction="row" align="center" gap="sm">
               <input
+                id="crawler-verify-legit"
                 type="checkbox"
                 checked={config.verify_legitimate_crawlers}
                 onChange={(e) => onChange({ ...config, verify_legitimate_crawlers: e.target.checked })}
                 className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
               />
-              <div className="flex items-center gap-1">
-                <Shield className="w-3 h-3 text-ac-green" />
-                <span className="text-xs text-ink-secondary">Verify legitimate crawlers (DNS)</span>
-              </div>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+              <Stack direction="row" align="center" gap="xs">
+                <Shield className="w-3 h-3 text-ac-green" aria-hidden="true" />
+                <label htmlFor="crawler-verify-legit" className="text-xs text-ink-secondary cursor-pointer">
+                  Verify legitimate crawlers (DNS)
+                </label>
+              </Stack>
+            </Stack>
+            <Stack direction="row" align="center" gap="sm">
               <input
+                id="crawler-block-bad-bots"
                 type="checkbox"
                 checked={config.block_bad_bots}
                 onChange={(e) => onChange({ ...config, block_bad_bots: e.target.checked })}
                 className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
               />
-              <div className="flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-ac-red" />
-                <span className="text-xs text-ink-secondary">Block known bad bots</span>
-              </div>
-            </label>
+              <Stack direction="row" align="center" gap="xs">
+                <AlertTriangle className="w-3 h-3 text-ac-red" aria-hidden="true" />
+                <label htmlFor="crawler-block-bad-bots" className="text-xs text-ink-secondary cursor-pointer">
+                  Block known bad bots
+                </label>
+              </Stack>
+            </Stack>
           </div>
 
           {/* DNS Failure Policy */}

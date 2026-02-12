@@ -3,7 +3,7 @@ import { Timer, Hourglass } from 'lucide-react';
 import { clsx } from 'clsx';
 import { parseIntSafe, parseFloatSafe } from '../../../utils/parseNumeric';
 import type { TarpitConfig as SharedTarpitConfig } from '@signal-horizon/shared/types';
-import { Alert } from '@/ui';
+import { Alert, Stack } from '@/ui';
 
 /**
  * Tarpit config data used by the UI form.
@@ -51,13 +51,13 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Hourglass className={clsx("w-5 h-5", config.enabled ? "text-ac-orange" : "text-ink-muted")} />
+        <Stack direction="row" align="center" gap="sm">
+          <Hourglass className={clsx("w-5 h-5", config.enabled ? "text-ac-orange" : "text-ink-muted")} aria-hidden="true" />
           <div>
             <h3 className="text-sm font-medium text-ink-primary">Tarpit (Slow-Drip Defense)</h3>
             <p className="text-xs text-ink-secondary">Progressive delays for suspicious actors</p>
           </div>
-        </div>
+        </Stack>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -194,10 +194,10 @@ export const TarpitConfig = memo(function TarpitConfig({ config, onChange }: Tar
           </div>
 
           <div className="p-3 bg-surface-subtle text-xs text-ink-muted">
-            <div className="flex items-center gap-1 mb-1">
-              <Timer className="w-3 h-3" />
+            <Stack direction="row" align="center" gap="xs" className="mb-1">
+              <Timer className="w-3 h-3" aria-hidden="true" />
               <span className="font-medium">Delay Formula:</span>
-            </div>
+            </Stack>
             <code className="text-ac-blue">
               delay = min({config.base_delay_ms}ms × {config.progressive_multiplier}^level, {config.max_delay_ms}ms)
             </code>

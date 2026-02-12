@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { FileWarning } from 'lucide-react';
+import { Stack } from '@/ui';
 
 export interface BlockPageConfigData {
   company_name?: string;
@@ -20,13 +21,13 @@ interface BlockPageConfigProps {
 export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange }: BlockPageConfigProps) {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <FileWarning className="w-5 h-5 text-ac-orange" />
+      <Stack direction="row" align="center" gap="sm">
+        <FileWarning className="w-5 h-5 text-ac-orange" aria-hidden="true" />
         <div>
           <h3 className="text-sm font-medium text-ink-primary">Block Page Branding</h3>
           <p className="text-xs text-ink-secondary">Customize the page shown to blocked users</p>
         </div>
-      </div>
+      </Stack>
 
       <div className="space-y-4 border-t border-border-subtle pt-6">
         {/* Branding inputs */}
@@ -74,15 +75,18 @@ export const BlockPageConfig = memo(function BlockPageConfig({ config, onChange 
               { key: 'show_client_ip', label: 'Client IP' },
               { key: 'show_rule_id', label: 'Rule ID (debug)' },
             ].map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-2 cursor-pointer">
+              <Stack key={key} direction="row" align="center" gap="sm">
                 <input
+                  id={`block-page-${key}`}
                   type="checkbox"
                   checked={config[key as keyof BlockPageConfigData] as boolean}
                   onChange={(e) => onChange({ ...config, [key]: e.target.checked })}
                   className="w-4 h-4 border-border-subtle text-ac-blue focus:ring-ac-blue/20"
                 />
-                <span className="text-xs text-ink-secondary">{label}</span>
-              </label>
+                <label htmlFor={`block-page-${key}`} className="text-xs text-ink-secondary cursor-pointer">
+                  {label}
+                </label>
+              </Stack>
             ))}
           </div>
         </div>

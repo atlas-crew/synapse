@@ -10,7 +10,7 @@ import {
 } from './configDefaults';
 // Note: Some DEFAULT_* constants removed since parseIntSafe uses current value as fallback
 import { parseIntSafe } from '../../../utils/parseNumeric';
-import { Alert } from '@/ui';
+import { Alert, Stack } from '@/ui';
 
 export interface EntityConfigData {
   enabled: boolean;
@@ -60,13 +60,13 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
       {/* Entity Store Section */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users className={clsx("w-5 h-5", entityConfig.enabled ? "text-ac-blue" : "text-ink-muted")} />
+          <Stack direction="row" align="center" gap="sm">
+            <Users className={clsx("w-5 h-5", entityConfig.enabled ? "text-ac-blue" : "text-ink-muted")} aria-hidden="true" />
             <div>
               <h3 className="text-sm font-medium text-ink-primary">Entity Store</h3>
               <p className="text-xs text-ink-secondary">Per-IP risk tracking and automatic blocking</p>
             </div>
-          </div>
+          </Stack>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
@@ -104,10 +104,10 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
               />
             </div>
             <div className="space-y-1">
-              <label htmlFor="entity-risk-decay" className="text-xs font-medium text-ink-secondary flex items-center gap-1">
+              <Stack direction="row" align="center" gap="xs" className="text-xs font-medium text-ink-secondary">
                 <TrendingDown className="w-3 h-3" aria-hidden="true" />
-                Risk Decay/min
-              </label>
+                <label htmlFor="entity-risk-decay">Risk Decay/min</label>
+              </Stack>
               <input
                 id="entity-risk-decay"
                 type="number"
@@ -186,21 +186,22 @@ export const EntityConfig = memo(function EntityConfig({ entityConfig, travelCon
 
       {/* Impossible Travel Section */}
       <div className="space-y-6">
-        <div className="flex items-center gap-2">
-          <Plane className="w-5 h-5 text-ac-sky-blue" />
+        <Stack direction="row" align="center" gap="sm">
+          <Plane className="w-5 h-5 text-ac-sky-blue" aria-hidden="true" />
           <div>
             <h3 className="text-sm font-medium text-ink-primary">Impossible Travel Detection</h3>
             <p className="text-xs text-ink-secondary">Flag logins from geographically impossible locations</p>
           </div>
-        </div>
+        </Stack>
 
         <div className="grid grid-cols-2 gap-4 border-t border-border-subtle pt-6">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-ink-secondary flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              Max Speed (km/h)
-            </label>
+            <Stack direction="row" align="center" gap="xs" className="text-xs font-medium text-ink-secondary">
+              <MapPin className="w-3 h-3" aria-hidden="true" />
+              <label htmlFor="travel-max-speed">Max Speed (km/h)</label>
+            </Stack>
             <input
+              id="travel-max-speed"
               type="number"
               min="100"
               max="2000"

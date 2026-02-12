@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from 'react';
 import { Ban, X } from 'lucide-react';
-import { Button, Input, Select } from '@/ui';
+import { Button, Input, Select, Stack } from '@/ui';
 
 export interface AccessControlData {
   allow: string[];
@@ -41,13 +41,13 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Ban className="w-5 h-5 text-ink-muted" />
+      <Stack direction="row" align="center" gap="sm">
+        <Ban className="w-5 h-5 text-ink-muted" aria-hidden="true" />
         <div>
           <h3 className="text-sm font-medium text-ink-primary">Access Control</h3>
           <p className="text-xs text-ink-secondary">IP/CIDR Allow & Deny Lists</p>
         </div>
-      </div>
+      </Stack>
 
       <div className="space-y-4 border-t border-border-subtle pt-6">
         {/* Add Form */}
@@ -107,7 +107,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
                     onClick={() => handleRemove('deny', cidr)}
                     variant="ghost"
                     size="sm"
-                    icon={<X className="w-3 h-3" />}
+                    icon={<X className="w-3 h-3" aria-hidden="true" />}
                     style={{ height: '20px', padding: 0, color: '#7F7F7F' }}
                     aria-label={`Remove denied CIDR ${cidr}`}
                   />
@@ -128,7 +128,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
                     onClick={() => handleRemove('allow', cidr)}
                     variant="ghost"
                     size="sm"
-                    icon={<X className="w-3 h-3" />}
+                    icon={<X className="w-3 h-3" aria-hidden="true" />}
                     style={{ height: '20px', padding: 0, color: '#7F7F7F' }}
                     aria-label={`Remove allowed CIDR ${cidr}`}
                   />
