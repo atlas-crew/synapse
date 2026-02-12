@@ -516,10 +516,10 @@ const AdminSettingsPage: React.FC = () => {
           />
 
           <div className="mt-10 p-4 bg-ac-card-dark text-white space-y-4">
-            <div className="flex items-center gap-2 text-ac-sky-blue">
+            <Stack direction="row" align="center" gap="sm" className="text-ac-sky-blue">
               <Key className="w-4 h-4" />
               <span className="text-xs font-bold uppercase tracking-widest">Quick Access</span>
-            </div>
+            </Stack>
             <Link
               to="/fleet/keys"
               className="block text-xs hover:text-ac-sky-blue transition-colors"
@@ -640,12 +640,12 @@ const AdminSettingsPage: React.FC = () => {
                   </p>
 
                   <div className="p-6 border border-status-error/20 bg-status-error/5 space-y-4">
-                    <div className="flex items-center gap-3 text-status-error">
+                    <Stack direction="row" align="center" gap="smPlus" className="text-status-error">
                       <Spinner size={20} color="#EF3340" />
                       <h3 className="font-bold text-sm uppercase tracking-wider">
                         Invalidate All Sessions
                       </h3>
-                    </div>
+                    </Stack>
                     <p className="text-xs text-ink-muted">
                       This will increment the security epoch for your tenant. All existing JWTs and
                       session tokens will be immediately invalidated. Users and sensors will be
@@ -665,7 +665,12 @@ const AdminSettingsPage: React.FC = () => {
                   <h3 className="text-lg font-light text-ink-primary uppercase tracking-tight">
                     Data Consent Status
                   </h3>
-                  <div className="flex items-center gap-4 p-4 border border-border-subtle bg-surface-subtle">
+                  <Stack
+                    direction="row"
+                    align="center"
+                    gap="md"
+                    className="p-4 border border-border-subtle bg-surface-subtle"
+                  >
                     {settings?.metadata.consent.status === 'acknowledged' ? (
                       <>
                         <div className="w-10 h-10 bg-status-success/10 flex items-center justify-center text-status-success">
@@ -708,7 +713,7 @@ const AdminSettingsPage: React.FC = () => {
                         </Button>
                       </>
                     )}
-                  </div>
+                  </Stack>
                 </section>
 
                 <section className="bg-surface-card border-t-4 border-ink-muted p-8 shadow-card space-y-6">
@@ -812,7 +817,7 @@ const AdminSettingsPage: React.FC = () => {
                           className="group flex items-center justify-between p-5 bg-surface-subtle hover:bg-ac-navy hover:text-white transition-all border-l-4 border-ac-sky-blue"
                         >
                           <div>
-                            <div className="flex items-center gap-3 mb-1">
+                            <Stack direction="row" align="center" gap="smPlus" className="mb-1">
                               <span className="font-bold text-sm">{policy.name}</span>
                               <span
                                 className={clsx(
@@ -831,12 +836,17 @@ const AdminSettingsPage: React.FC = () => {
                                   DEFAULT
                                 </span>
                               )}
-                            </div>
+                            </Stack>
                             <p className="text-xs text-ink-muted group-hover:text-white/60">
                               {policy.description || 'No description provided.'}
                             </p>
                           </div>
-                          <div className="text-right flex items-center gap-4">
+                          <Stack
+                            direction="row"
+                            align="center"
+                            gap="md"
+                            className="text-right"
+                          >
                             <div className="text-xs opacity-60">VER {policy.version}.0</div>
                             <button
                               onClick={() =>
@@ -846,7 +856,7 @@ const AdminSettingsPage: React.FC = () => {
                             >
                               {policy.isDefault ? 'Clone' : 'Edit'}
                             </button>
-                          </div>
+                          </Stack>
                         </div>
                       ))
                     )}
@@ -1108,7 +1118,7 @@ const AdminSettingsPage: React.FC = () => {
                   )}
 
                   <div className="bg-surface-subtle p-4 border border-border-subtle flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-4">
+                    <Stack direction="row" align="center" gap="md">
                       <Ban className="w-5 h-5 text-status-error" />
                       <div>
                         <p className="text-sm font-bold text-ink-primary">Dynamic IP Blocking</p>
@@ -1116,7 +1126,7 @@ const AdminSettingsPage: React.FC = () => {
                           Fleet-wide blocks are automatically propagated to all sensors within 50ms.
                         </p>
                       </div>
-                    </div>
+                    </Stack>
                     <div className="text-right">
                       <p className="text-lg font-light text-ink-primary">
                         {blocklistStats.totalActive.toLocaleString()}
@@ -1145,7 +1155,7 @@ const AdminSettingsPage: React.FC = () => {
                           key={pb.id}
                           className="p-4 border border-border-subtle flex items-center justify-between hover:bg-surface-subtle transition-colors group cursor-pointer"
                         >
-                          <div className="flex items-center gap-4">
+                          <Stack direction="row" align="center" gap="md">
                             <Zap
                               className={clsx(
                                 'w-4 h-4',
@@ -1160,7 +1170,7 @@ const AdminSettingsPage: React.FC = () => {
                                   : `IF ${pb.triggerType} ${pb.triggerValue ? `== ${pb.triggerValue}` : ''}`}
                               </p>
                             </div>
-                          </div>
+                          </Stack>
                           <CheckCircle className="w-4 h-4 text-status-success opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       ))
@@ -1192,10 +1202,10 @@ const AdminSettingsPage: React.FC = () => {
                   />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="p-6 border border-border-subtle space-y-4">
-                      <div className="flex items-center gap-3 text-ac-blue">
+                      <Stack direction="row" align="center" gap="smPlus" className="text-ac-blue">
                         <RefreshCw className="w-5 h-5" />
                         <h3 className="font-bold text-sm uppercase tracking-wider">Hot Reload</h3>
-                      </div>
+                      </Stack>
                       <p className="text-xs text-ink-muted leading-relaxed">
                         Triggers a configuration reload across all online sensors. No service
                         interruption or connection draining required.
@@ -1210,10 +1220,15 @@ const AdminSettingsPage: React.FC = () => {
                     </div>
 
                     <div className="p-6 border border-border-subtle space-y-4">
-                      <div className="flex items-center gap-3 text-status-error">
+                      <Stack
+                        direction="row"
+                        align="center"
+                        gap="smPlus"
+                        className="text-status-error"
+                      >
                         <Power className="w-5 h-5" />
                         <h3 className="font-bold text-sm uppercase tracking-wider">Fleet Drain</h3>
-                      </div>
+                      </Stack>
                       <p className="text-xs text-ink-muted leading-relaxed">
                         Commands all sensors to stop accepting new connections and gracefully finish
                         existing ones. Use for maintenance.
@@ -1316,7 +1331,7 @@ const AdminSettingsPage: React.FC = () => {
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <Stack direction="row" align="center" gap="sm">
                         <code className="flex-1 bg-surface-card border border-border-subtle p-3 text-xs font-mono text-ink-primary break-all">
                           {createdToken}
                         </code>
@@ -1327,7 +1342,7 @@ const AdminSettingsPage: React.FC = () => {
                         >
                           <Copy className="w-4 h-4 text-ink-secondary" />
                         </button>
-                      </div>
+                      </Stack>
                       <p className="text-xs font-bold text-status-error">
                         <AlertTriangle className="w-3 h-3 inline mr-1" />
                         SAVE THIS SECURELY. It will not be shown again.
@@ -1469,13 +1484,18 @@ const AdminSettingsPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-4 p-4 border border-ac-blue/20 bg-ac-blue/5">
+                  <Stack
+                    direction="row"
+                    align="center"
+                    gap="md"
+                    className="p-4 border border-ac-blue/20 bg-ac-blue/5"
+                  >
                     <Activity className="w-5 h-5 text-ac-blue" />
                     <p className="text-xs text-ink-secondary">
                       Connectivity tests allow private targets only when they match configured hub
                       endpoints (Signal Hub / Synapse Direct).
                     </p>
-                  </div>
+                  </Stack>
                 </section>
 
                 <section className="bg-surface-card border-t-4 border-ac-magenta p-8 shadow-card space-y-6">
@@ -1578,7 +1598,12 @@ const AdminSettingsPage: React.FC = () => {
                             <p className="text-xs font-bold text-ink-primary uppercase tracking-widest">
                               Connectivity Diagnostics
                             </p>
-                            <div className="flex items-center gap-2 bg-surface-subtle p-1 border border-border-subtle rounded">
+                            <Stack
+                              direction="row"
+                              align="center"
+                              gap="sm"
+                              className="bg-surface-subtle p-1 border border-border-subtle rounded"
+                            >
                               <button
                                 onClick={() => setDiagSource('hub')}
                                 className={clsx(
@@ -1601,7 +1626,7 @@ const AdminSettingsPage: React.FC = () => {
                               >
                                 Remote Sensors
                               </button>
-                            </div>
+                            </Stack>
                           </div>
 
                           <div className="border border-border-subtle bg-surface-subtle p-4 space-y-4">
@@ -1637,9 +1662,13 @@ const AdminSettingsPage: React.FC = () => {
                                   {sensors
                                     .filter((s) => s.status === 'online')
                                     .map((sensor) => (
-                                      <label
+                                      <Stack
+                                        as="label"
+                                        direction="row"
+                                        align="center"
+                                        gap="sm"
                                         key={sensor.id}
-                                        className="flex items-center gap-2 p-2 bg-surface-card border border-border-subtle cursor-pointer hover:border-ac-blue/50 transition-colors"
+                                        className="p-2 bg-surface-card border border-border-subtle cursor-pointer hover:border-ac-blue/50 transition-colors"
                                       >
                                         <input
                                           type="checkbox"
@@ -1661,7 +1690,7 @@ const AdminSettingsPage: React.FC = () => {
                                         <span className="text-[10px] font-mono truncate text-ink-primary">
                                           {sensor.name}
                                         </span>
-                                      </label>
+                                      </Stack>
                                     ))}
                                   {sensors.filter((s) => s.status === 'online').length === 0 && (
                                     <div className="col-span-2 py-4 text-center text-[10px] text-ink-muted italic border border-dashed border-border-subtle">
@@ -2084,14 +2113,19 @@ const AdminSettingsPage: React.FC = () => {
 
                         <div className="flex items-center justify-between py-4 border-b border-border-subtle">
                           <div>
-                            <div className="flex items-center gap-2 font-bold text-sm text-ink-primary">
+                            <Stack
+                              direction="row"
+                              align="center"
+                              gap="sm"
+                              className="font-bold text-sm text-ink-primary"
+                            >
                               <Cpu className="w-4 h-4" /> Chaos Engine
-                            </div>
+                            </Stack>
                             <p className="text-xs text-ink-muted">
                               Enable randomized traffic injection for resilience testing.
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <Stack direction="row" align="center" gap="sm">
                             <span className="text-xs font-bold text-ink-muted uppercase tracking-tighter">
                               {hubConfig?.fleetCommands?.enableToggleChaos ? 'ENABLED' : 'DISABLED'}
                             </span>
@@ -2105,19 +2139,24 @@ const AdminSettingsPage: React.FC = () => {
                               disabled={isUpdatingConfig || hubLoading}
                               label="Toggle Chaos Engine"
                             />
-                          </div>
+                          </Stack>
                         </div>
 
                         <div className="flex items-center justify-between py-4 border-b border-border-subtle">
                           <div>
-                            <div className="flex items-center gap-2 font-bold text-sm text-ink-primary">
+                            <Stack
+                              direction="row"
+                              align="center"
+                              gap="sm"
+                              className="font-bold text-sm text-ink-primary"
+                            >
                               <Shield className="w-4 h-4" /> Moving Target Defense
-                            </div>
+                            </Stack>
                             <p className="text-xs text-ink-muted">
                               Rotate upstream addresses dynamically to frustrate reconnaissance.
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <Stack direction="row" align="center" gap="sm">
                             <span className="text-xs font-bold text-ink-muted uppercase tracking-tighter">
                               {hubConfig?.fleetCommands?.enableToggleMtd ? 'ENABLED' : 'DISABLED'}
                             </span>
@@ -2131,7 +2170,7 @@ const AdminSettingsPage: React.FC = () => {
                               disabled={isUpdatingConfig || hubLoading}
                               label="Toggle Moving Target Defense"
                             />
-                          </div>
+                          </Stack>
                         </div>
                       </div>
 
