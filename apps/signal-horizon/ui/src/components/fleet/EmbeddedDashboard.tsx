@@ -152,9 +152,9 @@ export function EmbeddedDashboard({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           {/* Connection Status */}
-          <div className="flex items-center gap-1.5 text-sm mr-2">
+          <Stack direction="row" align="center" gap="xsPlus" className="text-sm mr-2">
             {state.connected ? (
               <>
                 <Wifi className="h-4 w-4 text-status-success" />
@@ -166,7 +166,7 @@ export function EmbeddedDashboard({
                 <span className="text-ink-secondary">Disconnected</span>
               </>
             )}
-          </div>
+          </Stack>
 
           {/* Action Buttons */}
           <button
@@ -201,7 +201,7 @@ export function EmbeddedDashboard({
               <Maximize2 className="h-4 w-4" />
             )}
           </button>
-        </div>
+        </Stack>
       </div>
 
       {/* Content */}
@@ -210,7 +210,7 @@ export function EmbeddedDashboard({
         {state.error && (
           <div className="p-6">
             <div className="bg-status-error/10 border border-status-error/20 p-4">
-              <div className="flex items-center gap-2 text-status-error">
+              <Stack direction="row" align="center" gap="sm" className="text-status-error">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{state.error.message}</span>
                 <button
@@ -219,7 +219,7 @@ export function EmbeddedDashboard({
                 >
                   Retry
                 </button>
-              </div>
+              </Stack>
             </div>
           </div>
         )}

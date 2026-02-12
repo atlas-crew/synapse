@@ -160,6 +160,7 @@ export const typography = {
 
 export const spacing = {
   xs: '4px',
+  xsPlus: '6px',
   sm: '8px',
   // Intermediate spacing token between sm (8px) and md (16px).
   smPlus: '12px',
@@ -173,6 +174,7 @@ export const spacing = {
 // Numeric versions for calculations
 export const spacingN = {
   xs: 4,
+  xsPlus: 6,
   sm: 8,
   smPlus: 12,
   md: 16,

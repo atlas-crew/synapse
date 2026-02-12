@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import { ArrowRight, AlertTriangle } from 'lucide-react';
+import { Stack } from '@/ui';
 
 interface SchemaChange {
   field: string;
@@ -21,7 +22,7 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
     <div className="card border-l-4 border-l-ac-orange">
       <div className="p-4 border-b border-border-subtle flex justify-between items-start">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <Stack direction="row" align="center" gap="sm" className="mb-1">
             <span className={clsx(
               "px-2 py-0.5 text-xs font-bold  uppercase",
               method === 'GET' ? 'bg-method-get/10 text-method-get' :
@@ -31,15 +32,15 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
               {method}
             </span>
             <span className="font-mono text-sm text-ink-primary">{endpoint}</span>
-          </div>
+          </Stack>
           <p className="text-xs text-ink-secondary">
             Drift detected at {new Date(detectedAt).toLocaleString()}
           </p>
         </div>
-        <div className="flex items-center gap-1 text-ac-orange text-xs font-medium">
+        <Stack direction="row" align="center" gap="xs" className="text-ac-orange text-xs font-medium">
           <AlertTriangle className="w-4 h-4" />
           {changes.length} Changes
-        </div>
+        </Stack>
       </div>
       
       <div className="divide-y divide-border-subtle">
@@ -55,7 +56,7 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
               </span>
             </div>
             
-            <div className="flex items-center gap-3 text-xs mt-2">
+            <Stack direction="row" align="center" gap="smPlus" className="text-xs mt-2">
               <div className="flex-1 bg-surface-base p-2 border border-border-subtle text-ink-muted">
                 <span className="block text-[10px] uppercase text-ink-muted mb-0.5">Expected</span>
                 <span className="font-mono text-green-600">{change.oldType || 'undefined'}</span>
@@ -65,7 +66,7 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
                 <span className="block text-[10px] uppercase text-ink-muted mb-0.5">Actual</span>
                 <span className="font-mono text-red-500">{change.newType || 'undefined'}</span>
               </div>
-            </div>
+            </Stack>
             
             <p className="text-ink-secondary text-xs mt-2 italic">
               {change.description}
