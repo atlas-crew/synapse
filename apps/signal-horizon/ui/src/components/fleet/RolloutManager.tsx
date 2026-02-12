@@ -37,7 +37,7 @@ import type {
   RolloutProgressStatus,
 } from '../../hooks/fleet/useReleases';
 import { useSensors } from '../../hooks/fleet/useSensors';
-import { Modal, Spinner } from '@/ui';
+import { Modal, Spinner, Stack } from '@/ui';
 
 // ============================================================================
 // Types
@@ -209,7 +209,7 @@ const StepIndicator = memo(function StepIndicator({
               onClick={() => isClickable && onStepClick(step.key)}
               disabled={!isClickable}
               className={clsx(
-                'flex items-center gap-2 px-3 py-1.5 transition-colors',
+                'px-3 py-1.5 transition-colors',
                 isActive && 'bg-ac-blue text-white',
                 isCompleted && 'bg-status-success/10 text-status-success',
                 !isActive && !isCompleted && 'bg-surface-subtle text-ink-muted',
@@ -217,8 +217,10 @@ const StepIndicator = memo(function StepIndicator({
                 !isClickable && 'cursor-default'
               )}
             >
-              {isCompleted ? <Check className="w-4 h-4" /> : step.icon}
-              <span className="text-xs font-medium hidden sm:inline">{step.label}</span>
+              <Stack as="span" direction="row" inline align="center" gap="sm">
+                {isCompleted ? <Check className="w-4 h-4" /> : step.icon}
+                <span className="text-xs font-medium hidden sm:inline">{step.label}</span>
+              </Stack>
             </button>
 
             {/* Connector line */}
@@ -261,14 +263,14 @@ const ReleaseCard = memo(function ReleaseCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             <span className="text-lg font-semibold text-ink-primary">v{release.version}</span>
             {isLatest && (
               <span className="px-2 py-0.5 text-xs font-medium bg-status-success/10 text-status-success border border-status-success/30">
                 Latest
               </span>
             )}
-          </div>
+          </Stack>
           <div className="mt-1 text-xs text-ink-muted">
             {formatDate(release.createdAt)} - {formatBytes(release.size)}
           </div>
@@ -347,15 +349,19 @@ const SensorProgressCard = memo(function SensorProgressCard({ progress }: { prog
     <div className="p-3 bg-surface-card border border-border-subtle">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-ink-primary truncate">{progress.sensorName}</span>
-        <div
+        <Stack
+          direction="row"
+          inline
+          align="center"
+          gap="xs"
           className={clsx(
-            'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium border',
+            'px-2 py-0.5 text-xs font-medium border',
             config.className
           )}
         >
           {config.icon}
           <span>{config.label}</span>
-        </div>
+        </Stack>
       </div>
       {progress.error && (
         <div className="mt-2 p-2 bg-status-error/10 border border-status-error/20 text-xs text-status-error">
@@ -539,7 +545,7 @@ export const RolloutManager = memo(function RolloutManager({
       <div className={clsx('bg-surface-card border border-border-subtle overflow-hidden', className)}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-surface-raised border-b border-border-subtle">
-          <div className="flex items-center gap-3">
+          <Stack direction="row" align="center" gap="smPlus">
             <div className="p-2 bg-ac-blue/10">
               <Layers className="w-5 h-5 text-ac-blue" />
             </div>
@@ -549,18 +555,20 @@ export const RolloutManager = memo(function RolloutManager({
                 v{activeRollout.release.version} - {activeRollout.strategy} strategy
               </p>
             </div>
-          </div>
+          </Stack>
           <button
             onClick={() => setShowConfirmCancel(true)}
             disabled={isCancellingRollout}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-status-error bg-status-error/10 border border-status-error/30 hover:bg-status-error/20 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-status-error bg-status-error/10 border border-status-error/30 hover:bg-status-error/20 transition-colors disabled:opacity-50"
           >
-            {isCancellingRollout ? (
-              <Spinner size={16} color="#EF3340" />
-            ) : (
-              <Square className="w-4 h-4" />
-            )}
-            Cancel Rollout
+            <Stack as="span" direction="row" inline align="center" gap="sm">
+              {isCancellingRollout ? (
+                <Spinner size={16} color="#EF3340" />
+              ) : (
+                <Square className="w-4 h-4" />
+              )}
+              Cancel Rollout
+            </Stack>
           </button>
         </div>
 
@@ -628,10 +636,12 @@ export const RolloutManager = memo(function RolloutManager({
               <button
                 onClick={handleCancelRollout}
                 disabled={isCancellingRollout}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
               >
-                {isCancellingRollout && <Spinner size={16} color="#FFFFFF" />}
-                Cancel Rollout
+                <Stack as="span" direction="row" inline align="center" gap="sm">
+                  {isCancellingRollout && <Spinner size={16} color="#FFFFFF" />}
+                  Cancel Rollout
+                </Stack>
               </button>
             </div>
           </Modal>
@@ -703,15 +713,15 @@ export const RolloutManager = memo(function RolloutManager({
             {/* Rolling strategy options */}
             {strategy === 'rolling' && (
               <div className="p-4 bg-surface-subtle space-y-4">
-                <div className="flex items-center gap-2">
+                <Stack direction="row" align="center" gap="sm">
                   <Info className="w-4 h-4 text-ink-muted" />
                   <span className="text-sm font-medium text-ink-primary">Rolling Options</span>
-                </div>
+                </Stack>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-ink-secondary mb-1">Batch Size</label>
-                    <div className="flex items-center gap-2">
+                    <Stack direction="row" align="center" gap="sm">
                       <input
                         type="range"
                         min="1"
@@ -721,13 +731,13 @@ export const RolloutManager = memo(function RolloutManager({
                         className="flex-1"
                       />
                       <span className="w-12 text-right text-sm font-mono text-ink-primary">{batchSize}</span>
-                    </div>
+                    </Stack>
                     <p className="mt-1 text-xs text-ink-muted">Sensors per batch</p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-ink-secondary mb-1">Batch Delay</label>
-                    <div className="flex items-center gap-2">
+                    <Stack direction="row" align="center" gap="sm">
                       <input
                         type="number"
                         min="0"
@@ -737,7 +747,7 @@ export const RolloutManager = memo(function RolloutManager({
                         className="w-20 px-2 py-1 text-sm bg-surface-inset border border-border-subtle text-ink-primary"
                       />
                       <span className="text-sm text-ink-muted">seconds</span>
-                    </div>
+                    </Stack>
                     <p className="mt-1 text-xs text-ink-muted">Wait between batches</p>
                   </div>
                 </div>
@@ -884,32 +894,34 @@ export const RolloutManager = memo(function RolloutManager({
           onClick={handleBack}
           disabled={currentStep === 'release'}
           className={clsx(
-            'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
+            'px-4 py-2 text-sm font-medium transition-colors',
             currentStep === 'release'
               ? 'text-ink-muted cursor-not-allowed'
               : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle'
           )}
         >
-          <ChevronLeft className="w-4 h-4" />
-          Back
+          <Stack as="span" direction="row" inline align="center" gap="sm">
+            <ChevronLeft className="w-4 h-4" />
+            Back
+          </Stack>
         </button>
 
         {currentStep === 'review' ? (
           <button
             onClick={handleStartRollout}
             disabled={!canProceed || isStartingRollout}
-            className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 text-sm font-medium text-white bg-ac-blue hover:bg-ac-blue-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isStartingRollout ? (
-              <>
+              <Stack as="span" direction="row" inline align="center" gap="sm">
                 <Spinner size={16} color="#FFFFFF" />
                 Starting...
-              </>
+              </Stack>
             ) : (
-              <>
+              <Stack as="span" direction="row" inline align="center" gap="sm">
                 <Play className="w-4 h-4" />
                 Start Rollout
-              </>
+              </Stack>
             )}
           </button>
         ) : (
@@ -917,14 +929,16 @@ export const RolloutManager = memo(function RolloutManager({
             onClick={handleNext}
             disabled={!canProceed}
             className={clsx(
-              'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
+              'px-4 py-2 text-sm font-medium transition-colors',
               canProceed
                 ? 'text-white bg-ac-blue hover:bg-ac-blue-dark'
                 : 'text-ink-muted bg-surface-subtle cursor-not-allowed'
             )}
           >
-            Next
-            <ChevronRight className="w-4 h-4" />
+            <Stack as="span" direction="row" inline align="center" gap="sm">
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </Stack>
           </button>
         )}
       </div>
