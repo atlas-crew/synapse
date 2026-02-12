@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 15:02_
+_Generated: 2026-02-12 15:45_
 
 ## Summary
 
-**Total findings: 266**
+**Total findings: 248**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 266 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 248 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -18,7 +18,6 @@ Priority files to migrate first (most raw patterns):
 | Hits | File |
 |------|------|
 | 19 | `pages/fleet/ReleasesPage.tsx` |
-| 18 | `components/fleet/FileBrowser.tsx` |
 | 17 | `pages/AdminSettingsPage.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 2 | `components/warroom/PlaybookRunner.tsx` |
 | 1 | `pages/hunting/RequestTimelinePage.tsx` |
 | 1 | `pages/fleet/sensor-detail/shared.tsx` |
+| 1 | `pages/fleet/sensor-detail/PerformanceTab.tsx` |
 
 ---
 
@@ -88,13 +88,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/RolloutManager.tsx` | 714 | `<div className="flex items-center gap-2">` |
 | `components/fleet/RolloutManager.tsx` | 730 | `<div className="flex items-center gap-2">` |
 | `components/fleet/RolloutManager.tsx` | 901 | `className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-a` |
-| `components/fleet/FileBrowser.tsx` | 190 | `<nav className="flex items-center gap-1 text-sm overflow-x-auto">` |
-| `components/fleet/FileBrowser.tsx` | 193 | `className="flex items-center gap-1 px-2 py-1 hover:bg-surface-subtle text-ink-se` |
-| `components/fleet/FileBrowser.tsx` | 204 | `<div key={partPath} className="flex items-center gap-1 shrink-0">` |
-| `components/fleet/FileBrowser.tsx` | 274 | `<div className="flex items-center gap-2">` |
-| `components/fleet/FileBrowser.tsx` | 304 | `<div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacit` |
-| `components/fleet/FileBrowser.tsx` | 382 | `<div className="flex items-center gap-1 shrink-0">` |
-| `components/fleet/FileBrowser.tsx` | 432 | `<span className="text-status-success flex items-center gap-1">` |
-| `components/fleet/FileBrowser.tsx` | 506 | `<div className="flex items-center gap-2">` |
-| `components/fleet/FileBrowser.tsx` | 756 | `<div className="flex items-center gap-3">` |
+| `components/api-intelligence/ViolationsFeed.tsx` | 41 | `<span className="text-[10px] text-ink-muted flex items-center gap-1">` |
+| `components/api-intelligence/ApiTreemap.tsx` | 139 | `<div key={service.name} className="flex items-center gap-2">` |
+| `components/LoadingStates.tsx` | 34 | `<div className="flex items-center gap-3">` |
+| `components/LoadingStates.tsx` | 115 | `<div className="flex items-center gap-3">` |
+| `components/LoadingStates.tsx` | 122 | `<div className="flex items-center gap-2">` |
+| `components/LoadingStates.tsx` | 264 | `<div className="flex items-center gap-3">` |
+| `components/LoadingStates.tsx` | 320 | `<div className="flex items-center gap-3">` |
+| `components/LoadingStates.tsx` | 327 | `<div className="flex items-center gap-4">` |
+| `components/LoadingStates.tsx` | 356 | `<div className="flex items-center gap-3">` |
 

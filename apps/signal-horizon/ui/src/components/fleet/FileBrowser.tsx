@@ -187,37 +187,39 @@ const Breadcrumbs = memo(function Breadcrumbs({ path, onNavigate }: BreadcrumbsP
   const parts = path.split('/').filter(Boolean);
 
   return (
-    <nav className="flex items-center gap-1 text-sm overflow-x-auto">
-      <button
-        onClick={() => onNavigate('/')}
-        className="flex items-center gap-1 px-2 py-1 hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors shrink-0"
-        title="Go to root"
-      >
-        <Home className="w-4 h-4" />
-      </button>
+    <nav className="text-sm overflow-x-auto" aria-label="File path breadcrumb">
+      <Stack direction="row" align="center" gap="xs">
+        <button
+          onClick={() => onNavigate('/')}
+          className="flex items-center px-2 py-1 hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors shrink-0"
+          title="Go to root"
+        >
+          <Home className="w-4 h-4" />
+        </button>
 
-      {parts.map((part, index) => {
-        const partPath = '/' + parts.slice(0, index + 1).join('/');
-        const isLast = index === parts.length - 1;
+        {parts.map((part, index) => {
+          const partPath = '/' + parts.slice(0, index + 1).join('/');
+          const isLast = index === parts.length - 1;
 
-        return (
-          <div key={partPath} className="flex items-center gap-1 shrink-0">
-            <ChevronRight className="w-4 h-4 text-ink-muted" />
-            {isLast ? (
-              <span className="px-2 py-1 font-medium text-ink-primary truncate max-w-[200px]">
-                {part}
-              </span>
-            ) : (
-              <button
-                onClick={() => onNavigate(partPath)}
-                className="px-2 py-1 hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors truncate max-w-[150px]"
-              >
-                {part}
-              </button>
-            )}
-          </div>
-        );
-      })}
+          return (
+            <Stack key={partPath} direction="row" align="center" gap="xs" className="shrink-0">
+              <ChevronRight className="w-4 h-4 text-ink-muted" />
+              {isLast ? (
+                <span className="px-2 py-1 font-medium text-ink-primary truncate max-w-[200px]" aria-current="location">
+                  {part}
+                </span>
+              ) : (
+                <button
+                  onClick={() => onNavigate(partPath)}
+                  className="px-2 py-1 hover:bg-surface-subtle text-ink-secondary hover:text-ink-primary transition-colors truncate max-w-[150px]"
+                >
+                  {part}
+                </button>
+              )}
+            </Stack>
+          );
+        })}
+      </Stack>
     </nav>
   );
 });
@@ -271,7 +273,7 @@ const FileRow = memo(function FileRow({
     >
       {/* Name */}
       <td className="px-4 py-2">
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           {file.isDir ? (
             <FolderOpen className="w-4 h-4 text-yellow-500 shrink-0" />
           ) : (
@@ -286,7 +288,7 @@ const FileRow = memo(function FileRow({
           >
             {file.name}
           </span>
-        </div>
+        </Stack>
       </td>
 
       {/* Size */}
@@ -301,7 +303,13 @@ const FileRow = memo(function FileRow({
 
       {/* Actions */}
       <td className="px-4 py-2">
-        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Stack
+          direction="row"
+          align="center"
+          justify="flex-end"
+          gap="xs"
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+        >
           {file.isDir ? (
             <button
               onClick={(e) => {
@@ -354,7 +362,7 @@ const FileRow = memo(function FileRow({
               <Hash className="w-4 h-4" />
             </button>
           )}
-        </div>
+        </Stack>
       </td>
     </tr>
   );
@@ -379,7 +387,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
           {filename}
         </span>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <Stack direction="row" align="center" gap="xs" className="shrink-0">
           {download.status === 'complete' && (
             <button
               onClick={onSave}
@@ -399,7 +407,7 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
               <X className="w-3.5 h-3.5" />
             </button>
           )}
-        </div>
+        </Stack>
       </Stack>
 
       {/* Progress bar */}
@@ -429,9 +437,9 @@ const DownloadItem = memo(function DownloadItem({ download, onCancel, onSave }: 
           )}
           {download.status === 'verifying' && 'Verifying checksum...'}
           {download.status === 'complete' && (
-            <span className="text-status-success flex items-center gap-1">
+            <Stack as="span" direction="row" align="center" gap="xs" inline className="text-status-success">
               <Check className="w-3 h-3" /> Complete
-            </span>
+            </Stack>
           )}
           {download.status === 'error' && (
             <span className="text-status-error">{download.error || 'Download failed'}</span>
@@ -503,7 +511,7 @@ const ChecksumModal = memo(function ChecksumModal({
         {checksum && !isLoading && (
           <div>
             <div className="text-xs text-ink-muted mb-1">SHA-256</div>
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <code className="flex-1 p-2 text-xs bg-surface-inset font-mono text-ink-secondary break-all">
                 {checksum}
               </code>
@@ -514,7 +522,7 @@ const ChecksumModal = memo(function ChecksumModal({
               >
                 {copied ? <Check className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
               </button>
-            </div>
+            </Stack>
           </div>
         )}
       </div>
@@ -753,13 +761,13 @@ export const FileBrowser = memo(function FileBrowser({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle bg-surface-raised">
-          <div className="flex items-center gap-3">
+          <Stack direction="row" align="center" gap="smPlus">
             <HardDrive className="w-4 h-4 text-ink-muted" />
             <h3 className="text-sm font-semibold text-ink-primary">{sensorName}</h3>
             <span className="text-xs text-ink-secondary">File Browser</span>
-          </div>
+          </Stack>
 
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             {/* Refresh */}
             <button
               onClick={refresh}
@@ -780,11 +788,11 @@ export const FileBrowser = memo(function FileBrowser({
                 <X className="w-4 h-4" />
               </button>
             )}
-          </div>
+          </Stack>
         </div>
 
         {/* Navigation bar */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-border-subtle bg-surface-subtle">
+        <Stack direction="row" align="center" gap="sm" className="px-4 py-2 border-b border-border-subtle bg-surface-subtle">
           {/* Up button */}
           <button
             onClick={navigateUp}
@@ -821,7 +829,7 @@ export const FileBrowser = memo(function FileBrowser({
               <Breadcrumbs path={currentPath} onNavigate={navigateTo} />
             </div>
           )}
-        </div>
+        </Stack>
 
         {/* File table */}
         <div className="flex-1 overflow-auto">
@@ -855,28 +863,28 @@ export const FileBrowser = memo(function FileBrowser({
                     className="px-4 py-2 text-left font-medium text-ink-secondary cursor-pointer select-none hover:text-ink-primary"
                     onClick={() => handleSort('name')}
                   >
-                    <div className="flex items-center gap-1">
+                    <Stack direction="row" align="center" gap="xs">
                       Name
                       <SortIndicator column="name" />
-                    </div>
+                    </Stack>
                   </th>
                   <th
                     className="px-4 py-2 text-right font-medium text-ink-secondary cursor-pointer select-none hover:text-ink-primary w-24"
                     onClick={() => handleSort('size')}
                   >
-                    <div className="flex items-center justify-end gap-1">
+                    <Stack direction="row" align="center" justify="flex-end" gap="xs">
                       Size
                       <SortIndicator column="size" />
-                    </div>
+                    </Stack>
                   </th>
                   <th
                     className="px-4 py-2 text-left font-medium text-ink-secondary cursor-pointer select-none hover:text-ink-primary w-32"
                     onClick={() => handleSort('modified')}
                   >
-                    <div className="flex items-center gap-1">
+                    <Stack direction="row" align="center" gap="xs">
                       Modified
                       <SortIndicator column="modified" />
-                    </div>
+                    </Stack>
                   </th>
                   <th className="px-4 py-2 w-28" />
                 </tr>
@@ -915,7 +923,7 @@ export const FileBrowser = memo(function FileBrowser({
               onClick={() => setShowDownloads(!showDownloads)}
               className="w-full flex items-center justify-between px-4 py-2 bg-surface-raised hover:bg-surface-subtle transition-colors"
             >
-              <div className="flex items-center gap-2">
+              <Stack direction="row" align="center" gap="sm">
                 <Download className="w-4 h-4 text-ink-muted" />
                 <span className="text-xs font-medium text-ink-primary">
                   Downloads
@@ -923,9 +931,9 @@ export const FileBrowser = memo(function FileBrowser({
                     <span className="ml-1 text-ink-muted">({activeDownloads.length} active)</span>
                   )}
                 </span>
-              </div>
+              </Stack>
 
-              <div className="flex items-center gap-2">
+              <Stack direction="row" align="center" gap="sm">
                 {completedDownloads.length > 0 && (
                   <button
                     onClick={(e) => {
@@ -943,7 +951,7 @@ export const FileBrowser = memo(function FileBrowser({
                 ) : (
                   <ChevronUp className="w-4 h-4 text-ink-muted" />
                 )}
-              </div>
+              </Stack>
             </button>
 
             {/* Download list */}
@@ -976,19 +984,24 @@ export const FileBrowser = memo(function FileBrowser({
               )}
             </span>
 
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <Clock className="w-3 h-3" />
               <span>Backspace: Up | Enter: Open/Download | Ctrl+R: Refresh</span>
-            </div>
+            </Stack>
           </div>
         </div>
 
         {/* Copy feedback */}
         {copiedPath && (
-          <div className="absolute bottom-16 right-4 flex items-center gap-2 px-3 py-2 bg-surface-card border border-border-subtle shadow-lg text-xs text-status-success">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="absolute bottom-16 right-4 px-3 py-2 bg-surface-card border border-border-subtle shadow-lg text-xs text-status-success"
+          >
             <Check className="w-3.5 h-3.5" />
             Path copied!
-          </div>
+          </Stack>
         )}
       </div>
 
