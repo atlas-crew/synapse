@@ -10,6 +10,7 @@ import type {
   GlobalSessionSearchResult,
   SensorSession,
 } from '../../hooks/fleet/useSessionSearch';
+import { Stack } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -58,21 +59,26 @@ function RiskBadge({ score }: { score: number }) {
   }
 
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium ${colorClass}`}>
+    <Stack as="span" direction="row" align="center" gap="xs" inline className={`px-2 py-0.5 text-xs font-medium ${colorClass}`}>
       <span className="font-mono">{score}</span>
       <span className="text-[10px]">{label}</span>
-    </span>
+    </Stack>
   );
 }
 
 function BlockedBadge({ reason }: { reason?: string }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-ac-red/20 text-ac-red"
+    <Stack
+      as="span"
+      direction="row"
+      align="center"
+      gap="xs"
+      inline
+      className="px-2 py-0.5 text-xs font-medium bg-ac-red/20 text-ac-red"
       title={reason}
     >
       BLOCKED
-    </span>
+    </Stack>
   );
 }
 
@@ -183,12 +189,12 @@ export function SessionSearchResults({
       className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider cursor-pointer hover:bg-surface-raised/50"
       onClick={() => handleSort(field)}
     >
-      <div className="flex items-center gap-1">
+      <Stack direction="row" align="center" gap="xs">
         {label}
         {sortField === field && (
           <span className="text-ac-blue">{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>
         )}
-      </div>
+      </Stack>
     </th>
   );
 
@@ -196,7 +202,7 @@ export function SessionSearchResults({
     <div className={`space-y-4 ${className}`}>
       {/* Summary Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-6 text-sm">
+        <Stack direction="row" align="center" gap="lg" className="text-sm">
           <span className="text-ink-secondary">
             <span className="font-medium text-ink-primary">{results.totalSessions}</span> sessions found
           </span>
@@ -211,10 +217,10 @@ export function SessionSearchResults({
           <span className="text-ink-tertiary">
             ({results.searchDurationMs}ms)
           </span>
-        </div>
+        </Stack>
 
         {/* View Mode Toggle */}
-        <div className="flex items-center gap-2">
+        <Stack direction="row" align="center" gap="sm">
           <button
             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
               viewMode === 'flat'
@@ -235,7 +241,7 @@ export function SessionSearchResults({
           >
             By Sensor
           </button>
-        </div>
+        </Stack>
       </div>
 
       {/* Results Table */}
@@ -354,7 +360,7 @@ export function SessionSearchResults({
                 className="w-full px-4 py-3 flex items-center justify-between bg-surface-raised hover:bg-surface-raised/80 transition-colors"
                 onClick={() => toggleSensorExpanded(sensorResult.sensorId)}
               >
-                <div className="flex items-center gap-4">
+                <Stack direction="row" align="center" gap="md">
                   <span className={`w-2 h-2  ${sensorResult.online ? 'bg-ac-green' : 'bg-ac-gray-mid'}`} />
                   <span className="font-medium text-ink-primary">{sensorResult.sensorName}</span>
                   <span className="text-sm text-ink-secondary">
@@ -363,13 +369,13 @@ export function SessionSearchResults({
                   {sensorResult.error && (
                     <span className="text-xs text-ac-red">{sensorResult.error}</span>
                   )}
-                </div>
-                <div className="flex items-center gap-4">
+                </Stack>
+                <Stack direction="row" align="center" gap="md">
                   <span className="text-xs text-ink-tertiary">{sensorResult.searchDurationMs}ms</span>
                   <span className="text-ink-secondary">
                     {expandedSensors.has(sensorResult.sensorId) ? '\u25B2' : '\u25BC'}
                   </span>
-                </div>
+                </Stack>
               </button>
 
               {/* Expanded Sessions */}
@@ -384,7 +390,7 @@ export function SessionSearchResults({
                       onClick={() => handleSessionClick({ ...session, sensorId: sensorResult.sensorId, sensorName: sensorResult.sensorName })}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-6">
+                        <Stack direction="row" align="center" gap="lg">
                           <div>
                             <div className="text-sm font-mono text-ink-primary truncate max-w-[200px]">{session.id}</div>
                             <div className="text-xs text-ink-tertiary">{session.actorId}</div>
@@ -392,11 +398,11 @@ export function SessionSearchResults({
                           <div className="text-sm font-mono text-ink-primary">{session.clientIp}</div>
                           <RiskBadge score={session.riskScore} />
                           {session.isBlocked && <BlockedBadge reason={session.blockReason} />}
-                        </div>
-                        <div className="flex items-center gap-4">
+                        </Stack>
+                        <Stack direction="row" align="center" gap="md">
                           <span className="text-sm text-ink-secondary">{session.requestCount.toLocaleString()} reqs</span>
                           <span className="text-sm text-ink-tertiary">{formatTimeAgo(session.lastSeen)}</span>
-                          <div className="flex items-center gap-2">
+                          <Stack direction="row" align="center" gap="sm">
                             {!session.isBlocked && onRevokeSession && (
                               <button
                                 className="px-2 py-1 text-xs font-medium text-ac-orange hover:bg-ac-orange/10 disabled:opacity-50"
@@ -421,8 +427,8 @@ export function SessionSearchResults({
                                 Ban
                               </button>
                             )}
-                          </div>
-                        </div>
+                          </Stack>
+                        </Stack>
                       </div>
                     </div>
                   ))}

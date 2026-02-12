@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 14:34_
+_Generated: 2026-02-12 14:44_
 
 ## Summary
 
-**Total findings: 291**
+**Total findings: 281**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 291 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 281 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -22,7 +22,6 @@ Priority files to migrate first (most raw patterns):
 | 17 | `pages/AdminSettingsPage.tsx` |
 | 12 | `pages/fleet/BandwidthDashboardPage.tsx` |
 | 11 | `pages/beam/threats/ThreatActivityPage.tsx` |
-| 11 | `components/fleet/SessionSearchResults.tsx` |
 | 9 | `pages/fleet/sensor-detail/ConfigurationTab.tsx` |
 | 9 | `pages/beam/threats/BlockedRequestsPage.tsx` |
 | 9 | `pages/beam/threats/AttackPatternsPage.tsx` |
@@ -57,6 +56,7 @@ Priority files to migrate first (most raw patterns):
 | 3 | `components/fleet/EmbeddedDashboard.tsx` |
 | 3 | `components/api-intelligence/SchemaDriftDiff.tsx` |
 | 2 | `pages/fleet/sensor-detail/OverviewTab.tsx` |
+| 2 | `pages/fleet/FleetUpdatesPage.tsx` |
 
 ---
 
@@ -86,15 +86,15 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/RemoteShell.tsx` | 342 | `<div className="flex items-center gap-2 text-status-warning text-sm">` |
 | `components/fleet/RemoteShell.tsx` | 355 | `<div className="flex items-center gap-2 text-status-error text-sm">` |
 | `components/fleet/RemoteShell.tsx` | 362 | `className="flex items-center gap-1 px-2 py-1 text-xs text-status-error hover:bg-` |
-| `components/fleet/SessionSearchResults.tsx` | 61 | `<span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium` |
-| `components/fleet/SessionSearchResults.tsx` | 71 | `className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-a10` |
-| `components/fleet/SessionSearchResults.tsx` | 186 | `<div className="flex items-center gap-1">` |
-| `components/fleet/SessionSearchResults.tsx` | 199 | `<div className="flex items-center gap-6 text-sm">` |
-| `components/fleet/SessionSearchResults.tsx` | 217 | `<div className="flex items-center gap-2">` |
-| `components/fleet/SessionSearchResults.tsx` | 308 | `<div className="flex items-center justify-end gap-2">` |
-| `components/fleet/SessionSearchResults.tsx` | 357 | `<div className="flex items-center gap-4">` |
-| `components/fleet/SessionSearchResults.tsx` | 367 | `<div className="flex items-center gap-4">` |
-| `components/fleet/SessionSearchResults.tsx` | 387 | `<div className="flex items-center gap-6">` |
-| `components/fleet/SessionSearchResults.tsx` | 396 | `<div className="flex items-center gap-4">` |
-| `components/fleet/SessionSearchResults.tsx` | 399 | `<div className="flex items-center gap-2">` |
+| `components/fleet/SessionSearchResults.tsx` | 314 | `<div className="flex items-center justify-end gap-2">` |
+| `components/fleet/RolloutManager.tsx` | 264 | `<div className="flex items-center gap-2">` |
+| `components/fleet/RolloutManager.tsx` | 542 | `<div className="flex items-center gap-3">` |
+| `components/fleet/RolloutManager.tsx` | 556 | `className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-status-err` |
+| `components/fleet/RolloutManager.tsx` | 631 | `className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-s` |
+| `components/fleet/RolloutManager.tsx` | 706 | `<div className="flex items-center gap-2">` |
+| `components/fleet/RolloutManager.tsx` | 714 | `<div className="flex items-center gap-2">` |
+| `components/fleet/RolloutManager.tsx` | 730 | `<div className="flex items-center gap-2">` |
+| `components/fleet/RolloutManager.tsx` | 901 | `className="flex items-center gap-2 px-6 py-2 text-sm font-medium text-white bg-a` |
+| `components/fleet/EmbeddedDashboard.tsx` | 155 | `<div className="flex items-center gap-2">` |
+| `components/fleet/EmbeddedDashboard.tsx` | 157 | `<div className="flex items-center gap-1.5 text-sm mr-2">` |
 
