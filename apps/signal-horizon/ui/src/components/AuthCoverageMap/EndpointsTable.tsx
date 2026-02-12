@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { RiskBadge } from './RiskBadge.js';
 import { PatternBadge } from './PatternBadge.js';
+import { Stack } from '@/ui';
 
 export type AuthPattern = 'enforced' | 'none_observed' | 'public' | 'insufficient_data';
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
@@ -52,7 +53,7 @@ export const EndpointsTable: React.FC<Props> = ({ endpoints, onSelectEndpoint })
               onClick={() => onSelectEndpoint?.(ep.endpoint)}
             >
               <td className="px-4 py-3">
-                <div className="flex items-center gap-3">
+                <Stack direction="row" align="center" gap="md">
                   <span className={clsx(
                     "px-2 py-0.5  text-[10px] font-bold uppercase",
                     ep.method === 'GET' ? "bg-green-500/10 text-green-600" :
@@ -64,7 +65,7 @@ export const EndpointsTable: React.FC<Props> = ({ endpoints, onSelectEndpoint })
                   <span className="text-sm font-mono text-ink-primary truncate max-w-md">
                     {ep.endpoint.replace(`${ep.method} `, '')}
                   </span>
-                </div>
+                </Stack>
               </td>
               <td className="px-4 py-3 text-right">
                 <span className="text-sm font-mono text-ink-secondary">

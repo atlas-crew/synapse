@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { Stack } from '@/ui';
 
 export interface ActivityItem {
   id: string;
@@ -68,12 +69,12 @@ export const ActivityFeed = memo(function ActivityFeed({
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <span className="text-sm font-medium text-navy-900 truncate">
                 {item.title}
               </span>
               {item.badge}
-            </div>
+            </Stack>
             {item.description && (
               <p className="text-xs text-gray-500 mt-0.5 truncate">
                 {item.description}

@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { Stack } from '@/ui';
 
 export type ProgressVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
 
@@ -50,7 +51,7 @@ export const ProgressBar = memo(function ProgressBar({
       : variant;
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
+    <Stack direction="row" align="center" gap="sm" className={className}>
       <div className={`flex-1 bg-gray-200 overflow-hidden ${sizeStyles[size]}`}>
         <div
           className={`h-full transition-all duration-300 ${variantStyles[computedVariant]}`}
@@ -62,7 +63,7 @@ export const ProgressBar = memo(function ProgressBar({
           {Math.round(percentage)}%
         </span>
       )}
-    </div>
+    </Stack>
   );
 });
 

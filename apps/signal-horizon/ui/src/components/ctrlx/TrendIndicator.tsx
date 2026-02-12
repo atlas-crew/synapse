@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Stack } from '@/ui';
 
 export type TrendDirection = 'up' | 'down' | 'neutral';
 
@@ -43,11 +44,13 @@ export const TrendIndicator = memo(function TrendIndicator({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium ${color} ${bgColor} ${className}`}
+      className={`inline-block px-1.5 py-0.5 text-xs font-medium ${color} ${bgColor} ${className}`}
     >
-      <Icon className="w-3 h-3" />
-      <span>{displayValue}%</span>
-      {label && <span className="text-gray-500 ml-0.5">{label}</span>}
+      <Stack direction="row" align="center" gap="xs">
+        <Icon className="w-3 h-3" />
+        <span>{displayValue}%</span>
+        {label && <span className="text-gray-500 ml-0.5">{label}</span>}
+      </Stack>
     </span>
   );
 });
