@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-11 18:27_
+_Generated: 2026-02-12 13:00_
 
 ## Summary
 
-**Total findings: 423**
+**Total findings: 414**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 423 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 414 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -78,12 +78,7 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/ui/CommandPalette.tsx` | 689 | `<div className="flex items-center gap-1.5">` |
 | `components/warroom/PlaybookRunner.tsx` | 81 | `<h3 className="font-medium text-ac-blue flex items-center gap-2">` |
 | `components/warroom/PlaybookRunner.tsx` | 110 | `<div className="flex items-center gap-3">` |
-| `components/warroom/PlaybookSelector.tsx` | 109 | `<div className="flex items-center gap-2">` |
-| `components/hunting/SigmaLeadsPanel.tsx` | 107 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/SigmaLeadsPanel.tsx` | 144 | `<div className="ml-auto flex items-center gap-2">` |
-| `components/hunting/SigmaRulesPanel.tsx` | 124 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
-| `components/hunting/SigmaRulesPanel.tsx` | 140 | `<div className="flex items-center gap-2">` |
-| `components/hunting/SigmaRulesPanel.tsx` | 207 | `className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-a1` |
+| `components/warroom/PlaybookSelector.tsx` | 20 | `<div className="flex items-center gap-2">` |
 | `components/hunting/BehavioralAnomaliesPanel.tsx` | 141 | `<div className="flex items-center gap-2">` |
 | `components/hunting/BehavioralAnomaliesPanel.tsx` | 146 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/BehavioralAnomaliesPanel.tsx` | 164 | `<div className="flex items-center gap-2">` |
@@ -93,8 +88,13 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/hunting/ClickHouseOpsPanel.tsx` | 123 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 139 | `<div className="flex flex-wrap items-center gap-3">` |
 | `components/hunting/ClickHouseOpsPanel.tsx` | 156 | `<div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle"` |
-| `components/hunting/SavedQueries.tsx` | 111 | `<div className="flex items-center gap-2 flex-1 min-w-0">` |
-| `components/hunting/SavedQueries.tsx` | 121 | `<div className="flex items-center gap-1 mt-0.5 text-xs text-ink-muted">` |
-| `components/hunting/SavedQueries.tsx` | 130 | `<div className="flex items-center gap-1 shrink-0">` |
-| `components/hunting/SavedQueries.tsx` | 171 | `<div className="flex items-center gap-4">` |
+| `components/hunting/RecentRequestsPanel.tsx` | 91 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/RecentRequestsPanel.tsx` | 135 | `<div className="ml-auto flex items-center gap-2">` |
+| `components/hunting/RecentRequestsPanel.tsx` | 190 | `className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-in` |
+| `components/hunting/LowAndSlowPanel.tsx` | 99 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/LowAndSlowPanel.tsx` | 169 | `<div className="ml-auto flex items-center gap-2">` |
+| `components/hunting/FleetIntelligencePanel.tsx` | 111 | `className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-in` |
+| `components/hunting/FleetIntelligencePanel.tsx` | 182 | `<div className="ml-auto flex items-center gap-2">` |
+| `components/hunting/HuntQueryBuilder.tsx` | 230 | `<div className="flex items-center gap-2">` |
+| `components/hunting/HuntQueryBuilder.tsx` | 234 | `<div className="flex items-center gap-2">` |
 

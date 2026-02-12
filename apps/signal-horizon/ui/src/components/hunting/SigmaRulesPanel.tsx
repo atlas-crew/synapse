@@ -121,11 +121,13 @@ export function SigmaRulesPanel({
           type="button"
           onClick={() => void refresh()}
           disabled={!historicalEnabled || loading}
-          className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+          className="px-3 py-2 border border-border-subtle bg-surface-base text-sm text-ink-secondary hover:text-ink-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title="Refresh"
         >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
+          <Stack direction="row" align="center" gap="sm">
+            <RefreshCw className="w-4 h-4" />
+            <span>Refresh</span>
+          </Stack>
         </button>
       </Stack>
 
@@ -137,10 +139,10 @@ export function SigmaRulesPanel({
 
       {historicalEnabled && (
         <div className="p-4 space-y-4">
-          <div className="flex items-center gap-2">
+          <Stack direction="row" align="center" gap="sm">
             {loading && <LoadingSpinner />}
             <div className="text-xs text-ink-muted font-mono">count={sorted.length}</div>
-          </div>
+          </Stack>
 
           {error && (
             <div className="p-3 bg-ac-red/10 border border-ac-red/30 text-ac-red text-sm">
@@ -204,11 +206,13 @@ export function SigmaRulesPanel({
                             type="button"
                             onClick={() => void handleDelete(r)}
                             disabled={busy}
-                            className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-ac-red hover:text-ac-red/80 disabled:opacity-50 disabled:cursor-not-allowed font-mono inline-flex items-center gap-2"
+                            className="px-2 py-1 border border-border-subtle bg-surface-base text-xs text-ac-red hover:text-ac-red/80 disabled:opacity-50 disabled:cursor-not-allowed font-mono"
                             title="Delete rule"
                           >
-                            <Trash2 className="w-3 h-3" />
-                            Delete
+                            <Stack direction="row" align="center" gap="sm">
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete</span>
+                            </Stack>
                           </button>
                         </td>
                       </tr>

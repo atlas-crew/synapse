@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Clock, Play, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { SavedQuery } from '../../hooks/useHunt';
-import { SectionHeader, Spinner } from '@/ui';
+import { SectionHeader, Spinner, Stack } from '@/ui';
 
 interface SavedQueriesProps {
   queries: SavedQuery[];
@@ -108,7 +108,7 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
               )}
               onClick={() => setExpandedId(expandedId === query.id ? null : query.id)}
             >
-              <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Stack direction="row" align="center" gap="sm" className="flex-1 min-w-0">
                 {expandedId === query.id ? (
                   <ChevronDown className="w-4 h-4 text-ink-muted shrink-0" />
                 ) : (
@@ -118,16 +118,18 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
                   <div className="font-medium text-ink-primary text-sm truncate">
                     {query.name}
                   </div>
-                  <div className="flex items-center gap-1 mt-0.5 text-xs text-ink-muted">
+                  <Stack direction="row" align="center" gap="xs" className="mt-0.5 text-xs text-ink-muted">
                     <Clock className="w-3 h-3" />
-                    {query.lastRunAt
-                      ? `Last run ${formatRelativeTime(query.lastRunAt)}`
-                      : 'Never run'}
-                  </div>
+                    <span>
+                      {query.lastRunAt
+                        ? `Last run ${formatRelativeTime(query.lastRunAt)}`
+                        : 'Never run'}
+                    </span>
+                  </Stack>
                 </div>
-              </div>
+              </Stack>
 
-              <div className="flex items-center gap-1 shrink-0">
+              <Stack direction="row" align="center" gap="xs" className="shrink-0">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -155,7 +157,7 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-              </div>
+              </Stack>
             </div>
 
             {/* Expanded Details */}
@@ -168,10 +170,10 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
                   <div className="font-mono bg-surface-subtle border border-border-subtle px-2 py-1">
                     {formatQuerySummary(query.query)}
                   </div>
-                  <div className="flex items-center gap-4">
+                  <Stack direction="row" align="center" gap="md">
                     <span>Limit: {query.query.limit || 1000}</span>
                     <span>Created: {new Date(query.createdAt).toLocaleDateString()}</span>
-                  </div>
+                  </Stack>
                 </div>
               </div>
             )}
