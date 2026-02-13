@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import { CheckCircle, Circle, X, Play, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { type Playbook } from '../../data/playbooks';
-import { Spinner, Stack } from '@/ui';
+import { Spinner, Stack, colors } from '@/ui';
 
 interface PlaybookRunnerProps {
   playbook: Playbook;
@@ -117,7 +117,7 @@ export function PlaybookRunner({ playbook, onClose, onComplete }: PlaybookRunner
                     isWaiting ? (
                       <AlertCircle className="w-5 h-5 text-ac-orange animate-pulse" aria-label="Waiting for approval" />
                     ) : (
-                      <Spinner size={20} color="#0057B7" />
+                      <Spinner size={20} color={colors.blue} />
                     )
                   ) : (
                     <Circle className="w-5 h-5 text-ink-muted" aria-label="Pending" />

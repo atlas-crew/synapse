@@ -4,7 +4,7 @@ import { Shield, Search, Filter, ArrowUpDown, AlertTriangle } from 'lucide-react
 import { SummaryCards, CoverageMapSummary } from './SummaryCards.js';
 import { GapsPanel } from './GapsPanel.js';
 import { EndpointsTable, EndpointAuthStats } from './EndpointsTable.js';
-import { Button, SectionHeader, Spinner, Stack } from '@/ui';
+import { Button, SectionHeader, Spinner, Stack, colors } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
@@ -162,7 +162,7 @@ export const AuthCoverageMap: React.FC = () => {
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
-              color: '#7F7F7F',
+              color: colors.gray.mid,
             }}
           />
           
@@ -225,7 +225,7 @@ export const AuthCoverageMap: React.FC = () => {
         
         {endpointsLoading ? (
           <div className="p-12 flex flex-col items-center justify-center text-ink-muted italic bg-surface-base">
-            <Spinner size={32} color="#0057B7" style={{ marginBottom: '16px' }} />
+            <Spinner size={32} color={colors.blue} style={{ marginBottom: '16px' }} />
             Synchronizing endpoint catalog...
           </div>
         ) : (

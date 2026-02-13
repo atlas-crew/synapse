@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from 'react';
 import { Ban, X } from 'lucide-react';
-import { Button, Input, Select, Stack } from '@/ui';
+import { Button, Input, Select, Stack, colors } from '@/ui';
 
 export interface AccessControlData {
   allow: string[];
@@ -108,7 +108,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
                     variant="ghost"
                     size="sm"
                     icon={<X className="w-3 h-3" aria-hidden="true" />}
-                    style={{ height: '20px', padding: 0, color: '#7F7F7F' }}
+                    style={{ height: '20px', padding: 0, color: colors.gray.mid }}
                     aria-label={`Remove denied CIDR ${cidr}`}
                   />
                 </div>
@@ -129,7 +129,7 @@ export const AccessControlConfig = memo(function AccessControlConfig({ config, o
                     variant="ghost"
                     size="sm"
                     icon={<X className="w-3 h-3" aria-hidden="true" />}
-                    style={{ height: '20px', padding: 0, color: '#7F7F7F' }}
+                    style={{ height: '20px', padding: 0, color: colors.gray.mid }}
                     aria-label={`Remove allowed CIDR ${cidr}`}
                   />
                 </div>

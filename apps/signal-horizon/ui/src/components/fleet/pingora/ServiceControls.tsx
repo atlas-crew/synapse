@@ -1,7 +1,7 @@
 import { useState, useCallback, memo } from 'react';
 import { RefreshCw, Play, RotateCw } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Spinner, Stack } from '@/ui';
+import { Spinner, Stack, colors } from '@/ui';
 
 interface ServiceControlsProps {
   onAction: (action: 'test' | 'reload' | 'restart') => Promise<void>;
@@ -59,7 +59,7 @@ export const ServiceControls = memo(function ServiceControls({ onAction }: Servi
         >
           <Stack direction="row" align="center" gap="sm">
             {status === 'running' && lastAction === 'reload' ? (
-              <Spinner size={12} color="#0057B7" />
+              <Spinner size={12} color={colors.blue} />
             ) : (
               <RefreshCw className="w-3 h-3" />
             )}

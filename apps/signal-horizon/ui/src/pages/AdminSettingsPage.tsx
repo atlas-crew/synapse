@@ -45,7 +45,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, SectionHeader, Spinner, Stack, Tabs } from '@/ui';
+import { Button, SectionHeader, Spinner, Stack, Tabs, colors } from '@/ui';
 
 const PAGE_TITLE_STYLE = {
   fontSize: '20px',
@@ -641,7 +641,7 @@ const AdminSettingsPage: React.FC = () => {
 
                   <div className="p-6 border border-status-error/20 bg-status-error/5 space-y-4">
                     <Stack direction="row" align="center" gap="smPlus" className="text-status-error">
-                      <Spinner size={20} color="#EF3340" />
+                      <Spinner size={20} color={colors.red} />
                       <h3 className="font-bold text-sm uppercase tracking-wider">
                         Invalidate All Sessions
                       </h3>
@@ -757,8 +757,8 @@ const AdminSettingsPage: React.FC = () => {
                       style={{
                         height: '48px',
                         borderWidth: '2px',
-                        borderColor: '#EF3340',
-                        color: '#EF3340',
+                        borderColor: colors.red,
+                        color: colors.red,
                         fontSize: '12px',
                         fontWeight: 700,
                         textTransform: 'uppercase',
@@ -1879,8 +1879,8 @@ const AdminSettingsPage: React.FC = () => {
                       style={{
                         height: '48px',
                         borderWidth: '2px',
-                        borderColor: '#EF3340',
-                        color: '#EF3340',
+                        borderColor: colors.red,
+                        color: colors.red,
                         fontSize: '12px',
                         fontWeight: 700,
                         textTransform: 'uppercase',

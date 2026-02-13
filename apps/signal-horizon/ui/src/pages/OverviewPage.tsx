@@ -501,7 +501,7 @@ export default function OverviewPage() {
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: '#7F7F7F',
+                color: colors.gray.mid,
               }}
             />
           </div>
@@ -544,7 +544,7 @@ export default function OverviewPage() {
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: '#7F7F7F',
+                color: colors.gray.mid,
               }}
             />
           </div>

@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
-import { Button, Modal, SectionHeader, Stack } from '@/ui';
+import { Button, Modal, SectionHeader, Stack, colors } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -622,7 +622,7 @@ export function GlobalSessionSearchPage() {
               size="sm"
               onClick={handleRevokeSession}
               disabled={isActionPending}
-              style={{ background: '#F59E0B', color: '#FFFFFF' }}
+              style={{ background: colors.orange, color: colors.white }}
             >
               {isActionPending ? 'Revoking...' : 'Revoke Session'}
             </Button>
@@ -696,7 +696,7 @@ export function GlobalSessionSearchPage() {
               size="sm"
               onClick={handleBanActor}
               disabled={isActionPending || !banModal.reason}
-              style={{ background: '#EF3340', color: '#FFFFFF' }}
+              style={{ background: colors.red, color: colors.white }}
             >
               {isActionPending ? 'Banning...' : 'Ban Actor'}
             </Button>

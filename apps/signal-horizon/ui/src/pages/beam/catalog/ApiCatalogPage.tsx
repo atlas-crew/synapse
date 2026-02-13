@@ -21,7 +21,7 @@ import {
 import { clsx } from 'clsx';
 import { useBeamEndpoints } from '../../../hooks/useBeamEndpoints';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader, Spinner, Stack } from '@/ui';
+import { SectionHeader, Spinner, Stack, colors } from '@/ui';
 
 type SortField = 'path' | 'method' | 'requestCount' | 'lastSeenAt' | 'avgLatencyMs';
 type SortDirection = 'asc' | 'desc';
@@ -549,7 +549,7 @@ export default function ApiCatalogPage() {
             >
               <Stack as="span" direction="row" inline align="center" gap="sm">
                 {hookLoading ? (
-                  <Spinner size={16} color="#7F7F7F" />
+                  <Spinner size={16} color={colors.gray.mid} />
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}

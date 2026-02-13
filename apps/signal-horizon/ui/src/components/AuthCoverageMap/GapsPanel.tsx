@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { RiskBadge } from './RiskBadge.js';
-import { Button, SectionHeader, Stack } from '@/ui';
+import { Button, SectionHeader, Stack, colors } from '@/ui';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 
@@ -54,7 +54,7 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
-              color: '#EF3340',
+              color: colors.red,
             }}
           />
         </Stack>
@@ -126,7 +126,7 @@ export const GapsPanel: React.FC<Props> = ({ endpoints, onViewEndpoint }) => {
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: '#0057B7',
+                color: colors.blue,
                 height: '32px',
               }}
               onClick={() => {}}

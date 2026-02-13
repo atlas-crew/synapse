@@ -504,7 +504,7 @@ export default function ThreatActivityPage() {
             >
               <Stack as="span" direction="row" inline align="center" gap="sm">
                 {hookLoading ? (
-                  <Spinner size={16} color="#7F7F7F" />
+                  <Spinner size={16} color={colors.gray.mid} />
                 ) : (
                   <RefreshCw className="w-4 h-4" />
                 )}
@@ -608,7 +608,7 @@ export default function ThreatActivityPage() {
             <Button
               variant="ghost"
               size="sm"
-              style={{ height: '28px', padding: 0, fontSize: '14px', color: '#529EEC' }}
+              style={{ height: '28px', padding: 0, fontSize: '14px', color: colors.skyBlue }}
             >
               View all →
             </Button>

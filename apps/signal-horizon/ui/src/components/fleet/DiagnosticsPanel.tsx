@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { useDiagnostics, type DiagnosticsData } from '../../hooks/fleet/useDiagnostics';
 import { ResourceBar } from './ResourceBar';
-import { Spinner, Stack } from '@/ui';
+import { Spinner, Stack, colors } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -538,7 +538,7 @@ export function DiagnosticsPanel({
             title="Refresh"
           >
             {isLoading ? (
-              <Spinner size={16} color="#7F7F7F" />
+              <Spinner size={16} color={colors.gray.mid} />
             ) : (
               <RefreshCw className="w-4 h-4 text-ink-secondary" />
             )}
@@ -562,7 +562,7 @@ export function DiagnosticsPanel({
         {/* Loading State */}
         {isLoading && !data && (
           <div className="flex flex-col items-center justify-center py-12">
-            <Spinner size={32} color="#7F7F7F" style={{ marginBottom: '12px' }} />
+            <Spinner size={32} color={colors.gray.mid} style={{ marginBottom: '12px' }} />
             <p className="text-sm text-ink-muted">Loading diagnostics...</p>
           </div>
         )}

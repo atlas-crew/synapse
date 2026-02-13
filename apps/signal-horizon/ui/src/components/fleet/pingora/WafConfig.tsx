@@ -1,7 +1,7 @@
 import { useCallback, memo } from 'react';
 import { Shield } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Button, Stack } from '@/ui';
+import { Button, Stack, colors } from '@/ui';
 
 export interface WafConfigData {
   enabled: boolean;
@@ -91,7 +91,7 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
                 }}
                 variant="ghost"
                 size="sm"
-                style={{ height: '24px', padding: 0, fontSize: '12px', color: '#0057B7' }}
+                style={{ height: '24px', padding: 0, fontSize: '12px', color: colors.blue }}
               >
                 + Add Override
               </Button>
@@ -120,7 +120,7 @@ export const WafConfig = memo(function WafConfig({ config, onChange }: WafConfig
                         onClick={() => handleRuleOverride(id, null)}
                         variant="ghost"
                         size="sm"
-                        style={{ height: '24px', padding: 0, fontSize: '12px', color: '#EF3340' }}
+                        style={{ height: '24px', padding: 0, fontSize: '12px', color: colors.red }}
                       >
                         Remove
                       </Button>

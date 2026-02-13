@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button, Modal, SectionHeader, Stack } from '@/ui';
+import { Button, Modal, SectionHeader, Stack, colors } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -620,7 +620,7 @@ export function OnboardingPage(): React.ReactElement {
               onClick={() => revokeMutation.mutate(tokenToRevoke)}
               size="sm"
               fill
-              style={{ background: '#EF3340' }}
+              style={{ background: colors.red }}
               disabled={revokeMutation.isPending}
             >
               {revokeMutation.isPending ? 'Revoking...' : 'Revoke Token'}

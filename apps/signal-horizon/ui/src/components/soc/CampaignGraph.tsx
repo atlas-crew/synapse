@@ -5,7 +5,7 @@ import fcose from 'cytoscape-fcose';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch, API_KEY } from '../../lib/api';
-import { Spinner, Stack } from '@/ui';
+import { Spinner, Stack, colors as uiColors } from '@/ui';
 
 cytoscape.use(fcose);
 
@@ -34,10 +34,10 @@ interface NodeDetails {
 const colors = {
   campaign: { bg: '#BF3A30', border: '#E8847D' },   // Atlas Crew Red
   actor: { bg: '#C24900', border: '#E8974D' },       // Atlas Crew Orange (contrast-safe)
-  ip: { bg: '#0057B7', border: '#70BAF7' },           // Atlas Crew Blue
+  ip: { bg: uiColors.blue, border: '#70BAF7' },       // Atlas Crew Blue
   sensor: { bg: '#008731', border: '#5CB87A' },       // Atlas Crew Green (contrast-safe)
   token: { bg: '#440099', border: '#9B6BD6' },        // Atlas Crew Purple
-  asn: { bg: '#529EEC', border: '#BEDDFF' },          // Atlas Crew Sky Blue
+  asn: { bg: uiColors.skyBlue, border: uiColors.tint.skyLight }, // Atlas Crew Sky Blue
   edge: {
     attributed: '#BF3A30',  // Atlas Crew Red
     linked: '#C24900',      // Atlas Crew Orange
@@ -312,7 +312,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
       {!isLayoutComplete && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-surface-base/95 backdrop-blur-sm">
           <Stack direction="row" align="center" style={{ gap: '12px' }} className="text-ink-muted">
-            <Spinner size={20} color="#7F7F7F" />
+            <Spinner size={20} color={uiColors.gray.mid} />
             <span className="text-sm font-medium">Analyzing correlations...</span>
           </Stack>
         </div>

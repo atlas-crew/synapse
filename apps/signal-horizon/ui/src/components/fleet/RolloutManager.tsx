@@ -37,7 +37,7 @@ import type {
   RolloutProgressStatus,
 } from '../../hooks/fleet/useReleases';
 import { useSensors } from '../../hooks/fleet/useSensors';
-import { Modal, Spinner, Stack } from '@/ui';
+import { Modal, Spinner, Stack, colors } from '@/ui';
 
 // ============================================================================
 // Types
@@ -563,7 +563,7 @@ export const RolloutManager = memo(function RolloutManager({
           >
             <Stack as="span" direction="row" inline align="center" gap="sm">
               {isCancellingRollout ? (
-                <Spinner size={16} color="#EF3340" />
+                <Spinner size={16} color={colors.red} />
               ) : (
                 <Square className="w-4 h-4" />
               )}
@@ -639,7 +639,7 @@ export const RolloutManager = memo(function RolloutManager({
                 className="px-4 py-2 text-sm font-medium text-white bg-status-error hover:bg-status-error/90 transition-colors disabled:opacity-50"
               >
                 <Stack as="span" direction="row" inline align="center" gap="sm">
-                  {isCancellingRollout && <Spinner size={16} color="#FFFFFF" />}
+                  {isCancellingRollout && <Spinner size={16} color={colors.white} />}
                   Cancel Rollout
                 </Stack>
               </button>
@@ -914,7 +914,7 @@ export const RolloutManager = memo(function RolloutManager({
           >
             {isStartingRollout ? (
               <Stack as="span" direction="row" inline align="center" gap="sm">
-                <Spinner size={16} color="#FFFFFF" />
+                <Spinner size={16} color={colors.white} />
                 Starting...
               </Stack>
             ) : (
