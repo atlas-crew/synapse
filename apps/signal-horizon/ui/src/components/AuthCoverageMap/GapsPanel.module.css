@@ -66,7 +66,7 @@
 
 .viewBtn {
   background: var(--ac-blue);
-  color: #fff;
+  color: var(--ac-white);
   border: none;
   padding: 6px 12px;
   cursor: pointer;
@@ -74,7 +74,7 @@
 }
 
 .viewBtn:hover {
-  background: var(--ac-blue-dark);
+  background: var(--ac-blue-dark, #004494);
 }
 
 .showMore {
