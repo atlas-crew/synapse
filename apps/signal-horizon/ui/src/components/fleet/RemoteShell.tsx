@@ -8,7 +8,7 @@ import { X, Activity, WifiOff, AlertCircle, Clock, RefreshCw } from 'lucide-reac
 import '@xterm/xterm/css/xterm.css';
 import { useRemoteShell } from '../../hooks/fleet/useRemoteShell';
 import type { ShellSessionStatus } from '../../types/shell';
-import { Spinner, Stack } from '@/ui';
+import { Spinner, Stack, colors } from '@/ui';
 
 /** Tokyo Night inspired terminal theme */
 const TERMINAL_THEME = {
@@ -259,7 +259,7 @@ export function RemoteShell({
         className: 'text-status-success',
       },
       connecting: {
-        icon: <Spinner size={16} color="#7F7F7F" />,
+        icon: <Spinner size={16} color={colors.gray.mid} />,
         text: isReconnecting
           ? `Reconnecting (${reconnectAttempt}/${maxReconnectAttempts})...`
           : 'Connecting...',
@@ -386,7 +386,7 @@ export function RemoteShell({
         {status === 'connecting' && (
           <div className="absolute inset-0 bg-surface-card/80 backdrop-blur-sm flex items-center justify-center">
             <Stack direction="column" align="center" style={{ gap: '12px' }}>
-              <Spinner size={32} color="#0057B7" />
+              <Spinner size={32} color={colors.blue} />
               <p className="text-sm text-ink-secondary">
                 {isReconnecting
                   ? `Reconnecting to ${sensorName}... (attempt ${reconnectAttempt}/${maxReconnectAttempts})`

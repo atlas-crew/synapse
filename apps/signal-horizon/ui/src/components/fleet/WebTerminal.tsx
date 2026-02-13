@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Activity, WifiOff, AlertCircle } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
-import { Spinner, Stack } from '@/ui';
+import { Spinner, Stack, colors } from '@/ui';
 
 export interface WebTerminalProps {
   sensorId: string;
@@ -201,7 +201,7 @@ export function WebTerminal({
       case 'connecting':
         return (
           <Stack direction="row" align="center" gap="sm" className="text-ink-secondary">
-            <Spinner size={16} color="#7F7F7F" />
+            <Spinner size={16} color={colors.gray.mid} />
             <span className="text-sm font-medium">Connecting...</span>
           </Stack>
         );
@@ -262,7 +262,7 @@ export function WebTerminal({
         {connectionState === 'connecting' && (
           <div className="absolute inset-0 bg-surface-card/80 backdrop-blur-sm flex items-center justify-center">
             <Stack direction="column" align="center" style={{ gap: '12px' }}>
-              <Spinner size={32} color="#7F7F7F" />
+              <Spinner size={32} color={colors.gray.mid} />
               <p className="text-sm text-ink-secondary">Establishing connection...</p>
             </Stack>
           </div>

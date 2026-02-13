@@ -17,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import type { PolicyConfig, EnforcementMode } from '@signal-horizon/shared/types';
-import { Button, Stack } from '@/ui';
+import { Button, Stack, colors } from '@/ui';
 
 export interface PolicyConfigEditorProps {
   value: PolicyConfig;
@@ -466,7 +466,7 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
                           fontWeight: 700,
                           textTransform: 'uppercase',
                           letterSpacing: '0.08em',
-                          color: '#0057B7',
+                          color: colors.blue,
                         }}
                       >
                         + Define Pattern
@@ -526,7 +526,7 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
                           padding: '0 8px',
                           fontSize: '10px',
                           fontWeight: 700,
-                          color: '#7F7F7F',
+                          color: colors.gray.mid,
                         }}
                       >
                         + ADD
@@ -597,7 +597,7 @@ export function PolicyConfigEditor({ value, onChange }: PolicyConfigEditorProps)
                   <Button
                     variant="ghost"
                     size="sm"
-                    style={{ height: '20px', padding: 0, color: '#0057B7', fontWeight: 700 }}
+                    style={{ height: '20px', padding: 0, color: colors.blue, fontWeight: 700 }}
                   >
                     MANAGE
                   </Button>

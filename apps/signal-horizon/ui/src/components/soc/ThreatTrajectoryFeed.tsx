@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
-import { Button, SectionHeader, Stack } from '@/ui';
+import { Button, SectionHeader, Stack, colors } from '@/ui';
 
 interface ThreatTrajectoryFeedProps {
   threats: Threat[];
@@ -52,7 +52,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
             fontWeight: 700,
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
-            color: '#0057B7',
+            color: colors.blue,
           }}
         />
         <span className="text-[10px] text-ink-muted uppercase tracking-tighter">Diagnostic Feed</span>
@@ -133,7 +133,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
             fontSize: '9px',
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
-            color: '#0057B7',
+            color: colors.blue,
             height: '32px',
           }}
         >
