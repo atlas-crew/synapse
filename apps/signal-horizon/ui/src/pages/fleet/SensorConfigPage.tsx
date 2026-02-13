@@ -187,17 +187,19 @@ export function SensorConfigPage() {
   );
   if (error) return (
     <Stack direction="column" align="center" justify="center" gap="md" className="p-12">
-      <div className="flex items-center gap-2 text-status-error">
+      <Stack direction="row" align="center" gap="sm" className="text-status-error">
         <AlertCircle className="w-5 h-5" />
         <span>Error: {formatApiError(error, 'Failed to load configuration')}</span>
-      </div>
+      </Stack>
       <button
         onClick={() => refetch()}
         disabled={isFetching}
-        className="flex items-center gap-2 px-4 py-2 text-sm bg-accent-primary text-white hover:bg-accent-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
+        className="px-4 py-2 text-sm bg-accent-primary text-white hover:bg-accent-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
       >
-        {isFetching ? <Spinner size={16} color="#FFFFFF" /> : <RefreshCw className="w-4 h-4" />}
-        {isFetching ? 'Retrying...' : 'Retry'}
+        <Stack as="span" inline direction="row" align="center" gap="sm">
+          {isFetching ? <Spinner size={16} color="#FFFFFF" /> : <RefreshCw className="w-4 h-4" />}
+          {isFetching ? 'Retrying...' : 'Retry'}
+        </Stack>
       </button>
     </Stack>
   );
@@ -219,30 +221,34 @@ export function SensorConfigPage() {
             titleStyle={PAGE_HEADER_TITLE_STYLE}
           />
         </div>
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           {/* View Mode Tabs */}
           <div className="flex items-center bg-surface-subtle p-1">
             <button
               onClick={() => handleModeChange('guided')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium  transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+              className={`px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
                 viewMode === 'guided'
                   ? 'bg-surface-card text-ink-primary shadow-sm'
                   : 'text-ink-secondary hover:text-ink-primary'
               }`}
             >
-              <Settings className="w-4 h-4" />
-              Guided
+              <Stack as="span" inline direction="row" align="center" gap="xsPlus">
+                <Settings className="w-4 h-4" />
+                Guided
+              </Stack>
             </button>
             <button
               onClick={() => handleModeChange('json')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium  transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
+              className={`px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
                 viewMode === 'json'
                   ? 'bg-surface-card text-ink-primary shadow-sm'
                   : 'text-ink-secondary hover:text-ink-primary'
               }`}
             >
-              <Code2 className="w-4 h-4" />
-              JSON
+              <Stack as="span" inline direction="row" align="center" gap="xsPlus">
+                <Code2 className="w-4 h-4" />
+                JSON
+              </Stack>
             </button>
           </div>
 
@@ -260,7 +266,7 @@ export function SensorConfigPage() {
           >
             {updateMutation.isPending ? 'Saving...' : 'Save & Push'}
           </button>
-        </div>
+        </Stack>
       </div>
 
       {/* Content Area */}

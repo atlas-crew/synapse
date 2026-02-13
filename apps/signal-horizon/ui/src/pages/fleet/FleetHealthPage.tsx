@@ -6,7 +6,7 @@ import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { ResourceBarGroup } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
 import { apiFetch } from '../../lib/api';
-import { Box, SectionHeader, alpha, colors } from '@/ui';
+import { Box, SectionHeader, Stack, alpha, colors } from '@/ui';
 
 interface HealthSummary {
   overallScore: number;
@@ -156,28 +156,28 @@ export function FleetHealthPage() {
           <h3 className="text-lg font-medium text-ink-primary mb-4">Status Distribution</h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <Stack direction="row" align="center" gap="smPlus">
                 <div className="w-4 h-4" style={{ background: colors.green }} />
                 <span className="text-sm text-ink-secondary">Online</span>
-              </div>
+              </Stack>
               <span className="text-sm font-medium" style={{ color: colors.green }}>
                 {metrics?.onlineCount ?? 0}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <Stack direction="row" align="center" gap="smPlus">
                 <div className="w-4 h-4" style={{ background: colors.orange }} />
                 <span className="text-sm text-ink-secondary">Warning</span>
-              </div>
+              </Stack>
               <span className="text-sm font-medium" style={{ color: colors.orange }}>
                 {metrics?.warningCount ?? 0}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <Stack direction="row" align="center" gap="smPlus">
                 <div className="w-4 h-4" style={{ background: colors.gray.mid }} />
                 <span className="text-sm text-ink-secondary">Offline</span>
-              </div>
+              </Stack>
               <span className="text-sm font-medium" style={{ color: colors.red }}>
                 {metrics?.offlineCount ?? 0}
               </span>
@@ -212,10 +212,10 @@ export function FleetHealthPage() {
                 role="link"
                 aria-label={`View critical sensor ${sensor.name}`}
               >
-                <div className="flex items-center gap-4">
+                <Stack direction="row" align="center" gap="md">
                   <SensorStatusBadge status={sensor.status} />
                   <span className="font-medium text-ink-primary">{sensor.name}</span>
-                </div>
+                </Stack>
                 <div className="text-sm text-ink-secondary">
                   CPU: {sensor.cpu.toFixed(1)}% | Memory: {sensor.memory.toFixed(1)}%
                 </div>
@@ -251,10 +251,10 @@ export function FleetHealthPage() {
                 role="link"
                 aria-label={`View warning sensor ${sensor.name}`}
               >
-                <div className="flex items-center gap-4">
+                <Stack direction="row" align="center" gap="md">
                   <SensorStatusBadge status={sensor.status} />
                   <span className="font-medium text-ink-primary">{sensor.name}</span>
-                </div>
+                </Stack>
                 <div className="text-sm text-ink-secondary">
                   CPU: {sensor.cpu.toFixed(1)}% | Memory: {sensor.memory.toFixed(1)}%
                 </div>
