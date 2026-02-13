@@ -44,7 +44,7 @@
 
 .method {
   font-weight: 600;
-  color: #0057B7;
+  color: var(--ac-blue);
   margin-right: 8px;
 }
 

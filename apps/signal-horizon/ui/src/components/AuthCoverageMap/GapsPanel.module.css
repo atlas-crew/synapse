@@ -46,7 +46,7 @@
 .method {
   font-family: monospace;
   font-weight: 600;
-  color: #0057B7;
+  color: var(--ac-blue);
   min-width: 60px;
 }
 
@@ -65,7 +65,7 @@
 }
 
 .viewBtn {
-  background: #0057B7;
+  background: var(--ac-blue);
   color: #fff;
   border: none;
   padding: 6px 12px;
@@ -74,7 +74,7 @@
 }
 
 .viewBtn:hover {
-  background: #004494;
+  background: var(--ac-blue-dark);
 }
 
 .showMore {
