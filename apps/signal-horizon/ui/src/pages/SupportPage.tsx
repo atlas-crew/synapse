@@ -18,7 +18,7 @@ import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
-import { Button, Input, SectionHeader, Spinner, Stack } from '@/ui';
+import { Button, colors, Input, SectionHeader, Spinner, Stack } from '@/ui';
 import type { CSSProperties } from 'react';
 
 const authHeaders = {
@@ -33,7 +33,7 @@ const SUPPORT_HUB_TITLE_STYLE: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.1em',
-  color: '#FFFFFF',
+  color: colors.white,
 };
 const DIAGNOSTICS_TITLE_STYLE: CSSProperties = {
   fontSize: '48px',
@@ -48,7 +48,7 @@ const CATEGORY_TITLE_STYLE: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.2em',
-  color: '#0057B7',
+  color: colors.blue,
 };
 const CONTACT_TITLE_STYLE: CSSProperties = {
   fontSize: '32px',
@@ -792,9 +792,9 @@ Track these metrics:
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
         securityLevel: 'loose',
         themeVariables: {
-          primaryColor: '#0057B7',
-          edgeLabelBackground: '#ffffff',
-          tertiaryColor: '#f0f4f8',
+          primaryColor: colors.blue,
+          edgeLabelBackground: colors.white,
+          tertiaryColor: colors.gray.light,
         },
       });
 
@@ -912,7 +912,7 @@ Track these metrics:
                   transform: 'translateY(-50%)',
                   height: '24px',
                   padding: 0,
-                  color: '#7F7F7F',
+                  color: colors.gray.mid,
                 }}
               >
               </Button>
@@ -995,7 +995,7 @@ Track these metrics:
           <div className="max-w-3xl mx-auto">
             {isLoading ? (
               <Stack direction="column" align="center" justify="center" gap="md" className="h-64">
-                <Spinner size={40} color="#0057B7" />
+                <Spinner size={40} color={colors.blue} />
                 <p className="text-xs font-bold text-ink-muted uppercase tracking-widest">Retrieving Tactical Intel...</p>
               </Stack>
             ) : (
@@ -1148,7 +1148,7 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
-                    color: '#0057B7',
+                    color: colors.blue,
                   }}
                 >
                   Resolution Guide
@@ -1200,7 +1200,7 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
                       fontWeight: 700,
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em',
-                      color: '#0057B7',
+                      color: colors.blue,
                     }}
                   >
                     Download

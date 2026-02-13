@@ -1,5 +1,6 @@
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import type { InventoryService } from '../../hooks/useApiIntelligence';
+import { chartColors, colors, fontFamily } from '@/ui';
 
 const DEMO_TREEMAP_DATA = [
   {
@@ -39,12 +40,12 @@ const DEMO_TREEMAP_DATA = [
 
 // Atlas Crew Brand chart series colors (priority order per chart standards)
 const COLORS = [
-  '#0057B7', // Atlas Crew Blue
-  '#529EEC', // Sky Blue
-  '#00B140', // Green
-  '#E35205', // Orange
-  '#D62598', // Magenta
-  '#5E8AB4', // Cloud Blue
+  chartColors[0],
+  chartColors[1],
+  chartColors[2],
+  chartColors[3],
+  chartColors[5],
+  chartColors[6],
 ];
 
 // Simple rect-only content
@@ -59,7 +60,7 @@ const CustomizedContent = (props: any) => {
         width={width}
         height={height}
         fill={depth < 2 ? COLORS[index % COLORS.length] : 'none'}
-        stroke="#00102E"
+        stroke={colors.navy}
         strokeWidth={1}
       />
     </g>
@@ -98,8 +99,8 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
             <Treemap
               data={treemapData}
               dataKey="size"
-              stroke="#001E62"
-              fill="#0057B7"
+              stroke={colors.navy}
+              fill={colors.blue}
               content={<CustomizedContent />}
             >
               <Tooltip
@@ -107,7 +108,7 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload;
                     return (
-                      <div className="bg-surface-hero border border-border-subtle p-3 shadow-lg text-xs" style={{ fontFamily: 'Rubik' }}>
+                      <div className="bg-surface-hero border border-border-subtle p-3 shadow-lg text-xs" style={{ fontFamily }}>
                         <p className="font-medium text-ink-primary">{data.name}</p>
                         {data.method && (
                           <p className="text-ink-secondary">Method: {data.method}</p>
@@ -141,7 +142,7 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
                 className="w-3 h-3"
                 style={{ backgroundColor: COLORS[i % COLORS.length] }}
               />
-              <span className="text-xs text-ink-secondary" style={{ fontFamily: 'Rubik' }}>{service.name}</span>
+              <span className="text-xs text-ink-secondary" style={{ fontFamily }}>{service.name}</span>
             </div>
           ))}
         </div>
