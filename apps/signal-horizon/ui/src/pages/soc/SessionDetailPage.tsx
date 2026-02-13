@@ -136,9 +136,14 @@ export default function SessionDetailPage() {
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Fingerprint aria-hidden="true" className="w-4 h-4" /> Identity Binding
-          </div>
+          </Stack>
           <div className="mt-3 space-y-2 text-sm text-ink-secondary">
             <div>
               <span className="text-ink-muted">Token:</span>{' '}
@@ -155,18 +160,28 @@ export default function SessionDetailPage() {
           </div>
         </div>
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Activity aria-hidden="true" className="w-4 h-4" /> Session Pulse
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             Last activity {new Date(session.lastActivity).toLocaleString()}. Request volume trending{' '}
             {session.requestCount > 400 ? 'elevated' : 'stable'}.
           </div>
         </div>
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Shield aria-hidden="true" className="w-4 h-4" /> Response Notes
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             {session.isSuspicious
               ? 'Investigate for potential hijack or token replay.'
@@ -185,7 +200,13 @@ export default function SessionDetailPage() {
             <div className="text-ink-muted">No hijack alerts for this session.</div>
           )}
           {(session.hijackAlerts ?? []).map((alert, index) => (
-            <div key={`${alert.alertType}-${index}`} className="flex flex-wrap items-center gap-3">
+            <Stack
+              key={`${alert.alertType}-${index}`}
+              direction="row"
+              align="center"
+              gap="smPlus"
+              wrap
+            >
               <div
                 className="px-2 py-1 text-xs border"
                 style={
@@ -211,7 +232,7 @@ export default function SessionDetailPage() {
                 {new Date(alert.timestamp).toLocaleString()}
               </div>
               <div className="text-xs text-ink-muted">{Math.round(alert.confidence * 100)}%</div>
-            </div>
+            </Stack>
           ))}
         </div>
       </section>

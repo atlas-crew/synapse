@@ -14,14 +14,14 @@ export default function LiveMapPage() {
         actions={
           <Stack direction="row" align="center" gap="sm">
             <StatusBadge status="info" variant="subtle" size="sm">
-              <span className="inline-flex items-center gap-1">
+              <Stack as="span" inline direction="row" align="center" gap="xs">
                 <Globe aria-hidden="true" className="w-4 h-4" />
                 Global Fleet Connected
                 <span
                   className="w-2 h-2 animate-pulse"
                   style={{ background: colors.green, display: 'inline-block' }}
                 />
-              </span>
+              </Stack>
             </StatusBadge>
           </Stack>
         }
@@ -31,23 +31,29 @@ export default function LiveMapPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card p-4">
-            <h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap-2">
-              <span className="w-2 h-2" style={{ background: colors.red }} />
-              Critical Threats (Last 5m)
+            <h3 className="text-sm font-medium text-ink-secondary mb-2">
+              <Stack as="span" inline direction="row" align="center" gap="sm">
+                <span className="w-2 h-2" style={{ background: colors.red }} />
+                Critical Threats (Last 5m)
+              </Stack>
             </h3>
             <span className="text-2xl font-mono text-ink-primary">142</span>
           </div>
           <div className="card p-4">
-            <h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap-2">
-              <span className="w-2 h-2" style={{ background: colors.orange }} />
-              High Severity
+            <h3 className="text-sm font-medium text-ink-secondary mb-2">
+              <Stack as="span" inline direction="row" align="center" gap="sm">
+                <span className="w-2 h-2" style={{ background: colors.orange }} />
+                High Severity
+              </Stack>
             </h3>
             <span className="text-2xl font-mono text-ink-primary">853</span>
           </div>
           <div className="card p-4">
-            <h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap-2">
-              <Shield aria-hidden="true" className="w-4 h-4" style={{ color: colors.green }} />
-              Auto-Blocked
+            <h3 className="text-sm font-medium text-ink-secondary mb-2">
+              <Stack as="span" inline direction="row" align="center" gap="sm">
+                <Shield aria-hidden="true" className="w-4 h-4" style={{ color: colors.green }} />
+                Auto-Blocked
+              </Stack>
             </h3>
             <span className="text-2xl font-mono text-ink-primary">98.4%</span>
           </div>

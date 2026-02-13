@@ -180,11 +180,11 @@ export default function ActorDetailPage() {
             </Stack>
           }
         />
-        <div className="flex items-center gap-3">
+        <Stack direction="row" align="center" gap="smPlus">
           <div className="text-sm text-ink-secondary">Actor ID</div>
           <div className="font-mono text-sm text-ink-primary">{actor.actorId}</div>
           <CopyButton value={actor.actorId} />
-        </div>
+        </Stack>
       </header>
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -284,18 +284,28 @@ export default function ActorDetailPage() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Activity aria-hidden="true" className="w-4 h-4" /> Activity Summary
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             Last seen {new Date(actor.lastSeen).toLocaleString()}.{' '}
             {actor.isBlocked ? 'Actor is currently blocked.' : 'Actor is being monitored.'}
           </div>
         </div>
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Shield aria-hidden="true" className="w-4 h-4" /> Response Notes
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             {actor.blockReason
               ? `Block reason: ${actor.blockReason}`

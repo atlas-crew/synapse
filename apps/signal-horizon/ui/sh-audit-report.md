@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 19:28_
+_Generated: 2026-02-12 19:33_
 
 ## Summary
 
-**Total findings: 54**
+**Total findings: 39**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 54 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 39 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -17,14 +17,10 @@ Priority files to migrate first (most raw patterns):
 
 | Hits | File |
 |------|------|
-| 4 | `pages/soc/SessionDetailPage.tsx` |
-| 4 | `pages/soc/LiveMapPage.tsx` |
-| 4 | `pages/soc/CampaignsPage.tsx` |
 | 4 | `pages/fleet/SensorKeysPage.tsx` |
 | 4 | `pages/beam/catalog/ServicesPage.tsx` |
 | 4 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` |
 | 4 | `pages/SupportPage.tsx` |
-| 3 | `pages/soc/ActorDetailPage.tsx` |
 | 3 | `pages/fleet/DlpDashboardPage.tsx` |
 | 3 | `pages/fleet/CapacityForecastPage.tsx` |
 | 3 | `pages/CampaignDetailPage.tsx` |
@@ -53,21 +49,6 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `components/fleet/SessionSearchResults.tsx` | 314 | `<div className="flex items-center justify-end gap-2">` |
 | `components/api-intelligence/ViolationsFeed.tsx` | 41 | `<span className="text-[10px] text-ink-muted flex items-center gap-1">` |
 | `components/api-intelligence/ApiTreemap.tsx` | 139 | `<div key={service.name} className="flex items-center gap-2">` |
-| `pages/soc/CampaignsPage.tsx` | 168 | `<div className="card-header flex flex-wrap items-center gap-3">` |
-| `pages/soc/CampaignsPage.tsx` | 280 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/CampaignsPage.tsx` | 288 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/CampaignsPage.tsx` | 312 | `<div className="card p-4 flex items-center gap-4">` |
-| `pages/soc/ActorDetailPage.tsx` | 183 | `<div className="flex items-center gap-3">` |
-| `pages/soc/ActorDetailPage.tsx` | 287 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/ActorDetailPage.tsx` | 296 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/LiveMapPage.tsx` | 17 | `<span className="inline-flex items-center gap-1">` |
-| `pages/soc/LiveMapPage.tsx` | 34 | `<h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap` |
-| `pages/soc/LiveMapPage.tsx` | 41 | `<h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap` |
-| `pages/soc/LiveMapPage.tsx` | 48 | `<h3 className="text-sm font-medium text-ink-secondary mb-2 flex items-center gap` |
-| `pages/soc/SessionDetailPage.tsx` | 139 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/SessionDetailPage.tsx` | 158 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/SessionDetailPage.tsx` | 167 | `<div className="flex items-center gap-2 text-sm text-ink-muted uppercase trackin` |
-| `pages/soc/SessionDetailPage.tsx` | 188 | `<div key={`${alert.alertType}-${index}`} className="flex flex-wrap items-center ` |
 | `pages/ApiIntelligencePage.tsx` | 161 | `<div className="flex items-center gap-2">` |
 | `pages/hunting/RequestTimelinePage.tsx` | 390 | `<div className="flex items-center gap-3">` |
 | `pages/SupportPage.tsx` | 252 | `<div className="flex items-center gap-10">` |
@@ -80,4 +61,19 @@ Tailwind flex + items-center + gap → use <Stack direction=row align=center>
 | `pages/beam/catalog/ServicesPage.tsx` | 366 | `<div className={clsx('flex items-center gap-1', status.color)}>` |
 | `pages/beam/catalog/ServicesPage.tsx` | 398 | `<div className="flex items-center gap-3">` |
 | `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 176 | `<div className="flex items-center gap-4 text-sm">` |
+| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 177 | `<div className="flex items-center gap-2">` |
+| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 181 | `<div className="flex items-center gap-2">` |
+| `pages/beam/analytics/TrafficAnalyticsPage.tsx` | 352 | `<div className="flex items-center gap-3">` |
+| `pages/CampaignDetailPage.tsx` | 114 | `className="text-sm text-link hover:text-link-hover flex items-center gap-1"` |
+| `pages/CampaignDetailPage.tsx` | 140 | `<div className="flex items-center gap-2">` |
+| `pages/CampaignDetailPage.tsx` | 379 | `<div className="card p-4 flex items-center gap-3">` |
+| `pages/fleet/sensor-detail/OverviewTab.tsx` | 180 | `<span className="inline-flex items-center gap-2 text-xs text-ink-primary">` |
+| `pages/fleet/sensor-detail/OverviewTab.tsx` | 294 | `<div className="flex items-center gap-3">` |
+| `pages/fleet/sensor-detail/shared.tsx` | 81 | `className="group flex items-center gap-2 px-4 py-3 bg-surface-subtle border bord` |
+| `pages/fleet/sensor-detail/PerformanceTab.tsx` | 59 | `<span className="inline-flex items-center gap-2 text-sm font-medium text-ink-pri` |
+| `pages/fleet/DlpDashboardPage.tsx` | 89 | `<div className="flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border ` |
+| `pages/fleet/DlpDashboardPage.tsx` | 229 | `<h3 className="text-lg font-medium text-ink-primary mb-6 flex items-center gap-2` |
+| `pages/fleet/DlpDashboardPage.tsx` | 268 | `<h3 className="text-lg font-medium text-ink-primary mb-6 flex items-center gap-2` |
+| `pages/fleet/CapacityForecastPage.tsx` | 219 | `<div className="flex items-center gap-2 px-3 py-1.5 bg-ac-orange/10 border bord` |
+| `pages/fleet/CapacityForecastPage.tsx` | 375 | `<div className="mt-3 flex items-center gap-2 text-xs">` |
 

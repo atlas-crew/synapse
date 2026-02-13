@@ -165,7 +165,7 @@ export default function CampaignsPage() {
       </section>
 
       <section className="card">
-        <div className="card-header flex flex-wrap items-center gap-3">
+        <Stack className="card-header" direction="row" align="center" gap="smPlus" wrap>
           <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Status</div>
           <Tabs
             tabs={statusTabs.map((tab) => ({ key: tab.value, label: tab.label }))}
@@ -185,7 +185,7 @@ export default function CampaignsPage() {
               />
             </Box>
           </div>
-        </div>
+        </Stack>
         <div className="card-body">
           {isLoading && <div className="text-ink-muted">Loading campaigns...</div>}
           {error && (
@@ -277,17 +277,27 @@ export default function CampaignsPage() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Activity className="w-4 h-4" /> Correlation Notes
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             Campaigns are prioritized by cross-sensor correlation density and risk velocity.
           </div>
         </div>
         <div className="card p-4">
-          <div className="flex items-center gap-2 text-sm text-ink-muted uppercase tracking-[0.2em]">
+          <Stack
+            direction="row"
+            align="center"
+            gap="sm"
+            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
+          >
             <Shield className="w-4 h-4" /> Response Guidance
-          </div>
+          </Stack>
           <div className="mt-3 text-ink-secondary text-sm">
             Escalate ACTIVE campaigns to the War Room with mitigation playbooks enabled.
           </div>
@@ -309,7 +319,7 @@ function StatCard({
   accentColor: string;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-4">
+    <Stack className="card p-4" direction="row" align="center" gap="md">
       <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
         <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
       </div>
@@ -317,6 +327,6 @@ function StatCard({
         <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
         <p className="text-2xl font-light text-ink-primary">{value}</p>
       </div>
-    </div>
+    </Stack>
   );
 }
