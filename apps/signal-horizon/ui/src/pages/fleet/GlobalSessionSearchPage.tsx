@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
-import { Button, Modal, SectionHeader } from '@/ui';
+import { Button, Modal, SectionHeader, Stack } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -353,7 +353,7 @@ export function GlobalSessionSearchPage() {
       {riskTierData.length > 0 && (
         <div className="card p-4">
           <h3 className="text-sm font-medium text-ink-secondary mb-3">Sessions by Risk Tier</h3>
-          <div className="flex items-center gap-1 h-4">
+          <Stack direction="row" align="center" gap="xs" className="h-4">
             {riskTierData.map((tier) => (
               <div
                 key={tier.label}
@@ -362,7 +362,7 @@ export function GlobalSessionSearchPage() {
                 title={`${tier.label}: ${tier.value.toLocaleString()} (${tier.pct}%)`}
               />
             ))}
-          </div>
+          </Stack>
           <div className="flex items-center justify-between mt-2 text-xs text-ink-tertiary">
             {riskTierData.map((tier) => (
               <span key={tier.label}>
@@ -481,7 +481,7 @@ export function GlobalSessionSearchPage() {
 
           {/* Blocked Only */}
           <div className="flex items-center">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <Stack as="label" direction="row" align="center" gap="sm" className="cursor-pointer">
               <input
                 type="checkbox"
                 className="w-4 h-4 text-ac-blue bg-surface-raised border border-border-default focus:ring-ac-blue"
@@ -489,12 +489,12 @@ export function GlobalSessionSearchPage() {
                 onChange={(e) => setFormState((s) => ({ ...s, blockedOnly: e.target.checked }))}
               />
               <span className="text-sm text-ink-primary">Blocked sessions only</span>
-            </label>
+            </Stack>
           </div>
 
           {/* Time Range Toggle */}
           <div className="flex items-center">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <Stack as="label" direction="row" align="center" gap="sm" className="cursor-pointer">
               <input
                 type="checkbox"
                 className="w-4 h-4 text-ac-blue bg-surface-raised border border-border-default focus:ring-ac-blue"
@@ -504,7 +504,7 @@ export function GlobalSessionSearchPage() {
                 }
               />
               <span className="text-sm text-ink-primary">Filter by time range</span>
-            </label>
+            </Stack>
           </div>
         </div>
 
@@ -537,7 +537,7 @@ export function GlobalSessionSearchPage() {
         )}
 
         {/* Form Actions */}
-        <div className="flex items-center gap-4 mt-6">
+        <Stack direction="row" align="center" gap="md" className="mt-6">
           <button
             type="submit"
             className="px-6 py-2 bg-ac-blue text-white font-medium hover:bg-ac-blue/90 transition-colors disabled:opacity-50"
@@ -552,7 +552,7 @@ export function GlobalSessionSearchPage() {
           >
             Clear
           </button>
-        </div>
+        </Stack>
 
         {searchError && <p className="mt-4 text-sm text-ac-red">{searchError.message}</p>}
       </form>
@@ -605,7 +605,7 @@ export function GlobalSessionSearchPage() {
           </div>
 
           <div className="mb-6">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <Stack as="label" direction="row" align="center" gap="sm" className="cursor-pointer">
               <input
                 type="checkbox"
                 className="w-4 h-4 text-ac-blue bg-surface-raised border border-border-default focus:ring-ac-blue"
@@ -613,10 +613,10 @@ export function GlobalSessionSearchPage() {
                 onChange={(e) => setRevokeModal((s) => ({ ...s, global: e.target.checked }))}
               />
               <span className="text-sm text-ink-primary">Revoke globally (all sensors)</span>
-            </label>
+            </Stack>
           </div>
 
-          <div className="flex items-center gap-4">
+          <Stack direction="row" align="center" gap="md">
             <Button
               className="flex-1"
               size="sm"
@@ -635,7 +635,7 @@ export function GlobalSessionSearchPage() {
             >
               Cancel
             </Button>
-          </div>
+          </Stack>
         </Modal>
       )}
 
@@ -690,7 +690,7 @@ export function GlobalSessionSearchPage() {
             />
           </div>
 
-          <div className="flex items-center gap-4">
+          <Stack direction="row" align="center" gap="md">
             <Button
               className="flex-1"
               size="sm"
@@ -709,7 +709,7 @@ export function GlobalSessionSearchPage() {
             >
               Cancel
             </Button>
-          </div>
+          </Stack>
         </Modal>
       )}
     </div>

@@ -1,15 +1,15 @@
 # Signal Horizon Component Audit
-_Generated: 2026-02-12 18:55_
+_Generated: 2026-02-12 19:00_
 
 ## Summary
 
-**Total findings: 110**
+**Total findings: 96**
 
 ### Findings by Component
 
 | Component | Hits | Action |
 |-----------|------|--------|
-| Stack (row+align+gap) | 110 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
+| Stack (row+align+gap) | 96 | Tailwind flex + items-center + gap → use <Stack direction=row align=center> |
 
 ### Files by Hit Count (Work Order)
 
@@ -17,8 +17,6 @@ Priority files to migrate first (most raw patterns):
 
 | Hits | File |
 |------|------|
-| 7 | `pages/fleet/RuleDistributionPage.tsx` |
-| 7 | `pages/fleet/GlobalSessionSearchPage.tsx` |
 | 6 | `pages/soc/SessionsPage.tsx` |
 | 6 | `pages/beam/analytics/ErrorAnalysisPage.tsx` |
 | 5 | `pages/fleet/SensorConfigPage.tsx` |

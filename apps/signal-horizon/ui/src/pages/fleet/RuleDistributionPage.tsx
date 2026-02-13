@@ -32,7 +32,7 @@ import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/ui/Toast';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import type { Rule } from '../../types/beam';
-import { Box, Button, SectionHeader, Spinner, alpha, colors, spacing } from '@/ui';
+import { Box, Button, SectionHeader, Spinner, Stack, alpha, colors, spacing } from '@/ui';
 
 type RuleStatus = 'active' | 'paused' | 'deploying' | 'failed';
 type RuleSeverity = 'critical' | 'high' | 'medium' | 'low';
@@ -152,7 +152,7 @@ function RuleCard({
             <Shield className="w-5 h-5" style={{ color: colors.skyBlue }} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <Stack direction="row" align="center" gap="sm">
               <h3 className="text-ink-primary font-medium">{rule.name}</h3>
               <span
                 className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-widest"
@@ -160,12 +160,12 @@ function RuleCard({
               >
                 {rule.severity}
               </span>
-            </div>
+            </Stack>
             <p className="text-xs text-ink-muted mt-0.5">{rule.category}</p>
           </div>
         </Button>
 
-        <div className="flex items-center gap-6">
+        <Stack direction="row" align="center" gap="lg">
           <div className="text-right">
             <p className="text-[10px] uppercase font-bold text-ink-muted tracking-tighter">
               Triggers
@@ -180,12 +180,17 @@ function RuleCard({
             </p>
             <p className="text-ink-secondary text-sm">{formatRelativeTime(rule.lastTriggered)}</p>
           </div>
-          <div className="flex items-center gap-1" style={{ color: statusConfig.color }}>
+          <Stack
+            direction="row"
+            align="center"
+            gap="xs"
+            style={{ color: statusConfig.color }}
+          >
             <StatusIcon className="w-4 h-4" aria-hidden="true" />
             <span className="text-[10px] uppercase font-bold tracking-widest">
               {statusConfig.label}
             </span>
-          </div>
+          </Stack>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -217,7 +222,7 @@ function RuleCard({
               <ChevronRight aria-hidden="true" className="w-5 h-5 text-ink-secondary" />
             )}
           </button>
-        </div>
+        </Stack>
       </div>
 
       {isExpanded && (
@@ -229,12 +234,12 @@ function RuleCard({
               </p>
               <p className="text-sm text-ink-secondary leading-relaxed">{rule.description}</p>
             </div>
-            <div className="flex items-center gap-8">
+            <Stack direction="row" align="center" gap="xl">
               <div>
                 <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">
                   Fleet Synchronization
                 </p>
-                <div className="flex items-center gap-2 mt-1">
+                <Stack direction="row" align="center" gap="sm" className="mt-1">
                   <div className="w-32 h-2 bg-surface-base overflow-hidden border border-border-subtle">
                     {(() => {
                       const pct = (rule.deployedSensors / rule.totalSensors) * 100;
@@ -257,7 +262,7 @@ function RuleCard({
                   <span className="text-ink-secondary text-xs font-mono">
                     {rule.deployedSensors}/{rule.totalSensors} online
                   </span>
-                </div>
+                </Stack>
               </div>
               <div>
                 <p className="text-[10px] uppercase font-bold text-ink-muted tracking-widest mb-1">
@@ -267,8 +272,8 @@ function RuleCard({
                   {new Date(rule.createdAt || Date.now()).toLocaleDateString()}
                 </p>
               </div>
-            </div>
-            <div className="flex items-center gap-3 pt-2">
+            </Stack>
+            <Stack direction="row" align="center" gap="smPlus" className="pt-2">
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -297,7 +302,7 @@ function RuleCard({
               >
                 Configure Logic
               </Button>
-            </div>
+            </Stack>
           </div>
         </div>
       )}
@@ -516,7 +521,7 @@ export function RuleDistributionPage() {
         justify="space-between"
         style={{ padding: spacing.md }}
       >
-        <div className="flex items-center gap-4">
+        <Stack direction="row" align="center" gap="md">
           <AlertTriangle aria-hidden="true" className="w-5 h-5" style={{ color: colors.magenta }} />
           <div>
             <p className="text-sm font-bold uppercase tracking-widest">
@@ -530,7 +535,7 @@ export function RuleDistributionPage() {
               {new Set(sensors.map((s) => s.region)).size} regions.
             </p>
           </div>
-        </div>
+        </Stack>
         <div
           className="flex gap-2 font-mono text-[10px]"
           style={{ color: alpha(colors.white, 0.4) }}
