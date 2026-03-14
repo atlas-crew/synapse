@@ -1,0 +1,21 @@
+{
+  "name": "atlascrew-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.18.2",
+  "scripts": {
+    "build": "pnpm exec nx run-many --target=build --all",
+    "test": "pnpm exec nx run-many --target=test --all",
+    "lint": "pnpm exec nx run-many --target=lint --all",
+    "type-check": "pnpm exec nx run-many --target=type-check --all",
+    "graph": "pnpm exec nx graph",
+    "signal-horizon:api": "pnpm --filter @atlascrew/signal-horizon-api dev",
+    "signal-horizon:ui": "pnpm --filter @atlascrew/signal-horizon-ui dev",
+    "synapse-client:build": "pnpm --filter synapse-client build",
+    "synapse-api:build": "pnpm --filter synapse-api build",
+    "synapse-pingora:test": "pnpm --filter synapse-pingora test"
+  },
+  "devDependencies": {
+    "nx": "21.6.4"
+  }
+}

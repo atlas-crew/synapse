@@ -15,7 +15,6 @@
   "scripts": {
     "build": "tsc -p .",
     "lint": "echo 'No linter configured'",
-    "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

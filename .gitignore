@@ -1,0 +1,11 @@
+node_modules/
+.pnpm-store/
+.nx/
+dist/
+coverage/
+target/
+Cargo.lock
+.DS_Store
+.env
+.env.*
+!.env.example
