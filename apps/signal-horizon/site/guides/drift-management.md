@@ -58,5 +58,5 @@ If the local change was intentional (e.g., emergency hot-patch during an inciden
 - **Regular Checks**: Periodically review the **Fleet Health** dashboard for "Drift Detected" indicators.
 
 ## Next Steps
-- **[Fleet Configuration](./fleet-configuration.md)**: Learn how to set the Desired State.
+- **[Fleet Configuration](../tutorials/fleet-configuration-management.md)**: Learn how to set the Desired State.
 - **[Remote Shell](./remote-shell.md)**: Use the browser shell to safely inspect sensor logs when drift is detected.
