@@ -147,7 +147,44 @@ ci-ts: lint type-check
 ci-rust: check-synapse build-synapse test-synapse
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DATABASE (Signal Horizon)
+# SERVICES (local infrastructure)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Check status of all local services
+services:
+    #!/usr/bin/env bash
+    check() {
+        local name="$1" port="$2"
+        if lsof -i :"$port" -P 2>/dev/null | grep -q LISTEN; then
+            echo "  $name (:$port): UP"
+        else
+            echo "  $name (:$port): DOWN"
+        fi
+    }
+    echo "Local services:"
+    check "Redis"      6379
+    check "PostgreSQL"  5432
+    check "ClickHouse" 8123
+
+# Start ClickHouse server via launchd
+ch-start:
+    launchctl load ~/Library/LaunchAgents/local.clickhouse-server.plist 2>/dev/null || true
+    @sleep 2
+    @curl -sf http://localhost:8123/ping > /dev/null && echo "ClickHouse running on :8123" || echo "ClickHouse failed to start — check /opt/homebrew/var/log/clickhouse/stderr.log"
+
+# Stop ClickHouse server
+ch-stop:
+    launchctl unload ~/Library/LaunchAgents/local.clickhouse-server.plist 2>/dev/null || true
+    @echo "ClickHouse stopped"
+
+# Initialize the Signal Horizon ClickHouse schema
+ch-init:
+    clickhouse client --query "CREATE DATABASE IF NOT EXISTS signal_horizon"
+    cd "{{root}}" && clickhouse client --database signal_horizon --multiquery --queries-file apps/signal-horizon/clickhouse/schema.sql
+    @echo "ClickHouse signal_horizon schema initialized"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATABASE (Signal Horizon — PostgreSQL)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Generate Prisma client

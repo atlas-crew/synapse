@@ -9,3 +9,18 @@ Cargo.lock
 .env
 .env.*
 !.env.example
+.agents/fixes/
+.agents/reviews
+
+# ClickHouse local data (should live in /opt/homebrew/var/clickhouse/)
+access/
+data/
+metadata/
+metadata_dropped/
+store/
+preprocessed_configs/
+flags/
+format_schemas/
+tmp/
+uuid
+status
