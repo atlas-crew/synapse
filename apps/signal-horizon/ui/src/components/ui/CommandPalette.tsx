@@ -189,7 +189,7 @@ export function CommandPalette({
             </div>
             <div>
               <div className="text-[10px] text-ink-muted uppercase font-bold">Blocked</div>
-              <div className="text-xl text-ac-magenta">{horizonStats.blockedIndicators}</div>
+              <div className="text-xl text-ac-red">{horizonStats.blockedIndicators}</div>
             </div>
           </div>
         )

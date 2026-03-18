@@ -18,7 +18,22 @@ import { useSensors } from '../../hooks/fleet';
 import { useToast } from '../../components/ui/Toast';
 import { deepMergeConfig } from '../../utils';
 import YAML from 'yaml';
-import { Modal, SectionHeader, Stack } from '@/ui';
+import { 
+  Alert,
+  Modal, 
+  SectionHeader, 
+  Stack, 
+  Box, 
+  Text, 
+  Button, 
+  Input, 
+  Select, 
+  Tabs,
+  Grid,
+  alpha,
+  colors,
+  CARD_HEADER_TITLE_STYLE 
+} from '@/ui';
 
 interface ConfigTemplate {
   id: string;
@@ -60,18 +75,6 @@ interface ConfigAuditResponse {
   limit: number;
   offset: number;
 }
-const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
-const CARD_HEADER_TITLE_STYLE = {
-  fontSize: '18px',
-  lineHeight: '28px',
-  fontWeight: 500,
-  color: 'var(--text-primary)',
-};
 
 async function fetchTemplates(): Promise<ConfigTemplate[]> {
   const data = await apiFetch<any>('/fleet/config/templates');
@@ -336,10 +339,10 @@ export function ConfigManagerPage() {
     },
   });
 
-  const envColors = {
-    production: 'bg-ac-red/10 text-ac-red border-ac-red/30',
-    staging: 'bg-ac-orange/10 text-ac-orange border-ac-orange/30',
-    dev: 'bg-ac-blue/10 text-ac-blue border-ac-blue/30',
+  const envColorTokens = {
+    production: colors.red,
+    staging: colors.orange,
+    dev: colors.blue,
   };
 
   const auditLogs = auditData?.logs ?? [];
@@ -402,7 +405,6 @@ export function ConfigManagerPage() {
     setTemplateConfigView('base');
     setTemplateBaseYamlError(null);
     setTemplateJsonError(null);
-    // Reset fields so stale state doesn't flash while detail loads.
     setNewName('');
     setNewDesc('');
     setNewEnv('production');
@@ -469,7 +471,6 @@ export function ConfigManagerPage() {
       });
     } catch (err: any) {
       setTemplateBaseYamlError(err?.message || 'Invalid YAML config');
-      // Keep last good object/json/advanced in place.
     }
   };
 
@@ -495,7 +496,6 @@ export function ConfigManagerPage() {
       setNewConfig(YAML.stringify(extractBaseConfig(parsed), { indent: 2 }));
     } catch (err: any) {
       setTemplateJsonError(err?.message || 'Invalid JSON config');
-      // Keep last good object/yaml/advanced in place.
     }
   };
 
@@ -575,431 +575,479 @@ export function ConfigManagerPage() {
     auditError instanceof Error ? auditError.message : 'Failed to load audit trail';
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <SectionHeader
-          title="Configuration Manager"
-          description="Manage and deploy configuration templates across your fleet"
-          size="h1"
-          style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
-        />
-        <button
-          onClick={openCreateModal}
-          disabled={isDemoMode}
-          className="btn-primary h-12 px-6 text-sm"
-        >
-          Create Template
-        </button>
-      </div>
-
-      {/* Sync Status */}
-      {syncIsError ? (
-        <div className="card p-6">
-          <div className="text-sm text-ac-red">Sync status unavailable: {syncErrorMessage}</div>
-          <button
-            type="button"
-            onClick={() => refetchSyncStatus()}
-            className="mt-3 px-3 py-1.5 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+    <Box p="xl">
+      <Stack gap="xl">
+        <Box flex direction="row" align="center" justify="space-between">
+          <SectionHeader
+            eyebrow="Signal Horizon"
+            title="Configuration Manager"
+            description="Manage and deploy configuration templates across your fleet"
+          />
+          <Button
+            onClick={openCreateModal}
+            disabled={isDemoMode}
+            size="lg"
           >
-            Retry
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-          <MetricCard label="Total Sensors" value={syncStatus?.totalSensors ?? 0} />
-          <MetricCard
-            label="In Sync"
-            value={syncStatus?.syncedSensors ?? 0}
-            className="border-ac-green/40"
-          />
-          <MetricCard
-            label="Out of Sync"
-            value={syncStatus?.outOfSyncSensors ?? 0}
-            className={syncStatus?.outOfSyncSensors ? 'border-ac-orange/40' : ''}
-          />
-          <MetricCard
-            label="Sync Errors"
-            value={syncStatus?.errorSensors ?? 0}
-            className={syncStatus?.errorSensors ? 'border-ac-red/40' : ''}
-          />
-        </div>
-      )}
+            Create Template
+          </Button>
+        </Box>
 
-      {/* Sync Progress */}
-      {syncStatus && !syncLoading && !syncIsError && (
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-medium text-ink-primary">Fleet Sync Status</h3>
-            <span className="text-sm text-ink-secondary">
-              {Math.round(syncStatus.syncPercentage)}%
-            </span>
-          </div>
-          <div className="w-full h-3 bg-surface-subtle">
-            <div
-              className="h-3 bg-ac-blue transition-all duration-500"
-              style={{ width: `${syncStatus.syncPercentage}%` }}
+        {/* Sync Status */}
+        {syncIsError ? (
+          <Box bg="card" border="subtle" p="lg">
+            <Text variant="small" style={{ color: 'var(--ac-red)' }}>Sync status unavailable: {syncErrorMessage}</Text>
+            <Box style={{ marginTop: '12px' }}>
+              <Button
+                variant="outlined"
+                size="sm"
+                onClick={() => refetchSyncStatus()}
+              >
+                Retry
+              </Button>
+            </Box>
+          </Box>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+            <MetricCard label="Total Sensors" value={syncStatus?.totalSensors ?? 0} />
+            <MetricCard
+              label="In Sync"
+              value={syncStatus?.syncedSensors ?? 0}
+              className="border-ac-green/40"
+            />
+            <MetricCard
+              label="Out of Sync"
+              value={syncStatus?.outOfSyncSensors ?? 0}
+              className={syncStatus?.outOfSyncSensors ? 'border-ac-orange/40' : ''}
+            />
+            <MetricCard
+              label="Sync Errors"
+              value={syncStatus?.errorSensors ?? 0}
+              className={syncStatus?.errorSensors ? 'border-ac-red/40' : ''}
             />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Pingora Presets */}
-      <div className="card">
-        <div className="px-6 py-4 border-b border-border-subtle">
-          <SectionHeader
-            title="Pingora Upstream Presets"
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-          />
-          <p className="mt-1 text-sm text-ink-secondary">
-            Deploy upstream rewrites to existing sensor configs (pushes immediately).
-          </p>
-        </div>
-
-        <div className="p-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1 space-y-3">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
-              Apparatus Echo Target
-            </div>
-            <div className="text-sm text-ink-secondary">
-              Local stack: <span className="font-mono">just dev-waf-echo</span> exposes{' '}
-              <span className="font-mono">demo.site</span>.
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                  Host
-                </label>
-                <input
-                  value={echoHost}
-                  onChange={(e) => setEchoHost(e.target.value)}
-                  className="h-10 w-full bg-surface-subtle border border-border-subtle px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                  Port
-                </label>
-                <input
-                  type="number"
-                  value={echoPort}
-                  onChange={(e) => setEchoPort(Number(e.target.value))}
-                  className="h-10 w-full bg-surface-subtle border border-border-subtle px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                />
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={isDemoMode || echoSelectedIds.length === 0 || echoPresetMutation.isPending}
-              onClick={() => {
-                const host = echoHost.trim();
-                const port = Number(echoPort);
-                if (!host) {
-                  toast.error('Host is required');
-                  return;
-                }
-                if (!Number.isFinite(port) || port < 1 || port > 65535) {
-                  toast.error('Port must be 1-65535');
-                  return;
-                }
-                echoPresetMutation.mutate();
-              }}
-              className="h-11 w-full px-4 text-xs font-bold uppercase tracking-[0.2em] border-2 border-ac-magenta text-ac-magenta hover:bg-ac-magenta hover:text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-            >
-              {echoPresetMutation.isPending
-                ? 'Pushing...'
-                : `Push To Selected (${echoSelectedIds.length})`}
-            </button>
-
-            {isDemoMode && <div className="text-xs text-ink-muted">Disabled in demo mode.</div>}
-          </div>
-
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                Target Sensors
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedEchoSensors(new Set(sensors.map((s: any) => s.id)))}
-                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                >
-                  Select All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedEchoSensors(new Set())}
-                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <div className="border border-border-subtle bg-surface-base max-h-[320px] overflow-auto">
-              <table className="min-w-full divide-y divide-border-subtle">
-                <thead className="bg-surface-subtle">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                      Select
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                      Sensor
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle">
-                  {sensors.map((sensor: any) => (
-                    <tr key={sensor.id} className="hover:bg-surface-subtle">
-                      <td className="px-4 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedEchoSensors.has(sensor.id)}
-                          onChange={() => {
-                            setSelectedEchoSensors((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(sensor.id)) next.delete(sensor.id);
-                              else next.add(sensor.id);
-                              return next;
-                            });
-                          }}
-                          className="w-4 h-4 text-ac-blue border-border-subtle"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium text-ink-primary">{sensor.name}</div>
-                        <div className="text-xs text-ink-muted font-mono">{sensor.id}</div>
-                      </td>
-                      <td className="px-4 py-2 text-sm text-ink-secondary">
-                        {sensor.connectionState || 'UNKNOWN'}
-                      </td>
-                    </tr>
-                  ))}
-                  {sensors.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-6 text-center text-ink-muted" colSpan={3}>
-                        No sensors available.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Templates */}
-      <div className="card">
-        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <SectionHeader
-            title="Configuration Templates"
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-            actions={
-              <div className="flex gap-2">
-                {['all', 'production', 'staging', 'dev'].map((env) => (
-                  <button
-                    key={env}
-                    type="button"
-                    onClick={() => setEnvFilter(env as any)}
-                    className={`px-3 py-1 text-xs font-medium border border-border-subtle hover:bg-surface-subtle capitalize focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                      envFilter === env ? 'bg-surface-subtle text-ink-primary' : 'text-ink-secondary'
-                    }`}
-                  >
-                    {env}
-                  </button>
-                ))}
-              </div>
-            }
-          />
-        </div>
-
-        {templatesLoading ? (
-          <div className="p-12 text-center text-ink-muted">Loading templates...</div>
-        ) : templatesIsError ? (
-          <div className="p-6">
-            <div className="text-sm text-ac-red">
-              Templates unavailable: {templatesErrorMessage}
-            </div>
-            <button
-              type="button"
-              onClick={() => refetchTemplates()}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-            >
-              Retry
-            </button>
-          </div>
-        ) : filteredTemplates.length === 0 ? (
-          <div className="p-12 text-center text-ink-muted">
-            No templates found. Create your first template to get started.
-          </div>
-        ) : (
-          <div className="divide-y divide-border-subtle">
-            {filteredTemplates.map((template) => (
-              <div
-                key={template.id}
-                role="button"
-                tabIndex={0}
-                aria-pressed={selectedTemplate === template.id}
-                aria-label={`Select template: ${template.name}`}
-                className={`w-full p-6 text-left hover:bg-surface-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-inset ${
-                  selectedTemplate === template.id ? 'bg-ac-blue/10' : ''
-                }`}
-                onClick={() => setSelectedTemplate(template.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setSelectedTemplate(template.id);
-                  }
+        {/* Sync Progress */}
+        {syncStatus && !syncLoading && !syncIsError && (
+          <Box bg="card" border="subtle" p="lg">
+            <Box flex direction="row" align="center" justify="space-between" style={{ marginBottom: '8px' }}>
+              <Text variant="h3" weight="medium" noMargin>Fleet Sync Status</Text>
+              <Text variant="body" color="secondary" noMargin>
+                {Math.round(syncStatus.syncPercentage)}%
+              </Text>
+            </Box>
+            <Box style={{ width: '100%', height: '12px', background: 'var(--surface-inset)' }}>
+              <Box
+                style={{
+                  height: '100%',
+                  background: 'var(--ac-blue)',
+                  width: `${syncStatus.syncPercentage}%`,
+                  transition: 'width 0.5s ease',
                 }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-medium text-ink-primary">{template.name}</h3>
-                      <span
-                        className={`px-2 py-0.5 text-xs font-medium border ${envColors[template.environment]}`}
-                      >
-                        {template.environment}
-                      </span>
-                      {template.isActive && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-ac-green/10 text-ac-green border border-ac-green/30">
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    {template.description && (
-                      <p className="mt-1 text-sm text-ink-secondary">{template.description}</p>
-                    )}
-                    <div className="mt-2 text-xs text-ink-muted">
-                      Version {template.version} • Updated{' '}
-                      {new Date(template.updatedAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isDemoMode) {
-                          toast.error('Config pushes are disabled in demo mode.');
-                          return;
-                        }
-                        if (allSensorIds.length === 0) {
-                          toast.error('No sensors available');
-                          return;
-                        }
-                        pushMutation.mutate({ templateId: template.id, sensorIds: allSensorIds });
-                      }}
-                      disabled={pushMutation.isPending || isDemoMode || allSensorIds.length === 0}
-                      className="px-3 py-1.5 text-sm font-medium text-ac-white bg-ac-blue hover:bg-ac-blue-dark disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                    >
-                      {pushMutation.isPending ? 'Pushing...' : 'Push to All'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openPushModal(template.id);
-                      }}
-                      disabled={isDemoMode}
-                      className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                    >
-                      Push to Selected
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(template.id);
-                      }}
-                      className="px-3 py-1.5 text-sm font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              />
+            </Box>
+          </Box>
         )}
-      </div>
 
-      {/* Audit Trail */}
-      <div className="card">
-        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <SectionHeader
-            title="Configuration Audit Trail"
-            description="Recent config changes across the fleet"
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-            actions={<span className="text-xs text-ink-muted">{auditData?.total ?? auditLogs.length} events</span>}
-          />
-        </div>
+        {/* Pingora Presets */}
+        <Box bg="card" border="subtle">
+          <Box p="lg" border="bottom" borderColor="subtle">
+            <SectionHeader
+              title="Pingora Upstream Presets"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+            />
+            <Text variant="small" color="secondary" style={{ marginTop: '4px' }}>
+              Deploy upstream rewrites to existing sensor configs (pushes immediately).
+            </Text>
+          </Box>
 
-        {isDemoMode ? (
-          <div className="p-6 text-sm text-ink-muted">Audit trail is disabled in demo mode.</div>
-        ) : auditIsError ? (
-          <div className="p-6">
-            <div className="text-sm text-ac-red">Audit trail unavailable: {auditErrorMessage}</div>
-            <button
-              type="button"
-              onClick={() => refetchAudit()}
-              className="mt-3 px-3 py-1.5 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-            >
-              Retry
-            </button>
-          </div>
-        ) : auditLoading ? (
-          <div className="p-6 text-sm text-ink-muted">Loading audit trail...</div>
-        ) : auditLogs.length === 0 ? (
-          <div className="p-6 text-sm text-ink-muted">No configuration changes recorded yet.</div>
-        ) : (
-          <div className="divide-y divide-border-subtle">
-            {auditLogs.map((log) => {
-              const changeCount = resolveChangeCount(log);
-              const summary = `${resolveResourceLabel(log)} ${formatAuditAction(log.action)}`;
-              return (
-                <Stack
-                  key={log.id}
-                  direction="row"
-                  align="flex-start"
-                  justify="space-between"
-                  gap="md"
-                  className="p-4"
-                >
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-ink-primary">{summary}</div>
-                    <div className="text-xs text-ink-muted">
-                      {log.resourceId ? (
-                        <span className="font-mono">{log.resourceId}</span>
-                      ) : (
-                        <span>unknown resource</span>
-                      )}
-                      {changeCount > 0 && <span> • {changeCount} changes</span>}
-                      <span> • {log.userId ?? 'system'}</span>
-                    </div>
-                  </div>
-                  <div className="text-xs text-ink-muted">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </div>
+          <Box p="lg">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <Box style={{ gridColumn: 'span 1' }}>
+                <Stack gap="lg">
+                  <Box>
+                    <Text variant="label" color="secondary" style={{ marginBottom: '4px' }}>
+                      Apparatus Echo Target
+                    </Text>
+                    <Text variant="body" color="secondary">
+                      Local stack: <Text as="span" variant="code">just dev-waf-echo</Text> exposes{' '}
+                      <Text as="span" variant="code">demo.site</Text>.
+                    </Text>
+                  </Box>
+
+                  <Grid cols={2} gap="md">
+                    <Input
+                      label="Host"
+                      value={echoHost}
+                      onChange={(e) => setEchoHost(e.target.value)}
+                      size="sm"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    />
+                    <Input
+                      label="Port"
+                      type="number"
+                      value={echoPort}
+                      onChange={(e) => setEchoPort(Number(e.target.value))}
+                      size="sm"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                    />
+                  </Grid>
+
+                  <Button
+                    disabled={isDemoMode || echoSelectedIds.length === 0 || echoPresetMutation.isPending}
+                    onClick={() => {
+                      const host = echoHost.trim();
+                      const port = Number(echoPort);
+                      if (!host) {
+                        toast.error('Host is required');
+                        return;
+                      }
+                      if (!Number.isFinite(port) || port < 1 || port > 65535) {
+                        toast.error('Port must be 1-65535');
+                        return;
+                      }
+                      echoPresetMutation.mutate();
+                    }}
+                    variant="outlined"
+                    style={{ 
+                      borderColor: colors.magenta, 
+                      color: colors.magenta,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.15em',
+                      fontWeight: 700
+                    }}
+                  >
+                    {echoPresetMutation.isPending
+                      ? 'Pushing...'
+                      : `Push To Selected (${echoSelectedIds.length})`}
+                  </Button>
+
+                  {isDemoMode && <Text variant="caption" color="secondary">Disabled in demo mode.</Text>}
                 </Stack>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </Box>
+
+              <Box style={{ gridColumn: 'span 2' }}>
+                <Box flex direction="row" align="center" justify="space-between" style={{ marginBottom: '12px' }}>
+                  <Text variant="label" color="secondary">Target Sensors</Text>
+                  <Stack direction="row" gap="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedEchoSensors(new Set(sensors.map((s: any) => s.id)))}
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedEchoSensors(new Set())}
+                    >
+                      Clear
+                    </Button>
+                  </Stack>
+                </Box>
+
+                <Box border="subtle" bg="bg" style={{ maxHeight: '320px', overflow: 'auto' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Select</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Sensor</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Status</Text>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sensors.map((sensor: any) => (
+                        <tr key={sensor.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedEchoSensors.has(sensor.id)}
+                              onChange={() => {
+                                setSelectedEchoSensors((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(sensor.id)) next.delete(sensor.id);
+                                  else next.add(sensor.id);
+                                  return next;
+                                });
+                              }}
+                              className="w-4 h-4"
+                              style={{ accentColor: 'var(--ac-blue)' }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" weight="medium" noMargin>{sensor.name}</Text>
+                            <Text variant="caption" color="secondary" noMargin style={{ fontFamily: 'var(--font-mono)' }}>
+                              {sensor.id}
+                            </Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="small" color="secondary" noMargin>
+                              {sensor.connectionState || 'UNKNOWN'}
+                            </Text>
+                          </td>
+                        </tr>
+                      ))}
+                      {sensors.length === 0 && (
+                        <tr>
+                          <td colSpan={3} style={{ padding: '32px', textAlign: 'center' }}>
+                            <Text variant="body" color="secondary" noMargin>No sensors available.</Text>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </Box>
+              </Box>
+            </div>
+          </Box>
+        </Box>
+
+        {/* Templates */}
+        <Box bg="card" border="subtle">
+          <Box p="lg" border="bottom" borderColor="subtle">
+            <SectionHeader
+              title="Configuration Templates"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Stack direction="row" gap="xsPlus">
+                  {['all', 'production', 'staging', 'dev'].map((env) => (
+                    <Button
+                      key={env}
+                      variant={envFilter === env ? 'primary' : 'outlined'}
+                      size="sm"
+                      onClick={() => setEnvFilter(env as any)}
+                      style={{ textTransform: 'capitalize' }}
+                    >
+                      {env}
+                    </Button>
+                  ))}
+                </Stack>
+              }
+            />
+          </Box>
+
+          {templatesLoading ? (
+            <Box p="xl" style={{ textAlign: 'center' }}>
+              <Text variant="body" color="secondary">Loading templates...</Text>
+            </Box>
+          ) : templatesIsError ? (
+            <Box p="lg">
+              <Text variant="small" style={{ color: 'var(--ac-red)' }}>
+                Templates unavailable: {templatesErrorMessage}
+              </Text>
+              <Box style={{ marginTop: '12px' }}>
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  onClick={() => refetchTemplates()}
+                >
+                  Retry
+                </Button>
+              </Box>
+            </Box>
+          ) : filteredTemplates.length === 0 ? (
+            <Box p="xl" style={{ textAlign: 'center' }}>
+              <Text variant="body" color="secondary">
+                No templates found. Create your first template to get started.
+              </Text>
+            </Box>
+          ) : (
+            <Stack gap="none">
+              {filteredTemplates.map((template, index) => (
+                <Box
+                  key={template.id}
+                  p="lg"
+                  border={index > 0 ? 'top' : 'none'}
+                  borderColor="subtle"
+                  className="hover:bg-surface-subtle transition-colors"
+                  style={{ 
+                    cursor: 'pointer',
+                    background: selectedTemplate === template.id ? 'var(--ac-blue-dim)' : 'transparent'
+                  }}
+                  onClick={() => setSelectedTemplate(template.id)}
+                >
+                  <Box flex direction="row" align="start" justify="space-between">
+                    <Stack gap="xs" style={{ flex: 1 }}>
+                      <Stack direction="row" align="center" gap="md">
+                        <Text variant="h3" weight="medium" noMargin>{template.name}</Text>
+                        <Box
+                          px="sm"
+                          py="none"
+                          style={{
+                            border: '1px solid',
+                            background: `color-mix(in srgb, ${envColorTokens[template.environment]}, transparent 90%)`,
+                            color: envColorTokens[template.environment],
+                            borderColor: `color-mix(in srgb, ${envColorTokens[template.environment]}, transparent 70%)`,
+                          }}
+                        >
+                          <Text variant="tag" style={{ fontSize: '9px' }}>{template.environment}</Text>
+                        </Box>
+                        {template.isActive && (
+                          <Box
+                            px="sm"
+                            py="none"
+                            style={{
+                              border: '1px solid',
+                              background: 'var(--ac-green-dim)',
+                              color: 'var(--ac-green)',
+                              borderColor: alpha(colors.green, 0.3),
+                            }}
+                          >
+                            <Text variant="tag" style={{ fontSize: '9px' }}>Active</Text>
+                          </Box>
+                        )}
+                      </Stack>
+                      {template.description && (
+                        <Text variant="body" color="secondary" noMargin>{template.description}</Text>
+                      )}
+                      <Text variant="caption" color="secondary" noMargin>
+                        Version {template.version} • Updated{' '}
+                        {new Date(template.updatedAt).toLocaleDateString()}
+                      </Text>
+                    </Stack>
+                    <Stack direction="row" gap="sm">
+                      <Button
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isDemoMode) {
+                            toast.error('Config pushes are disabled in demo mode.');
+                            return;
+                          }
+                          if (allSensorIds.length === 0) {
+                            toast.error('No sensors available');
+                            return;
+                          }
+                          pushMutation.mutate({ templateId: template.id, sensorIds: allSensorIds });
+                        }}
+                        disabled={pushMutation.isPending || isDemoMode || allSensorIds.length === 0}
+                      >
+                        {pushMutation.isPending ? 'Pushing...' : 'Push to All'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPushModal(template.id);
+                        }}
+                        disabled={isDemoMode}
+                      >
+                        Push to Selected
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(template.id);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </Stack>
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </Box>
+
+        {/* Audit Trail */}
+        <Box bg="card" border="subtle">
+          <Box p="lg" border="bottom" borderColor="subtle">
+            <SectionHeader
+              title="Configuration Audit Trail"
+              description="Recent config changes across the fleet"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Text variant="caption" color="secondary" noMargin>
+                  {auditData?.total ?? auditLogs.length} events
+                </Text>
+              }
+            />
+          </Box>
+
+          {isDemoMode ? (
+            <Box p="lg">
+              <Text variant="body" color="secondary">Audit trail is disabled in demo mode.</Text>
+            </Box>
+          ) : auditIsError ? (
+            <Box p="lg">
+              <Text variant="small" style={{ color: 'var(--ac-red)' }}>
+                Audit trail unavailable: {auditErrorMessage}
+              </Text>
+              <Box style={{ marginTop: '12px' }}>
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  onClick={() => refetchAudit()}
+                >
+                  Retry
+                </Button>
+              </Box>
+            </Box>
+          ) : auditLoading ? (
+            <Box p="xl" style={{ textAlign: 'center' }}>
+              <Text variant="body" color="secondary">Loading audit trail...</Text>
+            </Box>
+          ) : auditLogs.length === 0 ? (
+            <Box p="xl" style={{ textAlign: 'center' }}>
+              <Text variant="body" color="secondary">No configuration changes recorded yet.</Text>
+            </Box>
+          ) : (
+            <Stack gap="none">
+              {auditLogs.map((log, index) => {
+                const changeCount = resolveChangeCount(log);
+                const summary = `${resolveResourceLabel(log)} ${formatAuditAction(log.action)}`;
+                return (
+                  <Box
+                    key={log.id}
+                    p="md"
+                    border={index > 0 ? 'top' : 'none'}
+                    borderColor="subtle"
+                    flex 
+                    direction="row" 
+                    align="start" 
+                    justify="space-between"
+                  >
+                    <Stack gap="xs">
+                      <Text variant="body" weight="medium" noMargin>{summary}</Text>
+                      <Stack direction="row" align="center" gap="sm" wrap>
+                        {log.resourceId ? (
+                          <Text variant="code" noMargin>{log.resourceId}</Text>
+                        ) : (
+                          <Text variant="caption" color="secondary" noMargin>unknown resource</Text>
+                        )}
+                        {changeCount > 0 && (
+                          <Text variant="caption" color="secondary" noMargin>• {changeCount} changes</Text>
+                        )}
+                        <Text variant="caption" color="secondary" noMargin>• {log.userId ?? 'system'}</Text>
+                      </Stack>
+                    </Stack>
+                    <Text variant="caption" color="secondary" noMargin>
+                      {new Date(log.createdAt).toLocaleString()}
+                    </Text>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
+      </Stack>
 
       {/* Push Modal */}
       {showPushModal && (
@@ -1010,50 +1058,46 @@ export function ConfigManagerPage() {
           title="Push Template To Sensors"
           style={{ height: '80vh', maxHeight: '80vh' }}
         >
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                Target Sensors
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPushSelectedSensors(new Set(sensors.map((s: any) => String(s.id))))
-                  }
-                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+          <Box flex direction="column" style={{ height: '100%' }}>
+            <Box flex direction="row" align="center" justify="space-between" style={{ marginBottom: '12px' }}>
+              <Text variant="label" color="secondary">Target Sensors</Text>
+              <Stack direction="row" gap="sm">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPushSelectedSensors(new Set(sensors.map((s: any) => String(s.id))))}
                 >
                   Select All
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setPushSelectedSensors(new Set())}
-                  className="px-3 py-1 text-xs font-medium text-ink-secondary border border-border-subtle hover:bg-surface-subtle focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
                 >
                   Clear
-                </button>
-              </div>
-            </div>
+                </Button>
+              </Stack>
+            </Box>
 
-            <div className="border border-border-subtle bg-surface-base flex-1 overflow-auto">
-              <table className="min-w-full divide-y divide-border-subtle">
-                <thead className="bg-surface-subtle">
+            <Box border="subtle" bg="bg" style={{ flex: 1, overflow: 'auto' }}>
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                      Select
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Select</Text>
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                      Sensor
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Sensor</Text>
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                      Status
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Status</Text>
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-subtle">
+                <tbody>
                   {sensors.map((sensor: any) => (
-                    <tr key={sensor.id} className="hover:bg-surface-subtle">
-                      <td className="px-4 py-2">
+                    <tr key={sensor.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 16px' }}>
                         <input
                           type="checkbox"
                           checked={pushSelectedSensors.has(String(sensor.id))}
@@ -1066,47 +1110,48 @@ export function ConfigManagerPage() {
                               return next;
                             });
                           }}
-                          className="w-4 h-4 text-ac-blue border-border-subtle"
+                          className="w-4 h-4"
+                          style={{ accentColor: 'var(--ac-blue)' }}
                         />
                       </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium text-ink-primary">{sensor.name}</div>
-                        <div className="text-xs text-ink-muted font-mono">{sensor.id}</div>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" weight="medium" noMargin>{sensor.name}</Text>
+                        <Text variant="caption" color="secondary" noMargin style={{ fontFamily: 'var(--font-mono)' }}>
+                          {sensor.id}
+                        </Text>
                       </td>
-                      <td className="px-4 py-2 text-sm text-ink-secondary">
-                        {sensor.connectionState || 'UNKNOWN'}
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="small" color="secondary" noMargin>
+                          {sensor.connectionState || 'UNKNOWN'}
+                        </Text>
                       </td>
                     </tr>
                   ))}
                   {sensors.length === 0 && (
                     <tr>
-                      <td className="px-4 py-6 text-center text-ink-muted" colSpan={3}>
-                        No sensors available.
+                      <td colSpan={3} style={{ padding: '32px', textAlign: 'center' }}>
+                        <Text variant="body" color="secondary" noMargin>No sensors available.</Text>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
-            </div>
+            </Box>
 
-            <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-border-subtle">
-              <button
-                type="button"
-                onClick={() => setShowPushModal(false)}
-                className="btn-outline h-10 px-4 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={pushMutation.isPending || sensors.length === 0 || selectedPushCount === 0}
-                onClick={submitPushModal}
-                className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
-              >
-                {pushMutation.isPending ? 'Pushing...' : `Push (${selectedPushCount})`}
-              </button>
-            </div>
-          </div>
+            <Box p="lg" border="top" style={{ marginTop: '24px' }}>
+              <Stack direction="row" gap="md" justify="end">
+                <Button variant="outlined" onClick={() => setShowPushModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={pushMutation.isPending || sensors.length === 0 || selectedPushCount === 0}
+                  onClick={submitPushModal}
+                >
+                  {pushMutation.isPending ? 'Pushing...' : `Push (${selectedPushCount})`}
+                </Button>
+              </Stack>
+            </Box>
+          </Box>
         </Modal>
       )}
 
@@ -1123,223 +1168,170 @@ export function ConfigManagerPage() {
           }
           style={{ height: '80vh', maxHeight: '80vh' }}
         >
-          <div className="h-full flex flex-col relative">
+          <Box flex direction="column" style={{ height: '100%', position: 'relative' }}>
             {templateDetailError && templateModalMode === 'edit' && (
-              <div className="mb-4 border border-ac-red/30 bg-ac-red/10 px-4 py-2 text-sm text-ac-red">
-                {templateDetailError}
-              </div>
+              <Box p="md" style={{ marginBottom: '16px' }}>
+                <Alert status="error" title="Load Error">{templateDetailError}</Alert>
+              </Box>
             )}
 
-            <div
-              className={`grid grid-cols-3 gap-6 flex-1 overflow-hidden ${
-                templateDetailLoading ? 'opacity-60 pointer-events-none' : ''
-              }`}
-            >
+            <Box flex direction="row" gap="lg" style={{ flex: 1, overflow: 'hidden', opacity: templateDetailLoading ? 0.6 : 1 }}>
               {/* Left Column: Metadata */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-ink-secondary mb-1">Name</label>
-                  <input
-                    type="text"
+              <Box style={{ width: 320 }}>
+                <Stack gap="lg">
+                  <Input
+                    label="Name"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     disabled={templateDetailLoading}
-                    className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
                     placeholder="Template name"
+                    size="md"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink-secondary mb-1">
-                    Environment
-                  </label>
-                  <select
+                  <Select
+                    label="Environment"
                     value={newEnv}
                     onChange={(e) => setNewEnv(e.target.value as any)}
                     disabled={templateDetailLoading}
-                    className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue"
-                  >
-                    <option value="dev">Development</option>
-                    <option value="staging">Staging</option>
-                    <option value="production">Production</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-ink-secondary mb-1">
-                    Description
-                  </label>
-                  <textarea
+                    options={[
+                      { value: 'dev', label: 'Development' },
+                      { value: 'staging', label: 'Staging' },
+                      { value: 'production', label: 'Production' },
+                    ]}
+                    size="md"
+                  />
+                  <Input
+                    label="Description"
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
                     disabled={templateDetailLoading}
-                    className="w-full px-3 py-2 border border-border-subtle bg-surface-inset text-ink-primary focus:outline-none focus:border-ac-blue resize-none h-32"
                     placeholder="Optional description"
+                    multiline
+                    rows={4}
+                    size="md"
                   />
-                </div>
-              </div>
+                </Stack>
+              </Box>
 
               {/* Right Column: Config Editor */}
-              <div className="col-span-2 flex flex-col h-full overflow-hidden">
-                <Stack
-                  direction="row"
-                  align="center"
-                  justify="space-between"
-                  gap="md"
-                  className="mb-2"
-                >
-                  <label className="block text-sm font-medium text-ink-secondary">
-                    Sensor Configuration
-                  </label>
-                  <div className="flex items-center bg-surface-subtle p-1">
-                    <button
-                      type="button"
-                      onClick={() => setTemplateConfigView('base')}
-                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                        templateConfigView === 'base'
-                          ? 'bg-surface-card text-ink-primary shadow-sm'
-                          : 'text-ink-secondary hover:text-ink-primary'
-                      }`}
-                    >
-                      Base
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTemplateConfigView('advanced')}
-                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                        templateConfigView === 'advanced'
-                          ? 'bg-surface-card text-ink-primary shadow-sm'
-                          : 'text-ink-secondary hover:text-ink-primary'
-                      }`}
-                    >
-                      Advanced
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTemplateConfigView('json')}
-                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50 ${
-                        templateConfigView === 'json'
-                          ? 'bg-surface-card text-ink-primary shadow-sm'
-                          : 'text-ink-secondary hover:text-ink-primary'
-                      }`}
-                    >
-                      JSON
-                    </button>
-                  </div>
-                </Stack>
+              <Box flex direction="column" style={{ flex: 1, overflow: 'hidden' }}>
+                <Box flex direction="row" align="center" justify="space-between" style={{ marginBottom: '12px' }}>
+                  <Text variant="label" color="secondary">Sensor Configuration</Text>
+                  <Tabs
+                    variant="pills"
+                    size="sm"
+                    active={templateConfigView}
+                    onChange={(key) => setTemplateConfigView(key as any)}
+                    tabs={[
+                      { key: 'base', label: 'Base' },
+                      { key: 'advanced', label: 'Advanced' },
+                      { key: 'json', label: 'JSON' },
+                    ]}
+                  />
+                </Box>
 
                 {templateConfigView === 'base' && (
-                  <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                  <Box flex direction="column" style={{ flex: 1, overflow: 'hidden' }}>
                     {templateBaseYamlError && (
-                      <div className="mb-2 border border-ac-red/30 bg-ac-red/10 px-3 py-2 text-xs text-ac-red">
-                        {templateBaseYamlError}
-                      </div>
+                      <Box p="sm" style={{ marginBottom: '8px' }}>
+                        <Alert status="error">
+{templateBaseYamlError}</Alert>
+                      </Box>
                     )}
-                    <div className="flex-1 overflow-hidden min-h-0">
+                    <Box style={{ flex: 1, overflow: 'hidden' }}>
                       <SynapseConfigEditor value={newConfig} onChange={handleBaseYamlChange} />
-                    </div>
-                  </div>
+                    </Box>
+                  </Box>
                 )}
 
                 {templateConfigView === 'advanced' && (
-                  <div className="flex-1 overflow-auto min-h-0 border border-border-subtle bg-surface-base">
+                  <Box border="subtle" bg="bg" style={{ flex: 1, overflow: 'auto' }}>
                     <AdvancedConfigPanel
                       config={templateAdvancedConfig}
                       onChange={handleAdvancedConfigChange}
                     />
-                  </div>
+                  </Box>
                 )}
 
                 {templateConfigView === 'json' && (
-                  <Stack
-                    direction="column"
-                    className="flex-1 overflow-hidden min-h-0"
-                    style={{ gap: '12px' }}
-                  >
-                    <div className="border border-ac-magenta/30 bg-ac-magenta/10 px-4 py-3 text-xs text-ink-secondary">
-                      <div className="text-xs font-bold uppercase tracking-[0.2em] text-ac-magenta mb-1">
-                        Raw Config
-                      </div>
-                      Edit the full sensor configuration object. Invalid JSON will block save.
-                    </div>
+                  <Stack gap="md" style={{ height: '100%' }}>
+                    <Box p="md" bg="surface-inset" border="subtle">
+                      <Text variant="label" color="magenta" style={{ marginBottom: '4px' }}>RAW CONFIG</Text>
+                      <Text variant="caption" color="secondary">Edit the full sensor configuration object. Invalid JSON will block save.</Text>
+                    </Box>
 
                     {templateJsonError && (
-                      <div className="border border-ac-red/30 bg-ac-red/10 px-3 py-2 text-xs text-ac-red">
-                        {templateJsonError}
-                      </div>
+                      <Alert status="error">
+{templateJsonError}</Alert>
                     )}
 
-                    <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
+                    <Box border="subtle" shadow="subtle" style={{ flex: 1, overflow: 'hidden' }}>
                       <CodeEditor
                         value={templateConfigJson}
                         onChange={handleJsonChange}
                         language="json"
                         height="100%"
-                        className="h-full font-mono text-sm"
                       />
-                    </div>
+                    </Box>
                   </Stack>
                 )}
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-border-subtle">
-              <button
-                type="button"
-                onClick={() => setShowTemplateModal(false)}
-                className="btn-outline h-10 px-4 text-sm"
-              >
-                Cancel
-              </button>
-              {templateModalMode === 'edit' && (
-                <button
-                  type="button"
-                  disabled={
-                    isDemoMode ||
-                    templateDeleteMutation.isPending ||
-                    !editingTemplateId ||
-                    templateDetailLoading
-                  }
-                  onClick={() => {
-                    if (!editingTemplateId) return;
-                    const ok = window.confirm('Delete this template? This cannot be undone.');
-                    if (!ok) return;
-                    templateDeleteMutation.mutate(editingTemplateId);
-                  }}
-                  className="h-10 px-4 text-sm font-medium border border-ac-red text-ac-red hover:bg-ac-red hover:text-white transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
+            <Box p="lg" border="top" style={{ marginTop: '24px' }}>
+              <Stack direction="row" gap="md" justify="end">
+                <Button variant="outlined" onClick={() => setShowTemplateModal(false)}>
+                  Cancel
+                </Button>
+                {templateModalMode === 'edit' && (
+                  <Button
+                    variant="outlined"
+                    disabled={isDemoMode || templateDeleteMutation.isPending || !editingTemplateId || templateDetailLoading}
+                    onClick={() => {
+                      if (!editingTemplateId) return;
+                      const ok = window.confirm('Delete this template? This cannot be undone.');
+                      if (!ok) return;
+                      templateDeleteMutation.mutate(editingTemplateId);
+                    }}
+                    style={{ borderColor: colors.red, color: colors.red }}
+                  >
+                    {templateDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                  </Button>
+                )}
+                <Button
+                  disabled={isDemoMode || templateCreateMutation.isPending || templateUpdateMutation.isPending || templateDetailLoading}
+                  onClick={submitTemplateModal}
                 >
-                  {templateDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={
-                  isDemoMode ||
-                  templateCreateMutation.isPending ||
-                  templateUpdateMutation.isPending ||
-                  templateDetailLoading
-                }
-                onClick={submitTemplateModal}
-                className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
-              >
-                {templateModalMode === 'create'
-                  ? templateCreateMutation.isPending
-                    ? 'Creating...'
-                    : 'Create Template'
-                  : templateUpdateMutation.isPending
-                    ? 'Saving...'
-                    : 'Save Changes'}
-              </button>
-            </div>
+                  {templateModalMode === 'create'
+                    ? templateCreateMutation.isPending
+                      ? 'Creating...'
+                      : 'Create Template'
+                    : templateUpdateMutation.isPending
+                      ? 'Saving...'
+                      : 'Save Changes'}
+                </Button>
+              </Stack>
+            </Box>
 
             {templateDetailLoading && templateModalMode === 'edit' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-ac-black/20">
-                <div className="bg-surface-base border border-border-subtle px-4 py-2 text-sm text-ink-secondary">
-                  Loading template...
-                </div>
-              </div>
+              <Box 
+                style={{ 
+                  position: 'absolute', 
+                  inset: 0, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  background: 'rgba(0,0,0,0.2)',
+                  zIndex: 10
+                }}
+              >
+                <Box bg="card" border="subtle" px="lg" py="md">
+                  <Text variant="body" color="secondary" noMargin>Loading template...</Text>
+                </Box>
+              </Box>
             )}
-          </div>
+          </Box>
         </Modal>
       )}
-    </div>
+    </Box>
   );
 }

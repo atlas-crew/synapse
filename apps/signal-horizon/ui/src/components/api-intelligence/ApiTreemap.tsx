@@ -45,7 +45,7 @@ const COLORS = [
   colors.green,
   colors.orange,
   colors.magenta,
-  colors.cloudBlue,
+  colors.blue,
 ];
 
 // Simple rect-only content

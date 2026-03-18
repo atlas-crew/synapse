@@ -7,7 +7,19 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { fetchActorDetail, fetchActors, fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import type { SocActor, SocSession } from '../../types/soc';
-import { Alert, Box, Button, Input, SectionHeader, Select, Stack, StatusBadge } from '@/ui';
+import { 
+  Alert, 
+  Box, 
+  Button, 
+  Input, 
+  SectionHeader, 
+  Select, 
+  Stack, 
+  StatusBadge,
+  Text,
+  alpha,
+  colors
+} from '@/ui';
 
 type SearchType = 'auto' | 'ip' | 'fingerprint' | 'actor' | 'session';
 
@@ -117,153 +129,247 @@ export default function SocSearchPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <SectionHeader
-        eyebrow="Signal Horizon"
-        title="Global Search"
-        description="Search actors, sessions, IPs, and fingerprints across the fleet."
-        actions={
-          <Stack direction="row" align="center" gap="sm">
-            <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <Box style={{ width: 180 }}>
-              <Input
-                value={sensorId}
-                onChange={(event) => setSensorId(event.target.value)}
-                placeholder="synapse-pingora-1"
-                size="sm"
-              />
-            </Box>
-          </Stack>
-        }
-      />
+    <Box p="xl">
+      <Stack gap="xl">
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="Global Search"
+          description="Search actors, sessions, IPs, and fingerprints across the fleet."
+          actions={
+            <Stack direction="row" align="center" gap="sm">
+              <Text variant="label" color="secondary" noMargin>Sensor</Text>
+              <Box style={{ width: 180 }}>
+                <Input
+                  value={sensorId}
+                  onChange={(event) => setSensorId(event.target.value)}
+                  placeholder="synapse-pingora-1"
+                  size="sm"
+                />
+              </Box>
+            </Stack>
+          }
+        />
 
-      <form onSubmit={handleSubmit} className="card p-4 flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-[220px]">
-          <Input
-            label="Query"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="IP, actor ID, session ID, fingerprint"
-            size="sm"
-            fill
-          />
-        </div>
-        <div className="min-w-[160px]">
-          <Select
-            label="Type"
-            value={searchType}
-            onChange={(event) => setSearchType(event.target.value as SearchType)}
-            options={searchTypeOptions}
-            size="sm"
-          />
-        </div>
-        <Button type="submit" size="sm" icon={<Search aria-hidden="true" className="w-4 h-4" />}>
-          Search
-        </Button>
-      </form>
+        <Box bg="card" border="subtle" p="lg">
+          <form onSubmit={handleSubmit}>
+            <Stack direction="row" align="end" gap="md" wrap>
+              <Box style={{ flex: 1, minWidth: 220 }}>
+                <Input
+                  label="Query"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="IP, actor ID, session ID, fingerprint"
+                  size="sm"
+                  fill
+                />
+              </Box>
+              <Box style={{ width: 160 }}>
+                <Select
+                  label="Type"
+                  value={searchType}
+                  onChange={(event) => setSearchType(event.target.value as SearchType)}
+                  options={searchTypeOptions}
+                  size="sm"
+                />
+              </Box>
+              <Button type="submit" size="md" icon={<Search size={16} aria-hidden="true" />}>
+                Search
+              </Button>
+            </Stack>
+          </form>
+        </Box>
 
-      <section className="card">
-        <div className="card-header flex items-center justify-between">
-          <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Results</div>
-          {submitted?.term && (
-            <div className="text-xs text-ink-muted">
-              Showing {resolvedType} match for “{submitted.term}”
-            </div>
-          )}
-        </div>
-        <div className="card-body">
-          {!submitted && <div className="text-ink-muted">Run a search to see results.</div>}
-          {isLoading && <div className="text-ink-muted">Searching...</div>}
-          {error && <Alert status="error">Search failed. Verify the ID and try again.</Alert>}
-          {!isLoading &&
-            submitted &&
-            data &&
-            data.kind === 'actors' &&
-            (data.actors.length === 0 ? (
-              <div className="text-ink-muted">No actors matched the query.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <caption className="sr-only">
-                    Actor search results with risk and activity details
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th>Actor</th>
-                      <th>Risk</th>
-                      <th>Last Seen</th>
-                      <th>IPs</th>
-                      <th>Fingerprints</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.actors.map((actor) => (
-                      <tr key={actor.actorId}>
-                        <td className="font-mono text-sm text-ink-primary">
-                          <Link
-                            to={`/actors/${actor.actorId}`}
-                            className="text-link hover:text-link-hover"
-                          >
-                            {actor.actorId}
-                          </Link>
-                        </td>
-                        <td className="text-ink-primary">{Math.round(actor.riskScore)}</td>
-                        <td className="text-ink-secondary">
-                          {new Date(actor.lastSeen).toLocaleString()}
-                        </td>
-                        <td className="text-ink-secondary">{actor.ips.length}</td>
-                        <td className="text-ink-secondary">{actor.fingerprints.length}</td>
-                        <td>
-                          <StatusBadge
-                            status={actor.isBlocked ? 'error' : 'success'}
-                            variant="subtle"
-                            size="sm"
-                          >
-                            {actor.isBlocked ? 'Blocked' : 'Active'}
-                          </StatusBadge>
-                        </td>
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <Stack direction="row" align="center" justify="space-between">
+              <Text variant="label" color="secondary" noMargin>Results</Text>
+              {submitted?.term && (
+                <Text variant="caption" color="secondary" noMargin>
+                  Showing {resolvedType} match for “{submitted.term}”
+                </Text>
+              )}
+            </Stack>
+          </Box>
+          <Box p="none">
+            {!submitted && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" color="secondary">Run a search to see results.</Text>
+              </Box>
+            )}
+            {isLoading && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" color="secondary">Searching...</Text>
+              </Box>
+            )}
+            {error && (
+              <Box p="xl">
+                <Alert status="error" title="Search Failed">
+                  Verify the ID and try again.
+                </Alert>
+              </Box>
+            )}
+            {!isLoading && submitted && data && data.kind === 'actors' && (
+              data.actors.length === 0 ? (
+                <Box p="xl" style={{ textAlign: 'center' }}>
+                  <Text variant="body" color="secondary">No actors matched the query.</Text>
+                </Box>
+              ) : (
+                <Box style={{ overflowX: 'auto' }}>
+                  <table className="data-table">
+                    <caption className="sr-only">
+                      Actor search results with risk and activity details
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Actor</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Risk</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Last Seen</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>IPs</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Fingerprints</Text>
+                        </th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                          <Text variant="label" color="secondary" noMargin>Status</Text>
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          {!isLoading && submitted && data && data.kind === 'actor' && (
-            <div className="space-y-3">
-              <div className="text-sm text-ink-muted uppercase tracking-[0.2em]">Actor</div>
-              <Link
-                to={`/actors/${data.actor.actorId}`}
-                className="text-link hover:text-link-hover text-lg font-mono"
-              >
-                {data.actor.actorId}
-              </Link>
-              <div className="flex flex-wrap gap-4 text-sm text-ink-secondary">
-                <span>Risk {Math.round(data.actor.riskScore)}</span>
-                <span>{data.actor.sessionIds.length} sessions</span>
-                <span>{data.actor.ips.length} IPs</span>
-                <span>{data.actor.isBlocked ? 'Blocked' : 'Active'}</span>
-              </div>
-            </div>
-          )}
-          {!isLoading && submitted && data && data.kind === 'session' && (
-            <div className="space-y-3">
-              <div className="text-sm text-ink-muted uppercase tracking-[0.2em]">Session</div>
-              <Link
-                to={`/sessions/${data.session.sessionId}`}
-                className="text-link hover:text-link-hover text-lg font-mono"
-              >
-                {data.session.sessionId}
-              </Link>
-              <div className="flex flex-wrap gap-4 text-sm text-ink-secondary">
-                <span>{data.session.requestCount} requests</span>
-                <span>{data.session.isSuspicious ? 'Suspicious' : 'Active'}</span>
-                <span>Last activity {new Date(data.session.lastActivity).toLocaleString()}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
+                    </thead>
+                    <tbody>
+                      {data.actors.map((actor) => (
+                        <tr key={actor.actorId} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Link
+                              to={`/actors/${actor.actorId}`}
+                              className="text-link hover:opacity-80 transition-opacity"
+                              style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                            >
+                              {actor.actorId}
+                            </Link>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" weight="medium" noMargin>{Math.round(actor.riskScore)}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>
+                              {new Date(actor.lastSeen).toLocaleString()}
+                            </Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>{actor.ips.length}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>{actor.fingerprints.length}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <StatusBadge
+                              status={actor.isBlocked ? 'error' : 'success'}
+                              variant="subtle"
+                              size="sm"
+                            >
+                              {actor.isBlocked ? 'Blocked' : 'Active'}
+                            </StatusBadge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Box>
+              )
+            )}
+            {!isLoading && submitted && data && data.kind === 'actor' && (
+              <Box p="lg">
+                <Stack gap="lg">
+                  <Box>
+                    <Text variant="label" color="secondary" style={{ marginBottom: '8px' }}>Actor</Text>
+                    <Link
+                      to={`/actors/${data.actor.actorId}`}
+                      className="text-link hover:opacity-80 transition-opacity"
+                      style={{ fontSize: '18px', fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                    >
+                      {data.actor.actorId}
+                    </Link>
+                  </Box>
+                  <Stack direction="row" gap="xl" wrap>
+                    <Box>
+                      <Text variant="caption" color="secondary">Risk</Text>
+                      <Text variant="body" weight="bold" color={data.actor.riskScore > 75 ? 'error' : 'inherit'}>
+                        {Math.round(data.actor.riskScore)}
+                      </Text>
+                    </Box>
+                    <Box>
+                      <Text variant="caption" color="secondary">Sessions</Text>
+                      <Text variant="body" weight="bold">{data.actor.sessionIds.length}</Text>
+                    </Box>
+                    <Box>
+                      <Text variant="caption" color="secondary">IPs</Text>
+                      <Text variant="body" weight="bold">{data.actor.ips.length}</Text>
+                    </Box>
+                    <Box>
+                      <Text variant="caption" color="secondary">Status</Text>
+                      <StatusBadge
+                        status={data.actor.isBlocked ? 'error' : 'success'}
+                        variant="subtle"
+                        size="sm"
+                      >
+                        {data.actor.isBlocked ? 'Blocked' : 'Active'}
+                      </StatusBadge>
+                    </Box>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
+            {!isLoading && submitted && data && data.kind === 'session' && (
+              <Box p="lg">
+                <Stack gap="lg">
+                  <Box>
+                    <Text variant="label" color="secondary" style={{ marginBottom: '8px' }}>Session</Text>
+                    <Link
+                      to={`/sessions/${data.session.sessionId}`}
+                      className="text-link hover:opacity-80 transition-opacity"
+                      style={{ fontSize: '18px', fontFamily: 'var(--font-mono)', fontWeight: 500 }}
+                    >
+                      {data.session.sessionId}
+                    </Link>
+                  </Box>
+                  <Stack direction="row" gap="xl" wrap>
+                    <Box>
+                      <Text variant="caption" color="secondary">Requests</Text>
+                      <Text variant="body" weight="bold">{data.session.requestCount}</Text>
+                    </Box>
+                    <Box>
+                      <Text variant="caption" color="secondary">Status</Text>
+                      <Box
+                        px="sm"
+                        py="xs"
+                        style={{
+                          width: 'fit-content',
+                          border: '1px solid',
+                          background: data.session.isSuspicious ? 'var(--ac-orange-dim)' : 'var(--ac-green-dim)',
+                          color: data.session.isSuspicious ? 'var(--ac-orange)' : 'var(--ac-green)',
+                          borderColor: data.session.isSuspicious ? alpha(colors.orange, 0.3) : alpha(colors.green, 0.3),
+                        }}
+                      >
+                        <Text variant="tag" noMargin>{data.session.isSuspicious ? 'Suspicious' : 'Active'}</Text>
+                      </Box>
+                    </Box>
+                    <Box>
+                      <Text variant="caption" color="secondary">Last Activity</Text>
+                      <Text variant="body" weight="bold">{new Date(data.session.lastActivity).toLocaleString()}</Text>
+                    </Box>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }

@@ -654,7 +654,7 @@ const AdminSettingsPage: React.FC = () => {
                     <button
                       onClick={handleRevokeAll}
                       disabled={isRevokingAll}
-                      className="px-6 h-12 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-magenta-dark disabled:opacity-50 transition-colors shadow-lg shadow-status-error/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                      className="px-6 h-12 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-red-600 disabled:opacity-50 transition-colors shadow-lg shadow-status-error/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
                     >
                       {isRevokingAll ? 'Revoking...' : 'Revoke All Tokens'}
                     </button>
@@ -1036,7 +1036,7 @@ const AdminSettingsPage: React.FC = () => {
                         <button
                           onClick={() => setShowBlockForm(true)}
                           disabled={isAddingBlock || showBlockForm}
-                          className="px-4 py-2 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-magenta-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                          className="px-4 py-2 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-red-600 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
                         >
                           {isAddingBlock ? 'Adding...' : 'Add Manual Block'}
                         </button>
@@ -1109,7 +1109,7 @@ const AdminSettingsPage: React.FC = () => {
                         <button
                           onClick={handleManualBlockSubmit}
                           disabled={isAddingBlock || !blockIpInput.trim()}
-                          className="px-4 py-2 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-ac-magenta-dark disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
+                          className="px-4 py-2 bg-status-error text-white text-xs font-bold uppercase tracking-widest hover:bg-red-600 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
                         >
                           {isAddingBlock ? 'Adding...' : 'Block IP'}
                         </button>

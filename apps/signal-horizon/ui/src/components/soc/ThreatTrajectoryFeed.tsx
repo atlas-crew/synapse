@@ -75,7 +75,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
                 className={clsx(
                   'absolute -left-[7px] top-0 w-3 h-3 border-2 border-surface-card',
                   item.type === 'alert' ? (
-                    item.data.severity === 'CRITICAL' ? 'bg-ac-magenta' : 
+                    item.data.severity === 'CRITICAL' ? 'bg-ac-red' : 
                     item.data.severity === 'HIGH' ? 'bg-ac-orange' : 'bg-ac-blue'
                   ) : 'bg-ac-blue'
                 )} 
@@ -90,7 +90,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
                   className={clsx(
                     'text-[9px] px-1.5 py-0.5 border font-bold uppercase tracking-tighter',
                     item.type === 'alert' ? (
-                      item.data.severity === 'CRITICAL' ? 'text-ac-magenta border-ac-magenta/30 bg-ac-magenta/10' : 
+                      item.data.severity === 'CRITICAL' ? 'text-ac-red border-ac-red/30 bg-ac-red/10' : 
                       'text-ac-sky-blue border-ac-sky-blue/30 bg-ac-sky-blue/10'
                     ) : 'text-ac-blue-light border-ac-blue-light/30 bg-ac-blue-light/10'
                   )}

@@ -188,7 +188,7 @@ const CATEGORY_CONFIG: Record<PatternCategory, { label: string; color: string; b
 
 // Brand colors for severity
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string }> = {
-  critical: { color: 'text-ac-magenta', bg: 'bg-ac-magenta/20' },
+  critical: { color: 'text-ac-red', bg: 'bg-ac-red/20' },
   high: { color: 'text-ac-orange', bg: 'bg-ac-orange/20' },
   medium: { color: 'text-ac-blue', bg: 'bg-ac-blue/20' },
   low: { color: 'text-ac-navy', bg: 'bg-ac-navy/20' },

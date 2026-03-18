@@ -170,7 +170,7 @@ const SEVERITY_TOTAL = DEMO_SEVERITY_DIST.reduce((sum, d) => sum + d.value, 0);
 
 // Brand colors for severity (Magenta, Orange, Atlas Crew Blue, Navy)
 const SEVERITY_CONFIG: Record<ThreatSeverity, { color: string; bg: string; label: string }> = {
-  critical: { color: 'text-ac-magenta', bg: 'bg-ac-magenta/20', label: 'Critical' },
+  critical: { color: 'text-ac-red', bg: 'bg-ac-red/20', label: 'Critical' },
   high: { color: 'text-ac-orange', bg: 'bg-ac-orange/20', label: 'High' },
   medium: { color: 'text-ac-blue', bg: 'bg-ac-blue/20', label: 'Medium' },
   low: { color: 'text-ac-navy', bg: 'bg-ac-navy/20', label: 'Low' },

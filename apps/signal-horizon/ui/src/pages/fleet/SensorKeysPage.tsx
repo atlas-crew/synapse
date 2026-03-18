@@ -20,7 +20,19 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Modal, SectionHeader, colors } from '@/ui';
+import { 
+  Alert,
+  Modal, 
+  SectionHeader, 
+  colors,
+  Box,
+  Button,
+  Stack,
+  Text,
+  Input,
+  Select,
+  StatusBadge
+} from '@/ui';
 
 interface SensorKey {
   id: string;
@@ -40,27 +52,12 @@ interface SensorKey {
   lastRotatedAt: string | null;
 }
 
-// KeyActivity interface for potential future use
-// interface KeyActivity {
-//   id: string;
-//   action: 'created' | 'rotated' | 'revoked';
-//   keyName: string;
-//   timestamp: string;
-//   performedBy: string;
-// }
-
 interface NewKeyRequest {
   name: string;
   sensorId: string;
   expiresIn?: number; // days
   permissions: string[];
 }
-const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: colors.white,
-};
 
 export function SensorKeysPage(): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -187,256 +184,264 @@ export function SensorKeysPage(): React.ReactElement {
   };
 
   const getStatusBadge = (status: SensorKey['status']) => {
-    const styles = {
-      ACTIVE: 'bg-green-500/10 text-green-400 border-green-500/30',
-      EXPIRED: 'bg-red-500/10 text-red-400 border-red-500/30',
-      REVOKED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
-    };
-    return (
-      <span className={`px-2 py-1 text-xs font-medium  border ${styles[status]}`}>{status}</span>
-    );
+    const statusType = status === 'ACTIVE' ? 'success' : status === 'EXPIRED' ? 'error' : 'info';
+    return <StatusBadge status={statusType} variant="subtle" size="sm">{status}</StatusBadge>;
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading API keys...</div>
-      </div>
+      <Box p="xl" style={{ textAlign: 'center' }}>
+        <Text variant="body" color="secondary">Loading API keys...</Text>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6">
-        <div className="bg-red-500/10 border border-red-500/30 p-4 text-red-400">
+      <Box p="xl">
+        <Alert status="error" title="Load Error">
           Failed to load API keys. Please try again.
-        </div>
-      </div>
+        </Alert>
+      </Box>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <SectionHeader
-          title="API Key Management"
-          description="Manage sensor authentication keys and permissions"
-          size="h1"
-          style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
-        />
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-        >
-          <Plus className="w-4 h-4" />
-          Generate New Key
-        </button>
-      </div>
+    <Box p="xl">
+      <Stack gap="xl">
+        {/* Header */}
+        <Box flex direction="row" align="center" justify="space-between">
+          <SectionHeader
+            title="API Key Management"
+            description="Manage sensor authentication keys and permissions"
+            size="h1"
+            titleStyle={{ fontSize: '20px', lineHeight: '28px' }}
+          />
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            icon={<Plus size={16} aria-hidden="true" />}
+            size="lg"
+          >
+            Generate New Key
+          </Button>
+        </Box>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          label="Total Keys"
-          value={stats.total}
-          icon={<Key className="w-6 h-6" />}
-          trend={{ value: 0, label: 'All API keys' }}
-        />
-        <MetricCard
-          label="Active Keys"
-          value={stats.active}
-          icon={<Shield className="w-6 h-6" />}
-          trend={{ value: 0, label: 'Currently valid' }}
-        />
-        <MetricCard
-          label="Expired Keys"
-          value={stats.expired}
-          icon={<Clock className="w-6 h-6" />}
-          trend={{ value: 0, label: 'Need rotation' }}
-        />
-        <MetricCard
-          label="Expiring Soon"
-          value={stats.expiringSoon}
-          icon={<AlertTriangle className="w-6 h-6" />}
-          trend={{ value: 0, label: 'Within 30 days' }}
-        />
-      </div>
-
-      {/* Keys Table */}
-      <div className="bg-gray-800/50 border border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <caption className="sr-only">Sensor API keys with expiration and usage status</caption>
-            <thead className="bg-gray-700/50">
-              <tr>
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white"
-                  onClick={() => handleSort('name')}
-                >
-                  Name {sortColumn === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Sensor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Key ID
-                </th>
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white"
-                  onClick={() => handleSort('createdAt')}
-                >
-                  Created {sortColumn === 'createdAt' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white"
-                  onClick={() => handleSort('expiresAt')}
-                >
-                  Expires {sortColumn === 'expiresAt' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white"
-                  onClick={() => handleSort('status')}
-                >
-                  Status {sortColumn === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Last Used
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {sortedKeys.map((key) => (
-                <tr key={key.id} className="hover:bg-gray-700/30">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-white">{key.name}</div>
-                    {key.permissions.length > 0 && (
-                      <div className="text-xs text-gray-400">{key.permissions.join(', ')}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                    {key.sensor?.name || 'All Sensors'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <code className="text-xs font-mono text-gray-400 bg-gray-700 px-2 py-1">
-                      {key.keyPrefix}...
-                    </code>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                    {formatDate(key.createdAt)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                    {formatDate(key.expiresAt)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(key.status)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                    {formatDate(key.lastUsedAt)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                    {key.status === 'ACTIVE' && (
-                      <>
-                        <button
-                          onClick={() => rotateMutation.mutate(key.id)}
-                          disabled={rotateMutation.isPending}
-                          className="text-blue-400 hover:text-blue-300 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                          title="Rotate key"
-                        >
-                          <RotateCw className="w-4 h-4 inline" />
-                        </button>
-                        <button
-                          onClick={() => setKeyToRevoke(key.id)}
-                          className="text-red-400 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500/50"
-                          title="Revoke key"
-                        >
-                          <Trash2 className="w-4 h-4 inline" />
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {sortedKeys.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-400">
-                    No API keys found. Click "Generate New Key" to create one.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard
+            label="Total Keys"
+            value={stats.total}
+            icon={<Key className="w-6 h-6" />}
+          />
+          <MetricCard
+            label="Active Keys"
+            value={stats.active}
+            icon={<Shield className="w-6 h-6" />}
+          />
+          <MetricCard
+            label="Expired Keys"
+            value={stats.expired}
+            icon={<Clock className="w-6 h-6" />}
+          />
+          <MetricCard
+            label="Expiring Soon"
+            value={stats.expiringSoon}
+            icon={<AlertTriangle className="w-6 h-6" />}
+          />
         </div>
-      </div>
 
-      {/* Generate Key Modal */}
-      {isModalOpen && (
-        <GenerateKeyModal
-          sensors={sensors}
-          onClose={() => {
-            setIsModalOpen(false);
-            setGeneratedKey(null);
-          }}
-          onGenerate={(req) => generateMutation.mutate(req)}
-          isGenerating={generateMutation.isPending}
-          generatedKey={generatedKey}
-          onCopyKey={handleCopyKey}
-          copiedKey={copiedKey}
-        />
-      )}
+        {/* Keys Table */}
+        <Box bg="card" border="subtle">
+          <Box style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <caption className="sr-only">Sensor API keys with expiration and usage status</caption>
+              <thead>
+                <tr>
+                  <th
+                    style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)', cursor: 'pointer' }}
+                    onClick={() => handleSort('name')}
+                  >
+                    <Stack direction="row" align="center" gap="xs">
+                      <Text variant="label" color="secondary" noMargin>Name</Text>
+                      {sortColumn === 'name' && <Text variant="caption" color="secondary" noMargin>{sortDirection === 'asc' ? '↑' : '↓'}</Text>}
+                    </Stack>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Sensor</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Key ID</Text>
+                  </th>
+                  <th
+                    style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)', cursor: 'pointer' }}
+                    onClick={() => handleSort('createdAt')}
+                  >
+                    <Stack direction="row" align="center" gap="xs">
+                      <Text variant="label" color="secondary" noMargin>Created</Text>
+                      {sortColumn === 'createdAt' && <Text variant="caption" color="secondary" noMargin>{sortDirection === 'asc' ? '↑' : '↓'}</Text>}
+                    </Stack>
+                  </th>
+                  <th
+                    style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)', cursor: 'pointer' }}
+                    onClick={() => handleSort('expiresAt')}
+                  >
+                    <Stack direction="row" align="center" gap="xs">
+                      <Text variant="label" color="secondary" noMargin>Expires</Text>
+                      {sortColumn === 'expiresAt' && <Text variant="caption" color="secondary" noMargin>{sortDirection === 'asc' ? '↑' : '↓'}</Text>}
+                    </Stack>
+                  </th>
+                  <th
+                    style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)', cursor: 'pointer' }}
+                    onClick={() => handleSort('status')}
+                  >
+                    <Stack direction="row" align="center" gap="xs">
+                      <Text variant="label" color="secondary" noMargin>Status</Text>
+                      {sortColumn === 'status' && <Text variant="caption" color="secondary" noMargin>{sortDirection === 'asc' ? '↑' : '↓'}</Text>}
+                    </Stack>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Last Used</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Actions</Text>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedKeys.map((key) => (
+                  <tr key={key.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" weight="medium" noMargin>{key.name}</Text>
+                      {key.permissions.length > 0 && (
+                        <Text variant="caption" color="secondary" noMargin>{key.permissions.join(', ')}</Text>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" color="secondary" noMargin>{key.sensor?.name || 'All Sensors'}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="code" noMargin>{key.keyPrefix}...</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" color="secondary" noMargin>{formatDate(key.createdAt)}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" color="secondary" noMargin>{formatDate(key.expiresAt)}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>{getStatusBadge(key.status)}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" color="secondary" noMargin>{formatDate(key.lastUsedAt)}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Stack direction="row" gap="sm">
+                        {key.status === 'ACTIVE' && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => rotateMutation.mutate(key.id)}
+                              disabled={rotateMutation.isPending}
+                              title="Rotate key"
+                              icon={<RotateCw size={14} />}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setKeyToRevoke(key.id)}
+                              title="Revoke key"
+                              icon={<Trash2 size={14} style={{ color: colors.red }} />}
+                            />
+                          </>
+                        )}
+                      </Stack>
+                    </td>
+                  </tr>
+                ))}
+                {sortedKeys.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center' }}>
+                      <Text variant="body" color="secondary" noMargin>
+                        No API keys found. Click "Generate New Key" to create one.
+                      </Text>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </Box>
+        </Box>
 
-      {/* Generated Key Display (after rotation) */}
-      {generatedKey && !isModalOpen && (
-        <Modal open onClose={() => setGeneratedKey(null)} size="520px" title="Key Rotated Successfully">
-          <p className="text-sm text-gray-400 mb-4">Save this key securely. It won't be shown again.</p>
-          <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
-            <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
-          </div>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={handleCopyKey}
-              className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
-              {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              {copiedKey ? 'Copied!' : 'Copy'}
-            </button>
-            <button
-              onClick={() => setGeneratedKey(null)}
-              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
-              Done
-            </button>
-          </div>
-        </Modal>
-      )}
+        {/* Generate Key Modal */}
+        {isModalOpen && (
+          <GenerateKeyModal
+            sensors={sensors}
+            onClose={() => {
+              setIsModalOpen(false);
+              setGeneratedKey(null);
+            }}
+            onGenerate={(req) => generateMutation.mutate(req)}
+            isGenerating={generateMutation.isPending}
+            generatedKey={generatedKey}
+            onCopyKey={handleCopyKey}
+            copiedKey={copiedKey}
+          />
+        )}
 
-      {/* Revoke Confirmation Modal */}
-      {keyToRevoke && (
-        <Modal open onClose={() => setKeyToRevoke(null)} size="520px" title="Revoke API Key">
-          <p className="text-sm text-gray-400 mb-6">
-            Are you sure you want to revoke this API key? This action cannot be undone and will
-            immediately invalidate the key.
-          </p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setKeyToRevoke(null)}
-              disabled={revokeMutation.isPending}
-              className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => revokeMutation.mutate(keyToRevoke)}
-              disabled={revokeMutation.isPending}
-              className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500/50"
-            >
-              {revokeMutation.isPending ? 'Revoking...' : 'Revoke Key'}
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
+        {/* Generated Key Display (after rotation) */}
+        {generatedKey && !isModalOpen && (
+          <Modal open onClose={() => setGeneratedKey(null)} size="520px" title="Key Rotated Successfully">
+            <Stack gap="lg">
+              <Text variant="body" color="secondary">Save this key securely. It won't be shown again.</Text>
+              <Box bg="bg" border="subtle" p="md">
+                <Text variant="code" weight="medium" style={{ color: colors.green, wordBreak: 'break-all' }}>
+                  {generatedKey}
+                </Text>
+              </Box>
+              <Stack direction="row" gap="md" justify="end">
+                <Button
+                  variant="outlined"
+                  onClick={handleCopyKey}
+                  icon={copiedKey ? <Check size={14} /> : <Copy size={14} />}
+                >
+                  {copiedKey ? 'Copied!' : 'Copy'}
+                </Button>
+                <Button onClick={() => setGeneratedKey(null)}>
+                  Done
+                </Button>
+              </Stack>
+            </Stack>
+          </Modal>
+        )}
+
+        {/* Revoke Confirmation Modal */}
+        {keyToRevoke && (
+          <Modal open onClose={() => setKeyToRevoke(null)} size="520px" title="Revoke API Key">
+            <Stack gap="xl">
+              <Text variant="body" color="secondary">
+                Are you sure you want to revoke this API key? This action cannot be undone and will
+                immediately invalidate the key.
+              </Text>
+              <Stack direction="row" gap="md" justify="end">
+                <Button
+                  variant="outlined"
+                  onClick={() => setKeyToRevoke(null)}
+                  disabled={revokeMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => revokeMutation.mutate(keyToRevoke)}
+                  disabled={revokeMutation.isPending}
+                  style={{ background: colors.red, borderColor: colors.red }}
+                >
+                  {revokeMutation.isPending ? 'Revoking...' : 'Revoke Key'}
+                </Button>
+              </Stack>
+            </Stack>
+          </Modal>
+        )}
+      </Stack>
+    </Box>
   );
 }
 
@@ -494,103 +499,94 @@ function GenerateKeyModal({
       title={generatedKey ? 'API Key Generated' : 'Generate New API Key'}
     >
       {generatedKey ? (
-        <>
-          <p className="text-sm text-gray-400 mb-4">Save this key securely. It won't be shown again.</p>
-          <div className="bg-gray-900 border border-gray-700 p-3 mb-4">
-            <code className="text-xs font-mono text-green-400 break-all">{generatedKey}</code>
-          </div>
-          <div className="flex justify-end gap-3">
-            <button
+        <Stack gap="lg">
+          <Text variant="body" color="secondary">Save this key securely. It won't be shown again.</Text>
+          <Box bg="bg" border="subtle" p="md">
+            <Text variant="code" weight="medium" style={{ color: colors.green, wordBreak: 'break-all' }}>
+              {generatedKey}
+            </Text>
+          </Box>
+          <Stack direction="row" gap="md" justify="end">
+            <Button
+              variant="outlined"
               onClick={onCopyKey}
-              className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              icon={copiedKey ? <Check size={14} /> : <Copy size={14} />}
             >
-              {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               {copiedKey ? 'Copied!' : 'Copy'}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
+            </Button>
+            <Button onClick={onClose}>
               Done
-            </button>
-          </div>
-        </>
+            </Button>
+          </Stack>
+        </Stack>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-white mb-1">Key Name</label>
-            <input
-              type="text"
+        <form onSubmit={handleSubmit}>
+          <Stack gap="lg">
+            <Input
+              label="Key Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="e.g., Production API Key"
+              size="md"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-white mb-1">Sensor</label>
-            <select
+            <Select
+              label="Sensor"
               value={sensorId}
               onChange={(e) => setSensorId(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select a sensor</option>
-              {sensors.map((sensor) => (
-                <option key={sensor.id} value={sensor.id}>
-                  {sensor.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-white mb-1">Expiration</label>
-            <select
+              options={[
+                { value: '', label: 'Select a sensor' },
+                ...sensors.map(s => ({ value: s.id, label: s.name }))
+              ]}
+              size="md"
+            />
+            <Select
+              label="Expiration"
               value={expiresIn}
               onChange={(e) => setExpiresIn(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="180">180 days</option>
-              <option value="365">1 year</option>
-              <option value="never">Never</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-white mb-2">Permissions</label>
-            <div className="space-y-2">
-              {availablePermissions.map((perm) => (
-                <label key={perm.id} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={permissions.includes(perm.id)}
-                    onChange={() => togglePermission(perm.id)}
-                    className="w-4 h-4 text-blue-600 border-gray-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-white">{perm.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isGenerating}
-              className="px-4 py-2 text-gray-300 hover:text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isGenerating || !name || !sensorId || permissions.length === 0}
-              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
-              {isGenerating ? 'Generating...' : 'Generate Key'}
-            </button>
-          </div>
+              options={[
+                { value: '30', label: '30 days' },
+                { value: '90', label: '90 days' },
+                { value: '180', label: '180 days' },
+                { value: '365', label: '1 year' },
+                { value: 'never', label: 'Never' },
+              ]}
+              size="md"
+            />
+            <Box>
+              <Text variant="label" color="secondary" style={{ marginBottom: '8px' }}>Permissions</Text>
+              <Stack gap="sm">
+                {availablePermissions.map((perm) => (
+                  <Stack key={perm.id} as="label" direction="row" align="center" gap="md" style={{ cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={permissions.includes(perm.id)}
+                      onChange={() => togglePermission(perm.id)}
+                      className="w-4 h-4"
+                      style={{ accentColor: 'var(--ac-blue)' }}
+                    />
+                    <Text variant="body" noMargin>{perm.label}</Text>
+                  </Stack>
+                ))}
+              </Stack>
+            </Box>
+            <Stack direction="row" gap="md" justify="end" style={{ marginTop: '12px' }}>
+              <Button
+                variant="outlined"
+                onClick={onClose}
+                disabled={isGenerating}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isGenerating || !name || !sensorId || permissions.length === 0}
+              >
+                {isGenerating ? 'Generating...' : 'Generate Key'}
+              </Button>
+            </Stack>
+          </Stack>
         </form>
       )}
     </Modal>

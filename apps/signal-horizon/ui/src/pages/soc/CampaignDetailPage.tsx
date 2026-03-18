@@ -15,6 +15,9 @@ import {
   gridDefaultsSoft,
   tooltipDefaults,
   xAxisNoLine,
+  Box,
+  Text,
+  CARD_HEADER_TITLE_STYLE
 } from '@/ui';
 import {
   Target,
@@ -181,7 +184,11 @@ export default function CampaignDetailPage() {
   }, [campaign?.lastSeen]);
 
   if (isLoading && !campaign) {
-    return <div className="p-6 text-ink-muted">Loading campaign...</div>;
+    return (
+      <Box p="xl" style={{ textAlign: 'center' }}>
+        <Text variant="body" color="secondary">Loading campaign...</Text>
+      </Box>
+    );
   }
 
   if (!campaign) {
@@ -195,299 +202,348 @@ export default function CampaignDetailPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <Breadcrumb items={[{ label: 'Campaigns', to: '/campaigns' }, { label: campaign.name }]} />
-      <header className="space-y-2">
-        <Link
-          to="/campaigns"
-          className="text-sm text-link hover:text-link-hover inline-block"
-        >
-          <Stack direction="row" align="center" gap="xs">
-            <ChevronRight aria-hidden="true" className="w-4 h-4 rotate-180" />
-            <span>Back to Campaigns</span>
-          </Stack>
-        </Link>
-        <SectionHeader
-          title={campaign.name}
-          description={campaign.summary ?? 'Coordinated campaign detected across multiple signals.'}
-          size="h3"
-          actions={
-            <Stack direction="row" align="center" gap="sm">
-              <Button
-                variant="outlined"
-                size="sm"
-                icon={<ExternalLink aria-hidden="true" className="w-4 h-4" />}
-              >
-                Export IOCs
-              </Button>
-              <Button size="sm" icon={<Shield aria-hidden="true" className="w-4 h-4" />}>
-                Open War Room
-              </Button>
+    <Box p="xl">
+      <Stack gap="xl">
+        <Breadcrumb items={[{ label: 'Campaigns', to: '/campaigns' }, { label: campaign.name }]} />
+        
+        {/* Header */}
+        <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
+          <Stack gap="md">
+            <Link
+              to="/campaigns"
+              className="text-link hover:opacity-80 transition-opacity"
+              style={{ fontSize: '13px', width: 'fit-content' }}
+            >
+              <Stack direction="row" align="center" gap="sm">
+                <ChevronRight aria-hidden="true" size={14} className="rotate-180" />
+                <span>Back to Campaigns</span>
+              </Stack>
+            </Link>
+            <SectionHeader
+              title={campaign.name}
+              description={campaign.summary ?? 'Coordinated campaign detected across multiple signals.'}
+              size="h2"
+              actions={
+                <Stack direction="row" align="center" gap="md">
+                  <Button
+                    variant="outlined"
+                    size="sm"
+                    icon={<ExternalLink aria-hidden="true" size={14} />}
+                  >
+                    Export IOCs
+                  </Button>
+                  <Button size="sm" icon={<Shield aria-hidden="true" size={14} />}>
+                    Open War Room
+                  </Button>
+                </Stack>
+              }
+            />
+            <Stack direction="row" align="center" gap="md">
+              <StatusBadge status={campaignStatusToBadge(campaign.status)} variant="subtle" size="sm">
+                {campaign.status}
+              </StatusBadge>
+              <StatusBadge status={severityToBadge(campaign.severity)} variant="subtle" size="sm">
+                {campaign.severity}
+              </StatusBadge>
+              {campaign.actorCount > 5 && (
+                <StatusBadge status="accent" variant="subtle" size="sm">
+                  Cross-Tenant
+                </StatusBadge>
+              )}
             </Stack>
-          }
-        />
-        <Stack direction="row" align="center" gap="sm">
-          <StatusBadge status={campaignStatusToBadge(campaign.status)} variant="subtle" size="sm">
-            {campaign.status}
-          </StatusBadge>
-          <StatusBadge status={severityToBadge(campaign.severity)} variant="subtle" size="sm">
-            {campaign.severity}
-          </StatusBadge>
-          {campaign.actorCount > 5 && (
-            <StatusBadge status="accent" variant="subtle" size="sm">
-              Cross-Tenant
-            </StatusBadge>
-          )}
-        </Stack>
-      </header>
+          </Stack>
+        </Box>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatMini icon={Users} label="Actors" value={campaign.actorCount.toString()} />
-        <StatMini
-          icon={Activity}
-          label="Confidence"
-          value={`${Math.round(campaign.confidence * 100)}%`}
-        />
-        <StatMini
-          icon={Clock}
-          label="First Seen"
-          value={new Date(campaign.firstSeen).toLocaleDateString()}
-        />
-        <StatMini
-          icon={Target}
-          label="Last Seen"
-          value={new Date(campaign.lastSeen).toLocaleTimeString()}
-        />
-      </div>
-
-      {/* Campaign Correlation Graph */}
-      <ErrorBoundary>
-        <CampaignGraph campaignId={id} />
-      </ErrorBoundary>
-
-      <section className="card">
-        <div className="card-header">
-          <SectionHeader
-            title="Campaign Velocity"
-            size="h4"
-            mb="xs"
-            style={{ marginBottom: 0 }}
-            titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatMini icon={Users} label="Actors" value={campaign.actorCount.toString()} />
+          <StatMini
+            icon={Activity}
+            label="Confidence"
+            value={`${Math.round(campaign.confidence * 100)}%`}
+          />
+          <StatMini
+            icon={Clock}
+            label="First Seen"
+            value={new Date(campaign.firstSeen).toLocaleDateString()}
+          />
+          <StatMini
+            icon={Target}
+            label="Last Seen"
+            value={new Date(campaign.lastSeen).toLocaleTimeString()}
           />
         </div>
-        <div className="card-body h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={velocityData}>
-              <CartesianGrid {...gridDefaultsSoft} />
-              <XAxis dataKey="time" {...xAxisNoLine} />
-              <YAxis {...axisDefaults.y} />
-              <Tooltip {...tooltipDefaults} />
-              <Area
-                type="monotone"
-                dataKey="volume"
-                stroke={colors.red}
-                fill={colors.red}
-                fillOpacity={0.25}
+
+        {/* Campaign Correlation Graph */}
+        <Box bg="card" border="subtle" p="none" style={{ height: 400, position: 'relative' }}>
+          <ErrorBoundary>
+            <CampaignGraph campaignId={id} />
+          </ErrorBoundary>
+        </Box>
+
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <SectionHeader
+              title="Campaign Velocity"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+            />
+          </Box>
+          <Box p="lg" style={{ height: 256 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={velocityData}>
+                <CartesianGrid {...gridDefaultsSoft} />
+                <XAxis dataKey="time" {...xAxisNoLine} />
+                <YAxis {...axisDefaults.y} />
+                <Tooltip {...tooltipDefaults} />
+                <Area
+                  type="monotone"
+                  dataKey="volume"
+                  stroke={colors.red}
+                  fill={colors.red}
+                  fillOpacity={0.25}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Box>
+        </Box>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <SectionHeader
+                title="Correlation Signals"
+                size="h4"
+                style={{ marginBottom: 0 }}
+                titleStyle={CARD_HEADER_TITLE_STYLE}
               />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="card">
-          <div className="card-header">
-            <SectionHeader
-              title="Correlation Signals"
-              size="h4"
-              mb="xs"
-              style={{ marginBottom: 0 }}
-              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
-            />
-          </div>
-          <div className="card-body space-y-4">
-            {signals.length === 0 && (
-              <div className="text-ink-muted">No correlation signals yet.</div>
-            )}
-            {signals.map((signal) => (
-              <div key={signal.type} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink-secondary">{signal.type}</span>
-                  <span className="text-ink-primary font-medium">
-                    {Math.round(signal.confidence * 100)}%
-                  </span>
-                </div>
-                <div className="h-2 bg-surface-subtle border border-border-subtle">
-                  <div
-                    className="h-full"
-                    style={{
-                      background: colors.green,
-                      width: `${Math.round(signal.confidence * 100)}%`,
-                    }}
-                  />
-                </div>
-                {signal.reason && <p className="text-xs text-ink-muted">{signal.reason}</p>}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header flex items-center justify-between">
-            <SectionHeader
-              title="Associated Actors"
-              size="h4"
-              mb="xs"
-              style={{ marginBottom: 0 }}
-              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
-            />
-            <Button variant="outlined" size="sm">
-              Add to Watchlist
-            </Button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <caption className="sr-only">Actors associated with this campaign</caption>
-              <thead>
-                <tr>
-                  <th>Actor</th>
-                  <th>Risk</th>
-                  <th>IPs</th>
-                  <th>Last Seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {actors.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-ink-muted">
-                      No actors linked yet.
-                    </td>
-                  </tr>
+            </Box>
+            <Box p="lg">
+              <Stack gap="lg">
+                {signals.length === 0 && (
+                  <Text variant="body" color="secondary" align="center">No correlation signals yet.</Text>
                 )}
-                {actors.map((actor) => (
-                  <tr key={actor.actorId}>
-                    <td className="font-mono text-sm text-ink-primary">
-                      <Link
-                        to={`/actors/${actor.actorId}`}
-                        className="text-link hover:text-link-hover"
-                      >
-                        {actor.actorId}
-                      </Link>
-                    </td>
-                    <td className="text-ink-secondary">{Math.round(actor.riskScore)}</td>
-                    <td className="text-ink-secondary">{actor.ips.length}</td>
-                    <td className="text-ink-secondary">
-                      {new Date(actor.lastSeen).toLocaleString()}
-                    </td>
-                  </tr>
+                {signals.map((signal) => (
+                  <Stack key={signal.type} gap="sm">
+                    <Stack direction="row" align="center" justify="space-between">
+                      <Text variant="body" color="secondary" noMargin>{signal.type}</Text>
+                      <Text variant="body" weight="medium" noMargin>
+                        {Math.round(signal.confidence * 100)}%
+                      </Text>
+                    </Stack>
+                    <Box style={{ height: 4, background: 'var(--bg-surface-subtle)', border: '1px solid var(--border-subtle)' }}>
+                      <Box
+                        style={{
+                          height: '100%',
+                          background: 'var(--ac-green)',
+                          width: `${Math.round(signal.confidence * 100)}%`,
+                        }}
+                      />
+                    </Box>
+                    {signal.reason && (
+                      <Text variant="caption" color="secondary" noMargin>{signal.reason}</Text>
+                    )}
+                  </Stack>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+              </Stack>
+            </Box>
+          </Box>
 
-      {/* Participating IPs & Affected Customers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="card">
-          <div className="card-header flex items-center justify-between">
-            <SectionHeader
-              title="Participating IPs"
-              size="h4"
-              mb="xs"
-              style={{ marginBottom: 0 }}
-              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
-            />
-            <Button variant="outlined" size="sm">
-              Block All
-            </Button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <caption className="sr-only">IP addresses participating in this campaign</caption>
-              <thead>
-                <tr>
-                  <th>IP</th>
-                  <th>Hits</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {demoParticipatingIps.map((ip) => (
-                  <tr key={ip.ip}>
-                    <td className="font-mono text-sm text-ink-primary">{ip.ip}</td>
-                    <td className="text-ink-secondary">{ip.hits.toLocaleString()}</td>
-                    <td>
-                      <StatusBadge
-                        status={ip.status === 'BLOCKED' ? 'error' : 'warning'}
-                        variant="subtle"
-                        size="sm"
-                      >
-                        {ip.status}
-                      </StatusBadge>
-                    </td>
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <Stack direction="row" align="center" justify="space-between">
+                <SectionHeader
+                  title="Associated Actors"
+                  size="h4"
+                  style={{ marginBottom: 0 }}
+                  titleStyle={CARD_HEADER_TITLE_STYLE}
+                />
+                <Button variant="outlined" size="sm">
+                  Add to Watchlist
+                </Button>
+              </Stack>
+            </Box>
+            <Box style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <caption className="sr-only">Actors associated with this campaign</caption>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Actor</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Risk</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>IPs</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Last Seen</Text>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {actors.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '24px', textAlign: 'center' }}>
+                        <Text variant="body" color="secondary" noMargin>No actors linked yet.</Text>
+                      </td>
+                    </tr>
+                  )}
+                  {actors.map((actor) => (
+                    <tr key={actor.actorId} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Link
+                          to={`/actors/${actor.actorId}`}
+                          className="text-link hover:opacity-80 transition-opacity"
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                        >
+                          {actor.actorId}
+                        </Link>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" weight="medium" noMargin>{Math.round(actor.riskScore)}</Text>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" color="secondary" noMargin>{actor.ips.length}</Text>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" color="secondary" noMargin>
+                          {new Date(actor.lastSeen).toLocaleString()}
+                        </Text>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+          </Box>
+        </div>
 
-        <section className="card">
-          <div className="card-header flex items-center justify-between">
-            <SectionHeader
-              title="Affected Customers"
-              size="h4"
-              mb="xs"
-              style={{ marginBottom: 0 }}
-              titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
-            />
-            <Button variant="outlined" size="sm">
-              View All
-            </Button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <caption className="sr-only">Customers affected by this campaign</caption>
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Attempts</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {demoAffectedCustomers.map((customer) => (
-                  <tr key={customer.name}>
-                    <td className="text-ink-primary">{customer.name}</td>
-                    <td className="text-ink-secondary">{customer.attempts.toLocaleString()}</td>
-                    <td>
-                      <StatusBadge
-                        status={customer.status === 'ACTIVE' ? 'error' : 'success'}
-                        variant="subtle"
-                        size="sm"
-                      >
-                        {customer.status}
-                      </StatusBadge>
-                    </td>
+        {/* Participating IPs & Affected Customers */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <Stack direction="row" align="center" justify="space-between">
+                <SectionHeader
+                  title="Participating IPs"
+                  size="h4"
+                  style={{ marginBottom: 0 }}
+                  titleStyle={CARD_HEADER_TITLE_STYLE}
+                />
+                <Button variant="outlined" size="sm">
+                  Block All
+                </Button>
+              </Stack>
+            </Box>
+            <Box style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <caption className="sr-only">IP addresses participating in this campaign</caption>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>IP</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Hits</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Status</Text>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+                </thead>
+                <tbody>
+                  {demoParticipatingIps.map((ip) => (
+                    <tr key={ip.ip} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="code" noMargin>{ip.ip}</Text>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" color="secondary" noMargin>{ip.hits.toLocaleString()}</Text>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <StatusBadge
+                          status={ip.status === 'BLOCKED' ? 'error' : 'warning'}
+                          variant="subtle"
+                          size="sm"
+                        >
+                          {ip.status}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+          </Box>
 
-      {/* Response Actions */}
-      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <ActionButton icon={Swords} label="Block All IPs" tone="red" />
-        <ActionButton icon={Shield} label="Block Fingerprint" tone="red" />
-        <ActionButton icon={Network} label="Block ASN" tone="red" />
-        <ActionButton icon={Flame} label="Challenge Mode" tone="orange" />
-        <ActionButton icon={ExternalLink} label="Export IOCs" tone="blue" />
-        <ActionButton icon={Building} label="Notify Customers" tone="blue" />
-      </section>
-    </div>
+          <Box bg="card" border="subtle">
+            <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+              <Stack direction="row" align="center" justify="space-between">
+                <SectionHeader
+                  title="Affected Customers"
+                  size="h4"
+                  style={{ marginBottom: 0 }}
+                  titleStyle={CARD_HEADER_TITLE_STYLE}
+                />
+                <Button variant="outlined" size="sm">
+                  View All
+                </Button>
+              </Stack>
+            </Box>
+            <Box style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <caption className="sr-only">Customers affected by this campaign</caption>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Customer</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Attempts</Text>
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <Text variant="label" color="secondary" noMargin>Status</Text>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demoAffectedCustomers.map((customer) => (
+                    <tr key={customer.name} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" noMargin>{customer.name}</Text>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <Text variant="body" color="secondary" noMargin>{customer.attempts.toLocaleString()}</Text>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <StatusBadge
+                          status={customer.status === 'ACTIVE' ? 'error' : 'success'}
+                          variant="subtle"
+                          size="sm"
+                        >
+                          {customer.status}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+          </Box>
+        </div>
+
+        {/* Response Actions */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <ActionButton icon={Swords} label="Block All IPs" tone="red" />
+          <ActionButton icon={Shield} label="Block Fingerprint" tone="red" />
+          <ActionButton icon={Network} label="Block ASN" tone="red" />
+          <ActionButton icon={Flame} label="Challenge Mode" tone="orange" />
+          <ActionButton icon={ExternalLink} label="Export IOCs" tone="blue" />
+          <ActionButton icon={Building} label="Notify Customers" tone="blue" />
+        </div>
+      </Stack>
+    </Box>
   );
 }
 
@@ -496,20 +552,33 @@ function StatMini({
   label,
   value,
 }: {
-  icon: typeof Target;
+  icon: any;
   label: string;
   value: string;
 }) {
   return (
-    <Stack direction="row" align="center" gap="md" className="card p-4">
-      <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center text-ink-muted">
-        <Icon aria-hidden="true" className="w-5 h-5" />
-      </div>
-      <div>
-        <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
-        <p className="text-lg font-medium text-ink-primary mt-1">{value}</p>
-      </div>
-    </Stack>
+    <Box bg="card" border="subtle" p="lg">
+      <Stack direction="row" align="center" gap="lg">
+        <Box
+          style={{
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-surface-subtle)',
+          }}
+        >
+          <Icon aria-hidden="true" size={20} className="text-ink-muted" />
+        </Box>
+        <Box>
+          <Text variant="label" color="secondary" noMargin>{label}</Text>
+          <Text variant="body" weight="medium" noMargin style={{ marginTop: '4px', fontSize: '18px' }}>
+            {value}
+          </Text>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 
@@ -518,21 +587,21 @@ function ActionButton({
   label,
   tone,
 }: {
-  icon: typeof Target;
+  icon: any;
   label: string;
   tone: 'red' | 'orange' | 'blue';
 }) {
-  const toneColor = tone === 'red' ? colors.red : tone === 'orange' ? colors.orange : colors.blue;
+  const toneColor = tone === 'red' ? 'var(--ac-red)' : tone === 'orange' ? 'var(--ac-orange)' : 'var(--ac-blue)';
 
   return (
     <Button
       size="sm"
-      fill
-      icon={<Icon aria-hidden="true" className="w-4 h-4" />}
+      fullWidth
+      icon={<Icon aria-hidden="true" size={14} />}
       style={{
         background: toneColor,
         border: `1px solid ${alpha(toneColor, 0.6)}`,
-        color: colors.white,
+        color: '#FFFFFF',
       }}
     >
       {label}

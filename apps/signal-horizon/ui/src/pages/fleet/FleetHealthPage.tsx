@@ -1,12 +1,22 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
-import { MetricCard, SensorStatusBadge } from '../../components/fleet';
-import { ResourceBarGroup } from '../../components/fleet/ResourceBar';
+import { CheckCircle2, AlertTriangle, XCircle, ArrowRight, Activity } from 'lucide-react';
+import { MetricCard } from '../../components/fleet';
+import { ResourceBar } from '../../components/fleet/ResourceBar';
 import { useFleetMetrics, useSensors } from '../../hooks/fleet';
 import { apiFetch } from '../../lib/api';
-import { Box, SectionHeader, Stack, alpha, colors } from '@/ui';
+import type { SensorSummary } from '../../types/fleet';
+import {
+  Box,
+  SectionHeader,
+  Stack,
+  Grid,
+  Text,
+  alpha,
+  colors,
+  CARD_HEADER_TITLE_STYLE,
+} from '@/ui';
 
 interface HealthSummary {
   overallScore: number;
@@ -28,7 +38,7 @@ async function fetchHealthSummary(): Promise<HealthSummary> {
 export function FleetHealthPage() {
   const navigate = useNavigate();
   const { data: metrics } = useFleetMetrics();
-  const { data: sensors = [] } = useSensors();
+  const { data: sensors = [], isLoading: sensorsLoading } = useSensors();
 
   const { data: health } = useQuery({
     queryKey: ['fleet', 'health'],
@@ -81,213 +91,260 @@ export function FleetHealthPage() {
       metrics ? Math.round((metrics.onlineCount / Math.max(metrics.totalSensors, 1)) * 100) : 0,
     [metrics],
   );
-  const healthColor =
-    healthScore >= 90 ? colors.green : healthScore >= 70 ? colors.orange : colors.red;
+  
+  // P1-001 Fix: Distinguish between "Healthy" and "Empty"
+  const isFleetHealthy = sensors.length > 0 && criticalSensors.length === 0 && warningSensors.length === 0;
+  const isFleetEmpty = !sensorsLoading && sensors.length === 0;
+
+  const healthColor = isFleetEmpty 
+    ? 'var(--text-muted)' 
+    : healthScore >= 90 ? 'var(--ac-green)' : healthScore >= 70 ? 'var(--ac-orange)' : 'var(--ac-red)';
 
   return (
-    <div className="space-y-6 p-6">
-      <SectionHeader
-        title="Fleet Health"
-        description="Monitor the health and performance of your sensor fleet"
-      />
-
-      {/* Health Score */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <Box
-          bg="card"
-          border="left"
-          borderColor={healthColor}
-          p="lg"
-          style={{ gridColumn: 'span 2 / span 2' }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-ink-secondary">Overall Health Score</p>
-              <p className="mt-2 text-5xl font-light" style={{ color: healthColor }}>
-                {healthScore}%
-              </p>
-            </div>
-            <div className="w-20 h-20 flex items-center justify-center border border-border-subtle">
-              {healthScore >= 90 ? (
-                <CheckCircle2
-                  aria-hidden="true"
-                  className="w-8 h-8"
-                  style={{ color: colors.green }}
-                />
-              ) : healthScore >= 70 ? (
-                <AlertTriangle
-                  aria-hidden="true"
-                  className="w-8 h-8"
-                  style={{ color: colors.orange }}
-                />
-              ) : (
-                <XCircle aria-hidden="true" className="w-8 h-8" style={{ color: colors.red }} />
-              )}
-            </div>
-          </div>
-        </Box>
-
-        <MetricCard
-          label="Critical Alerts"
-          value={health?.criticalAlerts ?? criticalSensors.length}
-          description="Sensors offline or with CPU/memory above 90% requiring immediate attention"
-          className="border-l-2 border-l-ac-red"
-          labelClassName="text-ac-red"
-          valueClassName="text-ac-red"
+    <Box p="xl">
+      <Stack gap="xl">
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="Fleet Health"
+          description="Monitor the health and performance of your sensor fleet"
         />
-        <MetricCard
-          label="Warnings"
-          value={health?.warningAlerts ?? warningSensors.length}
-          description="Sensors with degraded status or resource usage between 75-90%"
-          className="border-l-2 border-l-ac-orange"
-          labelClassName="text-ac-orange"
-          valueClassName="text-ac-orange"
-        />
-      </div>
 
-      {/* Resource Usage */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <Box bg="card" border="top" borderColor={colors.blue} p="lg">
-          <h3 className="text-lg font-medium text-ink-primary mb-4">Fleet Resource Usage</h3>
-          <ResourceBarGroup cpu={avgCpu} memory={avgMemory} disk={35} size="lg" />
-        </Box>
-
-        <Box bg="card" border="top" borderColor={colors.navy} p="lg">
-          <h3 className="text-lg font-medium text-ink-primary mb-4">Status Distribution</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Stack direction="row" align="center" gap="smPlus">
-                <div className="w-4 h-4" style={{ background: colors.green }} />
-                <span className="text-sm text-ink-secondary">Online</span>
-              </Stack>
-              <span className="text-sm font-medium" style={{ color: colors.green }}>
-                {metrics?.onlineCount ?? 0}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <Stack direction="row" align="center" gap="smPlus">
-                <div className="w-4 h-4" style={{ background: colors.orange }} />
-                <span className="text-sm text-ink-secondary">Warning</span>
-              </Stack>
-              <span className="text-sm font-medium" style={{ color: colors.orange }}>
-                {metrics?.warningCount ?? 0}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <Stack direction="row" align="center" gap="smPlus">
-                <div className="w-4 h-4" style={{ background: colors.gray.mid }} />
-                <span className="text-sm text-ink-secondary">Offline</span>
-              </Stack>
-              <span className="text-sm font-medium" style={{ color: colors.red }}>
-                {metrics?.offlineCount ?? 0}
-              </span>
-            </div>
-          </div>
-        </Box>
-      </div>
-
-      {/* Sensors Requiring Attention */}
-      {criticalSensors.length > 0 && (
-        <Box bg="card" border="top" borderColor={colors.red} p="lg">
-          <h3 className="text-lg font-medium mb-4" style={{ color: colors.red }}>
-            Critical Issues ({criticalSensors.length})
-          </h3>
-          <div className="space-y-3">
-            {criticalSensors.slice(0, 5).map((sensor) => (
-              <div
-                key={sensor.id}
-                className="flex items-center justify-between p-3 cursor-pointer focus:outline-none focus:ring-2"
+        {/* Health Score and Alert KPI Cards */}
+        <Grid cols={4} gap="xl">
+          <Box
+            bg="card"
+            border="left"
+            borderColor={healthColor}
+            p="lg"
+            style={{ gridColumn: 'span 2 / span 2' }}
+          >
+            <Stack direction="row" align="center" justify="space-between">
+              <Box>
+                <Text variant="small" weight="medium" color="secondary">
+                  Overall Health Score
+                </Text>
+                <Text variant="h1" weight="light" style={{ color: healthColor, marginTop: '8px' }}>
+                  {isFleetEmpty ? '--' : `${healthScore}%`}
+                </Text>
+              </Box>
+              <Box
                 style={{
-                  border: `1px solid ${alpha(colors.red, 0.3)}`,
-                  background: alpha(colors.red, 0.1),
+                  width: '80px',
+                  height: '80px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: `1px solid ${alpha(colors.border.subtle, 0.5)}`,
                 }}
-                onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    navigate(`/fleet/sensors/${sensor.id}`);
-                  }
-                }}
-                tabIndex={0}
-                role="link"
-                aria-label={`View critical sensor ${sensor.name}`}
               >
-                <Stack direction="row" align="center" gap="md">
-                  <SensorStatusBadge status={sensor.status} />
-                  <span className="font-medium text-ink-primary">{sensor.name}</span>
-                </Stack>
-                <div className="text-sm text-ink-secondary">
-                  CPU: {sensor.cpu.toFixed(1)}% | Memory: {sensor.memory.toFixed(1)}%
-                </div>
-              </div>
-            ))}
-          </div>
-        </Box>
-      )}
+                {isFleetEmpty ? (
+                  <Activity aria-hidden="true" className="w-8 h-8 text-ink-muted" />
+                ) : healthScore >= 90 ? (
+                  <CheckCircle2
+                    aria-hidden="true"
+                    className="w-8 h-8"
+                    style={{ color: 'var(--ac-green)' }}
+                  />
+                ) : healthScore >= 70 ? (
+                  <AlertTriangle
+                    aria-hidden="true"
+                    className="w-8 h-8"
+                    style={{ color: 'var(--ac-orange)' }}
+                  />
+                ) : (
+                  <XCircle aria-hidden="true" className="w-8 h-8" style={{ color: 'var(--ac-red)' }} />
+                )}
+              </Box>
+            </Stack>
+          </Box>
 
-      {/* Warning Sensors */}
-      {warningSensors.length > 0 && (
-        <Box bg="card" border="top" borderColor={colors.orange} p="lg">
-          <h3 className="text-lg font-medium mb-4" style={{ color: colors.orange }}>
-            Warnings ({warningSensors.length})
-          </h3>
-          <div className="space-y-3">
-            {warningSensors.slice(0, 5).map((sensor) => (
-              <div
-                key={sensor.id}
-                className="flex items-center justify-between p-3 cursor-pointer focus:outline-none focus:ring-2"
-                style={{
-                  border: `1px solid ${alpha(colors.orange, 0.3)}`,
-                  background: alpha(colors.orange, 0.1),
-                }}
-                onClick={() => navigate(`/fleet/sensors/${sensor.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    navigate(`/fleet/sensors/${sensor.id}`);
-                  }
-                }}
-                tabIndex={0}
-                role="link"
-                aria-label={`View warning sensor ${sensor.name}`}
-              >
-                <Stack direction="row" align="center" gap="md">
-                  <SensorStatusBadge status={sensor.status} />
-                  <span className="font-medium text-ink-primary">{sensor.name}</span>
-                </Stack>
-                <div className="text-sm text-ink-secondary">
-                  CPU: {sensor.cpu.toFixed(1)}% | Memory: {sensor.memory.toFixed(1)}%
-                </div>
-              </div>
-            ))}
-          </div>
-        </Box>
-      )}
+          <MetricCard
+            label="Critical Alerts"
+            value={health?.criticalAlerts ?? criticalSensors.length}
+            description="Sensors offline or with CPU/memory above 90%"
+            className="border-l-2 border-l-ac-red"
+            labelClassName="text-ac-red"
+            valueClassName="text-ac-red"
+          />
+          <MetricCard
+            label="Warnings"
+            value={health?.warningAlerts ?? warningSensors.length}
+            description="Sensors with degraded status or 75-90% usage"
+            className="border-l-2 border-l-ac-orange"
+            labelClassName="text-ac-orange"
+            valueClassName="text-ac-orange"
+          />
+        </Grid>
 
-      {/* All Healthy */}
-      {criticalSensors.length === 0 && warningSensors.length === 0 && sensors.length > 0 && (
-        <Box
-          bg="card"
-          border="top"
-          borderColor={colors.green}
-          p="lg"
-          style={{ textAlign: 'center' }}
-        >
-          <div className="flex items-center justify-center mb-2">
-            <CheckCircle2
-              aria-hidden="true"
-              className="w-10 h-10"
-              style={{ color: colors.green }}
+        {/* Actionable Sensor Lists or Healthy/Empty States */}
+        {!isFleetHealthy && !isFleetEmpty ? (
+          <Grid cols={2} gap="xl">
+            {criticalSensors.length > 0 && (
+              <Box bg="card" border="left" borderColor="var(--ac-red)" p="lg">
+                <SectionHeader
+                  title="Critical Sensors"
+                  size="h4"
+                  titleStyle={CARD_HEADER_TITLE_STYLE}
+                  actions={criticalSensors.length > 5 && (
+                    <Text variant="caption" color="secondary" style={{ cursor: 'pointer' }} onClick={() => navigate('/fleet/sensors?status=offline')}>
+                      View All {criticalSensors.length}
+                    </Text>
+                  )}
+                />
+                <Stack gap="sm" style={{ marginTop: '16px' }}>
+                  {/* P2-001: Added slice(0, 5) */}
+                  {criticalSensors.slice(0, 5).map((s) => (
+                    <SensorIssueItem key={s.id} sensor={s} colorVar="--ac-red" onClick={() => navigate(`/fleet/sensors/${s.id}`)} />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+            {warningSensors.length > 0 && (
+              <Box bg="card" border="left" borderColor="var(--ac-orange)" p="lg">
+                <SectionHeader
+                  title="Warning Sensors"
+                  size="h4"
+                  titleStyle={CARD_HEADER_TITLE_STYLE}
+                  actions={warningSensors.length > 5 && (
+                    <Text variant="caption" color="secondary" style={{ cursor: 'pointer' }} onClick={() => navigate('/fleet/sensors?status=warning')}>
+                      View All {warningSensors.length}
+                    </Text>
+                  )}
+                />
+                <Stack gap="sm" style={{ marginTop: '16px' }}>
+                  {/* P2-001: Added slice(0, 5) */}
+                  {warningSensors.slice(0, 5).map((s) => (
+                    <SensorIssueItem key={s.id} sensor={s} colorVar="--ac-orange" onClick={() => navigate(`/fleet/sensors/${s.id}`)} />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+          </Grid>
+        ) : isFleetEmpty ? (
+          <Box bg="card" border="subtle" p="xl" style={{ textAlign: 'center' }}>
+            <Stack align="center" gap="md">
+              <Activity size={48} className="text-ink-muted" />
+              <Box>
+                <Text variant="h3" weight="semibold">No Sensors Detected</Text>
+                <Text variant="body" color="secondary">Deploy your first sensor to start monitoring fleet health.</Text>
+              </Box>
+            </Stack>
+          </Box>
+        ) : (
+          <Box bg="card" border="all" borderColor="var(--ac-green)" p="xl" style={{ textAlign: 'center' }}>
+            <Stack align="center" gap="md">
+              <CheckCircle2 size={48} style={{ color: 'var(--ac-green)' }} />
+              <Box>
+                <Text variant="h3" weight="semibold">All Systems Healthy</Text>
+                <Text variant="body" color="secondary">No critical or warning sensors detected in the fleet.</Text>
+              </Box>
+            </Stack>
+          </Box>
+        )}
+
+        {/* Resource Usage */}
+        <Grid cols={2} gap="xl">
+          <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
+            <SectionHeader
+              title="CPU Allocation"
+              size="h4"
+              titleStyle={CARD_HEADER_TITLE_STYLE}
             />
-          </div>
-          <h3 className="text-lg font-medium" style={{ color: colors.green }}>
-            All Systems Healthy
-          </h3>
-          <p className="text-sm text-ink-secondary mt-1">
-            All {sensors.length} sensors are operating normally
-          </p>
+            <Box style={{ marginTop: '24px' }}>
+              <ResourceBar
+                label="Average CPU Load"
+                value={avgCpu}
+              />
+            </Box>
+          </Box>
+
+          <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
+            <SectionHeader
+              title="Memory Allocation"
+              size="h4"
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+            />
+            <Box style={{ marginTop: '24px' }}>
+              <ResourceBar
+                label="Average Memory Usage"
+                value={avgMemory}
+              />
+            </Box>
+          </Box>
+        </Grid>
+
+        {/* Recent Incidents */}
+        <Box bg="card" border="top" borderColor="var(--ac-purple)" p="lg">
+          <SectionHeader
+            title="Recent Health Incidents"
+            size="h4"
+            titleStyle={CARD_HEADER_TITLE_STYLE}
+          />
+          <Box style={{ marginTop: '16px' }}>
+            <Stack gap="sm">
+              {(health?.recentIncidents || []).length === 0 ? (
+                <Text variant="small" color="secondary" style={{ textAlign: 'center', padding: '32px 0' }}>
+                  No recent health incidents detected
+                </Text>
+              ) : (
+                health?.recentIncidents.map((incident) => (
+                  <Box
+                    key={incident.id}
+                    p="md"
+                    bg="surface-subtle"
+                    className="hover:bg-surface-inset transition-colors"
+                  >
+                    <Stack direction="row" gap="md" align="center">
+                      <XCircle size={18} style={{ color: 'var(--ac-red)' }} />
+                      <Box style={{ flex: 1 }}>
+                        <Text variant="body" weight="medium">
+                          {incident.type}
+                        </Text>
+                        <Text variant="small" color="secondary">
+                          Sensor: {incident.sensorId} • {incident.message}
+                        </Text>
+                      </Box>
+                      <Text variant="small" color="secondary">
+                        {new Date(incident.timestamp).toLocaleTimeString()}
+                      </Text>
+                    </Stack>
+                  </Box>
+                ))
+              )}
+            </Stack>
+          </Box>
         </Box>
-      )}
-    </div>
+      </Stack>
+    </Box>
+  );
+}
+
+function SensorIssueItem({ sensor, colorVar, onClick }: { sensor: SensorSummary; colorVar: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        background: 'var(--bg-surface-subtle)',
+        border: 'none',
+        padding: '12px 16px',
+        cursor: 'pointer',
+        transition: 'background 0.2s ease',
+      }}
+      className="hover:bg-surface-inset group"
+      aria-label={`View details for ${sensor.name}`}
+    >
+      <Stack direction="row" align="center" justify="space-between">
+        <Box>
+          <Text variant="body" weight="medium">{sensor.name}</Text>
+          <Text variant="small" color="secondary">
+            CPU: {sensor.cpu.toFixed(1)}% • MEM: {sensor.memory.toFixed(1)}%
+          </Text>
+        </Box>
+        {/* P2-002 Fix: Use CSS variable for icon color to support dark mode */}
+        <ArrowRight size={16} style={{ color: `var(${colorVar})` }} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </Stack>
+    </button>
   );
 }

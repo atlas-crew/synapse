@@ -76,7 +76,7 @@ export const ActiveCampaignList: React.FC<ActiveCampaignListProps> = ({ campaign
               'group flex flex-wrap items-center justify-between p-4 transition-all duration-200 cursor-pointer border-l-4 border-radius-0 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ac-blue/50',
               'bg-surface-inset border-border-subtle',
               'hover:bg-surface-card hover:translate-x-1 hover:border-l-4',
-              campaign.severity === 'CRITICAL' && 'hover:border-ac-magenta group-hover:shadow-[0_0_15px_rgba(214,37,152,0.1)]',
+              campaign.severity === 'CRITICAL' && 'hover:border-ac-red group-hover:shadow-[0_0_15px_rgba(239,68,68,0.1)]',
               campaign.severity === 'HIGH' && 'hover:border-ac-orange group-hover:shadow-[0_0_15px_rgba(227,82,5,0.1)]',
               campaign.severity === 'MEDIUM' && 'hover:border-ac-blue',
               campaign.severity === 'LOW' && 'hover:border-ac-green'

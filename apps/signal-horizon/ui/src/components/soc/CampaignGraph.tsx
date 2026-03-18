@@ -30,20 +30,20 @@ interface NodeDetails {
   details?: Record<string, string | number>;
 }
 
-// Atlas Crew Brand color palette
+// Signal Horizon semantic color palette
 const colors = {
-  campaign: { bg: '#BF3A30', border: '#E8847D' },   // Atlas Crew Red
-  actor: { bg: '#C24900', border: '#E8974D' },       // Atlas Crew Orange (contrast-safe)
-  ip: { bg: uiColors.blue, border: '#70BAF7' },       // Atlas Crew Blue
-  sensor: { bg: '#008731', border: '#5CB87A' },       // Atlas Crew Green (contrast-safe)
-  token: { bg: uiColors.purple, border: '#9B6BD6' },  // Atlas Crew Purple
-  asn: { bg: uiColors.skyBlue, border: uiColors.tint.skyLight }, // Atlas Crew Sky Blue
+  campaign: { bg: '#EF4444', border: '#FCA5A5' },   // Danger Red
+  actor: { bg: '#F59E0B', border: '#FCD34D' },       // Warning Amber
+  ip: { bg: uiColors.blue, border: '#7EC8FF' },       // Primary Vivid Blue
+  sensor: { bg: '#10B981', border: '#6EE7B7' },       // Success Emerald
+  token: { bg: uiColors.magenta, border: '#C4B5FD' }, // Accent Arc Violet
+  asn: { bg: uiColors.blue, border: uiColors.border.subtle },
   edge: {
-    attributed: '#BF3A30',  // Atlas Crew Red
-    linked: '#C24900',      // Atlas Crew Orange
-    uses: uiColors.purple,   // Atlas Crew Purple
-    attacked: '#BF3A30',    // Atlas Crew Red
-    default: '#2A4A8E',     // Navy-lighter
+    attributed: '#EF4444',  // Danger Red
+    linked: '#F59E0B',      // Warning Amber
+    uses: uiColors.magenta, // Accent Arc Violet
+    attacked: '#EF4444',    // Danger Red
+    default: '#2A3F5C',     // Slate Strong
   },
 };
 

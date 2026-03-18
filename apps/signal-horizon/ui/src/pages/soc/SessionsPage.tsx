@@ -8,7 +8,17 @@ import { fetchSessions } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocSession, SocSessionListResponse } from '../../types/soc';
-import { Box, Button, Input, SectionHeader, Stack, Text, alpha, colors } from '@/ui';
+import { 
+  Box, 
+  Button, 
+  Input, 
+  SectionHeader, 
+  Stack, 
+  Text, 
+  alpha, 
+  colors, 
+  spacing,
+} from '@/ui';
 
 function buildDemoSessions(scenario: string): SocSessionListResponse {
   const now = Date.now();
@@ -122,197 +132,220 @@ export default function SessionsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <SectionHeader
-        eyebrow="Signal Horizon"
-        title="Sessions"
-        description="Inspect session behavior, hijack alerts, and enforcement actions."
-        actions={
-          <Stack direction="row" align="center" gap="sm">
-            <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <Box style={{ width: 180 }}>
-              <Input
-                value={sensorId}
-                onChange={(event) => setSensorId(event.target.value)}
-                placeholder="synapse-pingora-1"
-                size="sm"
-              />
-            </Box>
-            <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
-              Export CSV
-            </Button>
-          </Stack>
-        }
-      />
-
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard
-          icon={Activity}
-          label="Active Sessions"
-          value={
-            stats?.activeSessions ??
-            sessions.filter((session) => session.lastActivity > Date.now() - 30 * 60 * 1000).length
-          }
-          accentColor={colors.blue}
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Suspicious"
-          value={
-            stats?.suspiciousSessions ?? sessions.filter((session) => session.isSuspicious).length
-          }
-          accentColor={colors.orange}
-        />
-        <StatCard
-          icon={Shield}
-          label="Hijack Alerts"
-          value={
-            stats?.hijackAlerts ??
-            sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0)
-          }
-          accentColor={colors.red}
-        />
-      </section>
-
-      <section className="card">
-        <Stack className="card-header" direction="row" align="center" gap="smPlus" wrap>
-          <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
-          <Stack className="ml-auto" direction="row" align="center" gap="smPlus" wrap>
-            <Box style={{ width: 180 }}>
-              <Input
-                value={actorFilter}
-                onChange={(event) => setActorFilter(event.target.value)}
-                placeholder="Actor ID"
-                size="sm"
-              />
-            </Box>
-            <Stack as="label" direction="row" align="center" gap="sm" className="text-sm text-ink-secondary">
-              <input
-                type="checkbox"
-                checked={suspiciousOnly}
-                onChange={(event) => setSuspiciousOnly(event.target.checked)}
-                className="h-4 w-4"
-                style={{ accentColor: colors.blue }}
-              />
-              Suspicious only
+    <Box p="xl">
+      <Stack gap="xl">
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="Sessions"
+          description="Inspect session behavior, hijack alerts, and enforcement actions."
+          actions={
+            <Stack direction="row" align="center" gap="sm">
+              <Text variant="label" color="secondary" noMargin>Sensor</Text>
+              <Box style={{ width: 180 }}>
+                <Input
+                  value={sensorId}
+                  onChange={(event) => setSensorId(event.target.value)}
+                  placeholder="synapse-pingora-1"
+                  size="sm"
+                />
+              </Box>
+              <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
+                Export CSV
+              </Button>
             </Stack>
-          </Stack>
-        </Stack>
-        <div className="card-body">
-          {isLoading && <div className="text-ink-muted">Loading sessions...</div>}
-          {error && (
-            <Text as="div" color={colors.red} noMargin>
-              Failed to load sessions.
-            </Text>
-          )}
-          {!isLoading && sessions.length === 0 && (
-            <div className="text-ink-muted">No sessions match the current filters.</div>
-          )}
-          {sessions.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <caption className="sr-only">
-                  Active sessions with actor and alert information
-                </caption>
-                <thead>
-                  <tr>
-                    <th>Session</th>
-                    <th>Actor</th>
-                    <th>Last Activity</th>
-                    <th>Requests</th>
-                    <th>Alerts</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((session) => (
-                    <tr key={session.sessionId}>
-                      <td className="font-mono text-sm text-ink-primary">
-                        <Link
-                          to={`/sessions/${session.sessionId}`}
-                          className="text-link hover:text-link-hover"
-                        >
-                          {session.sessionId}
-                        </Link>
-                      </td>
-                      <td className="text-ink-secondary">
-                        {session.actorId ? (
-                          <Link
-                            to={`/actors/${session.actorId}`}
-                            className="text-link hover:text-link-hover"
-                          >
-                            {session.actorId}
-                          </Link>
-                        ) : (
-                          <span className="text-ink-muted">Unbound</span>
-                        )}
-                      </td>
-                      <td className="text-ink-secondary">
-                        {new Date(session.lastActivity).toLocaleString()}
-                      </td>
-                      <td className="text-ink-secondary">{session.requestCount}</td>
-                      <td className="text-ink-secondary">{session.hijackAlerts?.length ?? 0}</td>
-                      <td>
-                        <span
-                          className="px-2 py-0.5 text-xs border"
-                          style={
-                            session.isSuspicious
-                              ? {
-                                  background: alpha(colors.orange, 0.15),
-                                  color: colors.orange,
-                                  borderColor: alpha(colors.orange, 0.4),
-                                }
-                              : {
-                                  background: alpha(colors.green, 0.1),
-                                  color: colors.green,
-                                  borderColor: alpha(colors.green, 0.4),
-                                }
-                          }
-                        >
-                          {session.isSuspicious ? 'Suspicious' : 'Active'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
+          }
+        />
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Clock className="w-4 h-4" /> Session Aging
-          </Stack>
-          <div className="mt-3 text-ink-secondary text-sm">
-            {stats?.expiredSessions ?? 0} expired sessions tracked. Focus on suspicious sessions
-            first.
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard
+            icon={Activity}
+            label="Active Sessions"
+            value={
+              stats?.activeSessions ??
+              sessions.filter((session) => session.lastActivity > Date.now() - 30 * 60 * 1000).length
+            }
+            accentColorVar="--ac-blue"
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="Suspicious"
+            value={
+              stats?.suspiciousSessions ?? sessions.filter((session) => session.isSuspicious).length
+            }
+            accentColorVar="--ac-orange"
+          />
+          <StatCard
+            icon={Shield}
+            label="Hijack Alerts"
+            value={
+              stats?.hijackAlerts ??
+              sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0)
+            }
+            accentColorVar="--ac-red"
+          />
         </div>
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Shield className="w-4 h-4" /> Enforcement
-          </Stack>
-          <div className="mt-3 text-ink-secondary text-sm">
-            {stats?.totalInvalidated
-              ? `${stats.totalInvalidated} sessions invalidated recently.`
-              : 'No automatic revocations recorded.'}
-          </div>
+
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <Stack direction="row" align="center" justify="space-between" wrap>
+              <Text variant="label" color="secondary" noMargin>Filters</Text>
+              <Stack direction="row" align="center" gap="md" wrap>
+                <Box style={{ width: 180 }}>
+                  <Input
+                    value={actorFilter}
+                    onChange={(event) => setActorFilter(event.target.value)}
+                    placeholder="Actor ID"
+                    size="sm"
+                  />
+                </Box>
+                <Stack as="label" direction="row" align="center" gap="sm">
+                  <input
+                    type="checkbox"
+                    checked={suspiciousOnly}
+                    onChange={(event) => setSuspiciousOnly(event.target.checked)}
+                    className="h-4 w-4"
+                    style={{ accentColor: 'var(--ac-blue)' }}
+                  />
+                  <Text variant="small" color="secondary" noMargin>Suspicious only</Text>
+                </Stack>
+              </Stack>
+            </Stack>
+          </Box>
+          <Box p="none">
+            {isLoading && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" color="secondary">Loading sessions...</Text>
+              </Box>
+            )}
+            {error && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" style={{ color: 'var(--ac-red)' }}>
+                  Failed to load sessions.
+                </Text>
+              </Box>
+            )}
+            {!isLoading && sessions.length === 0 && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" color="secondary">No sessions match the current filters.</Text>
+              </Box>
+            )}
+            {sessions.length > 0 && (
+              <Box style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <caption className="sr-only">
+                    Active sessions with actor and alert information
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Session</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Actor</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Last Activity</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Requests</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Alerts</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Status</Text>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map((session) => (
+                      <tr key={session.sessionId} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Link
+                            to={`/sessions/${session.sessionId}`}
+                            className="text-link hover:opacity-80 transition-opacity"
+                            style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                          >
+                            {session.sessionId}
+                          </Link>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {session.actorId ? (
+                            <Link
+                              to={`/actors/${session.actorId}`}
+                              className="text-link hover:opacity-80 transition-opacity"
+                              style={{ fontSize: '13px' }}
+                            >
+                              {session.actorId}
+                            </Link>
+                          ) : (
+                            <Text variant="body" color="secondary" noMargin>Unbound</Text>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" color="secondary" noMargin>
+                            {new Date(session.lastActivity).toLocaleString()}
+                          </Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" color="secondary" noMargin>{session.requestCount}</Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" color="secondary" noMargin>{session.hijackAlerts?.length ?? 0}</Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Box
+                            px="sm"
+                            py="xs"
+                            style={{
+                              width: 'fit-content',
+                              border: '1px solid',
+                              background: session.isSuspicious ? 'var(--ac-orange-dim)' : 'var(--ac-green-dim)',
+                              color: session.isSuspicious ? 'var(--ac-orange)' : 'var(--ac-green)',
+                              borderColor: session.isSuspicious ? alpha(colors.orange, 0.3) : alpha(colors.green, 0.3),
+                            }}
+                          >
+                            <Text variant="tag" noMargin>{session.isSuspicious ? 'Suspicious' : 'Active'}</Text>
+                          </Box>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+            )}
+          </Box>
+        </Box>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md">
+              <Clock className="w-4 h-4 text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Session Aging</Text>
+            </Stack>
+            <Box style={{ marginTop: spacing.md }}>
+              <Text variant="body" color="secondary">
+                {stats?.expiredSessions ?? 0} expired sessions tracked. Focus on suspicious sessions
+                first.
+              </Text>
+            </Box>
+          </Box>
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md">
+              <Shield className="w-4 h-4 text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Enforcement</Text>
+            </Stack>
+            <Box style={{ marginTop: spacing.md }}>
+              <Text variant="body" color="secondary">
+                {stats?.totalInvalidated
+                  ? `${stats.totalInvalidated} sessions invalidated recently.`
+                  : 'No automatic revocations recorded.'}
+              </Text>
+            </Box>
+          </Box>
         </div>
-      </section>
-    </div>
+      </Stack>
+    </Box>
   );
 }
 
@@ -320,22 +353,33 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  accentColor,
+  accentColorVar,
 }: {
-  icon: typeof Activity;
+  icon: any;
   label: string;
   value: number;
-  accentColor: string;
+  accentColorVar: string;
 }) {
   return (
-    <Stack className="card p-4" direction="row" align="center" gap="md">
-      <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
-        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
-      </div>
-      <div>
-        <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
-        <p className="text-2xl font-light text-ink-primary">{value}</p>
-      </div>
-    </Stack>
+    <Box bg="card" border="subtle" p="lg">
+      <Stack direction="row" align="center" gap="lg">
+        <Box
+          style={{
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-surface-subtle)',
+          }}
+        >
+          <Icon aria-hidden="true" size={20} style={{ color: `var(${accentColorVar})` }} />
+        </Box>
+        <Box>
+          <Text variant="label" color="secondary" noMargin>{label}</Text>
+          <Text variant="h2" weight="light" noMargin>{value}</Text>
+        </Box>
+      </Stack>
+    </Box>
   );
 }

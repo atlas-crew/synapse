@@ -3,7 +3,17 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Shield, Activity, Fingerprint } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, Button, EmptyState, SectionHeader, Stack, alpha, colors } from '@/ui';
+import { 
+  Breadcrumb, 
+  Button, 
+  EmptyState, 
+  SectionHeader, 
+  Stack, 
+  alpha, 
+  colors,
+  Box,
+  Text,
+} from '@/ui';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchSessionDetail } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
@@ -68,7 +78,11 @@ export default function SessionDetailPage() {
   }, [session]);
 
   if (isLoading && !session) {
-    return <div className="p-6 text-ink-muted">Loading session...</div>;
+    return (
+      <Box p="xl" style={{ textAlign: 'center' }}>
+        <Text variant="body" color="secondary">Loading session...</Text>
+      </Box>
+    );
   }
 
   if (!session) {
@@ -81,161 +95,170 @@ export default function SessionDetailPage() {
     );
   }
 
-  const sessionStateStyle = session.isSuspicious
-    ? {
-        background: alpha(colors.orange, 0.15),
-        color: colors.orange,
-        borderColor: alpha(colors.orange, 0.4),
-      }
-    : {
-        background: alpha(colors.green, 0.1),
-        color: colors.green,
-        borderColor: alpha(colors.green, 0.4),
-      };
-
   return (
-    <div className="p-6 space-y-6">
-      <Breadcrumb items={[{ label: 'Sessions', to: '/sessions' }, { label: session.sessionId }]} />
-      <header className="space-y-2">
-        <Link to="/sessions" className="text-sm text-link hover:text-link-hover">
-          Back to Sessions
-        </Link>
-        <SectionHeader
-          title={session.sessionId}
-          description={`Created ${new Date(session.creationTime).toLocaleString()}`}
-          size="h3"
-          actions={
-            <Stack direction="row" align="center" gap="sm">
-              <Button variant="outlined" size="sm">
-                Revoke Session
-              </Button>
-              <span className="px-2 py-1 text-xs border" style={sessionStateStyle}>
-                {session.isSuspicious ? 'Suspicious' : 'Active'}
-              </span>
-            </Stack>
-          }
-        />
-        {session.actorId && (
-          <Link
-            to={`/actors/${session.actorId}`}
-            className="text-sm text-link hover:text-link-hover inline-block"
-          >
-            View actor {session.actorId}
-          </Link>
-        )}
-      </header>
-
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {summaryStats.map((stat) => (
-          <div key={stat.label} className="card p-4">
-            <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{stat.label}</p>
-            <p className="text-2xl font-light text-ink-primary mt-2">{stat.value}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Fingerprint aria-hidden="true" className="w-4 h-4" /> Identity Binding
-          </Stack>
-          <div className="mt-3 space-y-2 text-sm text-ink-secondary">
-            <div>
-              <span className="text-ink-muted">Token:</span>{' '}
-              <span className="font-mono">{session.tokenHash}</span>
-            </div>
-            <div>
-              <span className="text-ink-muted">JA4:</span>{' '}
-              <span className="font-mono">{session.boundJa4 ?? 'Unbound'}</span>
-            </div>
-            <div>
-              <span className="text-ink-muted">IP:</span>{' '}
-              <span className="font-mono">{session.boundIp ?? 'Unbound'}</span>
-            </div>
-          </div>
-        </div>
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Activity aria-hidden="true" className="w-4 h-4" /> Session Pulse
-          </Stack>
-          <div className="mt-3 text-ink-secondary text-sm">
-            Last activity {new Date(session.lastActivity).toLocaleString()}. Request volume trending{' '}
-            {session.requestCount > 400 ? 'elevated' : 'stable'}.
-          </div>
-        </div>
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Shield aria-hidden="true" className="w-4 h-4" /> Response Notes
-          </Stack>
-          <div className="mt-3 text-ink-secondary text-sm">
-            {session.isSuspicious
-              ? 'Investigate for potential hijack or token replay.'
-              : 'Session remains within normal bounds.'}
-          </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-header flex items-center justify-between">
-          <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Hijack Alerts</div>
-          <div className="text-xs text-ink-muted">{session.hijackAlerts?.length ?? 0} alerts</div>
-        </div>
-        <div className="card-body space-y-3">
-          {(session.hijackAlerts?.length ?? 0) === 0 && (
-            <div className="text-ink-muted">No hijack alerts for this session.</div>
-          )}
-          {(session.hijackAlerts ?? []).map((alert, index) => (
-            <Stack
-              key={`${alert.alertType}-${index}`}
-              direction="row"
-              align="center"
-              gap="smPlus"
-              wrap
+    <Box p="xl">
+      <Stack gap="xl">
+        <Breadcrumb items={[{ label: 'Sessions', to: '/sessions' }, { label: session.sessionId }]} />
+        
+        {/* Header */}
+        <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
+          <Stack gap="md">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.history.back()}
+              icon={<span aria-hidden="true">←</span>}
+              style={{ width: 'fit-content' }}
             >
-              <div
-                className="px-2 py-1 text-xs border"
-                style={
-                  alert.confidence > 0.8
-                    ? {
-                        background: alpha(colors.red, 0.15),
-                        color: colors.red,
-                        borderColor: alpha(colors.red, 0.4),
-                      }
-                    : {
-                        background: alpha(colors.orange, 0.15),
-                        color: colors.orange,
-                        borderColor: alpha(colors.orange, 0.4),
-                      }
-                }
+              Back to Sessions
+            </Button>
+            <SectionHeader
+              title={session.sessionId}
+              description={`Created ${new Date(session.creationTime).toLocaleString()}`}
+              size="h2"
+              actions={
+                <Stack direction="row" align="center" gap="md">
+                  <Button variant="outlined" size="sm">
+                    Revoke Session
+                  </Button>
+                  <Box
+                    px="sm"
+                    py="xs"
+                    style={{
+                      border: '1px solid',
+                      background: session.isSuspicious ? 'var(--ac-orange-dim)' : 'var(--ac-green-dim)',
+                      color: session.isSuspicious ? 'var(--ac-orange)' : 'var(--ac-green)',
+                      borderColor: session.isSuspicious ? alpha(colors.orange, 0.3) : alpha(colors.green, 0.3),
+                    }}
+                  >
+                    <Text variant="tag" noMargin>{session.isSuspicious ? 'Suspicious' : 'Active'}</Text>
+                  </Box>
+                </Stack>
+              }
+            />
+            {session.actorId && (
+              <Link
+                to={`/actors/${session.actorId}`}
+                className="text-link hover:opacity-80 transition-opacity"
+                style={{ fontSize: '13px', width: 'fit-content' }}
               >
-                {alert.alertType.replace('_', ' ')}
-              </div>
-              <div className="flex-1 text-sm text-ink-secondary">
-                {alert.originalValue} → {alert.newValue}
-              </div>
-              <div className="text-xs text-ink-muted">
-                {new Date(alert.timestamp).toLocaleString()}
-              </div>
-              <div className="text-xs text-ink-muted">{Math.round(alert.confidence * 100)}%</div>
-            </Stack>
+                View actor {session.actorId}
+              </Link>
+            )}
+          </Stack>
+        </Box>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {summaryStats.map((stat) => (
+            <Box key={stat.label} bg="card" border="subtle" p="lg">
+              <Text variant="label" color="secondary" noMargin>{stat.label}</Text>
+              <Text variant="h2" weight="light" noMargin style={{ marginTop: '8px' }}>
+                {stat.value}
+              </Text>
+            </Box>
           ))}
         </div>
-      </section>
-    </div>
+
+        {/* Details Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md" style={{ marginBottom: '16px' }}>
+              <Fingerprint size={18} className="text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Identity Binding</Text>
+            </Stack>
+            <Stack gap="sm">
+              <Box>
+                <Text variant="caption" color="secondary">Token</Text>
+                <Text variant="code" noMargin>{session.tokenHash}</Text>
+              </Box>
+              <Box>
+                <Text variant="caption" color="secondary">JA4</Text>
+                <Text variant="code" noMargin>{session.boundJa4 ?? 'Unbound'}</Text>
+              </Box>
+              <Box>
+                <Text variant="caption" color="secondary">IP</Text>
+                <Text variant="code" noMargin>{session.boundIp ?? 'Unbound'}</Text>
+              </Box>
+            </Stack>
+          </Box>
+          
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md" style={{ marginBottom: '16px' }}>
+              <Activity size={18} className="text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Session Pulse</Text>
+            </Stack>
+            <Text variant="body" color="secondary">
+              Last activity {new Date(session.lastActivity).toLocaleString()}. Request volume trending{' '}
+              <Text as="span" weight="medium" color={session.requestCount > 400 ? 'error' : 'success'}>
+                {session.requestCount > 400 ? 'elevated' : 'stable'}
+              </Text>.
+            </Text>
+          </Box>
+
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md" style={{ marginBottom: '16px' }}>
+              <Shield size={18} className="text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Response Notes</Text>
+            </Stack>
+            <Text variant="body" color="secondary">
+              {session.isSuspicious
+                ? 'Investigate for potential hijack or token replay.'
+                : 'Session remains within normal bounds.'}
+            </Text>
+          </Box>
+        </div>
+
+        {/* Hijack Alerts */}
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <Stack direction="row" align="center" justify="space-between">
+              <Text variant="label" color="secondary" noMargin>Hijack Alerts</Text>
+              <Text variant="caption" color="secondary" noMargin>{session.hijackAlerts?.length ?? 0} alerts</Text>
+            </Stack>
+          </Box>
+          <Box p="lg">
+            <Stack gap="lg">
+              {(session.hijackAlerts?.length ?? 0) === 0 && (
+                <Text variant="body" color="secondary" align="center">No hijack alerts for this session.</Text>
+              )}
+              {(session.hijackAlerts ?? []).map((alert, index) => (
+                <Stack
+                  key={`${alert.alertType}-${index}`}
+                  direction="row"
+                  align="center"
+                  gap="lg"
+                  wrap
+                >
+                  <Box
+                    px="sm"
+                    py="xs"
+                    style={{
+                      width: 'fit-content',
+                      border: '1px solid',
+                      background: alert.confidence > 0.8 ? 'var(--ac-red-dim)' : 'var(--ac-orange-dim)',
+                      color: alert.confidence > 0.8 ? 'var(--ac-red)' : 'var(--ac-orange)',
+                      borderColor: alert.confidence > 0.8 ? alpha(colors.red, 0.3) : alpha(colors.orange, 0.3),
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Text variant="tag" noMargin>{alert.alertType.replace('_', ' ')}</Text>
+                  </Box>
+                  <Text variant="body" color="secondary" style={{ flex: 1 }}>
+                    {alert.originalValue} → {alert.newValue}
+                  </Text>
+                  <Text variant="caption" color="secondary" noMargin>
+                    {new Date(alert.timestamp).toLocaleString()}
+                  </Text>
+                  <Text variant="caption" color="secondary" noMargin>
+                    {Math.round(alert.confidence * 100)}%
+                  </Text>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }

@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Activity, Shield, Star } from 'lucide-react';
@@ -10,8 +10,10 @@ import {
   SectionHeader,
   Stack,
   StatusBadge,
-  alpha,
-  colors,
+  Box,
+  Text,
+  Grid,
+  spacing,
 } from '@/ui';
 import { CopyButton } from '../../components/ui/CopyButton';
 import { useDemoMode } from '../../stores/demoModeStore';
@@ -60,31 +62,31 @@ const demoTimeline: SocActorTimelineEvent[] = [
   },
 ];
 
-const eventToneStyle: Record<string, CSSProperties> = {
+const eventStyles: Record<string, { bg: string; color: string; border: string }> = {
   rule_match: {
-    background: alpha(colors.orange, 0.1),
-    color: colors.orange,
-    borderColor: alpha(colors.orange, 0.4),
+    bg: 'var(--ac-orange-dim)',
+    color: 'var(--ac-orange)',
+    border: 'rgba(229, 168, 32, 0.3)',
   },
   block: {
-    background: alpha(colors.red, 0.15),
-    color: colors.red,
-    borderColor: alpha(colors.red, 0.4),
+    bg: 'var(--ac-red-dim)',
+    color: 'var(--ac-red)',
+    border: 'rgba(239, 68, 68, 0.3)',
   },
   actor_blocked: {
-    background: alpha(colors.red, 0.15),
-    color: colors.red,
-    borderColor: alpha(colors.red, 0.4),
+    bg: 'var(--ac-red-dim)',
+    color: 'var(--ac-red)',
+    border: 'rgba(239, 68, 68, 0.3)',
   },
   session_bind: {
-    background: alpha(colors.blue, 0.1),
-    color: colors.blue,
-    borderColor: alpha(colors.blue, 0.4),
+    bg: 'var(--ac-blue-dim)',
+    color: 'var(--ac-blue)',
+    border: 'rgba(56, 160, 255, 0.3)',
   },
   session_alert: {
-    background: alpha(colors.magenta, 0.1),
-    color: colors.magenta,
-    borderColor: alpha(colors.magenta, 0.4),
+    bg: 'var(--ac-magenta-dim)',
+    color: 'var(--ac-magenta)',
+    border: 'rgba(217, 70, 168, 0.3)',
   },
 };
 
@@ -122,7 +124,7 @@ export default function ActorDetailPage() {
   const summaryStats = useMemo(() => {
     if (!actor) return [];
     return [
-      { label: 'Risk Score', value: Math.round(actor.riskScore) },
+      { label: 'Risk Score', value: Math.round(actor.riskScore), color: actor.riskScore > 75 ? 'var(--ac-red)' : 'var(--text)' },
       { label: 'Sessions', value: actor.sessionIds.length },
       { label: 'IPs', value: actor.ips.length },
       { label: 'Fingerprints', value: actor.fingerprints.length },
@@ -130,7 +132,11 @@ export default function ActorDetailPage() {
   }, [actor]);
 
   if (actorLoading && !actor) {
-    return <div className="p-6 text-ink-muted">Loading actor...</div>;
+    return (
+      <Box p="xl" style={{ textAlign: 'center' }}>
+        <Text variant="body" color="secondary">Loading actor...</Text>
+      </Box>
+    );
   }
 
   if (!actor) {
@@ -144,175 +150,216 @@ export default function ActorDetailPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <Breadcrumb items={[{ label: 'Actors', to: '/actors' }, { label: actor.actorId }]} />
-      <header className="space-y-2">
-        <Link to="/actors" className="text-sm text-link hover:text-link-hover">
-          Back to Actors
-        </Link>
-        <SectionHeader
-          title={actor.actorId}
-          description={`First seen ${new Date(actor.firstSeen).toLocaleString()}`}
-          size="h3"
-          actions={
-            <Stack direction="row" align="center" gap="sm">
-              <Button
-                variant="outlined"
-                size="sm"
-                onClick={() => toggleWatch(actor.actorId)}
-                icon={
-                  <Star
-                    aria-hidden="true"
-                    className="w-4 h-4"
-                    style={{ color: watched ? colors.orange : undefined }}
-                  />
-                }
-              >
-                {watched ? 'Remove Watch' : 'Add to Watchlist'}
-              </Button>
-              <StatusBadge
-                status={actor.isBlocked ? 'error' : 'success'}
-                variant="subtle"
-                size="sm"
-              >
-                {actor.isBlocked ? 'Blocked' : 'Active'}
-              </StatusBadge>
+    <Box p="xl">
+      <Stack gap="xl">
+        <Breadcrumb items={[{ label: 'Actors', to: '/actors' }, { label: actor.actorId }]} />
+        
+        {/* Header */}
+        <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
+          <Stack gap="md">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.history.back()}
+              icon={<span aria-hidden="true">←</span>}
+              style={{ width: 'fit-content' }}
+            >
+              Back to Actors
+            </Button>
+            <SectionHeader
+              title={actor.actorId}
+              description={`First seen ${new Date(actor.firstSeen).toLocaleString()}`}
+              size="h2"
+              actions={
+                <Stack direction="row" align="center" gap="md">
+                  <Button
+                    variant="outlined"
+                    size="sm"
+                    onClick={() => toggleWatch(actor.actorId)}
+                    icon={
+                      <Star
+                        aria-hidden="true"
+                        size={16}
+                        style={{ color: watched ? 'var(--ac-orange)' : 'inherit' }}
+                      />
+                    }
+                  >
+                    {watched ? 'Remove Watch' : 'Add to Watchlist'}
+                  </Button>
+                  <StatusBadge
+                    status={actor.isBlocked ? 'error' : 'success'}
+                    variant="subtle"
+                    size="sm"
+                  >
+                    {actor.isBlocked ? 'Blocked' : 'Active'}
+                  </StatusBadge>
+                </Stack>
+              }
+            />
+            <Stack direction="row" align="center" gap="md">
+              <Text variant="small" color="secondary" noMargin>Actor ID</Text>
+              <Text variant="code" noMargin>{actor.actorId}</Text>
+              <CopyButton value={actor.actorId} />
             </Stack>
-          }
-        />
-        <Stack direction="row" align="center" gap="smPlus">
-          <div className="text-sm text-ink-secondary">Actor ID</div>
-          <div className="font-mono text-sm text-ink-primary">{actor.actorId}</div>
-          <CopyButton value={actor.actorId} />
-        </Stack>
-      </header>
+          </Stack>
+        </Box>
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {summaryStats.map((stat) => (
-          <div key={stat.label} className="card p-4">
-            <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{stat.label}</p>
-            <p className="text-2xl font-light text-ink-primary mt-2">{stat.value}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card p-4">
-          <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Associated IPs</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {actor.ips.map((ip) => (
-              <span
-                key={ip}
-                className="px-2 py-1 text-xs border border-border-subtle bg-surface-subtle text-ink-secondary font-mono"
-              >
-                {ip}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Fingerprints</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {actor.fingerprints.map((fp) => (
-              <span
-                key={fp}
-                className="px-2 py-1 text-xs border border-border-subtle bg-surface-subtle text-ink-secondary font-mono"
-              >
-                {fp}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="card p-4">
-          <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">Sessions</p>
-          <div className="mt-3 space-y-2">
-            {actor.sessionIds.map((sessionId) => (
-              <Link
-                key={sessionId}
-                to={`/sessions/${sessionId}`}
-                className="block text-sm text-link hover:text-link-hover font-mono"
-              >
-                {sessionId}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-header flex items-center justify-between">
-          <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Timeline</div>
-          <div className="text-xs text-ink-muted">{timeline.length} events</div>
-        </div>
-        <div className="card-body space-y-3">
-          {timeline.length === 0 && <div className="text-ink-muted">No timeline events yet.</div>}
-          {timeline.map((event, index) => (
-            <div key={`${event.eventType}-${index}`} className="flex gap-3">
-              <div
-                className="px-2 py-1 text-xs border h-fit"
-                style={
-                  eventToneStyle[event.eventType] ?? {
-                    borderColor: alpha(colors.gray.mid, 0.4),
-                    color: colors.gray.mid,
-                  }
-                }
-              >
-                {event.eventType.replace('_', ' ')}
-              </div>
-              <div className="flex-1">
-                <div className="text-sm text-ink-primary">
-                  {event.ruleId && `Rule ${event.ruleId}`}{' '}
-                  {event.path && `${event.method} ${event.path}`}
-                  {event.sessionId && `Session ${event.sessionId}`}
-                </div>
-                <div className="text-xs text-ink-muted">
-                  {new Date(event.timestamp).toLocaleString()}
-                  {event.riskDelta ? ` · +${event.riskDelta}` : ''}
-                  {event.riskScore ? ` · Risk ${event.riskScore}` : ''}
-                </div>
-                {event.blockReason && (
-                  <div className="text-xs text-ink-secondary mt-1">{event.blockReason}</div>
-                )}
-              </div>
-              {event.confidence && (
-                <div className="text-xs text-ink-muted">{Math.round(event.confidence * 100)}%</div>
-              )}
-            </div>
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {summaryStats.map((stat) => (
+            <Box key={stat.label} bg="card" border="subtle" p="lg">
+              <Text variant="label" color="secondary" noMargin>{stat.label}</Text>
+              <Text variant="h2" weight="light" noMargin style={{ marginTop: '8px', color: stat.color }}>
+                {stat.value}
+              </Text>
+            </Box>
           ))}
         </div>
-      </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Activity aria-hidden="true" className="w-4 h-4" /> Activity Summary
-          </Stack>
-          <div className="mt-3 text-ink-secondary text-sm">
-            Last seen {new Date(actor.lastSeen).toLocaleString()}.{' '}
-            {actor.isBlocked ? 'Actor is currently blocked.' : 'Actor is being monitored.'}
-          </div>
+        {/* Details Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Box bg="card" border="subtle" p="lg">
+            <Text variant="label" color="secondary" noMargin style={{ marginBottom: '16px' }}>Associated IPs</Text>
+            <Stack direction="row" gap="sm" wrap>
+              {actor.ips.map((ip) => (
+                <Box
+                  key={ip}
+                  px="sm"
+                  py="xs"
+                  bg="surface-inset"
+                  border="subtle"
+                >
+                  <Text variant="code" noMargin>{ip}</Text>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+          <Box bg="card" border="subtle" p="lg">
+            <Text variant="label" color="secondary" noMargin style={{ marginBottom: '16px' }}>Fingerprints</Text>
+            <Stack direction="row" gap="sm" wrap>
+              {actor.fingerprints.map((fp) => (
+                <Box
+                  key={fp}
+                  px="sm"
+                  py="xs"
+                  bg="surface-inset"
+                  border="subtle"
+                >
+                  <Text variant="code" noMargin>{fp}</Text>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+          <Box bg="card" border="subtle" p="lg">
+            <Text variant="label" color="secondary" noMargin style={{ marginBottom: '16px' }}>Sessions</Text>
+            <Stack gap="sm">
+              {actor.sessionIds.map((sessionId) => (
+                <Link
+                  key={sessionId}
+                  to={`/sessions/${sessionId}`}
+                  className="text-link hover:opacity-80 transition-opacity"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                >
+                  {sessionId}
+                </Link>
+              ))}
+            </Stack>
+          </Box>
         </div>
-        <div className="card p-4">
-          <Stack
-            direction="row"
-            align="center"
-            gap="sm"
-            className="text-sm text-ink-muted uppercase tracking-[0.2em]"
-          >
-            <Shield aria-hidden="true" className="w-4 h-4" /> Response Notes
-          </Stack>
-          <div className="mt-3 text-ink-secondary text-sm">
-            {actor.blockReason
-              ? `Block reason: ${actor.blockReason}`
-              : 'No automated block action recorded.'}
-          </div>
-        </div>
-      </section>
-    </div>
+
+        {/* Timeline */}
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <Stack direction="row" align="center" justify="space-between">
+              <Text variant="label" color="secondary" noMargin>Timeline</Text>
+              <Text variant="caption" color="secondary" noMargin>{timeline.length} events</Text>
+            </Stack>
+          </Box>
+          <Box p="lg">
+            <Stack gap="lg">
+              {timeline.length === 0 && (
+                <Text variant="body" color="secondary" align="center">No timeline events yet.</Text>
+              )}
+              {timeline.map((event, index) => {
+                const style = eventStyles[event.eventType] || { 
+                  bg: 'var(--bg-surface-inset)', 
+                  color: 'var(--text-muted)', 
+                  border: 'var(--border-subtle)' 
+                };
+                return (
+                  <Stack key={`${event.eventType}-${index}`} direction="row" gap="lg" align="start">
+                    <Box
+                      px="sm"
+                      py="xs"
+                      style={{
+                        width: 'fit-content',
+                        border: '1px solid',
+                        background: style.bg,
+                        color: style.color,
+                        borderColor: style.border,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Text variant="tag" noMargin>{event.eventType.replace('_', ' ')}</Text>
+                    </Box>
+                    <Box style={{ flex: 1 }}>
+                      <Text variant="body" weight="medium" noMargin>
+                        {event.ruleId && `Rule ${event.ruleId}`}
+                        {event.path && `${event.method} ${event.path}`}
+                        {event.sessionId && `Session ${event.sessionId}`}
+                      </Text>
+                      <Text variant="caption" color="secondary" noMargin>
+                        {new Date(event.timestamp).toLocaleString()}
+                        {event.riskDelta ? ` · +${event.riskDelta}` : ''}
+                        {event.riskScore ? ` · Risk ${event.riskScore}` : ''}
+                      </Text>
+                      {event.blockReason && (
+                        <Text variant="small" color="secondary" style={{ marginTop: '4px' }}>
+                          {event.blockReason}
+                        </Text>
+                      )}
+                    </Box>
+                    {event.confidence && (
+                      <Text variant="caption" color="secondary" noMargin>
+                        {Math.round(event.confidence * 100)}%
+                      </Text>
+                    )}
+                  </Stack>
+                );
+              })}
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Guidance Panels */}
+        <Grid cols={2} gap="xl">
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md">
+              <Activity size={18} className="text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Activity Summary</Text>
+            </Stack>
+            <Box style={{ marginTop: spacing.md }}>
+              <Text variant="body" color="secondary">
+                Last seen {new Date(actor.lastSeen).toLocaleString()}.{' '}
+                {actor.isBlocked ? 'Actor is currently blocked.' : 'Actor is being monitored.'}
+              </Text>
+            </Box>
+          </Box>
+          <Box bg="card" border="subtle" p="lg">
+            <Stack direction="row" align="center" gap="md">
+              <Shield size={18} className="text-ink-muted" />
+              <Text variant="label" color="secondary" noMargin>Response Notes</Text>
+            </Stack>
+            <Box style={{ marginTop: spacing.md }}>
+              <Text variant="body" color="secondary">
+                {actor.blockReason
+                  ? `Block reason: ${actor.blockReason}`
+                  : 'No automated block action recorded.'}
+              </Text>
+            </Box>
+          </Box>
+        </Grid>
+      </Stack>
+    </Box>
   );
 }

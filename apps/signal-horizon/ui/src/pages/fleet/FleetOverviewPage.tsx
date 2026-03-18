@@ -21,13 +21,18 @@ import { getDemoData } from '../../lib/demoData';
 import type { SensorSummary } from '../../types/fleet';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
 import { apiFetch } from '../../lib/api';
-import { Box, Button, Input, KpiStrip, SectionHeader, Select, Stack, colors } from '@/ui';
-const CARD_HEADER_TITLE_STYLE = {
-  fontSize: '18px',
-  lineHeight: '28px',
-  fontWeight: 600,
-  color: 'var(--text-primary)',
-};
+import {
+  Box,
+  Button,
+  Input,
+  KpiStrip,
+  SectionHeader,
+  Select,
+  Stack,
+  Grid,
+  Text,
+  CARD_HEADER_TITLE_STYLE,
+} from '@/ui';
 
 interface FleetOverview {
   summary: {
@@ -148,9 +153,9 @@ export function FleetOverviewPage() {
 
   if (overviewLoading || sensorsLoading) {
     return (
-      <div className="p-6">
+      <Box p="xl">
         <FleetOverviewSkeleton />
-      </div>
+      </Box>
     );
   }
 
@@ -176,101 +181,97 @@ export function FleetOverviewPage() {
       label: 'Sensors Online',
       value: formatNumber(summary.onlineCount),
       subtitle: 'Connected and reporting telemetry',
-      borderColor: colors.green,
-      valueColor: colors.green,
-      icon: <CheckCircle aria-hidden="true" className="w-4 h-4" style={{ color: colors.green }} />,
+      borderColor: 'var(--ac-green)',
+      valueColor: 'var(--ac-green)',
+      icon: <CheckCircle aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--ac-green)' }} />,
     },
     {
       label: 'Needs Attention',
       value: formatNumber(summary.warningCount),
       subtitle: 'Degraded performance or reconnecting',
-      borderColor: colors.orange,
-      valueColor: colors.orange,
+      borderColor: 'var(--ac-orange)',
+      valueColor: 'var(--ac-orange)',
       icon: (
-        <AlertTriangle aria-hidden="true" className="w-4 h-4" style={{ color: colors.orange }} />
+        <AlertTriangle aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--ac-orange)' }} />
       ),
     },
     {
       label: 'Offline',
       value: formatNumber(summary.offlineCount),
       subtitle: 'Not reporting; investigate',
-      borderColor: colors.red,
-      valueColor: colors.red,
-      icon: <XCircle aria-hidden="true" className="w-4 h-4" style={{ color: colors.red }} />,
+      borderColor: 'var(--ac-red)',
+      valueColor: 'var(--ac-red)',
+      icon: <XCircle aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--ac-red)' }} />,
     },
     {
       label: 'Requests/Min',
       value: formatNumber(fleetMetrics.totalRps),
       subtitle: 'Total across online sensors',
-      borderColor: colors.purple,
-      valueColor: colors.purple,
-      icon: <Zap aria-hidden="true" className="w-4 h-4" style={{ color: colors.purple }} />,
+      borderColor: 'var(--ac-purple)',
+      valueColor: 'var(--ac-purple)',
+      icon: <Zap aria-hidden="true" className="w-4 h-4" style={{ color: 'var(--ac-purple)' }} />,
     },
   ];
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <SectionHeader
-        title="Signal Array"
-        description={headerDescription}
-        actions={
-          <Stack direction="row" gap="sm">
-            <Button variant="outlined" size="md">
-              Export Report
-            </Button>
-            <Button variant="magenta" size="md">
-              Deploy Sensor
-            </Button>
-          </Stack>
-        }
-      />
+    <Box p="xl">
+      <Stack gap="xl">
+        {/* Header */}
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="Fleet Overview"
+          description={headerDescription}
+          actions={
+            <Stack direction="row" gap="sm">
+              <Button variant="outlined" size="md">
+                Export Report
+              </Button>
+              <Button variant="magenta" size="md">
+                Deploy Sensor
+              </Button>
+            </Stack>
+          }
+        />
 
-      {/* KPI Strip (@/ui) */}
-      <KpiStrip metrics={kpiMetrics} cols={4} />
+        {/* KPI Strip (@/ui) */}
+        <KpiStrip metrics={kpiMetrics} cols={4} />
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-4 gap-4">
-        <QuickAction
-          icon={Search}
-          title="Run Diagnostics"
-          description="Check sensor health & connectivity"
-          accentClassName="border-l-ac-blue dark:border-l-ac-sky-light"
-          iconClassName="text-ac-blue dark:text-ac-sky-light"
-        />
-        <QuickAction
-          icon={Shield}
-          title="DLP Management"
-          description="Monitor sensitive data leaks"
-          onClick={() => navigate('/fleet/dlp')}
-          accentClassName="border-l-ac-green"
-          iconClassName="text-ac-green"
-        />
-        <QuickAction
-          icon={Settings}
-          title="Configure Sensors"
-          description="Kernel params & Synapse-Pingora config"
-          onClick={() => navigate('/fleet/config')}
-          accentClassName="border-l-ac-orange"
-          iconClassName="text-ac-orange"
-        />
-        <QuickAction
-          icon={Globe}
-          title="Test Connectivity"
-          description="Run network connectivity tests"
-          accentClassName="border-l-ac-purple"
-          iconClassName="text-ac-purple"
-        />
-      </div>
+        {/* Quick Actions */}
+        <Grid cols={4} gap="md">
+          <QuickAction
+            icon={Search}
+            title="Run Diagnostics"
+            description="Check sensor health & connectivity"
+            accentColorVar="--ac-blue"
+          />
+          <QuickAction
+            icon={Shield}
+            title="DLP Management"
+            description="Monitor sensitive data leaks"
+            onClick={() => navigate('/fleet/dlp')}
+            accentColorVar="--ac-green"
+          />
+          <QuickAction
+            icon={Settings}
+            title="Configure Sensors"
+            description="Kernel params & Synapse-Pingora config"
+            onClick={() => navigate('/fleet/config')}
+            accentColorVar="--ac-orange"
+          />
+          <QuickAction
+            icon={Globe}
+            title="Test Connectivity"
+            description="Run network connectivity tests"
+            accentColorVar="--ac-purple"
+          />
+        </Grid>
 
-      {/* Alerts and Distribution */}
-      <div className="grid grid-cols-2 gap-6">
-        <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light p-6">
-          <div className="flex items-center justify-between mb-4">
+        {/* Alerts and Distribution */}
+        <Grid cols={2} gap="xl">
+          <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
             <SectionHeader
               title="Recent Alerts"
               size="h4"
-              style={{ marginBottom: 0 }}
               titleStyle={CARD_HEADER_TITLE_STYLE}
               actions={
                 <Button variant="ghost" size="sm">
@@ -278,84 +279,89 @@ export function FleetOverviewPage() {
                 </Button>
               }
             />
-          </div>
-          <div className="space-y-3">
-            {(overview?.recentAlerts || []).length === 0 ? (
-              <div className="text-ink-secondary text-sm py-4 text-center">No recent alerts</div>
-            ) : (
-              overview?.recentAlerts
-                .slice(0, 5)
-                .map((alert) => <AlertItem key={alert.id} alert={alert} />)
-            )}
-          </div>
-        </div>
+            <Stack gap="sm" style={{ marginTop: '16px' }}>
+              {(overview?.recentAlerts || []).length === 0 ? (
+                <Text variant="small" color="secondary" style={{ textAlign: 'center', padding: '16px 0' }}>
+                  No recent alerts
+                </Text>
 
-        <div className="card border border-border-subtle border-t-2 border-t-ac-navy dark:border-t-ac-sky-light p-6">
-          <SectionHeader
-            title="Fleet Distribution"
-            size="h4"
-            style={{ marginBottom: '16px' }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-          />
-          <div className="space-y-3">
-            {(overview?.regionDistribution || []).length === 0 ? (
-              <div className="text-ink-secondary text-sm py-4 text-center">No region data</div>
-            ) : (
-              overview?.regionDistribution.map((region) => (
-                <RegionBar key={region.region} region={region} />
-              ))
-            )}
-          </div>
-        </div>
-      </div>
+              ) : (
+                overview?.recentAlerts
+                  .slice(0, 5)
+                  .map((alert) => <AlertItem key={alert.id} alert={alert} />)
+              )}
+            </Stack>
+          </Box>
 
-      {/* Sensor Fleet Table */}
-      <div className="card border border-border-subtle border-t-2 border-t-ac-blue dark:border-t-ac-sky-light">
-        <div className="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-inset">
-          <SectionHeader
-            title="Sensor Fleet"
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-            actions={
-              <div className="flex items-center gap-4">
-                <Box style={{ width: 260 }}>
-                  <Input
-                    placeholder="Search sensors..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    aria-label="Search sensors by name"
-                    size="sm"
-                  />
-                </Box>
-                <Box style={{ width: 160 }}>
-                  <Select
-                    value={filters.status || ''}
-                    onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
-                    aria-label="Filter sensors by status"
-                    size="sm"
-                    options={[
-                      { value: '', label: 'All Status' },
-                      { value: 'online', label: 'Online' },
-                      { value: 'warning', label: 'Warning' },
-                      { value: 'offline', label: 'Offline' },
-                    ]}
-                  />
-                </Box>
-              </div>
-            }
+          <Box bg="card" border="top" borderColor="var(--ac-navy)" p="lg">
+            <SectionHeader
+              title="Fleet Distribution"
+              size="h4"
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+            />
+            <Stack gap="md" style={{ marginTop: '16px' }}>
+              {(overview?.regionDistribution || []).length === 0 ? (
+                <Text variant="small" color="secondary" style={{ textAlign: 'center', padding: '16px 0' }}>
+                  No region data
+                </Text>
+              ) : (
+                overview?.regionDistribution.map((region) => (
+                  <RegionBar key={region.region} region={region} />
+                ))
+              )}
+            </Stack>
+          </Box>
+        </Grid>
+
+        {/* Sensor Fleet Table */}
+        <Box bg="card" border="top" borderColor="var(--ac-blue)">
+          <Box p="md" bg="surface-inset" border="bottom">
+            <SectionHeader
+              title="Sensor Fleet"
+              size="h4"
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Stack direction="row" gap="md" align="center">
+                  <Box style={{ width: 260 }}>
+                    <Input
+                      placeholder="Search sensors..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      aria-label="Search sensors by name"
+                      size="sm"
+                    />
+                  </Box>
+                  <Box style={{ width: 160 }}>
+                    <Select
+                      value={filters.status || ''}
+                      onChange={(e) => setStatusFilter((e.target.value as any) || undefined)}
+                      aria-label="Filter sensors by status"
+                      size="sm"
+                      options={[
+                        { value: '', label: 'All Status' },
+                        { value: 'online', label: 'Online' },
+                        { value: 'warning', label: 'Warning' },
+                        { value: 'offline', label: 'Offline' },
+                      ]}
+                    />
+                  </Box>
+                </Stack>
+              }
+            />
+          </Box>
+          <SensorTable
+            sensors={filteredSensors}
+            onSensorClick={handleSensorClick}
+            onConfigureClick={handleConfigureClick}
           />
-        </div>
-        <SensorTable
-          sensors={filteredSensors}
-          onSensorClick={handleSensorClick}
-          onConfigureClick={handleConfigureClick}
-        />
-        <div className="p-4 border-t border-border-subtle text-sm text-ink-secondary">
-          Showing {filteredSensors.length} of {sensors.length} sensors
-        </div>
-      </div>
-    </div>
+          <Box p="md" border="top">
+            <Text variant="small" color="secondary">
+              Showing {filteredSensors.length} of {sensors.length} sensors
+            </Text>
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 
@@ -364,39 +370,59 @@ function QuickAction({
   title,
   description,
   onClick,
-  accentClassName,
-  iconClassName,
+  accentColorVar,
   disabled = false,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   onClick?: () => void;
-  accentClassName: string;
-  iconClassName: string;
+  accentColorVar: string;
   disabled?: boolean;
 }) {
   const isDisabled = disabled || !onClick;
   return (
-    <button
-      onClick={isDisabled ? undefined : onClick}
-      disabled={isDisabled}
-      title={isDisabled ? `${title} (coming soon)` : title}
-      aria-disabled={isDisabled}
-      className={`card border border-border-subtle border-l-2 p-4 text-left transition-colors group focus:outline-none focus:ring-2 focus:ring-ac-blue/50 dark:focus:ring-ac-sky-light/50 ${accentClassName} ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-surface-subtle'}`}
+    <Box
+      bg="card"
+      border="left"
+      borderColor={`var(${accentColorVar})`}
+      style={{ opacity: isDisabled ? 0.6 : 1, transition: 'all 0.2s ease' }}
     >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-surface-subtle flex items-center justify-center">
-          <Icon className={`w-5 h-5 ${iconClassName}`} />
-        </div>
-        <div>
-          <div className="font-semibold text-ink-primary group-hover:text-ink-primary transition-colors">
-            {title}
-          </div>
-          <div className="text-sm text-ink-secondary">{description}</div>
-        </div>
-      </div>
-    </button>
+      <button
+        onClick={isDisabled ? undefined : onClick}
+        disabled={isDisabled}
+        title={isDisabled ? `${title} (coming soon)` : title}
+        aria-disabled={isDisabled}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          background: 'transparent',
+          border: 'none',
+          padding: '16px',
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          outline: 'none',
+        }}
+        className="group hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ac-blue/50 dark:focus-visible:ring-ac-sky-light/50"
+      >
+        <Stack direction="row" gap="md" align="center">
+          <Box
+            p="sm"
+            bg="surface-subtle"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}
+          >
+            <Icon className="w-5 h-5" style={{ color: `var(${accentColorVar})` }} />
+          </Box>
+          <Box>
+            <Text variant="body" weight="semibold">
+              {title}
+            </Text>
+            <Text variant="small" color="secondary">
+              {description}
+            </Text>
+          </Box>
+        </Stack>
+      </button>
+    </Box>
   );
 }
 
@@ -407,20 +433,26 @@ function AlertItem({
 }) {
   const timeAgo = getTimeAgo(new Date(alert.createdAt));
   return (
-    <div className="flex items-start gap-3 p-3 hover:bg-surface-subtle transition-colors">
-      <AlertTriangle
-        aria-hidden="true"
-        className="w-5 h-5 flex-shrink-0 mt-0.5"
-        style={{ color: colors.red }}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-ink-primary truncate">{alert.type.replace(/_/g, ' ')}</div>
-        <div className="text-sm text-ink-secondary truncate">
-          {alert.sensorName}: {alert.error || 'Command failed'}
-        </div>
-      </div>
-      <div className="text-sm text-ink-secondary whitespace-nowrap">{timeAgo}</div>
-    </div>
+    <Box p="sm" className="hover:bg-surface-subtle transition-colors" style={{ cursor: 'default' }}>
+      <Stack direction="row" gap="md" align="start">
+        <AlertTriangle
+          aria-hidden="true"
+          className="w-5 h-5 flex-shrink-0 mt-0.5"
+          style={{ color: 'var(--ac-red)' }}
+        />
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="body" weight="medium" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {alert.type.replace(/_/g, ' ')}
+          </Text>
+          <Text variant="small" color="secondary" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {alert.sensorName}: {alert.error || 'Command failed'}
+          </Text>
+        </Box>
+        <Text variant="small" color="secondary" style={{ whiteSpace: 'nowrap' }}>
+          {timeAgo}
+        </Text>
+      </Stack>
+    </Box>
   );
 }
 
@@ -435,23 +467,35 @@ function RegionBar({
   const offlinePct = (region.offline / total) * 100;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-ink-primary">{formatRegion(region.region)}</span>
-        <span className="text-sm text-ink-secondary">{region.total} sensors</span>
-      </div>
-      <div className="h-6 flex overflow-hidden bg-surface-subtle border border-border-subtle">
+    <Box>
+      <Stack direction="row" align="center" justify="space-between" style={{ marginBottom: '4px' }}>
+        <Text variant="small" weight="medium">
+          {formatRegion(region.region)}
+        </Text>
+        <Text variant="small" color="secondary">
+          {region.total} sensors
+        </Text>
+      </Stack>
+      <Box
+        style={{
+          height: '24px',
+          display: 'flex',
+          overflow: 'hidden',
+          background: 'var(--bg-surface-subtle)',
+          border: '1px solid var(--border-subtle)',
+        }}
+      >
         {onlinePct > 0 && (
-          <Box style={{ width: `${onlinePct}%`, background: colors.status.success }} />
+          <Box style={{ width: `${onlinePct}%`, background: 'var(--ac-green)' }} />
         )}
         {warningPct > 0 && (
-          <Box style={{ width: `${warningPct}%`, background: colors.status.warning }} />
+          <Box style={{ width: `${warningPct}%`, background: 'var(--ac-orange)' }} />
         )}
         {offlinePct > 0 && (
-          <Box style={{ width: `${offlinePct}%`, background: colors.status.error }} />
+          <Box style={{ width: `${offlinePct}%`, background: 'var(--ac-red)' }} />
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 

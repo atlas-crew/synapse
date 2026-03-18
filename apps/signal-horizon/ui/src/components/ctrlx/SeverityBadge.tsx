@@ -13,9 +13,9 @@ interface SeverityBadgeProps {
 // Critical=Magenta, Warning=Orange, Success=Green, Info=Blue outline
 const severityConfig: Record<SeverityLevel, { bg: string; text: string; border: string; Icon: typeof AlertCircle }> = {
   CRITICAL: {
-    bg: 'bg-ac-magenta',
+    bg: 'bg-ac-red',
     text: 'text-white',
-    border: 'border-ac-magenta',
+    border: 'border-ac-red',
     Icon: AlertCircle,
   },
   HIGH: {

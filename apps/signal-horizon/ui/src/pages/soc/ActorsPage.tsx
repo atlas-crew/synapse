@@ -8,8 +8,16 @@ import { fetchActors } from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { downloadCsv } from '../../lib/csv';
 import type { SocActor, SocActorListResponse } from '../../types/soc';
-import { Box, Button, Input, SectionHeader, Stack, Text, alpha, colors } from '@/ui';
-
+import { 
+  Box,
+  Button,
+  Input,
+  SectionHeader,
+  Stack,
+  Text,
+  alpha,
+  colors,
+  } from '@/ui';
 function buildDemoActors(scenario: string): SocActorListResponse {
   const baseRisk = scenario === 'high-threat' ? 82 : scenario === 'normal' ? 55 : 28;
   const actors: SocActor[] = Array.from({ length: 10 }).map((_, index) => {
@@ -96,155 +104,184 @@ export default function ActorsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <SectionHeader
-        eyebrow="Signal Horizon"
-        title="Actors"
-        description="Track correlated actors and behavioral risk across the fleet."
-        actions={
-          <Stack direction="row" align="center" gap="sm">
-            <span className="text-xs text-ink-muted uppercase tracking-[0.18em]">Sensor</span>
-            <Box style={{ width: 180 }}>
-              <Input
-                value={sensorId}
-                onChange={(event) => setSensorId(event.target.value)}
-                placeholder="synapse-pingora-1"
-                size="sm"
-              />
-            </Box>
-            <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
-              Export CSV
-            </Button>
-          </Stack>
-        }
-      />
+    <Box p="xl">
+      <Stack gap="xl">
+        <SectionHeader
+          eyebrow="Signal Horizon"
+          title="Actors"
+          description="Track correlated actors and behavioral risk across the fleet."
+          actions={
+            <Stack direction="row" align="center" gap="sm">
+              <Text variant="label" color="secondary" noMargin>Sensor</Text>
+              <Box style={{ width: 180 }}>
+                <Input
+                  value={sensorId}
+                  onChange={(event) => setSensorId(event.target.value)}
+                  placeholder="synapse-pingora-1"
+                  size="sm"
+                />
+              </Box>
+              <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
+                Export CSV
+              </Button>
+            </Stack>
+          }
+        />
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard
-          icon={Users}
-          label="Tracked Actors"
-          value={stats?.totalActors ?? actors.length}
-          accentColor={colors.blue}
-        />
-        <StatCard
-          icon={AlertTriangle}
-          label="Blocked"
-          value={stats?.blockedActors ?? actors.filter((a) => a.isBlocked).length}
-          accentColor={colors.red}
-        />
-        <StatCard
-          icon={Shield}
-          label="Correlations"
-          value={stats?.correlationsMade ?? 0}
-          accentColor={colors.green}
-        />
-      </section>
-
-      <section className="card">
-        <Stack direction="row" align="center" gap="md" className="card-header flex-wrap">
-          <div className="text-sm uppercase tracking-[0.2em] text-ink-muted">Filters</div>
-          <Stack direction="row" align="center" gap="md" className="ml-auto flex-wrap">
-            <Box style={{ width: 160 }}>
-              <Input
-                value={ipFilter}
-                onChange={(event) => setIpFilter(event.target.value)}
-                placeholder="IP address"
-                size="sm"
-              />
-            </Box>
-            <Box style={{ width: 180 }}>
-              <Input
-                value={fingerprintFilter}
-                onChange={(event) => setFingerprintFilter(event.target.value)}
-                placeholder="Fingerprint"
-                size="sm"
-              />
-            </Box>
-            <Box style={{ width: 96 }}>
-              <Input
-                value={minRisk}
-                onChange={(event) => setMinRisk(event.target.value)}
-                type="number"
-                min={0}
-                max={100}
-                size="sm"
-              />
-            </Box>
-          </Stack>
-        </Stack>
-        <div className="card-body">
-          {isLoading && <div className="text-ink-muted">Loading actors...</div>}
-          {error && (
-            <Text as="div" color={colors.red} noMargin>
-              Failed to load actors.
-            </Text>
-          )}
-          {!isLoading && actors.length === 0 && (
-            <div className="text-ink-muted">No actors match the current filters.</div>
-          )}
-          {actors.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <caption className="sr-only">
-                  Tracked actors with risk scores and activity status
-                </caption>
-                <thead>
-                  <tr>
-                    <th>Actor</th>
-                    <th>Risk</th>
-                    <th>Last Seen</th>
-                    <th>IPs</th>
-                    <th>Fingerprints</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {actors.map((actor) => (
-                    <tr key={actor.actorId}>
-                      <td className="font-mono text-sm text-ink-primary">
-                        <Link
-                          to={`/actors/${actor.actorId}`}
-                          className="text-link hover:text-link-hover"
-                        >
-                          {actor.actorId}
-                        </Link>
-                      </td>
-                      <td className="text-ink-primary">{Math.round(actor.riskScore)}</td>
-                      <td className="text-ink-secondary">
-                        {new Date(actor.lastSeen).toLocaleString()}
-                      </td>
-                      <td className="text-ink-secondary">{actor.ips.length}</td>
-                      <td className="text-ink-secondary">{actor.fingerprints.length}</td>
-                      <td>
-                        {(() => {
-                          const isBlocked = actor.isBlocked;
-                          const badgeStyle = isBlocked
-                            ? {
-                                background: alpha(colors.red, 0.15),
-                                color: colors.red,
-                                borderColor: alpha(colors.red, 0.4),
-                              }
-                            : {
-                                background: alpha(colors.green, 0.1),
-                                color: colors.green,
-                                borderColor: alpha(colors.green, 0.4),
-                              };
-                          return (
-                            <span className="px-2 py-0.5 text-xs border" style={badgeStyle}>
-                              {isBlocked ? 'Blocked' : 'Active'}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard
+            icon={Users}
+            label="Tracked Actors"
+            value={stats?.totalActors ?? actors.length}
+            accentColorVar="--ac-blue"
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="Blocked"
+            value={stats?.blockedActors ?? actors.filter((a) => a.isBlocked).length}
+            accentColorVar="--ac-red"
+          />
+          <StatCard
+            icon={Shield}
+            label="Correlations"
+            value={stats?.correlationsMade ?? 0}
+            accentColorVar="--ac-green"
+          />
         </div>
-      </section>
-    </div>
+
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <Stack direction="row" align="center" justify="space-between" wrap>
+              <Text variant="label" color="secondary" noMargin>Filters</Text>
+              <Stack direction="row" align="center" gap="md" wrap>
+                <Box style={{ width: 160 }}>
+                  <Input
+                    value={ipFilter}
+                    onChange={(event) => setIpFilter(event.target.value)}
+                    placeholder="IP address"
+                    size="sm"
+                  />
+                </Box>
+                <Box style={{ width: 180 }}>
+                  <Input
+                    value={fingerprintFilter}
+                    onChange={(event) => setFingerprintFilter(event.target.value)}
+                    placeholder="Fingerprint"
+                    size="sm"
+                  />
+                </Box>
+                <Box style={{ width: 96 }}>
+                  <Input
+                    value={minRisk}
+                    onChange={(event) => setMinRisk(event.target.value)}
+                    type="number"
+                    min={0}
+                    max={100}
+                    size="sm"
+                  />
+                </Box>
+              </Stack>
+            </Stack>
+          </Box>
+          <Box p="none">
+            {isLoading && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" color="secondary">Loading actors...</Text>
+              </Box>
+            )}
+            {error && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" style={{ color: 'var(--ac-red)' }}>
+                  Failed to load actors.
+                </Text>
+              </Box>
+            )}
+            {!isLoading && actors.length === 0 && (
+              <Box p="xl" style={{ textAlign: 'center' }}>
+                <Text variant="body" color="secondary">No actors match the current filters.</Text>
+              </Box>
+            )}
+            {actors.length > 0 && (
+              <Box style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <caption className="sr-only">
+                    Tracked actors with risk scores and activity status
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Actor</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Risk</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Last Seen</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>IPs</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Fingerprints</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Status</Text>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actors.map((actor) => (
+                      <tr key={actor.actorId} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Link
+                            to={`/actors/${actor.actorId}`}
+                            className="text-link hover:opacity-80 transition-opacity"
+                            style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                          >
+                            {actor.actorId}
+                          </Link>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" weight="medium" noMargin>
+                            {Math.round(actor.riskScore)}
+                          </Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" color="secondary" noMargin>
+                            {new Date(actor.lastSeen).toLocaleString()}
+                          </Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" color="secondary" noMargin>{actor.ips.length}</Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Text variant="body" color="secondary" noMargin>{actor.fingerprints.length}</Text>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <Box
+                            px="sm"
+                            py="xs"
+                            style={{
+                              width: 'fit-content',
+                              border: '1px solid',
+                              background: actor.isBlocked ? 'var(--ac-red-dim)' : 'var(--ac-green-dim)',
+                              color: actor.isBlocked ? 'var(--ac-red)' : 'var(--ac-green)',
+                              borderColor: actor.isBlocked ? alpha(colors.red, 0.3) : alpha(colors.green, 0.3),
+                            }}
+                          >
+                            <Text variant="tag" noMargin>{actor.isBlocked ? 'Blocked' : 'Active'}</Text>
+                          </Box>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+            )}
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
 
@@ -252,22 +289,33 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  accentColor,
+  accentColorVar,
 }: {
-  icon: typeof Users;
+  icon: any;
   label: string;
   value: number;
-  accentColor: string;
+  accentColorVar: string;
 }) {
   return (
-    <Stack direction="row" align="center" gap="md" className="card p-4">
-      <div className="w-10 h-10 flex items-center justify-center bg-surface-subtle">
-        <Icon aria-hidden="true" className="w-5 h-5" style={{ color: accentColor }} />
-      </div>
-      <div>
-        <p className="text-xs tracking-[0.2em] uppercase text-ink-muted">{label}</p>
-        <p className="text-2xl font-light text-ink-primary">{value}</p>
-      </div>
-    </Stack>
+    <Box bg="card" border="subtle" p="lg">
+      <Stack direction="row" align="center" gap="lg">
+        <Box
+          style={{
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-surface-subtle)',
+          }}
+        >
+          <Icon aria-hidden="true" size={20} style={{ color: `var(${accentColorVar})` }} />
+        </Box>
+        <Box>
+          <Text variant="label" color="secondary" noMargin>{label}</Text>
+          <Text variant="h2" weight="light" noMargin>{value}</Text>
+        </Box>
+      </Stack>
+    </Box>
   );
 }

@@ -2,17 +2,21 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MetricCard, SensorStatusBadge } from '../../components/fleet';
 import { useSensors } from '../../hooks/fleet';
-import { Button, SectionHeader, Stack, alpha, colors } from '@/ui';
+import { 
+  Button, 
+  SectionHeader, 
+  Stack, 
+  alpha, 
+  colors,
+  Box,
+  Text,
+  StatusBadge,
+  CARD_HEADER_TITLE_STYLE
+} from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
 const API_KEY = import.meta.env.VITE_HORIZON_API_KEY || 'dev-dashboard-key';
 const authHeaders = { Authorization: `Bearer ${API_KEY}` };
-const CARD_HEADER_TITLE_STYLE = {
-  fontSize: '18px',
-  lineHeight: '28px',
-  fontWeight: 500,
-  color: 'var(--text-primary)',
-};
 
 interface SensorVersion {
   sensorId: string;
@@ -123,30 +127,11 @@ export function FleetUpdatesPage() {
 
   const { upToDate, needsUpdate, updating, failed } = statusCounts;
 
-  const statusStyles: Record<
-    SensorVersion['updateStatus'],
-    { bg: string; text: string; border: string }
-  > = {
-    up_to_date: {
-      bg: alpha(colors.green, 0.1),
-      text: colors.green,
-      border: alpha(colors.green, 0.3),
-    },
-    update_available: {
-      bg: alpha(colors.orange, 0.1),
-      text: colors.orange,
-      border: alpha(colors.orange, 0.3),
-    },
-    updating: {
-      bg: alpha(colors.blue, 0.1),
-      text: colors.blue,
-      border: alpha(colors.blue, 0.3),
-    },
-    failed: {
-      bg: alpha(colors.red, 0.1),
-      text: colors.red,
-      border: alpha(colors.red, 0.3),
-    },
+  const statusTypeMap: Record<SensorVersion['updateStatus'], 'success' | 'warning' | 'info' | 'error'> = {
+    up_to_date: 'success',
+    update_available: 'warning',
+    updating: 'info',
+    failed: 'error',
   };
 
   const statusLabels = {
@@ -157,194 +142,195 @@ export function FleetUpdatesPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <SectionHeader
-        title="Fleet Updates"
-        description="Manage sensor firmware and software updates"
-        actions={
-          <Button
-            onClick={() => updateMutation.mutate()}
-            disabled={selectedSensors.size === 0 || !targetVersion || updateMutation.isPending}
-            size="lg"
-          >
-            {updateMutation.isPending ? 'Updating...' : `Update Selected (${selectedSensors.size})`}
-          </Button>
-        }
-      />
+    <Box p="xl">
+      <Stack gap="xl">
+        <SectionHeader
+          title="Fleet Updates"
+          description="Manage sensor firmware and software updates"
+          actions={
+            <Button
+              onClick={() => updateMutation.mutate()}
+              disabled={selectedSensors.size === 0 || !targetVersion || updateMutation.isPending}
+              size="lg"
+            >
+              {updateMutation.isPending ? 'Updating...' : `Update Selected (${selectedSensors.size})`}
+            </Button>
+          }
+        />
 
-      {/* Status Overview */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <MetricCard label="Up to Date" value={upToDate} />
-        <MetricCard label="Needs Update" value={needsUpdate} />
-        <MetricCard label="Updating" value={updating} />
-        <MetricCard label="Failed" value={failed} />
-      </div>
+        {/* Status Overview */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+          <MetricCard label="Up to Date" value={upToDate} />
+          <MetricCard label="Needs Update" value={needsUpdate} />
+          <MetricCard label="Updating" value={updating} />
+          <MetricCard label="Failed" value={failed} />
+        </div>
 
-      {/* Available Updates */}
-      {availableUpdates.length > 0 && (
-        <div className="card p-6">
-          <h3 className="text-lg font-medium text-ink-primary mb-4">Available Updates</h3>
-          <div className="space-y-4">
-            {availableUpdates.map((update) => (
-              <div
-                key={update.version}
-                className="p-4 border"
-                style={
-                  update.critical
-                    ? {
-                        borderColor: alpha(colors.red, 0.4),
-                        background: alpha(colors.red, 0.1),
-                      }
-                    : { borderColor: alpha(colors.white, 0.08) }
-                }
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Stack direction="row" align="center" gap="smPlus">
-                      <span className="text-lg font-medium text-ink-primary">
+        {/* Available Updates */}
+        {availableUpdates.length > 0 && (
+          <Box bg="card" border="subtle" p="lg">
+            <Text variant="h3" weight="medium" style={{ marginBottom: '24px' }}>Available Updates</Text>
+            <Stack gap="md">
+              {availableUpdates.map((update) => (
+                <Box
+                  key={update.version}
+                  p="lg"
+                  bg="surface-inset"
+                  border="left"
+                  borderColor={update.critical ? 'var(--ac-red)' : 'var(--border-subtle)'}
+                  style={{
+                    background: update.critical ? 'color-mix(in srgb, var(--ac-red), transparent 95%)' : 'var(--bg-surface-inset)',
+                  }}
+                >
+                  <Stack direction="row" align="center" justify="space-between" style={{ marginBottom: '16px' }}>
+                    <Stack direction="row" align="center" gap="md">
+                      <Text variant="h3" weight="medium" noMargin>
                         Version {update.version}
-                      </span>
+                      </Text>
                       {update.critical && (
-                        <span
-                          className="px-2 py-0.5 text-xs font-medium border"
+                        <Box
+                          px="sm"
+                          py="none"
                           style={{
-                            background: alpha(colors.red, 0.15),
-                            color: colors.red,
+                            border: '1px solid',
+                            background: 'var(--ac-red-dim)',
+                            color: 'var(--ac-red)',
                             borderColor: alpha(colors.red, 0.3),
                           }}
                         >
-                          Critical
-                        </span>
+                          <Text variant="tag" style={{ fontSize: '9px' }}>Critical</Text>
+                        </Box>
                       )}
+                      <Text variant="caption" color="secondary" noMargin>
+                        Released {new Date(update.releaseDate).toLocaleDateString()}
+                      </Text>
                     </Stack>
-                    <div className="text-sm text-ink-muted mt-1">
-                      Released {new Date(update.releaseDate).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <Button
-                    onClick={() => setTargetVersion(update.version)}
-                    variant={targetVersion === update.version ? 'primary' : 'outlined'}
-                    size="sm"
-                  >
-                    {targetVersion === update.version ? 'Selected' : 'Select'}
-                  </Button>
-                </div>
-                <ul className="mt-3 space-y-1">
-                  {update.changelog.map((item, idx) => (
-                    <li key={idx} className="text-sm text-ink-secondary flex items-start gap-2">
-                      <span className="text-ink-muted">•</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Sensor Versions Table */}
-      <div className="card">
-        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
-          <SectionHeader
-            title="Sensor Versions"
-            size="h4"
-            style={{ marginBottom: 0 }}
-            titleStyle={CARD_HEADER_TITLE_STYLE}
-            actions={
-              <div className="flex gap-2">
-                <Button
-                  variant="outlined"
-                  size="sm"
-                  onClick={() =>
-                    setSelectedSensors(
-                      new Set(
-                        sensorVersions
-                          .filter((s) => s.updateStatus === 'update_available')
-                          .map((s) => s.id),
-                      ),
-                    )
-                  }
-                >
-                  Select Outdated
-                </Button>
-                <Button variant="outlined" size="sm" onClick={() => setSelectedSensors(new Set())}>
-                  Clear Selection
-                </Button>
-              </div>
-            }
-          />
-        </div>
-
-        <table className="min-w-full divide-y divide-border-subtle">
-          <caption className="sr-only">Fleet sensor versions and update status</caption>
-          <thead className="bg-surface-subtle">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                Select
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                Sensor
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                Current Version
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                Update Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-widest">
-                Last Updated
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-surface-base divide-y divide-border-subtle">
-            {sensorVersions.map((sensor) => (
-              <tr key={sensor.id} className="hover:bg-surface-subtle">
-                <td className="px-6 py-4">
-                  <input
-                    type="checkbox"
-                    checked={selectedSensors.has(sensor.id)}
-                    onChange={() => toggleSensor(sensor.id)}
-                    disabled={sensor.updateStatus === 'updating'}
-                    className="w-4 h-4 border-border-subtle disabled:opacity-50"
-                    style={{ accentColor: colors.blue }}
-                  />
-                </td>
-                <td className="px-6 py-4">
-                  <Stack direction="row" align="center" gap="smPlus">
-                    <span className="font-medium text-ink-primary">{sensor.name}</span>
-                    <span className="text-sm text-ink-muted">{sensor.region}</span>
+                    <Button
+                      onClick={() => setTargetVersion(update.version)}
+                      variant={targetVersion === update.version ? 'primary' : 'outlined'}
+                      size="sm"
+                    >
+                      {targetVersion === update.version ? 'Selected' : 'Select'}
+                    </Button>
                   </Stack>
-                </td>
-                <td className="px-6 py-4">
-                  <SensorStatusBadge status={sensor.status} />
-                </td>
-                <td className="px-6 py-4 text-sm text-ink-primary font-mono">
-                  {sensor.currentVersion}
-                </td>
-                <td className="px-6 py-4">
-                  <span
-                    className="px-2 py-1 text-xs font-medium border"
-                    style={{
-                      background: statusStyles[sensor.updateStatus].bg,
-                      color: statusStyles[sensor.updateStatus].text,
-                      borderColor: statusStyles[sensor.updateStatus].border,
-                    }}
+                  <Stack gap="xs">
+                    {update.changelog.map((item, idx) => (
+                      <Stack key={idx} direction="row" gap="sm" align="start">
+                        <Text variant="body" color="secondary" noMargin>•</Text>
+                        <Text variant="body" color="secondary" noMargin>{item}</Text>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        )}
+
+        {/* Sensor Versions Table */}
+        <Box bg="card" border="subtle">
+          <Box p="md" border="bottom" borderColor="subtle" bg="surface-inset">
+            <SectionHeader
+              title="Sensor Versions"
+              size="h4"
+              style={{ marginBottom: 0 }}
+              titleStyle={CARD_HEADER_TITLE_STYLE}
+              actions={
+                <Stack direction="row" gap="sm">
+                  <Button
+                    variant="outlined"
+                    size="sm"
+                    onClick={() =>
+                      setSelectedSensors(
+                        new Set(
+                          sensorVersions
+                            .filter((s) => s.updateStatus === 'update_available')
+                            .map((s) => s.id),
+                        ),
+                      )
+                    }
                   >
-                    {statusLabels[sensor.updateStatus]}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-ink-muted">
-                  {sensor.lastUpdated ? new Date(sensor.lastUpdated).toLocaleDateString() : '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                    Select Outdated
+                  </Button>
+                  <Button variant="outlined" size="sm" onClick={() => setSelectedSensors(new Set())}>
+                    Clear Selection
+                  </Button>
+                </Stack>
+              }
+            />
+          </Box>
+
+          <Box style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <caption className="sr-only">Fleet sensor versions and update status</caption>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Select</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Sensor</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Status</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Current Version</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Update Status</Text>
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                    <Text variant="label" color="secondary" noMargin>Last Updated</Text>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sensorVersions.map((sensor) => (
+                  <tr key={sensor.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedSensors.has(sensor.id)}
+                        onChange={() => toggleSensor(sensor.id)}
+                        disabled={sensor.updateStatus === 'updating'}
+                        className="w-4 h-4"
+                        style={{ accentColor: 'var(--ac-blue)' }}
+                      />
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Stack direction="row" align="center" gap="md">
+                        <Text variant="body" weight="medium" noMargin>{sensor.name}</Text>
+                        <Text variant="caption" color="secondary" noMargin>{sensor.region}</Text>
+                      </Stack>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <SensorStatusBadge status={sensor.status} />
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="code" noMargin>{sensor.currentVersion}</Text>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <StatusBadge
+                        status={statusTypeMap[sensor.updateStatus]}
+                        variant="subtle"
+                        size="sm"
+                      >
+                        {statusLabels[sensor.updateStatus]}
+                      </StatusBadge>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Text variant="body" color="secondary" noMargin>
+                        {sensor.lastUpdated ? new Date(sensor.lastUpdated).toLocaleDateString() : '-'}
+                      </Text>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
