@@ -20,6 +20,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   /** Full width */
   fill?: boolean;
+  /** Alias for fill */
+  fullWidth?: boolean;
   /** Loading state */
   loading?: boolean;
   /** Icon before text */
@@ -63,7 +65,7 @@ const variantStyles: Record<ButtonVariant, {
     hover: { background: colors.hover.navy },
   },
   ghost: {
-    base: { background: 'transparent', color: colors.skyBlue, border: 'none' },
+    base: { background: 'transparent', color: colors.blue, border: 'none' },
     hover: { background: 'rgba(255,255,255,0.06)' },
   },
 };
@@ -72,6 +74,7 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
   fill,
+  fullWidth,
   loading,
   icon,
   iconAfter,
@@ -82,6 +85,7 @@ export const Button: React.FC<ButtonProps> = ({
 }) => {
   const [hovered, setHovered] = React.useState(false);
   const vs = variantStyles[variant];
+  const isFullWidth = fill || fullWidth;
 
   return (
     <button
@@ -98,7 +102,7 @@ export const Button: React.FC<ButtonProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        width: fill ? '100%' : undefined,
+        width: isFullWidth ? '100%' : undefined,
         opacity: disabled ? 0.5 : 1,
         ...sizeMap[size],
         ...vs.base,

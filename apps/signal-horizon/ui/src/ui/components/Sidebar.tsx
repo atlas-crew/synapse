@@ -148,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     disabled={item.disabled}
                     style={{
                       width: '100%',
-                      background: isActive ? 'rgba(0, 87, 183, 0.2)' : 'transparent',
+                      background: isActive ? 'rgba(30, 144, 255, 0.2)' : 'transparent',
                       border: 'none',
                       borderLeft: isActive ? `3px solid ${colors.blue}` : '3px solid transparent',
                       borderRadius: 0,
@@ -224,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onClick={() => !child.disabled && onNavigate(child.key)}
                             style={{
                               width: '100%',
-                              background: childActive ? 'rgba(0, 87, 183, 0.15)' : 'transparent',
+                              background: childActive ? 'rgba(30, 144, 255, 0.15)' : 'transparent',
                               border: 'none',
                               borderRadius: 0,
                               padding: `6px ${spacing.md} 6px 44px`,

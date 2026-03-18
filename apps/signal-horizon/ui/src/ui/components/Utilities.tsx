@@ -37,7 +37,7 @@ export const Tooltip: React.FC<TooltipProps> = ({ content, position = 'top', del
       {visible && (
         <div style={{
           position: 'absolute', ...positionStyles[position],
-          background: '#001E62', border: '1px solid rgba(255,255,255,0.12)',
+          background: '#0B4F8A', border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: 0, boxShadow: shadows.elevated.dark,
           padding: `${spacing.xs} ${spacing.sm}`, fontFamily,
           fontWeight: fontWeight.regular, fontSize: '12px', color: '#F0F4F8',

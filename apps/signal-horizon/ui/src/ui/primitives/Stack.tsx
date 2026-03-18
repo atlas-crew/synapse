@@ -9,7 +9,7 @@ import { spacing } from '../tokens/tokens';
  *   <Stack direction="row" gap="lg" align="center">items horizontally</Stack>
  */
 
-type SpacingKey = keyof typeof spacing;
+type SpacingKey = keyof typeof spacing | 'none';
 type StackElement = 'div' | 'span' | 'section' | 'label';
 
 interface StackProps extends React.HTMLAttributes<HTMLElement> {
@@ -49,7 +49,7 @@ export const Stack: React.FC<StackProps> = ({
     style={{
       display: inline ? 'inline-flex' : 'flex',
       flexDirection: direction,
-      gap: spacing[gap],
+      gap: gap === 'none' ? 0 : gap ? spacing[gap as keyof typeof spacing] : undefined,
       alignItems: align,
       justifyContent: justify,
       flexWrap: wrap ? 'wrap' : undefined,

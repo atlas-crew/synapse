@@ -1,68 +1,93 @@
 import React from 'react';
-import { fontFamily, typography, colors } from '../tokens/tokens';
+import { fontFamily, typography, colors, fontWeight } from '../tokens/tokens';
 import { sx } from '../utils/helpers';
 
 /**
  * Text — Typography primitive. Applies brand fonts and sizing automatically.
  *
  * Usage:
- *   <Text variant="h2">Dashboard</Text>
+ *   <Text variant="display">Dashboard</Text>
  *   <Text variant="body" muted>Secondary info</Text>
- *   <Text variant="eyebrow" color={colors.magenta}>STATUS</Text>
- *   <Text variant="kpiValue" color={colors.green}>17μs</Text>
+ *   <Text variant="tag" color={colors.red}>CRITICAL</Text>
+ *   <Text variant="metric">2,847</Text>
  */
 
-type TextVariant = keyof typeof typography;
+export type TextVariant = keyof typeof typography;
 
 interface TextProps extends React.HTMLAttributes<HTMLElement> {
   variant?: TextVariant;
   color?: string;
   muted?: boolean;
-  as?: keyof JSX.IntrinsicElements;
+  as?: React.ElementType;
   truncate?: boolean;
   align?: React.CSSProperties['textAlign'];
   maxWidth?: string;
   noMargin?: boolean;
   inline?: boolean;
-  mono?: boolean;
   style?: React.CSSProperties;
   children?: React.ReactNode;
+  weight?: keyof typeof fontWeight;
 }
 
-const variantToTag: Partial<Record<TextVariant, keyof JSX.IntrinsicElements>> = {
-  h1: 'h1', h2: 'h2', h3: 'h3', h4: 'h4', h5: 'h5', h6: 'h6',
-  eyebrow: 'span', body: 'p', subhead: 'p', small: 'span', caption: 'span',
+const variantToTag: Partial<Record<TextVariant, React.ElementType>> = {
+  display: 'h1',
+  heading: 'h2',
+  subhead: 'h3',
+  body: 'p',
+  nav: 'span',
+  navActive: 'span',
+  code: 'code',
+  h1: 'h1',
+  h2: 'h2',
+  h3: 'h3',
+  h4: 'h4',
+  h5: 'h5',
+  h6: 'h6',
 };
 
 export const Text: React.FC<TextProps> = ({
-  variant = 'body', color, muted, as, truncate, align, maxWidth,
-  noMargin, inline, mono, style, children, ...rest
+  variant = 'body',
+  color,
+  muted,
+  as,
+  truncate,
+  align,
+  maxWidth,
+  noMargin,
+  inline,
+  style,
+  children,
+  weight,
+  ...rest
 }) => {
   const variantStyles = typography[variant] || typography.body;
-  const Tag = (as || variantToTag[variant] || 'span') as any;
+  const Tag = as || variantToTag[variant] || 'span';
 
-  const resolvedColor = muted
-    ? colors.gray.mid
-    : color || (variant === 'chartSubtitle' || variant === 'chartLabel' || variant === 'chartLegend'
-        ? colors.gray.mid
-        : '#F0F4F8');
+  const resolvedColor = muted ? colors.textMuted : color || colors.text;
 
   const baseStyle = sx(
     {
-      fontFamily: mono ? "'JetBrains Mono', 'Fira Code', monospace" : fontFamily,
+      fontFamily,
       margin: noMargin ? 0 : undefined,
       color: resolvedColor,
       borderRadius: 0,
+      fontWeight: weight ? fontWeight[weight] : undefined,
     },
     variantStyles as React.CSSProperties,
-    truncate ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const } : undefined,
+    truncate
+      ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }
+      : undefined,
     align ? { textAlign: align } : undefined,
     maxWidth ? { maxWidth } : undefined,
     inline ? { display: 'inline' } : undefined,
     style,
   );
 
-  return <Tag style={baseStyle} {...rest}>{children}</Tag>;
+  return (
+    <Tag style={baseStyle} {...rest}>
+      {children}
+    </Tag>
+  );
 };
 
 Text.displayName = 'Text';

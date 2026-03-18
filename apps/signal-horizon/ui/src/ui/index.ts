@@ -1,7 +1,7 @@
 /**
- * Signal Horizon Component Library
- * ==================================
- * AtlasCrew-brand-compliant React component library for Signal Horizon dashboards.
+ * Apparatus Design System Component Library
+ * ========================================
+ * brand-compliant React component library for Signal Horizon dashboards.
  *
  * Quick Start:
  *   import { MetricCard, KpiStrip, ChartPanel, DataTable, Button } from '@/ui';
@@ -22,15 +22,14 @@ export {
   chartColors,
   semanticChartColors,
   fontFamily,
-  fontWeight,
   typography,
   spacing,
   spacingN,
   shadows,
   transitions,
   borders,
-  kpiBorderColors,
   gradients,
+  fv,
 } from './tokens/tokens';
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -46,6 +45,7 @@ export {
   formatBytes,
   sx,
   clamp,
+  applyType,
 } from './utils/helpers';
 
 // ─── Primitives ──────────────────────────────────────────────────────────────

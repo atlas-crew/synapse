@@ -1,16 +1,51 @@
 /**
- * Signal Horizon Global Styles
- * ============================
+ * Apparatus Design System — Global Styles
+ * ======================================
  * Import this once at app root.
- * Enforces brand resets, keyframes, and base typography.
+ * Enforces brand resets, keyframes, and base typography using Recursive variable font.
  *
  * Usage:
  *   import '@/ui/styles/global.css';
  */
 
-/* ─── Font Import ──────────────────────────────────────────────────────────── */
+/* ─── Font Import (must precede all other rules) ─────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap');
+
+/* ─── Variables ────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Brand Colors */
+  --ac-blue: #1E90FF;
+  --ac-blue-dark: #0A6ED8;
+  --ac-blue-darker: #0B4F8A;
+  --ac-blue-light: #7EC8FF;
+  
+  --ac-magenta: #8B5CF6;
+  --ac-magenta-dark: #6D28D9;
+  --ac-magenta-darker: #4C1D95;
+  --ac-magenta-light: #C4B5FD;
+  
+  --ac-green: #10B981;
+  --ac-red: #EF4444;
+  --ac-orange: #F59E0B;
+  --ac-sky-blue: #06B6D4;
+
+  /* Neutrals - Slate Command */
+  --text: #E8ECF4;
+  --text-muted: #5A6F8A;
+  --text-secondary: #8899B0;
+  --text-dim: #4e6580;
+
+  /* Surfaces - Slate Command (Dark Mode) */
+  --bg: #0C1220;
+  --surface: #101828;
+  --surface-subtle: #131C2E;
+  --surface-inset: #080E1A;
+  --surface-overlay: #182440;
+  --border: #1E2D44;
+  --border-accent: #2A3F5C;
+}
 
 /* ─── Brand Reset ──────────────────────────────────────────────────────────── */
 
@@ -27,12 +62,12 @@ html {
 }
 
 body {
-  font-family: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Recursive', ui-monospace, monospace;
   font-weight: 400;
-  font-size: 16px;
+  font-size: 13px; /* Standard body size in Apparatus */
   line-height: 1.5;
-  color: #F0F4F8;
-  background: #000A1A;
+  color: var(--text);
+  background: var(--bg);
   margin: 0;
   padding: 0;
   hyphens: none;
@@ -40,77 +75,94 @@ body {
 
 /* ─── Typography ───────────────────────────────────────────────────────────── */
 
-h1, h2, h3, h4 {
-  font-weight: 300;
+h1, h2, h3, h4, h5, h6, p {
   margin: 0 0 16px 0;
 }
 
-h5, h6 {
-  font-weight: 500;
-  margin: 0 0 12px 0;
+/* Page titles / Display */
+h1 {
+  font-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
+  font-size: 36px;
+  line-height: 56px;
 }
 
-h1 { font-size: 3rem; line-height: 56px; }
-h2 { font-size: 2rem; line-height: 40px; }
-h3 { font-size: 1.75rem; line-height: 36px; }
-h4 { font-size: 1.5rem; line-height: 32px; }
-h5 { font-size: 1.25rem; line-height: 28px; }
-h6 { font-size: 1rem; line-height: 24px; }
+/* Section headers / Heading */
+h2 {
+  font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;
+  font-size: 24px;
+  line-height: 40px;
+}
 
-p { margin: 0 0 16px 0; }
+/* Card titles / Heading fallback */
+h3 {
+  font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;
+  font-size: 1.75rem;
+  line-height: 36px;
+}
+
+h4 {
+  font-variation-settings: 'wght' 600, 'MONO' 0, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -3;
+  font-size: 1.5rem;
+  line-height: 32px;
+}
+
+/* Standard Body Text */
+p, li {
+  font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;
+  font-size: 13px;
+}
 
 a {
-  color: #529EEC;
+  color: var(--ac-blue);
   text-decoration: none;
-  font-weight: 600;
-  transition: color 0.15s ease;
+  font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -5;
+  font-size: 13px; /* Matches body but with link styling */
+  transition: opacity 0.15s ease;
 }
-a:hover { color: #7CBAFF; }
+a:hover { opacity: 0.8; }
 
 /* ─── Scrollbar ────────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 0 !important;
+  background: var(--border);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--border-accent);
 }
 
 /* ─── Form Resets ──────────────────────────────────────────────────────────── */
 
 input, select, textarea, button {
-  font-family: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Recursive', ui-monospace, monospace;
   border-radius: 0 !important;
 }
 
 input, select, textarea {
   font-weight: 400;
-  font-size: 16px;
+  font-size: 13px;
   padding: 12px 16px;
-  border: 2px solid #003EC8;
-  background: #0A1A3A;
-  color: #F0F4F8;
+  border: 2px solid var(--border-accent);
+  background: var(--surface);
+  color: var(--text);
   transition: border-color 0.15s ease;
 }
 
 input:focus, select:focus, textarea:focus {
-  border-color: #529EEC;
+  border-color: var(--ac-blue);
   outline: none;
 }
 
 input::placeholder, textarea::placeholder {
-  color: #7F7F7F;
+  color: var(--text-dim);
 }
 
 /* ─── Table Resets ─────────────────────────────────────────────────────────── */
@@ -118,7 +170,6 @@ input::placeholder, textarea::placeholder {
 table {
   border-collapse: collapse;
   width: 100%;
-  font-family: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* ─── Keyframes ────────────────────────────────────────────────────────────── */
@@ -148,4 +199,4 @@ table {
 .sh-fade-in { animation: sh-fade-in 0.3s ease both; }
 .sh-slide-in { animation: sh-slide-in 0.3s ease both; }
 .sh-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sh-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+.sh-mono { font-variation-settings: 'MONO' 1; }

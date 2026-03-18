@@ -1,3 +1,6 @@
+import React from 'react';
+import { fontFamily, typography } from '../tokens/tokens';
+
 /**
  * Utility functions for the component library.
  * Color manipulation, value formatting, gradient generation.
@@ -16,8 +19,13 @@ export const lighten = (hex: string, amount: number): string => {
 export const darken = (hex: string, amount: number): string =>
   lighten(hex, -amount);
 
-export const alpha = (hex: string, opacity: number): string => {
-  const num = parseInt(hex.replace('#', ''), 16);
+export const alpha = (color: string, opacity: number): string => {
+  if (!color) return 'transparent';
+  if (color.startsWith('var(')) {
+    return `color-mix(in srgb, ${color}, transparent ${Math.round((1 - opacity) * 100)}%)`;
+  }
+  const hex = color.replace('#', '');
+  const num = parseInt(hex, 16);
   const r = (num >> 16) & 0xff;
   const g = (num >> 8) & 0xff;
   const b = num & 0xff;
@@ -86,3 +94,9 @@ export const sx = (...styles: (React.CSSProperties | undefined | false | null)[]
 /** Responsive clamp: fluid sizing between min and max */
 export const clamp = (min: string, preferred: string, max: string) =>
   `clamp(${min}, ${preferred}, ${max})`;
+
+/** Apply a type role as a style object */
+export const applyType = (role: keyof typeof typography): React.CSSProperties => ({
+  fontFamily,
+  ...(typography[role] as React.CSSProperties),
+});

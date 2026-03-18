@@ -7,241 +7,240 @@
     color-scheme: light;
 
     /* =========================================
-       PRIMARY COLORS
+       PRIMARY COLORS — Vivid Blue
        ========================================= */
-    --ac-blue: #0057B7;
-    --ac-navy: #001E62;
+    --ac-blue: #1E90FF;
+    --ac-navy: #0B4F8A;
     --ac-white: #FFFFFF;
 
     /* =========================================
-       SECONDARY COLORS
+       SECONDARY / ACCENT — Arc Violet
        ========================================= */
-    --ac-sky-blue: #529EEC;
-    --ac-magenta: #D62598;
+    --ac-sky-blue: #06B6D4;
+    --ac-magenta: #8B5CF6;
     --ac-black: #000000;
 
     /* =========================================
-       ACCENT COLORS
+       SEMANTIC COLORS (6-role system)
        ========================================= */
-    --ac-purple: #440099;
-    --ac-orange: #C24900;
-    --ac-cloud-blue: #5E8AB4;
-    --ac-green: #008731;
-    --ac-red: #EF3340;
+    --ac-purple: #8B5CF6;
+    --ac-orange: #F59E0B;
+    --ac-cloud-blue: #06B6D4;
+    --ac-green: #10B981;
+    --ac-red: #EF4444;
 
     /* =========================================
-       UI NEUTRALS
+       UI NEUTRALS — Slate Daylight
        ========================================= */
-    --ac-gray-light: #F0F4F8;
-    --ac-gray-medium: #DFE8F0;
-    --ac-gray-dark: #404040;
-    --ac-gray-mid: #7F7F7F;
-    --ac-card-dark: #0A1A3A;
+    --ac-gray-light: #EEF2F7;
+    --ac-gray-medium: #D4DCE8;
+    --ac-gray-dark: #475A72;
+    --ac-gray-mid: #6B7D96;
+    --ac-card-dark: #101828;
 
     /* =========================================
-       NAVY SCALE (for dark mode - design system)
-       War room aesthetic: Navy dominant, not charcoal
+       SLATE SCALE (for dark mode - design system)
+       Slate command: Cool blue-tinted darkness
        ========================================= */
-    --ac-navy-darkest: #00102E;
-    --ac-navy-darker: #001544;
-    --ac-navy-dark: #001E62;
-    --ac-navy-medium: #0A2A6E;
-    --ac-navy-light: #1A3A7E;
-    --ac-navy-lighter: #2A4A8E;
+    --ac-navy-darkest: #080e1a;
+    --ac-navy-darker: #0c1220;
+    --ac-navy-dark: #101828;
+    --ac-navy-medium: #131c2e;
+    --ac-navy-light: #182440;
+    --ac-navy-lighter: #1e2d44;
 
     /* =========================================
-       LIGHT MODE NAVY SCALE
-       Crisp, professional light tones with navy hints
+       LIGHT MODE SLATE SCALE
+       Cool blue-gray tints carrying slate identity
        ========================================= */
-    --light-surface-base: #FFFFFF;
-    --light-surface-elevated: #F8FAFC;
-    --light-surface-subtle: #F0F4F8;
-    --light-surface-muted: #E8EEF4;
+    --light-surface-base: #F7F9FC;
+    --light-surface-elevated: #FFFFFF;
+    --light-surface-subtle: #EEF2F7;
+    --light-surface-muted: #E4EAF2;
     --light-surface-card: #FFFFFF;
-    --light-navy-tint: rgba(0, 30, 98, 0.03);
-    --light-navy-wash: rgba(0, 30, 98, 0.06);
+    --light-navy-tint: rgba(26, 43, 66, 0.03);
+    --light-navy-wash: rgba(26, 43, 66, 0.06);
 
     /* =========================================
        TINTS & SHADES
        ========================================= */
-    --ac-blue-light: #7CBAFF;
-    --ac-blue-dark: #004189;
-    --ac-blue-darker: #00174A;
-    --ac-sky-light: #BEDDFF;
-    --ac-sky-dark: #3D77B1;
-    --ac-magenta-light: #E979C2;
-    --ac-magenta-dark: #A01B72;
+    --ac-blue-light: #7EC8FF;
+    --ac-blue-dark: #0A6ED8;
+    --ac-blue-darker: #0B4F8A;
+    --ac-sky-light: #67E8F9;
+    --ac-sky-dark: #0891B2;
+    --ac-magenta-light: #C4B5FD;
+    --ac-magenta-dark: #6D28D9;
 
     /* =========================================
        HOVER STATES
        ========================================= */
-    --ac-hover-light: #003EC8;
-    --ac-hover-dark: #7CBAFF;
+    --ac-hover-light: #0A6ED8;
+    --ac-hover-dark: #7EC8FF;
 
     /* =========================================
        TYPOGRAPHY
        ========================================= */
-    --font-stack: 'Rubik', 'Calibri', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-stack: 'Recursive', ui-monospace, -apple-system, BlinkMacSystemFont, sans-serif;
 
     /* =========================================
        THEME TOKENS - LIGHT
-       War room aesthetic: Crisp, precise, operational
-       Enhanced depth with layered surfaces and shadows
+       Slate daylight: Crisp, precise, blue-gray tinted
        ========================================= */
-    --surface-base: #FAFCFD;
-    --surface-subtle: #F0F4F8;
+    --surface-base: #F7F9FC;
+    --surface-subtle: #EEF2F7;
     --surface-card: #FFFFFF;
-    --surface-inset: #F4F7FA;
+    --surface-inset: #E4EAF2;
     --surface-overlay: #FFFFFF;
-    --surface-hero: #EDF2F7;
-    --surface-header: #001E62;
+    --surface-hero: #EEF2F7;
+    --surface-header: #0B4F8A;
     --surface-elevated: #FFFFFF;
-    --surface-recessed: #E8EEF4;
+    --surface-recessed: #E4EAF2;
 
-    --text-primary: #001E62;
-    --text-secondary: #334E68;
-    --text-muted: #627D98;
+    --text-primary: #1A2B42;
+    --text-secondary: #475A72;
+    --text-muted: #6B7D96;
     --text-inverse: #FFFFFF;
 
-    --link: #0057B7;
-    --link-hover: #003EC8;
+    --link: #0A6ED8;
+    --link-hover: #0B4F8A;
 
-    --border-subtle: #8596A7;
-    --border-medium: #B8C9DA;
-    --border-strong: #001E62;
-    --border-inset: #E2EAF2;
-    --border-card: rgba(0, 30, 98, 0.08);
+    --border-subtle: #D4DCE8;
+    --border-medium: #B0BDD0;
+    --border-strong: #1A2B42;
+    --border-inset: #E4EAF2;
+    --border-card: rgba(26, 43, 66, 0.08);
 
-    --accent: #0057B7;
-    --accent-hover: #004189;
-    --focus-ring: #0057B7;
+    --accent: #8B5CF6;
+    --accent-hover: #6D28D9;
+    --focus-ring: #8B5CF6;
 
-    /* Enhanced shadow system - more depth layers */
-    --shadow-xs: 0 1px 2px rgba(0, 30, 98, 0.04);
-    --shadow-sm: 0 1px 3px rgba(0, 30, 98, 0.06), 0 1px 2px rgba(0, 30, 98, 0.04);
-    --shadow-md: 0 4px 6px rgba(0, 30, 98, 0.07), 0 2px 4px rgba(0, 30, 98, 0.05);
-    --shadow-lg: 0 10px 15px rgba(0, 30, 98, 0.08), 0 4px 6px rgba(0, 30, 98, 0.05);
-    --shadow-xl: 0 20px 25px rgba(0, 30, 98, 0.10), 0 8px 10px rgba(0, 30, 98, 0.06);
-    --shadow-color: rgba(0, 30, 98, 0.08);
-    --shadow-color-strong: rgba(0, 30, 98, 0.14);
+    /* Enhanced shadow system - slate tinted */
+    --shadow-xs: 0 1px 2px rgba(26, 43, 66, 0.04);
+    --shadow-sm: 0 1px 3px rgba(26, 43, 66, 0.06), 0 1px 2px rgba(26, 43, 66, 0.04);
+    --shadow-md: 0 4px 6px rgba(26, 43, 66, 0.07), 0 2px 4px rgba(26, 43, 66, 0.05);
+    --shadow-lg: 0 10px 15px rgba(26, 43, 66, 0.08), 0 4px 6px rgba(26, 43, 66, 0.05);
+    --shadow-xl: 0 20px 25px rgba(26, 43, 66, 0.10), 0 8px 10px rgba(26, 43, 66, 0.06);
+    --shadow-color: rgba(26, 43, 66, 0.08);
+    --shadow-color-strong: rgba(26, 43, 66, 0.14);
 
-    /* Card elevation shadows - distinct layers */
-    --shadow-card: 0 1px 3px rgba(0, 30, 98, 0.08), 0 4px 12px rgba(0, 30, 98, 0.06), 0 0 0 1px rgba(0, 30, 98, 0.04);
-    --shadow-card-hover: 0 4px 8px rgba(0, 30, 98, 0.10), 0 12px 24px rgba(0, 30, 98, 0.08), 0 0 0 1px rgba(0, 87, 183, 0.12);
-    --shadow-card-raised: 0 8px 16px rgba(0, 30, 98, 0.12), 0 20px 40px rgba(0, 30, 98, 0.08);
+    /* Card elevation shadows */
+    --shadow-card: 0 1px 3px rgba(26, 43, 66, 0.08), 0 4px 12px rgba(26, 43, 66, 0.06), 0 0 0 1px rgba(26, 43, 66, 0.04);
+    --shadow-card-hover: 0 4px 8px rgba(26, 43, 66, 0.10), 0 12px 24px rgba(26, 43, 66, 0.08), 0 0 0 1px rgba(30, 144, 255, 0.12);
+    --shadow-card-raised: 0 8px 16px rgba(26, 43, 66, 0.12), 0 20px 40px rgba(26, 43, 66, 0.08);
 
     /* Depth effects - Light mode */
-    --glow-magenta: rgba(214, 37, 152, 0.20);
-    --glow-blue: rgba(0, 87, 183, 0.20);
+    --glow-magenta: rgba(139, 92, 246, 0.20);
+    --glow-blue: rgba(30, 144, 255, 0.20);
     --card-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, transparent 50%);
-    --card-shadow: rgba(0, 30, 98, 0.12);
-    --inset-shadow: inset 0 2px 4px rgba(0, 30, 98, 0.06), inset 0 0 0 1px rgba(0, 30, 98, 0.04);
+    --card-shadow: rgba(26, 43, 66, 0.12);
+    --inset-shadow: inset 0 2px 4px rgba(26, 43, 66, 0.06), inset 0 0 0 1px rgba(26, 43, 66, 0.04);
     --top-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 
-    /* Light mode gradient surfaces - more pronounced */
-    --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #FAFCFD 100%);
-    --gradient-card-hover: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
-    --gradient-surface: linear-gradient(180deg, rgba(0, 87, 183, 0.04) 0%, transparent 100%);
-    --gradient-surface-subtle: linear-gradient(180deg, rgba(0, 30, 98, 0.02) 0%, transparent 60%);
-    --gradient-inset: linear-gradient(180deg, rgba(0, 30, 98, 0.05) 0%, rgba(0, 30, 98, 0.02) 30%, transparent 100%);
-    --gradient-hero: linear-gradient(180deg, #EDF2F7 0%, #FAFCFD 50%, #FFFFFF 100%);
-    --gradient-header: linear-gradient(180deg, #001E62 0%, #001544 100%);
-    --gradient-sidebar: linear-gradient(90deg, rgba(0, 30, 98, 0.02) 0%, transparent 100%);
-    --border-glow: 0 0 0 1px rgba(0, 87, 183, 0.12);
+    /* Light mode gradient surfaces */
+    --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #F7F9FC 100%);
+    --gradient-card-hover: linear-gradient(180deg, #FFFFFF 0%, #F7F9FC 100%);
+    --gradient-surface: linear-gradient(180deg, rgba(30, 144, 255, 0.04) 0%, transparent 100%);
+    --gradient-surface-subtle: linear-gradient(180deg, rgba(26, 43, 66, 0.02) 0%, transparent 60%);
+    --gradient-inset: linear-gradient(180deg, rgba(26, 43, 66, 0.05) 0%, rgba(26, 43, 66, 0.02) 30%, transparent 100%);
+    --gradient-hero: linear-gradient(180deg, #EEF2F7 0%, #F7F9FC 50%, #FFFFFF 100%);
+    --gradient-header: linear-gradient(180deg, #0B4F8A 0%, #083D6C 100%);
+    --gradient-sidebar: linear-gradient(90deg, rgba(26, 43, 66, 0.02) 0%, transparent 100%);
+    --border-glow: 0 0 0 1px rgba(30, 144, 255, 0.12);
 
     /* Light mode inner depth */
     --inner-highlight: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
-    --inner-shadow-top: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(0, 30, 98, 0.04);
+    --inner-shadow-top: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(26, 43, 66, 0.04);
 
     /* Light mode table header */
-    --table-header-bg: linear-gradient(180deg, #001E62 0%, #001544 100%);
+    --table-header-bg: linear-gradient(180deg, #0B4F8A 0%, #083D6C 100%);
     --table-header-text: #FFFFFF;
 
     /* =========================================
        CHART TOOLTIP TOKENS
        ========================================= */
     --chart-tooltip-bg: #FFFFFF;
-    --chart-tooltip-border: rgba(0, 30, 98, 0.15);
-    --chart-tooltip-shadow: 0 4px 12px rgba(0, 30, 98, 0.15);
-    --chart-tooltip-label: #001E62;
-    --chart-tooltip-item: #334E68;
+    --chart-tooltip-border: rgba(26, 43, 66, 0.15);
+    --chart-tooltip-shadow: 0 4px 12px rgba(26, 43, 66, 0.15);
+    --chart-tooltip-label: #1A2B42;
+    --chart-tooltip-item: #475A72;
   }
 
   .dark {
     color-scheme: dark;
 
-    /* Charcoal-based dark mode (Tactical Remediation)
-       Shifted from Navy to Charcoal/Zinc for better data contrast */
-    --surface-base: #09090b;   /* Zinc 950 */
-    --surface-subtle: #18181b; /* Zinc 900 */
-    --surface-card: #121212;   /* Deep Charcoal */
-    --surface-inset: #040405;
-    --surface-overlay: #18181b;
-    --surface-hero: var(--ac-navy); /* Keep Navy for brand headers */
+    /* Slate command dark mode
+       Cool blue-tinted darkness for tactical ops feel */
+    --surface-base: #0c1220;
+    --surface-subtle: #131c2e;
+    --surface-card: #101828;
+    --surface-inset: #080e1a;
+    --surface-overlay: #182440;
+    --surface-hero: #0B4F8A;
 
-    --text-primary: #f4f4f5;   /* Zinc 100 */
-    --text-secondary: #a1a1aa; /* Zinc 400 */
-    --text-muted: #71717a;     /* Zinc 500 */
-    --text-inverse: #001E62;
+    --text-primary: #e8ecf4;
+    --text-secondary: #8899b0;
+    --text-muted: #5a6f8a;
+    --text-inverse: #0c1220;
 
-    --link: #529EEC;           /* Sky Blue */
-    --link-hover: #7CBAFF;
+    --link: #1E90FF;
+    --link-hover: #7EC8FF;
 
-    --border-subtle: #62626B;  /* Darkened for WCAG 1.4.11 non-text contrast */
-    --border-strong: #3f3f46;  /* Zinc 700 */
-    --border-inset: #09090b;
+    --border-subtle: #1e2d44;
+    --border-strong: #2a3f5c;
+    --border-inset: #080e1a;
 
-    --accent: #0057B7;
-    --accent-hover: #529EEC;
-    --focus-ring: #D62598;
+    --accent: #8B5CF6;
+    --accent-hover: #C4B5FD;
+    --focus-ring: #8B5CF6;
 
     --shadow-color: rgba(0, 0, 0, 0.6);
     --shadow-color-strong: rgba(0, 0, 0, 0.8);
 
     /* Chart tooltip tokens - dark mode */
-    --chart-tooltip-bg: #18181b;
-    --chart-tooltip-border: #3f3f46;
+    --chart-tooltip-bg: #101828;
+    --chart-tooltip-border: #1e2d44;
     --chart-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-    --chart-tooltip-label: #FFFFFF;
-    --chart-tooltip-item: #a1a1aa;
+    --chart-tooltip-label: #e8ecf4;
+    --chart-tooltip-item: #8899b0;
 
-    /* Depth effects - dark mode desaturated */
-    --glow-magenta: rgba(214, 37, 152, 0.3);
-    --glow-blue: rgba(0, 87, 183, 0.3);
+    /* Depth effects - dark mode */
+    --glow-magenta: rgba(139, 92, 246, 0.3);
+    --glow-blue: rgba(30, 144, 255, 0.35);
     --card-highlight: rgba(255, 255, 255, 0.04);
     --card-shadow: rgba(0, 0, 0, 0.6);
     --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 
-    /* Gradient surfaces for desaturated depth */
-    --gradient-card: linear-gradient(165deg, #18181b 0%, #121212 100%);
-    --gradient-card-hover: linear-gradient(165deg, #27272a 0%, #18181b 100%);
-    --gradient-surface: linear-gradient(180deg, rgba(0, 87, 183, 0.05) 0%, transparent 100%);
+    /* Gradient surfaces - slate depth */
+    --gradient-card: linear-gradient(165deg, #131c2e 0%, #101828 100%);
+    --gradient-card-hover: linear-gradient(165deg, #182440 0%, #131c2e 100%);
+    --gradient-surface: linear-gradient(180deg, rgba(30, 144, 255, 0.05) 0%, transparent 100%);
     --gradient-inset: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, transparent 30%);
-    --gradient-hero: linear-gradient(180deg, #001E62 0%, #001544 100%);
+    --gradient-hero: linear-gradient(180deg, #0B4F8A 0%, #083D6C 100%);
     --border-glow: 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
   body {
     @apply bg-surface-base text-ink-primary font-sans antialiased;
+    font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;
   }
 
-  /* Light mode atmosphere - precision command center
-     Clean, clinical with depth and visual hierarchy */
+  /* Light mode atmosphere - slate daylight command center */
   body,
   .app-shell {
     background:
-      /* Subtle tactical grid - precision feel */
-      linear-gradient(rgba(0, 30, 98, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 30, 98, 0.02) 1px, transparent 1px),
+      /* Subtle tactical grid */
+      linear-gradient(rgba(26, 43, 66, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(26, 43, 66, 0.02) 1px, transparent 1px),
       /* Top gradient for depth */
-      linear-gradient(180deg, rgba(0, 30, 98, 0.03) 0%, transparent 20%),
-      /* Subtle corner accents for atmosphere */
-      radial-gradient(ellipse at 0% 0%, rgba(0, 87, 183, 0.06) 0%, transparent 40%),
-      radial-gradient(ellipse at 100% 100%, rgba(214, 37, 152, 0.02) 0%, transparent 50%),
-      /* Subtle center vignette for focus */
-      radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0, 30, 98, 0.015) 100%),
-      /* Base - slightly warm white */
-      linear-gradient(180deg, #FAFCFD 0%, #F8FAFC 100%);
+      linear-gradient(180deg, rgba(26, 43, 66, 0.03) 0%, transparent 20%),
+      /* Subtle corner accents */
+      radial-gradient(ellipse at 0% 0%, rgba(30, 144, 255, 0.05) 0%, transparent 40%),
+      radial-gradient(ellipse at 100% 100%, rgba(139, 92, 246, 0.02) 0%, transparent 50%),
+      /* Subtle center vignette */
+      radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(26, 43, 66, 0.015) 100%),
+      /* Base - cool slate white */
+      linear-gradient(180deg, #F7F9FC 0%, #F7F9FC 100%);
     background-size:
       40px 40px,
       40px 40px,
@@ -253,18 +252,18 @@
     background-attachment: fixed;
   }
 
-  /* War room atmosphere - tactical command center (dark mode) */
+  /* Slate command atmosphere (dark mode) */
   .dark body,
   .dark .app-shell {
     background:
       /* Tactical grid */
-      linear-gradient(rgba(0, 87, 183, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 87, 183, 0.02) 1px, transparent 1px),
+      linear-gradient(rgba(30, 144, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30, 144, 255, 0.02) 1px, transparent 1px),
       /* Focal point highlights */
-      radial-gradient(ellipse at 30% 20%, rgba(0, 87, 183, 0.1) 0%, transparent 50%),
-      radial-gradient(ellipse at 70% 80%, rgba(214, 37, 152, 0.06) 0%, transparent 40%),
+      radial-gradient(ellipse at 30% 20%, rgba(30, 144, 255, 0.10) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(139, 92, 246, 0.07) 0%, transparent 40%),
       /* Base gradient */
-      linear-gradient(180deg, #001544 0%, #00102E 100%);
+      linear-gradient(180deg, #131c2e 0%, #0c1220 100%);
     background-size:
       40px 40px,
       40px 40px,
@@ -359,7 +358,7 @@
   /* Dark mode cards get navy gradient treatment */
   .dark .card {
     background: var(--gradient-card);
-    border: 1px solid rgba(0, 87, 183, 0.25);
+    border: 1px solid rgba(30, 144, 255, 0.25);
     box-shadow:
       0 4px 16px rgba(0, 0, 0, 0.4),
       0 1px 3px rgba(0, 0, 0, 0.3),
@@ -379,26 +378,26 @@
   .card-glass {
     @apply backdrop-blur-md;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
-    border: 1px solid rgba(0, 30, 98, 0.08);
+    border: 1px solid rgba(26, 43, 66, 0.08);
     border-top-color: rgba(255, 255, 255, 0.95);
     border-left-color: rgba(255, 255, 255, 0.6);
     box-shadow:
-      0 4px 16px rgba(0, 30, 98, 0.08),
-      0 1px 3px rgba(0, 30, 98, 0.04),
+      0 4px 16px rgba(26, 43, 66, 0.08),
+      0 1px 3px rgba(26, 43, 66, 0.04),
       inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -1px 0 rgba(0, 30, 98, 0.03);
+      inset 0 -1px 0 rgba(26, 43, 66, 0.03);
   }
 
   .card-glass:hover {
     box-shadow:
-      0 8px 24px rgba(0, 30, 98, 0.10),
-      0 2px 4px rgba(0, 30, 98, 0.05),
+      0 8px 24px rgba(26, 43, 66, 0.10),
+      0 2px 4px rgba(26, 43, 66, 0.05),
       inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 
   /* Glass panel - Dark mode */
   .dark .card-glass {
-    background: linear-gradient(165deg, rgba(0, 30, 98, 0.85) 0%, rgba(0, 21, 68, 0.9) 100%);
+    background: linear-gradient(165deg, rgba(26, 43, 66, 0.85) 0%, rgba(8, 14, 26, 0.9) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-top-color: rgba(255, 255, 255, 0.12);
     border-left-color: rgba(255, 255, 255, 0.1);
@@ -410,11 +409,11 @@
   .card-header {
     @apply px-4 py-3 border-b text-ink-primary;
     border-color: var(--border-subtle);
-    background: linear-gradient(180deg, rgba(0, 87, 183, 0.03) 0%, transparent 100%);
+    background: linear-gradient(180deg, rgba(30, 144, 255, 0.03) 0%, transparent 100%);
   }
 
   .dark .card-header {
-    border-color: rgba(0, 87, 183, 0.2);
+    border-color: rgba(30, 144, 255, 0.2);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
   }
 
@@ -426,7 +425,8 @@
   /* Button styles (Signal Horizon Design System)
      Primary: Magenta, Secondary: Atlas Crew Blue outline, Height: 40px */
   .btn {
-    @apply inline-flex items-center justify-center font-semibold text-sm tracking-[0.02em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-magenta focus:ring-offset-2 focus:ring-offset-surface-base disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center text-sm tracking-[0.02em] transition-colors focus:outline-none focus:ring-2 focus:ring-ac-magenta focus:ring-offset-2 focus:ring-offset-surface-base disabled:opacity-50 disabled:cursor-not-allowed;
+    font-variation-settings: 'wght' 600, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .btn-primary {
@@ -479,7 +479,7 @@
   }
 
   .severity-critical {
-    @apply bg-ac-magenta text-white border border-ac-magenta;
+    @apply bg-ac-red text-white border border-ac-red;
   }
 
   .severity-info {
@@ -503,7 +503,7 @@
   }
 
   /* Stat cards (Signal Horizon Design System)
-     Large numbers in Rubik Light (300), eyebrow labels
+     Metric role: MONO 1, CASL 0.6 for character + alignment
      Enhanced with deeper shadows and highlight effects */
   .stat-card {
     @apply p-4 relative;
@@ -539,7 +539,7 @@
 
   .dark .stat-card {
     background: linear-gradient(165deg, rgba(26, 58, 126, 0.9) 0%, rgba(10, 42, 110, 0.95) 100%);
-    border: 1px solid rgba(0, 87, 183, 0.25);
+    border: 1px solid rgba(30, 144, 255, 0.25);
     box-shadow:
       0 4px 16px rgba(0, 0, 0, 0.4),
       0 1px 3px rgba(0, 0, 0, 0.3);
@@ -556,11 +556,14 @@
   .dark .stat-card:hover {
     box-shadow:
       0 8px 24px rgba(0, 0, 0, 0.5),
-      0 0 0 1px rgba(0, 87, 183, 0.3);
+      0 0 0 1px rgba(30, 144, 255, 0.3);
   }
 
   .stat-value {
-    @apply text-3xl font-light text-ink-primary;
+    @apply text-ink-primary;
+    font-size: 32px;
+    letter-spacing: -0.5px;
+    font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .dark .stat-value {
@@ -568,23 +571,32 @@
   }
 
   .stat-value-primary {
-    @apply text-3xl font-light text-ac-magenta;
+    @apply text-ac-magenta;
+    font-size: 32px;
+    letter-spacing: -0.5px;
+    font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .dark .stat-value-primary {
-    text-shadow: 0 0 20px rgba(214, 37, 152, 0.4);
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
   }
 
   .stat-value-secondary {
-    @apply text-3xl font-light text-ac-blue;
+    @apply text-ac-blue;
+    font-size: 32px;
+    letter-spacing: -0.5px;
+    font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .dark .stat-value-secondary {
-    text-shadow: 0 0 20px rgba(0, 87, 183, 0.4);
+    text-shadow: 0 0 20px rgba(30, 144, 255, 0.4);
   }
 
   .stat-label {
-    @apply text-xs font-bold uppercase tracking-[0.1em] text-ink-muted mt-1;
+    @apply uppercase text-ink-muted mt-1;
+    font-size: 12px;
+    letter-spacing: 1px;
+    font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4;
   }
 
   /* Data table (Signal Horizon Design System)
@@ -594,15 +606,18 @@
   }
 
   .data-table th {
-    @apply text-left text-xs font-semibold tracking-[0.08em] uppercase px-4 py-2 text-white border-b;
-    background: linear-gradient(180deg, #001E62 0%, #001544 100%);
-    border-color: rgba(0, 87, 183, 0.3);
+    @apply text-left uppercase px-4 py-2 text-white border-b;
+    font-size: 12px;
+    letter-spacing: 1px;
+    font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4;
+    background: linear-gradient(180deg, #0B4F8A 0%, #083D6C 100%);
+    border-color: rgba(30, 144, 255, 0.3);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   .data-table td {
     @apply px-4 py-2 border-b;
-    border-color: rgba(0, 87, 183, 0.15);
+    border-color: rgba(30, 144, 255, 0.15);
   }
 
   .data-table tbody tr {
@@ -664,7 +679,10 @@
   }
 
   .ctrlx-table th {
-    @apply text-left text-xs font-semibold text-white tracking-wide uppercase px-4 py-2 border-b border-ac-navy;
+    @apply text-left text-white uppercase px-4 py-2 border-b border-ac-navy;
+    font-size: 12px;
+    letter-spacing: 1px;
+    font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4;
   }
 
   .ctrlx-table td {
@@ -722,7 +740,7 @@
   }
 
   .risk-badge-critical {
-    @apply risk-badge bg-ac-magenta text-white border border-ac-magenta;
+    @apply risk-badge bg-ac-red text-white border border-ac-red;
   }
 
   /* Status Badges (Signal Horizon Design System) */
@@ -743,7 +761,7 @@
   }
 
   .status-badge-blocked {
-    @apply status-badge bg-ac-magenta text-white;
+    @apply status-badge bg-ac-red text-white;
   }
 
   /* Tag Badges */
@@ -784,37 +802,53 @@
   }
 
   .ctrlx-page-title {
-    @apply text-2xl font-light text-ink-primary;
+    @apply text-ink-primary;
+    font-size: 24px;
+    font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .ctrlx-page-subtitle {
-    @apply text-xl font-light text-ink-primary;
+    @apply text-ink-primary;
+    font-size: 20px;
+    font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .ctrlx-page-actions {
     @apply flex items-center gap-3;
   }
 
-  /* Typography scale (Signal Horizon Design System) */
+  /* Typography scale (Signal Horizon Design System)
+     Recursive variable font — roles mapped to axis settings.
+     CASL = warmth (human vs machine), MONO = prose vs data */
   .heading-h1 {
-    @apply text-5xl font-light text-ink-primary; /* 48px */
+    @apply text-ink-primary;
+    font-size: 36px;
+    font-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .heading-h2 {
-    @apply text-3xl font-light text-ink-primary; /* 32px */
+    @apply text-ink-primary;
+    font-size: 24px;
+    font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .heading-h3 {
-    @apply text-2xl font-light text-ink-primary; /* 28px */
+    @apply text-ink-primary;
+    font-size: 20px;
+    font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;
   }
 
   .eyebrow {
-    @apply text-sm font-bold uppercase tracking-[0.1em] text-ink-muted;
+    @apply uppercase text-ink-muted;
+    font-size: 12px;
+    letter-spacing: 1px;
+    font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4;
   }
 
   /* CtrlX Button variants (Signal Horizon Design System) */
   .ctrlx-btn {
-    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ac-magenta;
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ac-magenta;
+    font-variation-settings: 'wght' 600, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
     transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
@@ -931,8 +965,8 @@
     border: 1px solid var(--border-subtle);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -1px 0 rgba(0, 30, 98, 0.03),
-      0 1px 2px rgba(0, 30, 98, 0.04);
+      inset 0 -1px 0 rgba(26, 43, 66, 0.03),
+      0 1px 2px rgba(26, 43, 66, 0.04);
   }
 
   /* Elevated card with full depth treatment */
@@ -970,7 +1004,7 @@
   }
 
   .dark .border-depth {
-    border-color: rgba(0, 87, 183, 0.2);
+    border-color: rgba(30, 144, 255, 0.2);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
       0 2px 4px rgba(0, 0, 0, 0.3);
@@ -1006,8 +1040,8 @@
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(0, 87, 183, 0.03) 50%,
-      rgba(0, 87, 183, 0.08) 70%,
+      rgba(30, 144, 255, 0.03) 50%,
+      rgba(30, 144, 255, 0.08) 70%,
       transparent 100%
     );
     animation: radar-scan 8s linear infinite;
@@ -1022,8 +1056,8 @@
   /* Tactical grid overlay */
   .tactical-grid {
     background-image:
-      linear-gradient(rgba(0, 87, 183, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 87, 183, 0.03) 1px, transparent 1px);
+      linear-gradient(rgba(30, 144, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30, 144, 255, 0.03) 1px, transparent 1px);
     background-size: 40px 40px;
   }
 
@@ -1053,9 +1087,9 @@
     background: linear-gradient(
       180deg,
       transparent 0%,
-      rgba(214, 37, 152, 0.02) 40%,
-      rgba(214, 37, 152, 0.05) 50%,
-      rgba(214, 37, 152, 0.02) 60%,
+      rgba(139, 92, 246, 0.02) 40%,
+      rgba(139, 92, 246, 0.05) 50%,
+      rgba(139, 92, 246, 0.02) 60%,
       transparent 100%
     );
     animation: data-flow 6s linear infinite;
@@ -1074,10 +1108,10 @@
 
   @keyframes threat-beacon {
     0%, 100% {
-      box-shadow: 0 0 0 0 rgba(214, 37, 152, 0.4);
+      box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4);
     }
     50% {
-      box-shadow: 0 0 0 8px rgba(214, 37, 152, 0);
+      box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);
     }
   }
 
@@ -1171,8 +1205,8 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(0, 87, 183, 0.5),
-      rgba(214, 37, 152, 0.5),
+      rgba(30, 144, 255, 0.5),
+      rgba(139, 92, 246, 0.5),
       transparent
     );
     background-size: 200% 100%;
@@ -1228,8 +1262,8 @@
   /* Light mode: Navy header bar maintains brand identity */
   .surface-hero-gradient {
     background: linear-gradient(180deg,
-      rgba(0, 30, 98, 1) 0%,
-      rgba(0, 21, 68, 1) 100%);
+      rgba(26, 43, 66, 1) 0%,
+      rgba(8, 14, 26, 1) 100%);
   }
 
   /* Sidebar gradient - Light mode */
@@ -1238,15 +1272,15 @@
       #F8FAFC 0%,
       #F0F4F8 100%);
     border-right: 1px solid var(--border-subtle);
-    box-shadow: inset -1px 0 8px rgba(0, 30, 98, 0.03);
+    box-shadow: inset -1px 0 8px rgba(26, 43, 66, 0.03);
   }
 
   /* Sidebar gradient - Dark mode */
   .dark .surface-sidebar {
     background: linear-gradient(180deg,
-      rgba(0, 21, 68, 0.98) 0%,
+      rgba(8, 14, 26, 0.98) 0%,
       rgba(0, 16, 46, 1) 100%);
-    border-right: 1px solid rgba(0, 87, 183, 0.2);
+    border-right: 1px solid rgba(30, 144, 255, 0.2);
     box-shadow: inset -1px 0 12px rgba(0, 0, 0, 0.2);
   }
 
@@ -1276,14 +1310,14 @@
   .surface-frosted {
     backdrop-filter: blur(12px);
     background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 30, 98, 0.08);
+    border: 1px solid rgba(26, 43, 66, 0.08);
   }
 
   /* Frosted glass effect - Dark mode */
   .dark .surface-frosted {
     background: linear-gradient(165deg,
-      rgba(0, 30, 98, 0.7) 0%,
-      rgba(0, 21, 68, 0.8) 100%);
+      rgba(26, 43, 66, 0.7) 0%,
+      rgba(8, 14, 26, 0.8) 100%);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
@@ -1319,7 +1353,7 @@
     inset: -20%;
     background: radial-gradient(
       ellipse at center,
-      rgba(0, 87, 183, 0.15) 0%,
+      rgba(30, 144, 255, 0.15) 0%,
       transparent 70%
     );
     pointer-events: none;
@@ -1330,7 +1364,7 @@
   .ambient-glow-magenta::before {
     background: radial-gradient(
       ellipse at center,
-      rgba(214, 37, 152, 0.12) 0%,
+      rgba(139, 92, 246, 0.12) 0%,
       transparent 70%
     );
   }
@@ -1370,11 +1404,11 @@
 
   /* Inner border glow */
   .inner-glow-blue {
-    box-shadow: inset 0 0 20px rgba(0, 87, 183, 0.15);
+    box-shadow: inset 0 0 20px rgba(30, 144, 255, 0.15);
   }
 
   .inner-glow-magenta {
-    box-shadow: inset 0 0 20px rgba(214, 37, 152, 0.12);
+    box-shadow: inset 0 0 20px rgba(139, 92, 246, 0.12);
   }
 
   /* =========================================
@@ -1391,7 +1425,7 @@
   }
 
   .glow-threat-critical {
-    box-shadow: 0 0 18px rgba(214, 37, 152, 0.5);
+    box-shadow: 0 0 18px rgba(139, 92, 246, 0.5);
   }
 
   /* Hover glow for buttons/interactive */
@@ -1433,13 +1467,13 @@
 
   /* Subtle background gradients */
   .bg-gradient-navy {
-    background: linear-gradient(180deg, #001E62 0%, #00102E 100%);
+    background: linear-gradient(180deg, #0B4F8A 0%, #080e1a 100%);
   }
 
   .bg-gradient-radial-navy {
     background:
-      radial-gradient(ellipse at 50% 0%, rgba(0, 87, 183, 0.12) 0%, transparent 60%),
-      linear-gradient(180deg, #001544 0%, #00102E 100%);
+      radial-gradient(ellipse at 50% 0%, rgba(30, 144, 255, 0.12) 0%, transparent 60%),
+      linear-gradient(180deg, #083D6C 0%, #080e1a 100%);
   }
 
   /* Animation delays */
@@ -1480,7 +1514,7 @@
   /* Language badge */
   .code-lang {
     @apply absolute top-0 left-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider;
-    background: rgba(0, 30, 98, 0.9);
+    background: rgba(26, 43, 66, 0.9);
     color: #64748b;
     border-bottom-right-radius: 4px;
   }
@@ -1583,7 +1617,7 @@
 
   /* Line highlighting */
   .line-highlight {
-    background: linear-gradient(to right, rgba(0, 87, 183, 0.2) 70%, transparent);
+    background: linear-gradient(to right, rgba(30, 144, 255, 0.2) 70%, transparent);
     margin-left: -1.5rem;
     margin-right: -1.5rem;
     padding-left: 1.5rem;
@@ -1661,8 +1695,8 @@
 /* Tactical background: Navy gradient + dot grid pattern */
 .tactical-bg {
   background-image:
-    linear-gradient(180deg, rgba(0, 30, 98, 0.06), rgba(0, 30, 98, 0)),
-    radial-gradient(circle at 1px 1px, rgba(0, 87, 183, 0.15) 1px, transparent 0);
+    linear-gradient(180deg, rgba(26, 43, 66, 0.06), rgba(26, 43, 66, 0)),
+    radial-gradient(circle at 1px 1px, rgba(30, 144, 255, 0.15) 1px, transparent 0);
   background-size: 100% 100%, 20px 20px;
 }
 
@@ -1679,7 +1713,7 @@
   left: 0;
   width: 100%;
   height: 2px;
-  background: rgba(0, 87, 183, 0.1);
+  background: rgba(30, 144, 255, 0.1);
   animation: scanline-move 4s linear infinite;
   pointer-events: none;
 }
@@ -1693,7 +1727,7 @@
 .timeline-connector {
   position: relative;
   padding-left: 1rem;
-  border-left: 2px solid rgba(0, 87, 183, 0.3);
+  border-left: 2px solid rgba(30, 144, 255, 0.3);
 }
 
 .timeline-connector::before {
@@ -1703,30 +1737,53 @@
   top: 0.5rem;
   width: 8px;
   height: 8px;
-  background: var(--ac-blue, #0057B7);
+  background: var(--ac-blue, #1E90FF);
 }
 
 /* Timeline dot color + shape variants (WCAG 1.4.1 - not color alone) */
 .timeline-dot-red::before {
-  background: var(--ac-red, #BF3A30);
+  background: var(--ac-red, #EF4444);
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); /* Diamond = alert */
 }
 .timeline-dot-orange::before {
-  background: var(--ac-orange, #C24900);
+  background: var(--ac-orange, #F59E0B);
   clip-path: polygon(50% 0%, 100% 100%, 0% 100%); /* Triangle = warning */
 }
 .timeline-dot-blue::before {
-  background: var(--ac-blue, #0057B7);
+  background: var(--ac-blue, #1E90FF);
   /* Square (default shape) = informational */
 }
 .timeline-dot-green::before {
-  background: var(--ac-green, #008731);
+  background: var(--ac-green, #10B981);
   border-radius: 50%; /* Circle = success */
 }
 .timeline-dot-magenta::before {
-  background: var(--ac-magenta, #D62598);
+  background: var(--ac-magenta, #8B5CF6);
   clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); /* Pentagon = notable */
 }
+
+/* =========================================
+   RECURSIVE TYPE ROLES
+   Direct utility classes for the 15-role type system.
+   CASL = warmth (human vs machine), MONO = prose vs data
+   Import: font-variation-settings drives everything.
+   ========================================= */
+
+.t-display    { font-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 36px; }
+.t-heading    { font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0; font-size: 24px; }
+.t-subhead    { font-variation-settings: 'wght' 600, 'MONO' 0, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -3; font-size: 14px; letter-spacing: 1.5px; }
+.t-body       { font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0; font-size: 13px; }
+.t-label      { font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 12px; letter-spacing: 1px; }
+.t-tag        { font-variation-settings: 'wght' 800, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -3; font-size: 11px; letter-spacing: 1.5px; }
+.t-metric     { font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0; font-size: 32px; letter-spacing: -0.5px; }
+.t-metric-unit { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 13px; letter-spacing: 0.5px; }
+.t-data       { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 13px; }
+.t-code       { font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 13px; letter-spacing: 0.5px; }
+.t-timestamp  { font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 11px; letter-spacing: 0.5px; }
+.t-nav        { font-variation-settings: 'wght' 500, 'MONO' 0.5, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' -2; font-size: 14px; letter-spacing: 1px; }
+.t-nav-active { font-variation-settings: 'wght' 700, 'MONO' 0.5, 'CASL' 0.1, 'CRSV' 0.5, 'slnt' -2; font-size: 14px; letter-spacing: 1px; }
+.t-link       { font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -15; font-size: 10px; letter-spacing: 1px; }
+.t-breadcrumb { font-variation-settings: 'wght' 700, 'MONO' 1, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' -7; font-size: 10px; letter-spacing: 2.5px; }
 
 /* =========================================
    UI LIBRARY KEYFRAMES
