@@ -341,10 +341,10 @@ function App() {
               <Link to="/campaigns" className="hover:text-white transition-colors group">
                 <Stack direction="row" align="center" gap="sm">
                   <span className={clsx('relative', activeCampaigns > 0 && 'threat-pulse')}>
-                    <Target className={clsx('w-4 h-4 transition-colors', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white/70 group-hover:text-white')} />
+                    <Target className={clsx('w-4 h-4 transition-colors', activeCampaigns > 0 ? 'text-ac-red' : 'text-white/70 group-hover:text-white')} />
                   </span>
                   <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                    <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-magenta' : 'text-white')}>{activeCampaigns}</span> ACTIVE
+                    <span className={clsx('font-semibold', activeCampaigns > 0 ? 'text-ac-red' : 'text-white')}>{activeCampaigns}</span> ACTIVE
                   </span>
                 </Stack>
               </Link>
