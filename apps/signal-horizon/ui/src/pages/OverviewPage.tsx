@@ -40,7 +40,7 @@ import {
 import { useRelativeTime } from '../hooks/useRelativeTime';
 
 // ─── @/ui library imports ────────────────────────────────────────────────────
-import { SectionHeader, KpiStrip, Button, Stack, colors } from '@/ui';
+import { SectionHeader, KpiStrip, Button, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 const ActiveCampaignList = lazy(() => import('../components/soc/ActiveCampaignList'));
 const ThreatTrajectoryFeed = lazy(() => import('../components/soc/ThreatTrajectoryFeed'));
@@ -262,11 +262,11 @@ export default function OverviewPage() {
         aria-label="Loading threat overview"
       >
         <SectionHeader
-          eyebrow={`Signal Horizon · Last ${timeRangeLabel}`}
           title="Threat Overview"
           description="Loading fleet intelligence..."
           size="h3"
           mb="sm"
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <div className="grid grid-cols-3 gap-6">
@@ -286,11 +286,11 @@ export default function OverviewPage() {
     <div className="p-6 space-y-6" role="main" aria-label="Threat overview dashboard">
       {/* ─── Header ──────────────────────────────────────────────────── */}
       <SectionHeader
-        eyebrow={`Signal Horizon · Last ${timeRangeLabel}`}
         title="Threat Overview"
         description={`Fleet threat intelligence and collective defense across ${stats.sensorsOnline} sensors${lastUpdatedSuffix}`}
         size="h3"
         mb="sm"
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <Stack direction="row" gap="sm">
             <Button
@@ -315,7 +315,7 @@ export default function OverviewPage() {
       <KpiStrip metrics={kpiMetrics} cols={5} size="default" />
 
       {/* ─── Attack Map + Threat Feed ────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ height: '420px' }}>
         <section
           className="md:col-span-2 card scanlines tactical-bg relative overflow-hidden"
           aria-labelledby="attack-map-heading"
@@ -370,7 +370,7 @@ export default function OverviewPage() {
             <AttackMap points={filteredMapPoints} routes={filteredMapRoutes} />
           </div>
         </section>
-        <div className="flex flex-col h-fit">
+        <div className="relative">
           <ErrorBoundary fallback={<AlertFeedSkeleton />}>
             <Suspense fallback={<AlertFeedSkeleton />}>
               <ThreatTrajectoryFeed threats={threats} alerts={alerts} />

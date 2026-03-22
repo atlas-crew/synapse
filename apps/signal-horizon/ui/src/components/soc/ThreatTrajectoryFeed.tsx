@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import type { Threat, ThreatAlert } from '../../stores/horizonStore';
 import { useRelativeTime } from '../../hooks/useRelativeTime';
@@ -14,6 +15,7 @@ type FeedItem =
   | { type: 'alert'; data: ThreatAlert; timestamp: number };
 
 export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ threats, alerts }) => {
+  const navigate = useNavigate();
   const mergedFeed = useMemo(() => {
     const items: FeedItem[] = [
       ...threats.map(t => ({ 
@@ -35,7 +37,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
 
   return (
     <section 
-      className="bg-surface-card border border-border-subtle flex flex-col h-full font-mono"
+      className="bg-surface-card border border-border-subtle flex flex-col absolute inset-0 font-mono"
       aria-labelledby="feed-heading"
     >
       <div className="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
@@ -59,7 +61,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
       </div>
 
       <div 
-        className="flex-1 overflow-y-auto max-h-[240px] p-4 space-y-6 scrollbar-thin scrollbar-thumb-ac-blue/30"
+        className="flex-1 overflow-y-auto min-h-0 p-4 space-y-6 scrollbar-thin scrollbar-thumb-ac-blue/30"
         role="log"
         aria-live="polite"
       >
@@ -129,6 +131,7 @@ export const ThreatTrajectoryFeed: React.FC<ThreatTrajectoryFeedProps> = ({ thre
           variant="ghost"
           size="sm"
           fill
+          onClick={() => navigate('/search')}
           style={{
             fontSize: '9px',
             letterSpacing: '0.2em',
