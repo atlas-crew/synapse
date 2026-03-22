@@ -31,9 +31,9 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const sizeMap: Record<ButtonSize, React.CSSProperties> = {
-  sm: { fontSize: '12px', height: '36px', padding: `0 ${spacing.md}` },
-  md: { fontSize: '14px', height: '44px', padding: `0 ${spacing.lg}` },
-  lg: { fontSize: '16px', height: '52px', padding: `0 ${spacing.xl}` },
+  sm: { fontSize: '12px', padding: `${spacing.sm}px ${spacing.md}px` },
+  md: { fontSize: '14px', padding: `${spacing.sm + 2}px ${spacing.lg}px` },
+  lg: { fontSize: '16px', padding: `${spacing.md - 2}px ${spacing.xl}px` },
 };
 
 const variantStyles: Record<ButtonVariant, {
@@ -41,28 +41,54 @@ const variantStyles: Record<ButtonVariant, {
   hover: React.CSSProperties;
 }> = {
   primary: {
-    base: { background: colors.blue, color: '#FFFFFF', border: 'none' },
-    hover: { background: colors.hover.blueLight },
+    base: {
+      background: colors.blue,
+      color: '#FFFFFF',
+      border: 'none',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
+    },
+    hover: {
+      background: colors.hover.blueLight,
+      boxShadow: '0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+    },
   },
   magenta: {
-    base: { background: colors.magenta, color: '#FFFFFF', border: 'none' },
-    hover: { background: colors.hover.magenta },
+    base: {
+      background: colors.magenta,
+      color: '#FFFFFF',
+      border: 'none',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
+    },
+    hover: {
+      background: colors.hover.magenta,
+      boxShadow: '0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
+    },
   },
   outlined: {
     base: {
       background: 'transparent',
       color: '#F0F4F8',
-      border: `2px solid rgba(255,255,255,0.3)`,
+      border: '1px solid rgba(255,255,255,0.2)',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
     },
     hover: {
-      background: colors.tint.navyMedium,
-      borderColor: colors.tint.navyMedium,
+      background: 'rgba(255,255,255,0.06)',
+      borderColor: 'rgba(255,255,255,0.35)',
       color: '#FFFFFF',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
     },
   },
   secondary: {
-    base: { background: colors.navy, color: '#FFFFFF', border: 'none' },
-    hover: { background: colors.hover.navy },
+    base: {
+      background: colors.navy,
+      color: '#FFFFFF',
+      border: 'none',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+    },
+    hover: {
+      background: colors.hover.navy,
+      boxShadow: '0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
+    },
   },
   ghost: {
     base: { background: 'transparent', color: colors.blue, border: 'none' },

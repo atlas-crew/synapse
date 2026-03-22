@@ -61,9 +61,11 @@ export { ChartPanel } from './components/ChartPanel';
 export { StatusBadge } from './components/StatusBadge';
 export {
   SectionHeader,
+  PAGE_TITLE_STYLE,
   CARD_HEADER_TITLE_STYLE,
   TRUNCATED_CARD_HEADER_TITLE_STYLE,
 } from './components/SectionHeader';
+export { StatCard } from './components/StatCard';
 export { DataTable, ValuePill } from './components/DataTable';
 export { Button } from './components/Button';
 export { Alert } from './components/Alert';

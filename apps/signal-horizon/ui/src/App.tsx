@@ -28,8 +28,8 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-import signalHorizonLogoLight from './assets/brand/signal-logo-light.svg';
 import signalHorizonLogoDark from './assets/brand/signal-logo-dark.svg';
+import horizonSidebarLockup from './assets/brand/horizon-sidebar-compact-dark.svg';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { ToastProvider } from './components/ui/Toast';
@@ -477,35 +477,19 @@ function App() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar with gradient depth */}
         <aside className={clsx('transition-all duration-200 bg-surface-subtle border-r border-border-subtle flex flex-col surface-sidebar relative', sidebarCollapsed ? 'w-16' : 'w-64')}>
-          <div className={clsx('border-b border-border-subtle overflow-hidden', sidebarCollapsed ? 'p-2' : 'p-6')}>
-            <Stack
-              direction="row"
-              align="center"
-              justify={sidebarCollapsed ? 'center' : undefined}
-              style={sidebarCollapsed ? undefined : { gap: '16px' }}
-            >
-              <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center">
-                <img
-                  src={signalHorizonLogoLight}
-                  alt="Signal Horizon"
-                  className="w-16 h-16 block dark:hidden"
-                />
-                <img
-                  src={signalHorizonLogoDark}
-                  alt="Signal Horizon"
-                  className="w-16 h-16 hidden dark:block"
-                />
-              </div>
-              {!sidebarCollapsed && (
-                <div>
-                  <div className="text-[1.7rem] font-light text-ink-primary tracking-tight leading-tight">Signal Horizon</div>
-                </div>
-              )}
-            </Stack>
-            {!sidebarCollapsed && (
-              <div className="mt-[10px]">
-                <p className="text-[10px] font-medium text-ac-magenta uppercase tracking-[0.15em]">See Further. Act Faster.</p>
-              </div>
+          <div className={clsx('border-b border-border-subtle overflow-hidden flex items-center', sidebarCollapsed ? 'p-2 justify-center' : 'px-5 py-4')}>
+            {sidebarCollapsed ? (
+              <img
+                src={signalHorizonLogoDark}
+                alt="Signal Horizon"
+                className="w-10 h-10"
+              />
+            ) : (
+              <img
+                src={horizonSidebarLockup}
+                alt="Signal Horizon — See Further. Act Faster."
+                className="w-full max-w-[200px] h-auto"
+              />
             )}
           </div>
 

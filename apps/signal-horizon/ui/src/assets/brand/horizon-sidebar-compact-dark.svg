@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="190" height="36" viewBox="0 0 190 36" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>@import url('https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&amp;display=swap');</style>
+  </defs>
+
+  <!-- Icon (scaled to 36px) -->
+  <g transform="scale(0.327)">
+    <rect width="110" height="110" fill="#0c1220"/>
+    <line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/>
+    <path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/>
+    <path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/>
+    <circle cx="55" cy="50" r="4.5" fill="#F97316"/>
+    <line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/>
+    <line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/>
+    <line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/>
+    <line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/>
+    <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3">
+      <polyline points="8,20 8,8 20,8"/>
+      <polyline points="90,8 102,8 102,20"/>
+      <polyline points="102,90 102,102 90,102"/>
+      <polyline points="20,102 8,102 8,90"/>
+    </g>
+  </g>
+
+  <!-- Wordmark only -->
+  <text x="46" y="24" font-family="'Recursive', monospace" font-size="22" font-weight="700" fill="#F97316" letter-spacing="1.5">HORIZON</text>
+</svg>
