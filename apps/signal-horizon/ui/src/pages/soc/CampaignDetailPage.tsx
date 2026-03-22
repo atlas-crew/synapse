@@ -17,6 +17,7 @@ import {
   xAxisNoLine,
   Box,
   Text,
+  PAGE_TITLE_STYLE,
   CARD_HEADER_TITLE_STYLE
 } from '@/ui';
 import {
@@ -223,6 +224,7 @@ export default function CampaignDetailPage() {
               title={campaign.name}
               description={campaign.summary ?? 'Coordinated campaign detected across multiple signals.'}
               size="h2"
+              titleStyle={PAGE_TITLE_STYLE}
               actions={
                 <Stack direction="row" align="center" gap="md">
                   <Button

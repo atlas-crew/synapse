@@ -33,6 +33,7 @@ import {
   Button,
   StatusBadge,
   DataTable,
+  PAGE_TITLE_STYLE,
   CARD_HEADER_TITLE_STYLE,
 } from '@/ui';
 import {
@@ -551,7 +552,7 @@ export default function BeamDashboardPage() {
     return (
       <Box p="xl" role="main" aria-busy="true" aria-label="Loading Beam dashboard">
         <Stack gap="xl">
-          <SectionHeader title="Beam Protection Dashboard" description="Loading..." />
+          <SectionHeader title="Beam Protection Dashboard" description="Loading..." titleStyle={PAGE_TITLE_STYLE} />
           <StatsGridSkeleton />
           <Grid cols={3} gap="xl">
             <Box style={{ gridColumn: 'span 2' }}><CardSkeleton /></Box>
@@ -588,6 +589,7 @@ export default function BeamDashboardPage() {
         <SectionHeader
           title="Beam Protection Dashboard"
           description="Real-time API security overview"
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             // Use inline style for indicator border to ensure theme-aware green renders correctly
             <Box bg="card" border="all" px="md" py="xs" style={{ borderColor: 'var(--ac-green)' }}>

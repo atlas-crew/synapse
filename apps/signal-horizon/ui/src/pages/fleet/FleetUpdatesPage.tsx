@@ -11,7 +11,8 @@ import {
   Box,
   Text,
   StatusBadge,
-  CARD_HEADER_TITLE_STYLE
+  CARD_HEADER_TITLE_STYLE,
+  PAGE_TITLE_STYLE
 } from '@/ui';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3100';
@@ -147,6 +148,7 @@ export function FleetUpdatesPage() {
         <SectionHeader
           title="Fleet Updates"
           description="Manage sensor firmware and software updates"
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Button
               onClick={() => updateMutation.mutate()}

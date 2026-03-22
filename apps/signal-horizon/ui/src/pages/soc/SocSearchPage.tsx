@@ -18,7 +18,8 @@ import {
   StatusBadge,
   Text,
   alpha,
-  colors
+  colors,
+  PAGE_TITLE_STYLE
 } from '@/ui';
 
 type SearchType = 'auto' | 'ip' | 'fingerprint' | 'actor' | 'session';
@@ -132,9 +133,9 @@ export default function SocSearchPage() {
     <Box p="xl">
       <Stack gap="xl">
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Global Search"
           description="Search actors, sessions, IPs, and fingerprints across the fleet."
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <Text variant="label" color="secondary" noMargin>Sensor</Text>

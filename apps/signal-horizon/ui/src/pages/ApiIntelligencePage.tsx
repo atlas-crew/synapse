@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   CARD_HEADER_TITLE_STYLE,
+  PAGE_TITLE_STYLE,
   Input,
   SectionHeader,
   Stack,
@@ -129,6 +130,7 @@ export default function ApiIntelligencePage() {
           <SectionHeader
             title="API Intelligence"
             description="Discover endpoints and monitor schema compliance"
+            titleStyle={PAGE_TITLE_STYLE}
           />
           <StatsGridSkeleton />
           <TableSkeleton rows={5} />
@@ -161,9 +163,9 @@ export default function ApiIntelligencePage() {
       <Stack gap="xl">
         {/* Header */}
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="API Intelligence"
           description={headerDescription}
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <Button
@@ -307,7 +309,7 @@ export default function ApiIntelligencePage() {
                   <defs>
                     <linearGradient id="violationGradient" x1="0" y1="0" x2="1" y2="0">
                       <stop offset="0%" stopColor={colors.magenta} stopOpacity={0.9} />
-                      <stop offset="100%" stopColor={colors.amber} stopOpacity={1} />
+                      <stop offset="100%" stopColor={colors.orange} stopOpacity={1} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid {...gridDefaults} strokeDasharray="3 3" horizontal={true} />

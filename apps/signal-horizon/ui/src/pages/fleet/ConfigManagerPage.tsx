@@ -32,7 +32,8 @@ import {
   Grid,
   alpha,
   colors,
-  CARD_HEADER_TITLE_STYLE 
+  CARD_HEADER_TITLE_STYLE,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 interface ConfigTemplate {
@@ -579,9 +580,9 @@ export function ConfigManagerPage() {
       <Stack gap="xl">
         <Box flex direction="row" align="center" justify="space-between">
           <SectionHeader
-            eyebrow="Signal Horizon"
             title="Configuration Manager"
             description="Manage and deploy configuration templates across your fleet"
+            titleStyle={PAGE_TITLE_STYLE}
           />
           <Button
             onClick={openCreateModal}

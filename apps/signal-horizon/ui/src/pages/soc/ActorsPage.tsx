@@ -17,6 +17,7 @@ import {
   Text,
   alpha,
   colors,
+  PAGE_TITLE_STYLE,
   } from '@/ui';
 function buildDemoActors(scenario: string): SocActorListResponse {
   const baseRisk = scenario === 'high-threat' ? 82 : scenario === 'normal' ? 55 : 28;
@@ -107,9 +108,9 @@ export default function ActorsPage() {
     <Box p="xl">
       <Stack gap="xl">
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Actors"
           description="Track correlated actors and behavioral risk across the fleet."
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <Text variant="label" color="secondary" noMargin>Sensor</Text>

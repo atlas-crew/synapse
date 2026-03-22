@@ -18,6 +18,7 @@ import {
   alpha, 
   colors, 
   spacing,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 function buildDemoSessions(scenario: string): SocSessionListResponse {
@@ -135,9 +136,9 @@ export default function SessionsPage() {
     <Box p="xl">
       <Stack gap="xl">
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Sessions"
           description="Inspect session behavior, hijack alerts, and enforcement actions."
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <Text variant="label" color="secondary" noMargin>Sensor</Text>

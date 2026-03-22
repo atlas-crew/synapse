@@ -21,16 +21,11 @@ import {
 import { clsx } from 'clsx';
 import { useBeamEndpoints } from '../../../hooks/useBeamEndpoints';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader, Spinner, Stack, colors } from '@/ui';
+import { SectionHeader, Spinner, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 type SortField = 'path' | 'method' | 'requestCount' | 'lastSeenAt' | 'avgLatencyMs';
 type SortDirection = 'asc' | 'desc';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 // Demo data - discovered endpoints
 const DEMO_ENDPOINTS = [
@@ -513,7 +508,7 @@ export default function ApiCatalogPage() {
           description="Loading endpoint data..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <TableSkeleton />
@@ -529,7 +524,8 @@ export default function ApiCatalogPage() {
         description="Discovered endpoints and API inventory"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
+
         actions={
           <Stack direction="row" align="center" gap="md">
             <Stack direction="row" align="center" gap="sm" className="text-sm">

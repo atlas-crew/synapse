@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button, Modal, SectionHeader, Stack, colors } from '@/ui';
+import { Button, Modal, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -62,11 +62,6 @@ interface NewTokenRequest {
   region?: string;
 }
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 export function OnboardingPage(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<'tokens' | 'pending'>('tokens');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -221,7 +216,7 @@ export function OnboardingPage(): React.ReactElement {
         description="Manage registration tokens and approve pending sensors"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <button
             onClick={() => setIsModalOpen(true)}

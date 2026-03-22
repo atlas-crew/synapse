@@ -9,7 +9,7 @@ import { Clipboard, RefreshCw } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { useHunt, type CampaignTimelineEvent } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
-import { Alert, Button, CARD_HEADER_TITLE_STYLE, colors, Input, SectionHeader, Spinner, Stack } from '@/ui';
+import { Alert, Button, CARD_HEADER_TITLE_STYLE, colors, Input, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
 
 function formatConfidenceOrNa(confidence: unknown): string {
   if (typeof confidence !== 'number') return 'n/a';
@@ -118,7 +118,8 @@ export default function CampaignTimelinePage() {
       <SectionHeader
         title="Campaign Timeline"
         description="Pivot ClickHouse telemetry by campaign_id."
-        size="h3"
+        size="h1"
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <Stack direction="row" align="center" gap="sm">
             <Button

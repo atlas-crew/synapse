@@ -7,6 +7,7 @@ import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   Button,
+  PAGE_TITLE_STYLE,
   CARD_HEADER_TITLE_STYLE,
   SectionHeader,
   Tabs,
@@ -117,9 +118,9 @@ export default function IntelPage() {
       <Stack gap="xl">
         {/* Header */}
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Global Intelligence"
           description="Fleet-wide attack trends and IOC export"
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="md">
               <Tabs

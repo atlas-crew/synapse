@@ -28,15 +28,11 @@ import {
   gridDefaultsSoft,
   tooltipDefaults,
   xAxisNoLine,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: '1h', label: '1 Hour' },
@@ -356,7 +352,7 @@ export default function ResponseTimesPage() {
           description="Loading performance data..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -372,7 +368,7 @@ export default function ResponseTimesPage() {
         description="Performance metrics and latency analysis"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
         actions={<TimeRangeSelector value={timeRange} onChange={setTimeRange} />}
       />
 

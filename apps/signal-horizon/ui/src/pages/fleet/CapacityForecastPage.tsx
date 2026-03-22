@@ -22,6 +22,7 @@ import {
   legendDefaults,
   tooltipDefaults,
   xAxisNoLine,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 // =============================================================================
@@ -32,11 +33,6 @@ const REGIONS = ['US-East', 'EU-West', 'AP-South'];
 const HISTORY_DAYS = 30;
 const FORECAST_DAYS = 14;
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 const CARD_HEADER_TITLE_STYLE = {
   fontSize: '16px',
   lineHeight: '22px',
@@ -147,7 +143,7 @@ export default function CapacityForecastPage() {
         description="Predictive resource planning based on historical trends"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <div className="flex bg-surface-subtle p-1 border border-border-subtle">
             {REGIONS.map((region) => (

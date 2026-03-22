@@ -46,16 +46,12 @@ import {
   gridDefaultsSoft,
   tooltipDefaults,
   xAxisNoLine,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 const xAxisSmall = { ...xAxisNoLine, tick: { ...xAxisNoLine.tick, fontSize: 11 } } as const;
 const yAxisSmall = { ...axisDefaults.y, tick: { ...axisDefaults.y.tick, fontSize: 11 } } as const;
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 const SECTION_HEADER_TITLE_STYLE = {
   fontSize: '18px',
   lineHeight: '28px',
@@ -431,7 +427,7 @@ export function ConnectivityPage(): React.ReactElement {
         description="Real-time network connectivity status and diagnostics"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
       />
 
       {/* Top Stats Cards */}

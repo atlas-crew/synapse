@@ -13,6 +13,7 @@ import {
   colors,
   Box,
   Text,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchSessionDetail } from '../../hooks/soc/api';
@@ -116,6 +117,7 @@ export default function SessionDetailPage() {
               title={session.sessionId}
               description={`Created ${new Date(session.creationTime).toLocaleString()}`}
               size="h2"
+              titleStyle={PAGE_TITLE_STYLE}
               actions={
                 <Stack direction="row" align="center" gap="md">
                   <Button variant="outlined" size="sm">

@@ -45,16 +45,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
 import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { Button, SectionHeader, Spinner, Stack, Tabs, colors } from '@/ui';
-
-const PAGE_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  fontWeight: 300,
-  textTransform: 'uppercase',
-  letterSpacing: '-0.02em',
-  color: 'var(--text-primary)',
-};
+import { Button, SectionHeader, Spinner, Stack, Tabs, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 const AdminSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<

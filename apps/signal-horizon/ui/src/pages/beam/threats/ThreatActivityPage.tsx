@@ -42,6 +42,7 @@ import {
   gridDefaultsSoft,
   tooltipDefaults,
   xAxisNoLine,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 type ThreatSeverity = 'critical' | 'high' | 'medium' | 'low';
@@ -50,11 +51,6 @@ type TimeRange = ThreatTimeRange;
 const tickSmallX = { ...axisDefaults.x.tick, fontSize: 11 };
 const tickSmallY = { ...axisDefaults.y.tick, fontSize: 11 };
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 // Demo data - threat activity timeline
 const DEMO_THREAT_TIMELINE = [
@@ -468,7 +464,7 @@ export default function ThreatActivityPage() {
           description="Loading threat data..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -484,7 +480,8 @@ export default function ThreatActivityPage() {
         description="Real-time threat monitoring and incident response"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
+
         actions={
           <Stack direction="row" align="center" gap="md">
             <Stack direction="row" align="center" gap="sm" className="text-sm">

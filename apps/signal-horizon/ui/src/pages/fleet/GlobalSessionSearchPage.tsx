@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useSessionSearch, type SessionSearchQuery } from '../../hooks/fleet/useSessionSearch';
 import { SessionSearchResults } from '../../components/fleet/SessionSearchResults';
 import { MetricCard } from '../../components/fleet';
-import { Button, Modal, SectionHeader, Stack, colors } from '@/ui';
+import { Button, Modal, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -78,11 +78,6 @@ const initialRevokeModalState: RevokeModalState = {
   global: true,
 };
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 const FORM_HEADER_TITLE_STYLE = {
   fontSize: '18px',
   lineHeight: '28px',
@@ -287,7 +282,7 @@ export function GlobalSessionSearchPage() {
         description="Search and manage sessions across all sensors in your fleet"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <Button
             variant="secondary"

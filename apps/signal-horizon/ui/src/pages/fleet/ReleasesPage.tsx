@@ -25,7 +25,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
-import { colors, Modal, SectionHeader, Spinner, Stack } from '@/ui';
+import { colors, Modal, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
 
 // ============================================================================
 // Types
@@ -52,11 +52,6 @@ interface ConfirmDeleteModalProps {
   isDeleting: boolean;
 }
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 const SECTION_HEADER_TITLE_STYLE = {
   fontSize: '18px',
   lineHeight: '28px',
@@ -710,7 +705,7 @@ export function ReleasesPage() {
         description="Manage and deploy sensor releases across your fleet"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <Stack direction="row" align="center" gap="smPlus">
             <button

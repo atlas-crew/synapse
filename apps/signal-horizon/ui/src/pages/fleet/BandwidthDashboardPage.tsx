@@ -40,6 +40,7 @@ import {
   chartColors,
   colors,
   tooltipDefaults,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 import {
   useBandwidthDashboard,
@@ -60,11 +61,6 @@ const COLORS = {
   accent: colors.red,
 };
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 const STATE_HEADER_TITLE_STYLE = {
   fontSize: '18px',
   lineHeight: '28px',
@@ -496,7 +492,7 @@ export default function BandwidthDashboardPage() {
             description="Loading bandwidth metrics..."
             size="h1"
             style={PAGE_HEADER_STYLE}
-            titleStyle={PAGE_HEADER_TITLE_STYLE}
+            titleStyle={PAGE_TITLE_STYLE}
           />
         </div>
         <div className="grid grid-cols-4 gap-4">
@@ -580,7 +576,7 @@ export default function BandwidthDashboardPage() {
           description="Fleet-wide bandwidth metrics and billing analysis"
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <Stack direction="row" align="center" gap="md">
           <select

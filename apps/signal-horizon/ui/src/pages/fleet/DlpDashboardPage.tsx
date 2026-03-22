@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
-import { Button, SectionHeader } from '@/ui';
+import { Button, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
 
 interface DlpStats {
   totalScans: number;
@@ -23,11 +23,6 @@ interface DlpViolation {
   path: string;
 }
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 const CARD_HEADER_TITLE_STYLE = {
   fontSize: '18px',
   lineHeight: '28px',
@@ -84,7 +79,7 @@ export function DlpDashboardPage() {
           description="Monitor sensitive data leaks and fleet-wide DLP violations"
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <div className="flex items-center gap-2 px-3 py-1.5 bg-status-success/10 border border-status-success/20 text-status-success text-xs font-bold">
           <Shield className="w-4 h-4" />

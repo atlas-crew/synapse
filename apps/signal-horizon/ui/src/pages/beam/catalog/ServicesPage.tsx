@@ -17,15 +17,10 @@ import {
 import { clsx } from 'clsx';
 // import { useBeamEndpoints } from '../../../stores/beamStore';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader, Stack } from '@/ui';
+import { SectionHeader, Stack, PAGE_TITLE_STYLE } from '@/ui';
 
 // Demo data - services with endpoints
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 const DEMO_SERVICES = [
   {
@@ -474,7 +469,7 @@ export default function ServicesPage() {
           description="Loading service data..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -490,7 +485,7 @@ export default function ServicesPage() {
         description="Endpoints grouped by service"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
       />
 
       {/* Stats Grid */}

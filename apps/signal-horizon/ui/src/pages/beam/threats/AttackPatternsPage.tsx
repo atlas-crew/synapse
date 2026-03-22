@@ -29,9 +29,9 @@ import {
   Line,
 } from 'recharts';
 import { StatsGridSkeleton, CardSkeleton } from '../../../components/LoadingStates';
-import { SectionHeader, Stack, axisDefaults, colors, tooltipDefaults, xAxisNoLine } from '@/ui';
+import { SectionHeader, Stack, axisDefaults, colors, tooltipDefaults, xAxisNoLine, PAGE_TITLE_STYLE } from '@/ui';
 
-type PatternCategory =
+type PatternCategory = 
   | 'injection'
   | 'authentication'
   | 'bot'
@@ -40,12 +40,6 @@ type PatternCategory =
   | 'protocol';
 type TrendDirection = 'up' | 'down' | 'stable';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
-
 // Demo data - attack patterns
 const DEMO_ATTACK_PATTERNS = [
   {
@@ -416,7 +410,7 @@ export default function AttackPatternsPage() {
           description="Loading pattern data..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -432,7 +426,8 @@ export default function AttackPatternsPage() {
         description="Pattern detection and threat intelligence"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
+
       />
 
       {/* Stats Grid */}

@@ -32,7 +32,7 @@ import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/ui/Toast';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import type { Rule } from '../../types/beam';
-import { Box, Button, SectionHeader, Spinner, Stack, alpha, colors, spacing } from '@/ui';
+import { Box, Button, SectionHeader, Spinner, Stack, alpha, colors, spacing, PAGE_TITLE_STYLE } from '@/ui';
 
 type RuleStatus = 'active' | 'paused' | 'deploying' | 'failed';
 type RuleSeverity = 'critical' | 'high' | 'medium' | 'low';
@@ -451,6 +451,7 @@ export function RuleDistributionPage() {
         <SectionHeader
           title="Fleet Rule Control"
           description="Manage and synchronize WAF protection logic across the global sensor array."
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <div className="flex gap-4">
               <Button

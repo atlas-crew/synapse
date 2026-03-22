@@ -38,15 +38,11 @@ import {
   gridDefaultsSoft,
   tooltipDefaults,
   xAxisNoLine,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 type ChangeType = 'added' | 'removed' | 'modified' | 'deprecated';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 type SchemaChangeView = {
   id: string;
@@ -356,7 +352,7 @@ export default function SchemaChangesPage() {
           description="Loading schema change data..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <CardSkeleton />
@@ -372,7 +368,7 @@ export default function SchemaChangesPage() {
         description="API schema drift detection and versioning"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
       />
 
       {/* Stats Grid */}

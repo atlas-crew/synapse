@@ -27,6 +27,7 @@ import {
   CARD_HEADER_TITLE_STYLE,
   Input,
   Modal,
+  PAGE_TITLE_STYLE,
   SectionHeader,
   Stack,
   Text,
@@ -178,9 +179,9 @@ export default function HuntingPage() {
       <Stack gap="xl">
         {/* Header */}
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Threat Hunting"
           description="Search and analyze threats across the fleet"
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Box
               bg="card"

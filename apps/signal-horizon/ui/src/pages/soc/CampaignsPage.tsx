@@ -19,6 +19,7 @@ import {
   alpha, 
   colors,
   spacing,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 const statusTabs = [
@@ -134,9 +135,9 @@ export default function CampaignsPage() {
     <Box p="xl">
       <Stack gap="xl">
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Campaigns"
           description="Coordinate response to active multi-actor campaigns across the fleet."
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <Text variant="label" color="secondary" noMargin>Sensor</Text>

@@ -12,6 +12,7 @@ import {
   CARD_HEADER_TITLE_STYLE,
   EmptyState,
   SectionHeader,
+  PAGE_TITLE_STYLE,
   Stack,
   StatusBadge,
   alpha,
@@ -121,7 +122,8 @@ export default function CampaignDetailPage() {
           description={
             campaign.description || 'Coordinated attack campaign detected by Signal Horizon'
           }
-          size="h3"
+          size="h1"
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <Button

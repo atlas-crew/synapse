@@ -12,6 +12,7 @@ import {
   Tabs,
   Box,
   Text,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 import { SensorStatusBadge } from '../../components/fleet';
 import { SensorDetailSkeleton } from '../../components/LoadingStates';
@@ -194,7 +195,7 @@ export function SensorDetailPage() {
                   title={sensor.name}
                   size="h2"
                   style={PAGE_HEADER_STYLE}
-                  titleStyle={{ fontSize: '20px', lineHeight: '28px' }}
+                  titleStyle={PAGE_TITLE_STYLE}
                 />
                 <Stack direction="row" align="center" gap="md" wrap>
                   <SensorStatusBadge status={status} />

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, SectionHeader, Spinner, Stack, colors } from '@/ui';
+import { Breadcrumb, SectionHeader, Spinner, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -25,11 +25,6 @@ async function updateFullConfig(id: string, config: unknown) {
 
 type ViewMode = 'guided' | 'json';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 type UpstreamPresetResult = { json: string; sitesUpdated: number };
 
@@ -222,7 +217,7 @@ export function SensorConfigPage() {
             title="Advanced Configuration"
             size="h1"
             style={PAGE_HEADER_STYLE}
-            titleStyle={PAGE_HEADER_TITLE_STYLE}
+            titleStyle={PAGE_TITLE_STYLE}
           />
         </div>
         <Stack direction="row" align="center" gap="smPlus">

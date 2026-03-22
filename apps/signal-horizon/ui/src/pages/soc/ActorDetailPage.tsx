@@ -14,6 +14,7 @@ import {
   Text,
   Grid,
   spacing,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 import { CopyButton } from '../../components/ui/CopyButton';
 import { useDemoMode } from '../../stores/demoModeStore';
@@ -170,6 +171,7 @@ export default function ActorDetailPage() {
               title={actor.actorId}
               description={`First seen ${new Date(actor.firstSeen).toLocaleString()}`}
               size="h2"
+              titleStyle={PAGE_TITLE_STYLE}
               actions={
                 <Stack direction="row" align="center" gap="md">
                   <Button

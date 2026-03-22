@@ -20,9 +20,9 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { StatsGridSkeleton, TableSkeleton } from '../../../components/LoadingStates';
-import { Button, Modal, SectionHeader, Stack } from '@/ui';
+import { Button, Modal, SectionHeader, Stack, PAGE_TITLE_STYLE } from '@/ui';
 
-type BlockReason =
+type BlockReason = 
   | 'sql_injection'
   | 'xss'
   | 'rate_limit'
@@ -31,11 +31,6 @@ type BlockReason =
   | 'credential_stuffing';
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-const PAGE_HEADER_TITLE_STYLE = {
-  fontSize: '20px',
-  lineHeight: '28px',
-  color: 'var(--text-primary)',
-};
 
 // Demo data - blocked requests
 const DEMO_BLOCKED_REQUESTS = [
@@ -459,7 +454,7 @@ export default function BlockedRequestsPage() {
           description="Loading blocked requests..."
           size="h1"
           style={PAGE_HEADER_STYLE}
-          titleStyle={PAGE_HEADER_TITLE_STYLE}
+          titleStyle={PAGE_TITLE_STYLE}
         />
         <StatsGridSkeleton />
         <TableSkeleton />
@@ -475,7 +470,8 @@ export default function BlockedRequestsPage() {
         description="Review and analyze blocked API requests"
         size="h1"
         style={PAGE_HEADER_STYLE}
-        titleStyle={PAGE_HEADER_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
+
         actions={
           <Button
             variant="secondary"

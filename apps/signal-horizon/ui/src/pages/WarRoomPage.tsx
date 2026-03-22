@@ -21,6 +21,7 @@ import {
   colors,
   Box,
   Text,
+  PAGE_TITLE_STYLE,
 } from '@/ui';
 
 interface Activity {
@@ -135,7 +136,6 @@ export default function WarRoomPage() {
           <Box>
             <Stack direction="row" align="center" gap="md">
               <SectionHeader
-                eyebrow="Signal Horizon"
                 title={id ? `War Room: ${id}` : 'Tactical Hub'}
                 icon={(
                   <Box
@@ -145,11 +145,7 @@ export default function WarRoomPage() {
                 )}
                 size="h2"
                 style={{ marginBottom: 0 }}
-                titleStyle={{
-                  fontSize: '20px',
-                  lineHeight: '28px',
-                  color: 'var(--text)',
-                }}
+                titleStyle={PAGE_TITLE_STYLE}
               />
             </Stack>
             <Text variant="body" color="secondary" style={{ marginTop: '4px', letterSpacing: '0.05em' }}>

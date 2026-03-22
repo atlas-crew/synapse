@@ -31,6 +31,7 @@ import {
   Stack,
   Grid,
   Text,
+  PAGE_TITLE_STYLE,
   CARD_HEADER_TITLE_STYLE,
 } from '@/ui';
 
@@ -218,9 +219,9 @@ export function FleetOverviewPage() {
       <Stack gap="xl">
         {/* Header */}
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Fleet Overview"
           description={headerDescription}
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" gap="sm">
               <Button variant="outlined" size="md">

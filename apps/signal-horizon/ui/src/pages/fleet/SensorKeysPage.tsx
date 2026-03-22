@@ -31,7 +31,8 @@ import {
   Text,
   Input,
   Select,
-  StatusBadge
+  StatusBadge,
+  PAGE_TITLE_STYLE
 } from '@/ui';
 
 interface SensorKey {
@@ -215,7 +216,7 @@ export function SensorKeysPage(): React.ReactElement {
             title="API Key Management"
             description="Manage sensor authentication keys and permissions"
             size="h1"
-            titleStyle={{ fontSize: '20px', lineHeight: '28px' }}
+            titleStyle={PAGE_TITLE_STYLE}
           />
           <Button
             onClick={() => setIsModalOpen(true)}

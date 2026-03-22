@@ -15,6 +15,7 @@ import {
   Text,
   alpha,
   colors,
+  PAGE_TITLE_STYLE,
   CARD_HEADER_TITLE_STYLE,
 } from '@/ui';
 
@@ -104,9 +105,9 @@ export function FleetHealthPage() {
     <Box p="xl">
       <Stack gap="xl">
         <SectionHeader
-          eyebrow="Signal Horizon"
           title="Fleet Health"
           description="Monitor the health and performance of your sensor fleet"
+          titleStyle={PAGE_TITLE_STYLE}
         />
 
         {/* Health Score and Alert KPI Cards */}

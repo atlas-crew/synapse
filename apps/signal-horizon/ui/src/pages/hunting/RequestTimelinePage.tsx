@@ -19,6 +19,7 @@ import {
   Spinner,
   Stack,
   Tabs,
+  PAGE_TITLE_STYLE,
   TRUNCATED_CARD_HEADER_TITLE_STYLE,
 } from '@/ui';
 
@@ -157,7 +158,8 @@ export default function RequestTimelinePage() {
       <SectionHeader
         title="Request Timeline"
         description="Pivot ClickHouse telemetry by request_id."
-        size="h3"
+        size="h1"
+        titleStyle={PAGE_TITLE_STYLE}
         actions={
           <Stack direction="row" align="center" gap="sm">
             <Button

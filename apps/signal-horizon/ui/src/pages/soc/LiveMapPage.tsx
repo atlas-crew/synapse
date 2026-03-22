@@ -1,7 +1,7 @@
 import { LiveAttackMap } from '../../components/soc/LiveAttackMap';
 import { Shield, Globe } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { SectionHeader, Stack, StatusBadge, Box, Text } from '@/ui';
+import { SectionHeader, Stack, StatusBadge, Box, Text, PAGE_TITLE_STYLE } from '@/ui';
 
 export default function LiveMapPage() {
   useDocumentTitle('SOC - Live Map');
@@ -12,7 +12,8 @@ export default function LiveMapPage() {
         <SectionHeader
           title="Live Threat Map"
           description="Real-time visualization of fleet-wide attack vectors"
-          size="h2"
+          size="h1"
+          titleStyle={PAGE_TITLE_STYLE}
           actions={
             <Stack direction="row" align="center" gap="sm">
               <StatusBadge status="info" variant="subtle" size="sm">

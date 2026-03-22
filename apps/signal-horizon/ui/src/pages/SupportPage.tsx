@@ -18,7 +18,7 @@ import 'prismjs/components/prism-docker';
 import 'prismjs/components/prism-toml';
 import { BookOpen, Stethoscope, MessageCircle, Search, X, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, API_KEY } from '../lib/api';
-import { Button, colors, Input, SectionHeader, Spinner, Stack } from '@/ui';
+import { Button, colors, Input, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
 import type { CSSProperties } from 'react';
 
 const authHeaders = {
@@ -35,13 +35,6 @@ const SUPPORT_HUB_TITLE_STYLE: CSSProperties = {
   letterSpacing: '0.1em',
   color: colors.white,
 };
-const DIAGNOSTICS_TITLE_STYLE: CSSProperties = {
-  fontSize: '48px',
-  lineHeight: '56px',
-  fontWeight: 300,
-  letterSpacing: '-0.02em',
-  color: 'var(--text-primary)',
-};
 const CATEGORY_TITLE_STYLE: CSSProperties = {
   fontSize: '11px',
   lineHeight: '16px',
@@ -49,13 +42,6 @@ const CATEGORY_TITLE_STYLE: CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.2em',
   color: colors.blue,
-};
-const CONTACT_TITLE_STYLE: CSSProperties = {
-  fontSize: '32px',
-  lineHeight: '40px',
-  fontWeight: 300,
-  letterSpacing: '-0.02em',
-  color: 'var(--text-primary)',
 };
 
 // Escape HTML entities for safe rendering
@@ -255,7 +241,7 @@ export function SupportPage() {
               title="Support Hub"
               size="h4"
               style={HEADER_NO_MARGIN_STYLE}
-              titleStyle={SUPPORT_HUB_TITLE_STYLE}
+              titleStyle={PAGE_TITLE_STYLE}
             />
 
             
@@ -1099,7 +1085,7 @@ function DiagnosticsCenter({ onSelectDoc }: { onSelectDoc?: (id: string) => void
             title="System Diagnostics"
             size="h1"
             style={HEADER_NO_MARGIN_STYLE}
-            titleStyle={DIAGNOSTICS_TITLE_STYLE}
+            titleStyle={PAGE_TITLE_STYLE}
           />
           <p className="text-lg text-ink-secondary mt-2">Fleet health verification and forensic bundle generation.</p>
         </div>
@@ -1222,7 +1208,7 @@ function ContactSupport() {
         title="Contact Support"
         size="h1"
         style={{ marginBottom: '8px' }}
-        titleStyle={CONTACT_TITLE_STYLE}
+        titleStyle={PAGE_TITLE_STYLE}
       />
       <p className="text-ink-secondary mb-10">Direct access to the Atlas Crew security engineering team.</p>
 
