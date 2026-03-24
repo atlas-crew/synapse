@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Protection — Color Reference</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080e1a; --surface: #0c1220; --card: #101828; --border: #1e2d44;
+  --text: #e8ecf4; --text-sec: #8899b0; --muted: #5a6f8a; --dim: #2a3f5c;
+  --blue: #1E90FF; --blue-shade: #0A6ED8; --blue-tint: #7EC8FF; --navy: #0B4F8A;
+  --violet: #8B5CF6; --violet-tint: #C4B5FD; --violet-shade: #6D28D9;
+  --coral: #F97316; --coral-tint: #FB923C;
+  --red: #EF4444; --amber: #F59E0B; --green: #10B981; --cyan: #06B6D4;
+  --font: 'Recursive', ui-monospace, monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; padding:48px; max-width:1200px; margin:0 auto; }
+h1 { font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:32px; margin-bottom:8px; }
+.subtitle { font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:48px; }
+.section-title { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4; font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:20px; padding-bottom:10px; border-bottom:1px solid var(--border); text-transform:uppercase; }
+.palette-row { display:flex; gap:12px; margin-bottom:32px; flex-wrap:wrap; }
+.swatch { width:140px; }
+.swatch-color { height:64px; display:flex; align-items:flex-end; padding:6px 8px; }
+.swatch-info { padding:8px; background:var(--card); border:1px solid var(--border); border-top:0; }
+.swatch-name { font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0; font-size:12px; }
+.swatch-hex { font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; color:var(--text-sec); margin-top:2px; }
+.swatch-var { font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:9px; color:var(--muted); margin-top:2px; }
+.swatch-role { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--muted); margin-top:4px; }
+
+.contrast-table { width:100%; border-collapse:collapse; margin-bottom:32px; }
+.contrast-table th { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4; font-size:10px; letter-spacing:1px; color:var(--muted); text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); }
+.contrast-table td { font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; padding:6px 12px; border-bottom:1px solid rgba(30,45,68,0.4); }
+.pass { color:var(--green); } .fail { color:var(--red); }
+
+.note { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0; font-size:12px; color:var(--text-sec); line-height:1.6; margin-bottom:32px; max-width:700px; }
+.note strong { font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.3,'CRSV' 0.5,'slnt' 0; color:var(--text); }
+
+.proportions { display:flex; height:24px; margin-bottom:8px; overflow:hidden; }
+.proportions > div { display:flex; align-items:center; justify-content:center; font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:8px; letter-spacing:0.5px; color:#fff; }
+.prop-label { font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:9px; color:var(--muted); margin-bottom:20px; }
+
+.footer { margin-top:64px; padding-top:16px; border-top:1px solid var(--border); font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--muted); letter-spacing:1px; }
+</style>
+</head>
+<body>
+<div id="dl-bar" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:8px 48px;background:#101828;border-bottom:1px solid #1e2d44;font-family:'Recursive',ui-monospace,monospace;">
+  <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:1.5px;color:#5a6f8a;">COLOR REFERENCE</span>
+  <div style="display:flex;gap:8px;">
+    <button onclick="dlMd()" style="padding:4px 12px;background:#1E90FF;color:#fff;border:none;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ Markdown</button>
+    <button onclick="dlHtml()" style="padding:4px 12px;background:transparent;color:#7EC8FF;border:1px solid #1e2d44;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ HTML</button>
+  </div>
+</div>
+<script>
+const _md="# Edge Protection Design System \u2014 Color Reference\n\n> **For AI agents**: This document contains exact hex values, CSS variable names, Tailwind classes, and usage rules for the Edge Protection color system. Use these values directly \u2014 do not infer or approximate colors.\n\n## Source of Truth\n- CSS: `apps/signal-horizon/ui/src/index.css`\n- Tailwind: `apps/signal-horizon/ui/tailwind.config.js`\n- Border radius: **0 everywhere** (Tailwind override)\n\n---\n\n## Primary \u2014 Vivid Blue\n\n| Token | Hex | CSS Variable | Tailwind | Role |\n|-------|-----|-------------|----------|------|\n| Blue | `#1E90FF` | `--ac-blue` | `text-ac-blue` | Primary UI, links, CTAs, chart series 1 |\n| Blue Shade | `#0A6ED8` | `--ac-blue-shade` | `text-ac-blue-shade` | Hover, pressed states |\n| Blue Tint | `#7EC8FF` | `--ac-blue-tint` | `text-ac-blue-tint` | Dark mode hover, link hover |\n| Navy | `#0B4F8A` | `--ac-navy` | `text-ac-navy` | Headers, hero backgrounds |\n| Navy Shade | `#083D6C` | `--ac-navy-shade` | \u2014 | Deep hero backgrounds |\n\n## Accent \u2014 Arc Violet\n\n| Token | Hex | CSS Variable | Tailwind | Role |\n|-------|-----|-------------|----------|------|\n| Violet | `#8B5CF6` | `--ac-purple` | `text-ac-purple` | Focus rings, anomaly accents, Synapse identity, chart series 2 |\n| Violet Tint | `#C4B5FD` | `--ac-magenta-tint` | `text-ac-magenta-tint` | Dark mode hover |\n| Violet Shade | `#6D28D9` | `--ac-magenta-shade` | `text-ac-magenta-shade` | Hover, pressed |\n| Violet Dark | `#4C1D95` | `--ac-magenta-darker` | \u2014 | Deep backgrounds |\n\n## Brand \u2014 Logo Only (NOT for UI)\n\n| Token | Hex | Role |\n|-------|-----|------|\n| Coral | `#F97316` | Horizon icon arcs, logo warm accent. **Never use as UI color.** |\n| Coral Light | `#FB923C` | Logo hover states |\n| Violet Light | `#A78BFA` | Synapse colored wordmark |\n\n## Status \u2014 Functional Only\n\n| Token | Hex | CSS Variable | Tailwind | Role |\n|-------|-----|-------------|----------|------|\n| Red | `#EF4444` | `--ac-red` | `text-ac-red` | Error, critical, danger |\n| Amber | `#F59E0B` | `--ac-orange` | `text-ac-orange` | Warning, high risk |\n| Green | `#10B981` | `--ac-green` | `text-ac-green` | Success, healthy, low risk |\n| Cyan | `#06B6D4` | `--ac-sky-blue` | `text-ac-sky-blue` | Info, secondary data viz |\n\n## Surface Scale \u2014 Dark Mode\n\n| Step | Hex | CSS Variable | Role |\n|------|-----|-------------|------|\n| Darkest | `#080e1a` | `--ac-navy-darkest` | Page background (inset) |\n| Base | `#0c1220` | `--surface-base` | Default page background |\n| Card | `#101828` | `--surface-card` | Elevated cards |\n| Subtle | `#131c2e` | `--surface-subtle` | Hover rows, active states |\n| Overlay | `#182440` | `--surface-overlay` | Dropdowns, modals |\n| Border | `#1e2d44` | `--border-subtle` | Dividers, card edges |\n| Border Strong | `#2a3f5c` | `--border-strong` | Emphasized borders |\n\n## Surface Scale \u2014 Light Mode\n\n| Token | Hex | CSS Variable | Role |\n|-------|-----|-------------|------|\n| Base | `#F7F9FC` | `--surface-base` | Page background |\n| Elevated | `#FFFFFF` | `--surface-elevated` | Cards |\n| Subtle | `#EEF2F7` | `--surface-subtle` | Hover, secondary areas |\n| Muted | `#E4EAF2` | `--surface-muted` | Inset panels |\n\n## Text \u2014 Dark Mode\n\n| Token | Hex | CSS Variable | Tailwind | Constraint |\n|-------|-----|-------------|----------|------------|\n| Primary | `#e8ecf4` | `--text-primary` | `text-ink-primary` | All sizes |\n| Secondary | `#8899b0` | `--text-secondary` | `text-ink-secondary` | All sizes |\n| Muted | `#5a6f8a` | `--text-muted` | `text-ink-muted` | **14px+ only** (fails AA Normal) |\n\n## Text \u2014 Light Mode\n\n| Token | Hex | CSS Variable | Role |\n|-------|-----|-------------|------|\n| Primary | `#1A2B42` | `--text-primary` | Headlines, body |\n| Secondary | `#475A72` | `--text-secondary` | Descriptions |\n| Muted | `#6B7D96` | `--text-muted` | Captions |\n\n## Usage Proportions\n\n- Surface: 35% \u2014 Let the dark slate breathe\n- Blue: 25% \u2014 Primary interactive color\n- Text: 20% \u2014 Content layer\n- Violet: 10% \u2014 Accent, not dominant\n- Coral: 5% \u2014 Logo marks only\n- Status: 5% \u2014 Functional indicators only\n\n## WCAG 2.1 AA Contrast\n\n| Pair | Ratio | AA Normal | AA Large |\n|------|-------|-----------|----------|\n| `#e8ecf4` on `#0c1220` | 14.2:1 | \u2713 | \u2713 |\n| `#8899b0` on `#0c1220` | 5.6:1 | \u2713 | \u2713 |\n| `#5a6f8a` on `#0c1220` | 3.2:1 | \u2717 | \u2713 |\n| `#1E90FF` on `#0c1220` | 4.8:1 | \u2713 | \u2713 |\n| `#8B5CF6` on `#0c1220` | 3.8:1 | \u2717 | \u2713 |\n\n## Rules\n\n1. **Coral is for logos, not UI.** Never use `#F97316` as a button, link, or background color.\n2. **Status colors are functional.** Red means error. Green means success. Always.\n3. **Muted text at 14px+ only.** `#5a6f8a` fails WCAG AA at normal text sizes.\n4. **Violet fails AA Normal.** Use at large sizes or as non-text accents only.\n5. **No pure white (#fff) for text.** Use `#e8ecf4` instead.\n";
+function dlMd(){var a=document.createElement("a");a.href="data:text/markdown;charset=utf-8,"+encodeURIComponent(_md);a.download="COLOR-REFERENCE.md";a.click();}
+function dlHtml(){var a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(document.documentElement.outerHTML);a.download=document.title.replace(/[^a-zA-Z0-9]/g,"-").toLowerCase()+".html";a.click();}
+</script>
+
+
+<h1>Color Reference</h1>
+<div class="subtitle">EDGE PROTECTION DESIGN SYSTEM · ATLAS CREW</div>
+
+<!-- ── PROPORTIONS ── -->
+<div class="section-title">Color Proportions</div>
+<div class="proportions">
+  <div style="flex:35;background:#0c1220;">SURFACE 35%</div>
+  <div style="flex:25;background:#1E90FF;">BLUE 25%</div>
+  <div style="flex:20;background:#e8ecf4;color:#0c1220;">TEXT 20%</div>
+  <div style="flex:10;background:#8B5CF6;">VIOLET 10%</div>
+  <div style="flex:5;background:#F97316;">CORAL 5%</div>
+  <div style="flex:5;background:#EF4444;">STATUS 5%</div>
+</div>
+<div class="prop-label">Surfaces dominate. Blue is the primary. Violet punctuates. Coral is reserved for logo accents and warm contrast. Status colors are functional only.</div>
+
+<!-- ── SURFACES ── -->
+<div class="section-title">Surfaces — Dark Mode</div>
+<div class="palette-row">
+  <div class="swatch"><div class="swatch-color" style="background:#080e1a;border:1px solid var(--border);"><span style="font-size:9px;color:var(--muted);">bg</span></div><div class="swatch-info"><div class="swatch-name">Base</div><div class="swatch-hex">#080e1a</div><div class="swatch-var">--ac-navy-darkest</div><div class="swatch-role">Page background</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#0c1220;border:1px solid var(--border);"></div><div class="swatch-info"><div class="swatch-name">Surface</div><div class="swatch-hex">#0c1220</div><div class="swatch-var">--surface-base</div><div class="swatch-role">Cards, panels</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#101828;border:1px solid var(--border);"></div><div class="swatch-info"><div class="swatch-name">Card</div><div class="swatch-hex">#101828</div><div class="swatch-var">--surface-card</div><div class="swatch-role">Elevated cards</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#131c2e;border:1px solid var(--border);"></div><div class="swatch-info"><div class="swatch-name">Subtle</div><div class="swatch-hex">#131c2e</div><div class="swatch-var">--surface-subtle</div><div class="swatch-role">Hover, active rows</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#182440;border:1px solid var(--border);"></div><div class="swatch-info"><div class="swatch-name">Overlay</div><div class="swatch-hex">#182440</div><div class="swatch-var">--surface-overlay</div><div class="swatch-role">Dropdowns, modals</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#1e2d44;border:1px solid var(--border);"></div><div class="swatch-info"><div class="swatch-name">Border</div><div class="swatch-hex">#1e2d44</div><div class="swatch-var">--border-subtle</div><div class="swatch-role">Dividers, card edges</div></div></div>
+</div>
+
+<!-- ── TEXT ── -->
+<div class="section-title">Text</div>
+<div class="palette-row">
+  <div class="swatch"><div class="swatch-color" style="background:var(--card);border:1px solid var(--border);"><span style="color:#e8ecf4;font-size:14px;">Aa</span></div><div class="swatch-info"><div class="swatch-name">Primary</div><div class="swatch-hex">#e8ecf4</div><div class="swatch-var">--text-primary</div><div class="swatch-role">Headlines, body text</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:var(--card);border:1px solid var(--border);"><span style="color:#8899b0;font-size:14px;">Aa</span></div><div class="swatch-info"><div class="swatch-name">Secondary</div><div class="swatch-hex">#8899b0</div><div class="swatch-var">--text-secondary</div><div class="swatch-role">Descriptions, labels</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:var(--card);border:1px solid var(--border);"><span style="color:#5a6f8a;font-size:14px;">Aa</span></div><div class="swatch-info"><div class="swatch-name">Muted</div><div class="swatch-hex">#5a6f8a</div><div class="swatch-var">--text-muted</div><div class="swatch-role">Captions, timestamps</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:var(--card);border:1px solid var(--border);"><span style="color:#2a3f5c;font-size:14px;">Aa</span></div><div class="swatch-info"><div class="swatch-name">Dim</div><div class="swatch-hex">#2a3f5c</div><div class="swatch-var">--border-strong</div><div class="swatch-role">Decorative only, not for readable text</div></div></div>
+</div>
+
+<!-- ── PRIMARY ── -->
+<div class="section-title">Primary — Vivid Blue</div>
+<div class="palette-row">
+  <div class="swatch"><div class="swatch-color" style="background:#7EC8FF;"></div><div class="swatch-info"><div class="swatch-name">Tint</div><div class="swatch-hex">#7EC8FF</div><div class="swatch-var">--ac-blue-tint</div><div class="swatch-role">Dark mode hover, links</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#1E90FF;"></div><div class="swatch-info"><div class="swatch-name">Vivid</div><div class="swatch-hex">#1E90FF</div><div class="swatch-var">--ac-blue</div><div class="swatch-role">Primary UI, links, CTAs</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#0A6ED8;"></div><div class="swatch-info"><div class="swatch-name">Shade</div><div class="swatch-hex">#0A6ED8</div><div class="swatch-var">--ac-blue-shade</div><div class="swatch-role">Hover, pressed states</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#0B4F8A;"></div><div class="swatch-info"><div class="swatch-name">Navy</div><div class="swatch-hex">#0B4F8A</div><div class="swatch-var">--ac-navy</div><div class="swatch-role">Headers, hero backgrounds</div></div></div>
+</div>
+
+<!-- ── ACCENT ── -->
+<div class="section-title">Accent — Arc Violet</div>
+<div class="palette-row">
+  <div class="swatch"><div class="swatch-color" style="background:#C4B5FD;"></div><div class="swatch-info"><div class="swatch-name">Tint</div><div class="swatch-hex">#C4B5FD</div><div class="swatch-var">--ac-magenta-tint</div><div class="swatch-role">Dark mode hover</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#8B5CF6;"></div><div class="swatch-info"><div class="swatch-name">Violet</div><div class="swatch-hex">#8B5CF6</div><div class="swatch-var">--ac-purple</div><div class="swatch-role">Focus rings, anomaly accents, data viz</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#6D28D9;"></div><div class="swatch-info"><div class="swatch-name">Shade</div><div class="swatch-hex">#6D28D9</div><div class="swatch-var">--ac-magenta-shade</div><div class="swatch-role">Hover, pressed</div></div></div>
+</div>
+
+<!-- ── BRAND / LOGO ── -->
+<div class="section-title">Brand — Logo Accents</div>
+<div class="note"><strong>Coral is for logos, not UI.</strong> Violet disappears into blue backgrounds at small icon sizes. Coral provides the warm/cool tension needed for marks to read at 20–80px. Don't use coral as a UI element color.</div>
+<div class="palette-row">
+  <div class="swatch"><div class="swatch-color" style="background:#F97316;"></div><div class="swatch-info"><div class="swatch-name">Coral</div><div class="swatch-hex">#F97316</div><div class="swatch-role">Horizon icon arcs, logo warm accent</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#FB923C;"></div><div class="swatch-info"><div class="swatch-name">Coral Light</div><div class="swatch-hex">#FB923C</div><div class="swatch-role">Logo hover states</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#A78BFA;"></div><div class="swatch-info"><div class="swatch-name">Violet Light</div><div class="swatch-hex">#A78BFA</div><div class="swatch-role">Synapse wordmark (colored variant)</div></div></div>
+</div>
+
+<!-- ── STATUS ── -->
+<div class="section-title">Status — Functional Only</div>
+<div class="note">Status colors are reserved for data visualization, badges, KPIs, and alert states. Not for backgrounds, large areas, or decoration.</div>
+<div class="palette-row">
+  <div class="swatch"><div class="swatch-color" style="background:#EF4444;"></div><div class="swatch-info"><div class="swatch-name">Red</div><div class="swatch-hex">#EF4444</div><div class="swatch-var">--ac-red</div><div class="swatch-role">Error, critical, danger</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#F59E0B;"></div><div class="swatch-info"><div class="swatch-name">Amber</div><div class="swatch-hex">#F59E0B</div><div class="swatch-var">--ac-orange</div><div class="swatch-role">Warning, high risk</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#10B981;"></div><div class="swatch-info"><div class="swatch-name">Green</div><div class="swatch-hex">#10B981</div><div class="swatch-var">--ac-green</div><div class="swatch-role">Success, healthy, low risk</div></div></div>
+  <div class="swatch"><div class="swatch-color" style="background:#06B6D4;"></div><div class="swatch-info"><div class="swatch-name">Cyan</div><div class="swatch-hex">#06B6D4</div><div class="swatch-var">--ac-sky-blue</div><div class="swatch-role">Info, secondary data viz</div></div></div>
+</div>
+
+<!-- ── CONTRAST ── -->
+<div class="section-title">Contrast Compliance (WCAG 2.1 AA)</div>
+<table class="contrast-table">
+<tr><th>PAIR</th><th>RATIO</th><th>AA NORMAL</th><th>AA LARGE</th></tr>
+<tr><td>text #e8ecf4 on surface #0c1220</td><td>14.2:1</td><td class="pass">PASS</td><td class="pass">PASS</td></tr>
+<tr><td>secondary #8899b0 on surface #0c1220</td><td>5.6:1</td><td class="pass">PASS</td><td class="pass">PASS</td></tr>
+<tr><td>muted #5a6f8a on surface #0c1220</td><td>3.2:1</td><td class="fail">FAIL</td><td class="pass">PASS</td></tr>
+<tr><td>blue #1E90FF on surface #0c1220</td><td>4.8:1</td><td class="pass">PASS</td><td class="pass">PASS</td></tr>
+<tr><td>blue #1E90FF on bg #080e1a</td><td>5.4:1</td><td class="pass">PASS</td><td class="pass">PASS</td></tr>
+<tr><td>violet #8B5CF6 on surface #0c1220</td><td>3.8:1</td><td class="fail">FAIL</td><td class="pass">PASS</td></tr>
+<tr><td>red #EF4444 on surface #0c1220</td><td>4.5:1</td><td class="pass">PASS</td><td class="pass">PASS</td></tr>
+<tr><td>green #10B981 on surface #0c1220</td><td>6.5:1</td><td class="pass">PASS</td><td class="pass">PASS</td></tr>
+</table>
+<div class="note"><strong>Muted text (#5a6f8a)</strong> fails AA Normal — use only for captions, timestamps, or decorative text at 14px+ (AA Large passes). <strong>Violet</strong> also fails AA Normal on dark surfaces — use at large sizes or as accents, not small body text.</div>
+
+<div class="footer">Edge Protection Color Reference · Atlas Crew · Source: index.css + tailwind.config.js</div>
+</body>
+</html>

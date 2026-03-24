@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Protection — Typography Reference</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080e1a; --surface: #0c1220; --card: #101828; --border: #1e2d44;
+  --text: #e8ecf4; --text-sec: #8899b0; --muted: #5a6f8a;
+  --blue: #1E90FF; --violet: #8B5CF6; --coral: #F97316;
+  --font: 'Recursive', ui-monospace, monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; padding:48px; max-width:1200px; margin:0 auto; }
+h1 { font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:32px; margin-bottom:8px; }
+.subtitle { font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:16px; }
+.intro { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0; font-size:13px; color:var(--text-sec); line-height:1.6; margin-bottom:48px; max-width:700px; }
+.intro strong { color:var(--text); font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.3,'CRSV' 0.5,'slnt' 0; }
+.section-title { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4; font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:20px; padding-bottom:10px; border-bottom:1px solid var(--border); text-transform:uppercase; }
+
+.role-card { display:grid; grid-template-columns:180px 1fr 280px; gap:0; margin-bottom:2px; background:var(--card); border:1px solid var(--border); align-items:center; }
+.role-card:first-of-type { border-top-left-radius:0; border-top-right-radius:0; }
+.role-meta { padding:14px 16px; border-right:1px solid var(--border); }
+.role-name { font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0; font-size:13px; }
+.role-class { font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--blue); margin-top:2px; }
+.role-context { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; font-size:9px; color:var(--muted); margin-top:4px; }
+.role-specimen { padding:14px 20px; display:flex; align-items:center; }
+.role-axes { padding:14px 16px; border-left:1px solid var(--border); font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:9px; color:var(--text-sec); line-height:1.7; }
+
+.axis-legend { display:flex; gap:32px; margin-bottom:32px; flex-wrap:wrap; }
+.axis-item { display:flex; flex-direction:column; gap:4px; }
+.axis-name { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; color:var(--text); letter-spacing:1px; }
+.axis-range { font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--muted); }
+.axis-desc { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--text-sec); }
+
+.gradient-bar { display:flex; height:32px; margin-bottom:8px; overflow:hidden; }
+.gradient-bar > div { display:flex; align-items:center; justify-content:center; font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:8px; letter-spacing:0.5px; }
+.gradient-label { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; font-size:11px; color:var(--text-sec); margin-bottom:32px; }
+
+.footer { margin-top:64px; padding-top:16px; border-top:1px solid var(--border); font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--muted); letter-spacing:1px; }
+</style>
+</head>
+<body>
+<div id="dl-bar" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:8px 48px;background:#101828;border-bottom:1px solid #1e2d44;font-family:'Recursive',ui-monospace,monospace;">
+  <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:1.5px;color:#5a6f8a;">TYPOGRAPHY REFERENCE</span>
+  <div style="display:flex;gap:8px;">
+    <button onclick="dlMd()" style="padding:4px 12px;background:#1E90FF;color:#fff;border:none;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ Markdown</button>
+    <button onclick="dlHtml()" style="padding:4px 12px;background:transparent;color:#7EC8FF;border:1px solid #1e2d44;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ HTML</button>
+  </div>
+</div>
+<script>
+const _md="# Edge Protection Design System \u2014 Typography Reference\n\n> **For AI agents**: This document contains exact `font-variation-settings` values for all 15 type roles. Use these values directly in inline styles or CSS. The font is **Recursive** (Google Fonts variable font). One font, 15 roles \u2014 no other fonts should be used.\n\n## Font Import\n\n```\nhttps://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap\n```\n\n## Font Stack\n\n```css\nfont-family: 'Recursive', ui-monospace, -apple-system, BlinkMacSystemFont, sans-serif;\n```\n\nCSS variable: `var(--font-stack)`\n\n---\n\n## Variable Axes\n\n| Axis | Range | Purpose |\n|------|-------|---------|\n| `wght` | 300\u2013900 | Weight (light to black) |\n| `MONO` | 0\u20131 | Proportional (0) \u2192 Monospace (1) |\n| `CASL` | 0\u20131 | Linear/clinical (0) \u2192 Casual/warm (1) |\n| `slnt` | -15\u20130 | Upright (0) \u2192 Full italic (-15) |\n| `CRSV` | 0.5 | **Locked** \u2014 not a design variable |\n\n## The CASL Rule\n\nCASL encodes the brand voice into the font itself:\n- **CASL 0.6** = human-facing text (body, descriptions, tooltips) \u2014 warm, approachable\n- **CASL 0.2\u20130.3** = headings, labels \u2014 slightly warm\n- **CASL 0** = machine output (data, code, timestamps, tables) \u2014 cold, clinical\n\nIf text is for humans to read \u2192 increase CASL. If it's machine output \u2192 CASL 0.\n\n---\n\n## 15 Type Roles\n\n### Display\n- **Class**: `.t-display`\n- **Use**: Page titles, hero text\n- **Settings**: `font-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 36px\n- **Note**: Lightest weight for biggest text \u2014 confidence, not volume\n\n### Heading\n- **Class**: `.t-heading`\n- **Use**: Section headers, card titles\n- **Settings**: `font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 24px\n\n### Subhead\n- **Class**: `.t-subhead`\n- **Use**: Card subtitles, secondary headers, eyebrows\n- **Settings**: `font-variation-settings: 'wght' 600, 'MONO' 0, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -3;`\n- **Size**: 14px \u00b7 `letter-spacing: 1.5px`\n\n### Body\n- **Class**: `.t-body`\n- **Use**: Descriptions, tooltips, longer prose\n- **Settings**: `font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 13px\n- **Note**: Highest CASL value \u2014 warmest role\n\n### Label\n- **Class**: `.t-label`\n- **Use**: Sidebar group titles, section labels\n- **Settings**: `font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4;`\n- **Size**: 12px \u00b7 `letter-spacing: 1px`\n\n### Tag\n- **Class**: `.t-tag`\n- **Use**: Status badges, severity chips\n- **Settings**: `font-variation-settings: 'wght' 800, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -3;`\n- **Size**: 11px \u00b7 `letter-spacing: 1.5px`\n\n### Metric\n- **Class**: `.t-metric`\n- **Use**: Big KPI numbers, dashboard values\n- **Settings**: `font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0.6, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 32px \u00b7 `letter-spacing: -0.5px`\n- **Note**: MONO 1 for alignment + CASL 0.6 for warmth\n\n### Metric Unit\n- **Class**: `.t-metric-unit`\n- **Use**: Units next to metrics (req/s, ms, etc.)\n- **Settings**: `font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 13px \u00b7 `letter-spacing: 0.5px`\n\n### Data\n- **Class**: `.t-data`\n- **Use**: Table cells, log entries, IP addresses\n- **Settings**: `font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 13px\n\n### Code\n- **Class**: `.t-code`\n- **Use**: Inline code, config values, identifiers\n- **Settings**: `font-variation-settings: 'wght' 400, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 13px \u00b7 `letter-spacing: 0.5px`\n\n### Timestamp\n- **Class**: `.t-timestamp`\n- **Use**: Log times, event dates\n- **Settings**: `font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`\n- **Size**: 11px \u00b7 `letter-spacing: 0.5px`\n\n### Nav\n- **Class**: `.t-nav`\n- **Use**: Sidebar navigation items (inactive)\n- **Settings**: `font-variation-settings: 'wght' 500, 'MONO' 0.5, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' -2;`\n- **Size**: 14px \u00b7 `letter-spacing: 1px`\n- **Note**: MONO 0.5 creates a hybrid prose/data texture\n\n### Nav Active\n- **Class**: `.t-nav-active`\n- **Use**: Active sidebar item\n- **Settings**: `font-variation-settings: 'wght' 700, 'MONO' 0.5, 'CASL' 0.1, 'CRSV' 0.5, 'slnt' -2;`\n- **Size**: 14px \u00b7 `letter-spacing: 1px`\n\n### Link\n- **Class**: `.t-link`\n- **Use**: Clickable text actions, \"View All \u2192\" CTAs\n- **Settings**: `font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' -15;`\n- **Size**: 10px \u00b7 `letter-spacing: 1px`\n- **Note**: Full italic slant (-15) \u2014 most kinetic role\n\n### Breadcrumb\n- **Class**: `.t-breadcrumb`\n- **Use**: Path navigation\n- **Settings**: `font-variation-settings: 'wght' 700, 'MONO' 1, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' -7;`\n- **Size**: 10px \u00b7 `letter-spacing: 2.5px`\n\n---\n\n## Wordmark Styles\n\n### Colored Uppercase (lockups, banners)\n```css\nfont-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;\nletter-spacing: 0.2em;\ntext-transform: uppercase;\n/* Horizon: color #F97316; Synapse: color #A78BFA; */\n```\n\n### Light Mixed Case (alternative, UI headers)\n```css\nfont-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;\n/* color: #e8ecf4 (dark) or #0c1220 (light) */\n```\n\n## Rules\n\n1. **One font only.** Recursive does everything \u2014 no Inter, Rubik, system fonts.\n2. **Don't use Tailwind `font-bold`/`font-light`.** These don't set CASL/MONO/slnt axes.\n3. **CASL 0 for machine data.** Tables, logs, IPs, timestamps \u2014 always clinical.\n4. **CASL 0.6 for human text.** Body copy, descriptions, help text \u2014 always warm.\n5. **wght 300 for display.** Lightest weight at biggest size. Don't bold headlines.\n6. **Border radius: 0 everywhere.** No exceptions. Sharp corners on everything.\n";
+function dlMd(){var a=document.createElement("a");a.href="data:text/markdown;charset=utf-8,"+encodeURIComponent(_md);a.download="TYPOGRAPHY-REFERENCE.md";a.click();}
+function dlHtml(){var a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(document.documentElement.outerHTML);a.download=document.title.replace(/[^a-zA-Z0-9]/g,"-").toLowerCase()+".html";a.click();}
+</script>
+
+
+<h1>Typography Reference</h1>
+<div class="subtitle">EDGE PROTECTION DESIGN SYSTEM · RECURSIVE VARIABLE FONT</div>
+<div class="intro">
+  One font, 15 roles. <strong>CASL</strong> encodes warmth — human-facing text is casual, machine output stays clinical. <strong>MONO</strong> separates prose from data. <strong>slnt</strong> adds energy to navigation. The gradient creates two tonal registers from a single font load.
+</div>
+
+<!-- ── FONT LOAD ── -->
+<div class="section-title">Font Import</div>
+<div style="background:var(--card);border:1px solid var(--border);padding:16px;margin-bottom:32px;">
+  <div style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--blue);word-break:break-all;">https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0c414342434c213d3922223c">[email&#160;protected]</a>,300..900,0..1,0..1,0..1&display=swap</div>
+</div>
+
+<!-- ── AXES ── -->
+<div class="section-title">Variable Axes</div>
+<div class="axis-legend">
+  <div class="axis-item"><div class="axis-name">wght</div><div class="axis-range">300–900</div><div class="axis-desc">Weight</div></div>
+  <div class="axis-item"><div class="axis-name">MONO</div><div class="axis-range">0–1</div><div class="axis-desc">Proportional → Monospace</div></div>
+  <div class="axis-item"><div class="axis-name">CASL</div><div class="axis-range">0–1</div><div class="axis-desc">Linear → Casual (warmth)</div></div>
+  <div class="axis-item"><div class="axis-name">slnt</div><div class="axis-range">-15–0</div><div class="axis-desc">Upright → Full italic</div></div>
+  <div class="axis-item"><div class="axis-name">CRSV</div><div class="axis-range">0.5 (locked)</div><div class="axis-desc">Cursive — not a design variable</div></div>
+</div>
+
+<!-- ── CASL GRADIENT ── -->
+<div class="section-title">CASL Warmth Gradient — The Brand Voice</div>
+<div class="gradient-bar">
+  <div style="flex:2;background:#F97316;color:#fff;">BODY 0.6</div>
+  <div style="flex:1.5;background:#e07020;color:#fff;">SUBHEAD 0.3</div>
+  <div style="flex:1.5;background:#c06828;color:#fff;">HEADING 0.2</div>
+  <div style="flex:1;background:#a06030;color:#fff;">NAV 0.2</div>
+  <div style="flex:2;background:#1E90FF;color:#fff;">DATA 0</div>
+  <div style="flex:1;background:#1670cc;color:#fff;">CODE 0</div>
+  <div style="flex:1;background:#105aaa;color:#fff;">TAG 0</div>
+</div>
+<div class="gradient-label">← Human-facing (warm, casual) · Machine output (cold, clinical) →</div>
+
+<!-- ── ROLES ── -->
+<div class="section-title">15 Type Roles — Live Specimens</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Display</div><div class="role-class">.t-display</div><div class="role-context">Page titles, hero text</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;">System Overview</span></div>
+  <div class="role-axes">wght 300 · MONO 0 · CASL 0<br>slnt 0 · 36px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Heading</div><div class="role-class">.t-heading</div><div class="role-context">Section headers, card titles</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:24px;">Incident Feed</span></div>
+  <div class="role-axes">wght 500 · MONO 0 · CASL 0.2<br>slnt 0 · 24px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Subhead</div><div class="role-class">.t-subhead</div><div class="role-context">Card subtitles, secondary headers</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.3,'CRSV' 0.5,'slnt' -3;font-size:14px;letter-spacing:1.5px;">ACTIVE ENTITIES (1H)</span></div>
+  <div class="role-axes">wght 600 · MONO 0 · CASL 0.3<br>slnt -3 · 14px · ls 1.5px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Body</div><div class="role-class">.t-body</div><div class="role-context">Descriptions, tooltips, longer text</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;">No high-risk entities recorded yet. The deception layer is monitoring 13 active honeypots.</span></div>
+  <div class="role-axes">wght 400 · MONO 0 · CASL 0.6<br>slnt 0 · 13px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Label</div><div class="role-class">.t-label</div><div class="role-context">Sidebar groups, section tags</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1px;">TEST & ATTACK</span></div>
+  <div class="role-axes">wght 600 · MONO 1 · CASL 0.3<br>slnt -4 · 12px · ls 1px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Tag</div><div class="role-class">.t-tag</div><div class="role-context">Status badges, severity chips</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 800,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -3;font-size:11px;letter-spacing:1.5px;color:var(--coral);">CRITICAL</span></div>
+  <div class="role-axes">wght 800 · MONO 0 · CASL 0<br>slnt -3 · 11px · ls 1.5px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Metric</div><div class="role-class">.t-metric</div><div class="role-context">Big numbers, KPI values</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;">72,481</span></div>
+  <div class="role-axes">wght 400 · MONO 1 · CASL 0.6<br>slnt 0 · 32px · ls -0.5px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Metric Unit</div><div class="role-class">.t-metric-unit</div><div class="role-context">Units next to metrics</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;letter-spacing:0.5px;color:var(--muted);">req/s</span></div>
+  <div class="role-axes">wght 500 · MONO 1 · CASL 0<br>slnt 0 · 13px · ls 0.5px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Data</div><div class="role-class">.t-data</div><div class="role-context">Table cells, log entries</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;">192.168.1.42  →  GET /api/v2/users  200  4ms</span></div>
+  <div class="role-axes">wght 500 · MONO 1 · CASL 0<br>slnt 0 · 13px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Code</div><div class="role-class">.t-code</div><div class="role-context">Inline code, config values</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;letter-spacing:0.5px;color:var(--blue);">synapse.config.max_body_size</span></div>
+  <div class="role-axes">wght 400 · MONO 1 · CASL 0<br>slnt 0 · 13px · ls 0.5px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Timestamp</div><div class="role-class">.t-timestamp</div><div class="role-context">Log times, event dates</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.5px;color:var(--muted);">2026-03-23T14:32:07.441Z</span></div>
+  <div class="role-axes">wght 500 · MONO 1 · CASL 0<br>slnt 0 · 11px · ls 0.5px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Nav</div><div class="role-class">.t-nav</div><div class="role-context">Sidebar navigation items</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 500,'MONO' 0.5,'CASL' 0.2,'CRSV' 0.5,'slnt' -2;font-size:14px;letter-spacing:1px;">Traffic Overview</span></div>
+  <div class="role-axes">wght 500 · MONO 0.5 · CASL 0.2<br>slnt -2 · 14px · ls 1px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Nav Active</div><div class="role-class">.t-nav-active</div><div class="role-context">Active sidebar item</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 700,'MONO' 0.5,'CASL' 0.1,'CRSV' 0.5,'slnt' -2;font-size:14px;letter-spacing:1px;color:var(--blue);">Traffic Overview</span></div>
+  <div class="role-axes">wght 700 · MONO 0.5 · CASL 0.1<br>slnt -2 · 14px · ls 1px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Link</div><div class="role-class">.t-link</div><div class="role-context">Clickable text, CTAs</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -15;font-size:10px;letter-spacing:1px;color:var(--blue);">VIEW ALL TRAFFIC →</span></div>
+  <div class="role-axes">wght 700 · MONO 0 · CASL 0<br>slnt -15 · 10px · ls 1px</div>
+</div>
+
+<div class="role-card">
+  <div class="role-meta"><div class="role-name">Breadcrumb</div><div class="role-class">.t-breadcrumb</div><div class="role-context">Path navigation</div></div>
+  <div class="role-specimen"><span style="font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0.2,'CRSV' 0.5,'slnt' -7;font-size:10px;letter-spacing:2.5px;color:var(--muted);">FLEET / SENSORS / SYN-042</span></div>
+  <div class="role-axes">wght 700 · MONO 1 · CASL 0.2<br>slnt -7 · 10px · ls 2.5px</div>
+</div>
+
+<!-- ── WORDMARK STYLES ── -->
+<div class="section-title" style="margin-top:48px;">Wordmark Variants</div>
+<div style="display:flex;gap:48px;flex-wrap:wrap;margin-bottom:32px;">
+  <div>
+    <div style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;">COLORED UPPERCASE</div>
+    <span style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:28px;letter-spacing:0.2em;color:var(--coral);">HORIZON</span>
+    <span style="margin-left:32px;font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:28px;letter-spacing:0.2em;color:#A78BFA;">SYNAPSE</span>
+  </div>
+  <div>
+    <div style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px;">LIGHT MIXED CASE</div>
+    <span style="font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:28px;color:var(--text);">Horizon</span>
+    <span style="margin-left:32px;font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:28px;color:var(--text);">Synapse</span>
+  </div>
+</div>
+
+<div class="footer">Edge Prot

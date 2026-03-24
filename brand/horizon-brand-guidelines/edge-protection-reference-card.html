@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Protection Design System — Quick Reference Card</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;
+  --text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;
+  --blue:#1E90FF;--blue-tint:#7EC8FF;--blue-shade:#0A6ED8;--navy:#0B4F8A;--navy-shade:#083D6C;
+  --violet:#8B5CF6;--violet-tint:#C4B5FD;--violet-shade:#6D28D9;--violet-dark:#4C1D95;
+  --coral:#F97316;--coral-light:#FB923C;
+  --red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;
+  --font:'Recursive',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#fff;color:#1a2b42;font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;font-size:11px;line-height:1.4;}
+.page{width:1440px;margin:0 auto;padding:32px 40px 24px;}
+
+/* Header */
+.header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:24px;padding-bottom:12px;border-bottom:3px solid var(--blue);}
+.header h1{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:24px;color:var(--bg);}
+.header .version{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:320px 320px 360px 360px;gap:24px;}
+
+/* Section titles */
+.st{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--bg);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #d4dce8;}
+
+/* Swatches */
+.sw-row{display:flex;gap:4px;margin-bottom:6px;}
+.sw{flex:1;min-width:0;}
+.sw-color{height:28px;display:flex;align-items:flex-end;padding:2px 4px;}
+.sw-label{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:8px;color:#1a2b42;margin-top:1px;}
+.sw-hex{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:8px;color:var(--muted);}
+
+/* Type specimens */
+.type-row{display:flex;align-items:baseline;gap:8px;margin-bottom:3px;padding:3px 0;border-bottom:1px solid #eef2f7;}
+.type-name{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:8px;letter-spacing:0.5px;color:var(--blue);width:60px;flex-shrink:0;}
+.type-specimen{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--bg);}
+.type-axes{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:7px;color:var(--muted);width:115px;flex-shrink:0;text-align:right;}
+
+/* Buttons */
+.btn-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:6px 14px;font-family:var(--font);font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;cursor:pointer;border:none;}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-outlined{background:transparent;border:1.5px solid var(--blue);color:var(--blue);}
+.btn-secondary{background:var(--card);color:var(--text);border:1px solid var(--border);}
+.btn-link{background:none;border:none;color:var(--blue);font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -15;font-size:10px;letter-spacing:1px;padding:6px 0;}
+.btn-accent{background:var(--violet);color:#fff;}
+
+/* Cards */
+.card-demo{padding:10px;margin-bottom:6px;}
+.card-demo.dark{background:var(--card);border:1px solid var(--border);color:var(--text);}
+.card-demo.light{background:#fff;border:1px solid #d4dce8;color:#1a2b42;}
+
+/* Alerts */
+.alert{display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:4px;font-size:10px;}
+.alert-icon{width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.alert-success{background:rgba(16,185,129,0.08);border-left:3px solid var(--green);color:#065f46;}
+.alert-warning{background:rgba(245,158,11,0.08);border-left:3px solid var(--amber);color:#92400e;}
+.alert-error{background:rgba(239,68,68,0.08);border-left:3px solid var(--red);color:#991b1b;}
+.alert-info{background:rgba(30,144,255,0.08);border-left:3px solid var(--blue);color:#0b4f8a;}
+
+/* Do/Don't */
+.dd-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;}
+.dd{padding:6px 8px;font-size:9px;line-height:1.5;}
+.do{border-left:3px solid var(--green);background:rgba(16,185,129,0.04);}
+.dont{border-left:3px solid var(--red);background:rgba(239,68,68,0.04);}
+.dd-label{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:8px;letter-spacing:1px;margin-bottom:3px;}
+.do .dd-label{color:var(--green);}
+.dont .dd-label{color:var(--red);}
+
+/* Proportion bar */
+.prop{display:flex;height:16px;margin-bottom:4px;overflow:hidden;}
+.prop>div{display:flex;align-items:center;justify-content:center;font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:7px;letter-spacing:0.3px;color:#fff;}
+
+/* Theme cards */
+.theme{padding:8px;margin-bottom:6px;}
+.theme-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:11px;margin-bottom:2px;}
+.theme-desc{font-size:9px;margin-bottom:6px;opacity:0.7;}
+.theme-bar{display:flex;height:18px;}
+.theme-bar>div{flex:1;display:flex;align-items:center;justify-content:center;font-size:7px;font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;}
+
+/* CASL gradient */
+.casl-bar{display:flex;height:20px;margin-bottom:4px;}
+.casl-bar>div{display:flex;align-items:center;justify-content:center;font-size:7px;font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;color:#fff;}
+
+/* Light/Dark mode examples */
+.mode-example{padding:10px;margin-bottom:4px;}
+.mode-example.dark-mode{background:var(--surface);color:var(--text);}
+.mode-example.light-mode{background:#f7f9fc;color:#1a2b42;border:1px solid #e4eaf2;}
+
+/* Footer */
+.footer{margin-top:16px;padding-top:8px;border-top:1px solid #d4dce8;display:flex;justify-content:space-between;font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--muted);letter-spacing:0.5px;}
+</style>
+</head>
+<body>
+<div id="dl-bar" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:8px 48px;background:#101828;border-bottom:1px solid #1e2d44;font-family:'Recursive',ui-monospace,monospace;">
+  <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:1.5px;color:#5a6f8a;">EDGE PROTECTION CHEATSHEET</span>
+  <div style="display:flex;gap:8px;">
+    <button onclick="dlMd()" style="padding:4px 12px;background:#1E90FF;color:#fff;border:none;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ Markdown</button>
+    <button onclick="dlHtml()" style="padding:4px 12px;background:transparent;color:#7EC8FF;border:1px solid #1e2d44;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ HTML</button>
+  </div>
+</div>
+<script>
+const _md="# Edge Protection Design System \u2014 Quick Reference\n\n> Single-page cheatsheet. For details see COLOR-REFERENCE.md, TYPOGRAPHY-REFERENCE.md, USAGE-GUIDE.md.\n\n## Colors\n\n### Primary\n`#1E90FF` Blue (primary) \u00b7 `#0A6ED8` Shade \u00b7 `#7EC8FF` Tint \u00b7 `#0B4F8A` Navy\n\n### Accent\n`#8B5CF6` Violet (accent) \u00b7 `#C4B5FD` Tint \u00b7 `#6D28D9` Shade\n\n### Logo Only\n`#F97316` Coral (Horizon) \u00b7 `#A78BFA` Violet Light (Synapse) \u2014 **NOT for UI**\n\n### Status\n`#EF4444` Red \u00b7 `#F59E0B` Amber \u00b7 `#10B981` Green \u00b7 `#06B6D4` Cyan\n\n### Surfaces (Dark)\n`#080e1a` \u2192 `#0c1220` \u2192 `#101828` \u2192 `#131c2e` \u2192 `#182440` \u2192 `#1e2d44`\n\n### Text (Dark)\n`#e8ecf4` Primary \u00b7 `#8899b0` Secondary \u00b7 `#5a6f8a` Muted (14px+ only)\n\n## Typography \u2014 Recursive Variable Font\n\n### Axes\nwght 300\u2013900 \u00b7 MONO 0\u20131 \u00b7 CASL 0\u20131 \u00b7 slnt -15\u20130 \u00b7 CRSV 0.5 (locked)\n\n### 15 Roles\n\n| Role | Class | wght | MONO | CASL | slnt | Size | Spacing |\n|------|-------|------|------|------|------|------|---------|\n| Display | `.t-display` | 300 | 0 | 0 | 0 | 36px | \u2014 |\n| Heading | `.t-heading` | 500 | 0 | 0.2 | 0 | 24px | \u2014 |\n| Subhead | `.t-subhead` | 600 | 0 | 0.3 | -3 | 14px | 1.5px |\n| Body | `.t-body` | 400 | 0 | 0.6 | 0 | 13px | \u2014 |\n| Label | `.t-label` | 600 | 1 | 0.3 | -4 | 12px | 1px |\n| Tag | `.t-tag` | 800 | 0 | 0 | -3 | 11px | 1.5px |\n| Metric | `.t-metric` | 400 | 1 | 0.6 | 0 | 32px | -0.5px |\n| Metric Unit | `.t-metric-unit` | 500 | 1 | 0 | 0 | 13px | 0.5px |\n| Data | `.t-data` | 500 | 1 | 0 | 0 | 13px | \u2014 |\n| Code | `.t-code` | 400 | 1 | 0 | 0 | 13px | 0.5px |\n| Timestamp | `.t-timestamp` | 500 | 1 | 0 | 0 | 11px | 0.5px |\n| Nav | `.t-nav` | 500 | 0.5 | 0.2 | -2 | 14px | 1px |\n| Nav Active | `.t-nav-active` | 700 | 0.5 | 0.1 | -2 | 14px | 1px |\n| Link | `.t-link` | 700 | 0 | 0 | -15 | 10px | 1px |\n| Breadcrumb | `.t-breadcrumb` | 700 | 1 | 0.2 | -7 | 10px | 2.5px |\n\n### CASL Rule\n- Human text \u2192 CASL 0.6 (warm)\n- Machine data \u2192 CASL 0 (clinical)\n- Navigation \u2192 CASL 0.2 (hybrid)\n\n### Wordmarks\n- **Colored uppercase**: wght 400, letter-spacing 0.2em. Horizon=#F97316, Synapse=#A78BFA\n- **Light mixed case**: wght 300, color #e8ecf4 (dark) / #0c1220 (light)\n\n## Rules\n\n1. Font: Recursive only, nothing else\n2. Border radius: 0 everywhere, no exceptions\n3. Coral (#F97316): logos only, never UI\n4. Status colors: functional only, never decorative\n5. Muted text (#5a6f8a): 14px+ only\n6. Display role: wght 300 (light), never bold\n7. Use `font-variation-settings`, not Tailwind font-weight utilities\n8. No pure white (#fff) for text \u2014 use #e8ecf4\n\n## Product Names\n- **Horizon** = edge protection hub (top-level name for both products)\n- **Synapse** = API/WAF sensor (runs standalone, \"Defense\" module within Horizon)\n- Taglines: Horizon = \"See Further. Act Faster.\" / Synapse = \"On-Board Intelligence\"\n";
+function dlMd(){var a=document.createElement("a");a.href="data:text/markdown;charset=utf-8,"+encodeURIComponent(_md);a.download="QUICK-REFERENCE.md";a.click();}
+function dlHtml(){var a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(document.documentElement.outerHTML);a.download=document.title.replace(/[^a-zA-Z0-9]/g,"-").toLowerCase()+".html";a.click();}
+</script>
+
+<div class="page">
+
+<div class="header">
+  <h1>Edge Protection Design System</h1>
+  <div class="version">Quick Reference Card v1.0</div>
+</div>
+
+<div class="grid">
+
+<!-- ═══════════════════ COLUMN 1 ═══════════════════ -->
+<div>
+
+  <!-- COLOR PALETTE -->
+  <div class="st">Color Palette</div>
+
+  <div style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin-bottom:4px;">Primary Colors</div>
+  <div class="sw-row">
+    <div class="sw"><div class="sw-color" style="background:var(--blue);"><span style="font-size:7px;color:#fff;">★</span></div><div class="sw-label">VIVID BLUE</div><div class="sw-hex">#1E90FF</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--navy);"></div><div class="sw-label">NAVY</div><div class="sw-hex">#0B4F8A</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--bg);"></div><div class="sw-label">DARK BASE</div><div class="sw-hex">#080e1a</div></div>
+  </div>
+
+  <div style="font-size:8px;color:var(--muted);margin-bottom:4px;">Tints and Shades</div>
+  <div class="sw-row">
+    <div class="sw"><div class="sw-color" style="background:var(--blue-tint);height:20px;"></div><div class="sw-hex">#7EC8FF</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--blue-shade);height:20px;"></div><div class="sw-hex">#0A6ED8</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--navy-shade);height:20px;"></div><div class="sw-hex">#083D6C</div></div>
+  </div>
+
+  <div style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin:6px 0 4px;">Accent — Arc Violet</div>
+  <div class="sw-row">
+    <div class="sw"><div class="sw-color" style="background:var(--violet);"></div><div class="sw-label">VIOLET</div><div class="sw-hex">#8B5CF6</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--violet-tint);"></div><div class="sw-label">TINT</div><div class="sw-hex">#C4B5FD</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--violet-shade);"></div><div class="sw-label">SHADE</div><div class="sw-hex">#6D28D9</div></div>
+  </div>
+
+  <div style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin:6px 0 4px;">Brand / Logo Only</div>
+  <div class="sw-row">
+    <div class="sw"><div class="sw-color" style="background:var(--coral);"></div><div class="sw-label">CORAL</div><div class="sw-hex">#F97316</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--coral-light);"></div><div class="sw-label">CORAL LT</div><div class="sw-hex">#FB923C</div></div>
+    <div class="sw"><div class="sw-color" style="background:#A78BFA;"></div><div class="sw-label">VIOLET LT</div><div class="sw-hex">#A78BFA</div></div>
+  </div>
+
+  <div style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin:6px 0 4px;">Status Colors</div>
+  <div class="sw-row">
+    <div class="sw"><div class="sw-color" style="background:var(--red);"></div><div class="sw-label">Red</div><div class="sw-hex">#EF4444</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--amber);"></div><div class="sw-label">Amber</div><div class="sw-hex">#F59E0B</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--green);"></div><div class="sw-label">Green</div><div class="sw-hex">#10B981</div></div>
+    <div class="sw"><div class="sw-color" style="background:var(--cyan);"></div><div class="sw-label">Cyan</div><div class="sw-hex">#06B6D4</div></div>
+  </div>
+
+  <div style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin:8px 0 4px;">Surface Scale (Dark Mode)</div>
+  <div class="sw-row">
+    <div class="sw"><div class="sw-color" style="background:#080e1a;border:1px solid #ccc;height:20px;"></div><div class="sw-hex">#080e1a</div></div>
+    <div class="sw"><div class="sw-color" style="background:#0c1220;border:1px solid #ccc;height:20px;"></div><div class="sw-hex">#0c1220</div></div>
+    <div class="sw"><div class="sw-color" style="background:#101828;border:1px solid #ccc;height:20px;"></div><div class="sw-hex">#101828</div></div>
+    <div class="sw"><div class="sw-color" style="background:#131c2e;border:1px solid #ccc;height:20px;"></div><div class="sw-hex">#131c2e</div></div>
+    <div class="sw"><div class="sw-color" style="background:#1e2d44;border:1px solid #ccc;height:20px;"></div><div class="sw-hex">#1e2d44</div></div>
+  </div>
+
+  <div style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin:8px 0 4px;">Usage Proportion</div>
+  <div class="prop">
+    <div style="flex:35;background:var(--surface);">Surface 35%</div>
+    <div style="flex:25;background:var(--blue);">Blue 25%</div>
+    <div style="flex:20;background:#e8ecf4;color:var(--bg);">Text 20%</div>
+    <div style="flex:10;background:var(--violet);">Vio 10%</div>
+    <div style="flex:5;background:var(--coral);">5%</div>
+    <div style="flex:5;background:var(--red);">5%</div>
+  </div>
+
+  <!-- GRADIENTS -->
+  <div class="st" style="margin-top:12px;">Gradients</div>
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Navy → Blue</div>
+  <div style="height:16px;background:linear-gradient(135deg,#0B4F8A 0%,#1E90FF 100%);margin-bottom:4px;"></div>
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Blue Scale (3-stop)</div>
+  <div style="height:16px;background:linear-gradient(90deg,#0B4F8A 0%,#1E90FF 50%,#7EC8FF 100%);margin-bottom:4px;"></div>
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Violet → Dark</div>
+  <div style="height:16px;background:linear-gradient(135deg,#8B5CF6 0%,#4C1D95 100%);margin-bottom:4px;"></div>
+
+</div>
+
+<!-- ═══════════════════ COLUMN 2 ═══════════════════ -->
+<div>
+
+  <!-- TYPOGRAPHY -->
+  <div class="st">Typography</div>
+  <div style="font-size:9px;margin-bottom:6px;">Font Family: <strong style="color:var(--blue);">Recursive</strong> (Google Fonts) · Variable: wght, MONO, CASL, slnt</div>
+
+  <div class="type-row">
+    <div class="type-name">Display</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:22px;">System Overview</div>
+    <div class="type-axes">300 · M0 · C0 · 36px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Heading</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:16px;">Incident Feed</div>
+    <div class="type-axes">500 · M0 · C.2 · 24px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Subhead</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.3,'CRSV' 0.5,'slnt' -3;font-size:12px;letter-spacing:1.5px;">ACTIVE ENTITIES</div>
+    <div class="type-axes">600 · M0 · C.3 · s-3 · 14px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Body</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:11px;">No high-risk entities recorded yet.</div>
+    <div class="type-axes">400 · M0 · C.6 · 13px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Label</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;">TEST & ATTACK</div>
+    <div class="type-axes">600 · M1 · C.3 · s-4 · 12px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Tag</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 800,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -3;font-size:9px;letter-spacing:1.5px;color:var(--red);">CRITICAL</div>
+    <div class="type-axes">800 · M0 · C0 · s-3 · 11px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Metric</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:20px;letter-spacing:-0.5px;">72,481</div>
+    <div class="type-axes">400 · M1 · C.6 · 32px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Data</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;">192.168.1.42 → GET /api 200</div>
+    <div class="type-axes">500 · M1 · C0 · 13px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Code</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:0.5px;color:var(--blue);">synapse.config.max_body</div>
+    <div class="type-axes">400 · M1 · C0 · 13px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Nav</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 500,'MONO' 0.5,'CASL' 0.2,'CRSV' 0.5,'slnt' -2;font-size:12px;letter-spacing:1px;">Traffic Overview</div>
+    <div class="type-axes">500 · M.5 · C.2 · s-2 · 14px</div>
+  </div>
+  <div class="type-row">
+    <div class="type-name">Link</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -15;font-size:9px;letter-spacing:1px;color:var(--blue);">VIEW ALL TRAFFIC →</div>
+    <div class="type-axes">700 · M0 · C0 · s-15 · 10px</div>
+  </div>
+  <div class="type-row" style="border-bottom:none;">
+    <div class="type-name">Breadcrumb</div>
+    <div class="type-specimen" style="font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0.2,'CRSV' 0.5,'slnt' -7;font-size:8px;letter-spacing:2.5px;color:var(--muted);">FLEET / SENSORS / SYN-042</div>
+    <div class="type-axes">700 · M1 · C.2 · s-7 · 10px</div>
+  </div>
+
+  <!-- CASL GRADIENT -->
+  <div style="font-size:8px;color:var(--muted);margin:8px 0 4px;">CASL Warmth Gradient — Brand Voice Encoded in Font</div>
+  <div class="casl-bar">
+    <div style="flex:2;background:var(--coral);">BODY .6</div>
+    <div style="flex:1;background:#d06828;">SUB .3</div>
+    <div style="flex:1;background:#a06030;">HEAD .2</div>
+    <div style="flex:2;background:var(--blue);">DATA 0</div>
+    <div style="flex:1;background:#105aaa;">CODE 0</div>
+  </div>
+  <div style="font-size:7px;color:var(--muted);margin-bottom:8px;">← Human (warm, casual) · Machine (cold, clinical) →</div>
+
+  <!-- BUTTON STYLES -->
+  <div class="st" style="margin-top:8px;">Button Styles</div>
+  <div style="font-size:8px;color:var(--muted);margin-bottom:4px;">No rounded corners · Title Case · Variable width, centered</div>
+  <div class="btn-row">
+    <div class="btn btn-primary">Primary</div>
+    <div class="btn btn-outlined">Outlined</div>
+    <div class="btn btn-secondary">Secondary</div>
+    <div class="btn btn-accent">Accent</div>
+    <div class="btn btn-link">Click →</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ COLUMN 3 ═══════════════════ -->
+<div>
+
+  <!-- CARD EXAMPLES -->
+  <div class="st">Card Examples</div>
+
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Dark Card</div>
+  <div class="card-demo dark">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <span style="font-variation-settings:'wght' 800,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -3;font-size:9px;letter-spacing:1.5px;color:var(--blue);background:rgba(30,144,255,0.15);padding:2px 6px;">FEATURED</span>
+    </div>
+    <div style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;">Edge Protection Platform</div>
+    <div style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);margin-top:2px;">Autonomous defense at the edge</div>
+  </div>
+
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Status Card</div>
+  <div class="card-demo dark">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+      <div style="width:8px;height:8px;background:var(--green);border-radius:50%;"></div>
+      <span style="font-variation-settings:'wght' 800,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -3;font-size:8px;letter-spacing:1px;color:var(--green);">ONLINE</span>
+    </div>
+    <div style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;">Synapse Sensor</div>
+    <div style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--text-sec);margin-top:2px;">All systems operational</div>
+  </div>
+
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Alert Card</div>
+  <div class="card-demo dark" style="border-left:3px solid var(--red);">
+    <span style="font-variation-settings:'wght' 800,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' -3;font-size:8px;letter-spacing:1px;color:var(--red);">CRITICAL</span>
+    <div style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;margin-top:2px;">Attack Detected</div>
+    <div style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--text-sec);margin-top:2px;">SQLi attempt blocked</div>
+  </div>
+
+  <!-- ALERT STYLES -->
+  <div class="st" style="margin-top:12px;">Alert Styles</div>
+  <div class="alert alert-success"><div class="alert-icon">✓</div><div><strong>Success:</strong> Operation completed</div></div>
+  <div class="alert alert-warning"><div class="alert-icon">!</div><div><strong>Warning:</strong> Please review settings</div></div>
+  <div class="alert alert-error"><div class="alert-icon">✕</div><div><strong>Error:</strong> Action failed</div></div>
+  <div class="alert alert-info"><div class="alert-icon">i</div><div><strong>Info:</strong> Update available</div></div>
+
+  <!-- LIGHT / DARK MODE -->
+  <div class="st" style="margin-top:12px;">Light / Dark Mode</div>
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Light Mode (Default)</div>
+  <div class="mode-example light-mode">
+    <div style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;">Fleet Overview</div>
+    <div style="font-size:9px;color:#475a72;margin-top:2px;">Body text on white with slate headings.</div>
+    <div style="display:flex;gap:4px;margin-top:6px;">
+      <div class="btn btn-primary" style="font-size:9px;padding:4px 10px;">Primary CTA</div>
+      <div class="btn" style="font-size:9px;padding:4px 10px;background:var(--violet);color:#fff;">Accent</div>
+    </div>
+  </div>
+  <div style="font-size:8px;color:var(--muted);margin-bottom:2px;">Dark Mode</div>
+  <div class="mode-example dark-mode">
+    <div style="font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;">Fleet Overview</div>
+    <div style="font-size:9px;color:var(--text-sec);margin-top:2px;">Body text on navy with light headings.</div>
+    <div style="display:flex;gap:4px;margin-top:6px;">
+      <div class="btn btn-primary" style="font-size:9px;padding:4px 10px;">Primary CTA</div>
+      <div class="btn" style="font-size:9px;padding:4px 10px;background:var(--violet);color:#fff;">Accent</div>
+    </div>
+  </div>
+
+  <!-- DO / DON'T -->
+  <div class="st" style="margin-top:12px;">Do / Don't</div>
+  <div class="dd-grid">
+    <div class="dd do"><div class="dd-label">✓ DO</div>Use Recursive for everything</div>
+    <div class="dd dont"><div class="dd-label">✕ DON'T</div>Mix Inter, Rubik, or system fonts</div>
+  </div>
+  <div class="dd-grid">
+    <div class="dd do"><div class="dd-label">✓ DO</div>Sharp corners on all UI elements</div>
+    <div class="dd dont"><div class="dd-label">✕ DON'T</div>Use rounded corners or pill shapes</div>
+  </div>
+  <div class="dd-grid">
+    <div class="dd do"><div class="dd-label">✓ DO</div>CASL 0.6 for body, CASL 0 for data</div>
+    <div class="dd dont"><div class="dd-label">✕ DON'T</div>Use CASL 0 for human-facing text</div>
+  </div>
+  <div class="dd-grid">
+    <div class="dd do"><div class="dd-label">✓ DO</div>Coral for logos and icon accents only</div>
+    <div class="dd dont"><div class="dd-label">✕ DON'T</div>Use coral as a UI element color</div>
+  </div>
+  <div class="dd-grid">
+    <div class="dd do"><div class="dd-label">✓ DO</div>wght 300 for display (lightest = biggest)</div>
+    <div class="dd dont"><div class="dd-label">✕ DON'T</div>Bold the display role or hero text</div>
+  </div>
+  <div class="dd-grid">
+    <div class="dd do"><div class="dd-label">✓ DO</div>Status colors for data/alerts only</div>
+    <div class="dd dont"><div class="dd-label">✕ DON'T</div>Use red/green decoratively</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════ COLUMN 4 ═══════════════════ -->
+<div>
+
+  <!-- COMPONENT THEME SETS -->
+  <div class="st">Component Theme Sets</div>
+
+  <div class="theme" style="background:var(--surface);color:var(--text);">
+    <div class="theme-name">Primary Dark Theme</div>
+    <div class="theme-desc">Body text on slate with blue headings.</div>
+    <div style="display:inline-block;padding:3px 8px;background:var(--blue);color:#fff;font-size:8px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;margin-bottom:4px;">Blue CTA</div>
+    <div class="theme-bar">
+      <div style="background:var(--surface);color:var(--muted);">Surface</div>
+      <div style="background:var(--blue);color:#fff;">Blue</div>
+      <div style="background:var(--card);color:var(--text-sec);">Card</div>
+      <div style="background:var(--text);color:var(--bg);">Text</div>
+    </div>
+  </div>
+
+  <div class="theme" style="background:var(--surface);color:var(--text);">
+    <div class="theme-name">Sensor Console</div>
+    <div class="theme-desc">Data-heavy interface with violet accents.</div>
+    <div style="display:inline-block;padding:3px 8px;background:var(--violet);color:#fff;font-size:8px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;margin-bottom:4px;">Violet Accent</div>
+    <div class="theme-bar">
+      <div style="background:var(--bg);color:var(--muted);">BG</div>
+      <div style="background:var(--violet);color:#fff;">Violet</div>
+      <div style="background:var(--card);color:var(--text-sec);">Card</div>
+      <div style="background:var(--text);color:var(--bg);">Text</div>
+    </div>
+  </div>
+
+  <div class="theme" style="background:#f7f9fc;color:#1a2b42;border:1px solid #e4eaf2;">
+    <div class="theme-name">Light Dashboard</div>
+    <div class="theme-desc">Clean interface for fleet management.</div>
+    <div style="display:inline-block;padding:3px 8px;background:var(--blue);color:#fff;font-size:8px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;margin-bottom:4px;">Blue CTA</div>
+    <div class="theme-bar">
+      <div style="background:#f7f9fc;color:#6b7d96;border:1px solid #e4eaf2;">Surface</div>
+      <div style="background:var(--blue);color:#fff;">Blue</div>
+      <div style="background:#fff;color:#475a72;border:1px solid #e4eaf2;">Card</div>
+      <div style="background:#1a2b42;color:#fff;">Text</div>
+    </div>
+  </div>
+
+  <div class="theme" style="background:var(--surface);color:var(--text);">
+    <div class="theme-name">Status Dashboard</div>
+    <div class="theme-desc">Metrics with status indicators.</div>
+    <div style="display:flex;gap:3px;margin-bottom:4px;">
+      <span style="padding:2px 6px;background:rgba(16,185,129,0.15);color:var(--green);font-size:7px;font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;">OK</span>
+      <span style="padding:2px 6px;background:rgba(245,158,11,0.15);color:var(--amber);font-size:7px;font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;">WARN</span>
+      <span style="padding:2px 6px;background:rgba(239,68,68,0.15);color:var(--red);font-size:7px;font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;">CRIT</span>
+    </div>
+    <div class="theme-bar">
+      <div style="background:var(--surface);color:var(--muted);">Surface</div>
+      <div style="background:var(--card);color:var(--text-sec);">Card</div>
+      <div style="background:var(--green);color:#fff;">Good</div>
+      <div style="background:var(--red);color:#fff;">Bad</div>
+    </div>
+  </div>
+
+  <div class="theme" style="background:var(--surface);color:var(--text);">
+    <div class="theme-name">Documentation Theme</div>
+    <div class="theme-desc">Clean docs with code highlights.</div>
+    <div style="display:inline-block;padding:3px 8px;background:var(--card);border:1px solid var(--border);color:var(--blue);font-size:8px;font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;margin-bottom:4px;">code</div>
+    <div class="theme-bar">
+      <div style="background:var(--surface);color:var(--muted);">Nav</div>
+      <div style="background:var(--card);color:var(--text-sec);">Body</div>
+      <div style="background:var(--blue);color:#fff;">Link</div>
+      <div style="background:var(--bg);color:var(--blue);">Code</div>
+    </div>
+  </div>
+
+  <div class="theme" style="background:linear-gradient(135deg,#0B4F8A 0%,#083D6C 100%);color:#fff;">
+    <div class="theme-name">Marketing / Hero Theme</div>
+    <div class="theme-desc">Bold gradient with CTA emphasis.</div>
+    <div style="display:inline-block;padding:3px 8px;background:var(--violet);color:#fff;font-size:8px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;margin-bottom:4px;">Get Started →</div>
+    <div class="theme-bar">
+      <div style="background:var(--navy);">Navy</div>
+      <div style="background:var(--blue);">Blue</div>
+      <div style="background:var(--violet);">CTA</div>
+      <div style="background:var(--bg);">BG</div>
+    </div>
+  </div>
+
+  <!-- ICON RULES -->
+  <div class="st" style="margin-top:12px;">Icon System</div>
+  <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;">
+    <svg width="48" height="48" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5"/><g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g></svg>
+    <svg width="48" height="48" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/><g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g></svg>
+    <div style="font-size:8px;color:#475a72;line-height:1.6;">
+      <div>• Corner brackets at ≥28px</div>
+      <div>• Stroke-based, no fills</div>
+      <div>• Blue structure, product accent</div>
+      <div>• Dark: #0c1220 bg rect</div>
+      <div>• Light: transparent</div>
+      <div>• Scales to 16px favicon</div>
+    </div>
+  </div>
+
+  <!-- WORDMARK VARIANTS -->
+  <div class="st" style="margin-top:8px;">Wordmark Variants</div>
+  <div style="background:var(--surface);padding:8px;margin-bottom:4px;">
+    <div style="font-size:7px;color:var(--muted);margin-bottom:4px;">COLORED UPPERCASE (lockups)</div>
+    <span style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:18px;letter-spacing:0.2em;color:var(--coral);">HORIZON</span>
+    <span style="margin-left:12px;font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:18px;letter-spacing:0.2em;color:#A78BFA;">SYNAPSE</span>
+  </div>
+  <div style="background:var(--surface);padding:8px;">
+    <div style="font-size:7px;color:var(--muted);margin-bottom:4px;">LIGHT MIXED CASE (alternative)</div>
+    <span style="font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:18px;color:var(--text);">Horizon</span>
+    <span style="margin-left:12px;font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:18px;color:var(--text);">Synapse</span>
+  </div>
+
+</div>
+
+</div><!-- /grid -->
+
+<div class="footer">
+  <div>Edge Protection Design System · Recursive font via Google Fonts · Atlas Crew</div>
+  <div>Reference Card v1.0 — March 2026</div>
+</div>
+
+</div><!-- /page -->
+</body>
+</html>

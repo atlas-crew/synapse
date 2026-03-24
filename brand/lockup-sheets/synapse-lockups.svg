@@ -1,121 +1,1180 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1200" height="800" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>@import url('https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&amp;display=swap');</style>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1200"
+   height="800"
+   viewBox="0 0 1200 800"
+   version="1.1"
+   id="svg102"
+   sodipodi:docname="synapse-lockups.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview102"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.54031975"
+     inkscape:cx="578.36124"
+     inkscape:cy="100.8662"
+     inkscape:window-width="1460"
+     inkscape:window-height="684"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg102" />
+  <defs
+     id="defs1">
+    <style
+       id="style1">@import url('https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&amp;display=swap');</style>
   </defs>
-  <rect width="1200" height="800" fill="#080b12"/>
-  <text x="60" y="46" font-family="Recursive, monospace" font-weight="600" font-size="11" letter-spacing="0.2em" fill="#5a6f8a">SYNAPSE LOCKUPS — DARK BACKGROUND</text>
-  <line x1="60" y1="56" x2="1140" y2="56" stroke="#1e2d44" stroke-width="1"/>
-
+  <rect
+     width="1200"
+     height="800"
+     fill="#080b12"
+     id="rect1"
+     x="1.5363436"
+     y="0" />
+  <g
+     id="g102"
+     inkscape:label="logo">
+    <rect
+       width="80"
+       height="80"
+       fill="#0c1220"
+       id="rect2-4"
+       x="387"
+       y="88"
+       style="stroke-width:0.727273" />
+    <line
+       x1="427"
+       y1="128"
+       x2="407.36365"
+       y2="105.45454"
+       stroke="#1e90ff"
+       stroke-width="1.81818"
+       stroke-linecap="square"
+       id="line2-9" />
+    <line
+       x1="427"
+       y1="128"
+       x2="446.63635"
+       y2="105.45454"
+       stroke="#1e90ff"
+       stroke-width="1.81818"
+       stroke-linecap="square"
+       id="line3-6" />
+    <line
+       x1="427"
+       y1="128"
+       x2="452.45456"
+       y2="124.36364"
+       stroke="#1e90ff"
+       stroke-width="1.81818"
+       stroke-linecap="square"
+       id="line4-3" />
+    <line
+       x1="427"
+       y1="128"
+       x2="405.90909"
+       y2="143.27272"
+       stroke="#1e90ff"
+       stroke-width="1.81818"
+       stroke-linecap="square"
+       id="line5-2" />
+    <line
+       x1="427"
+       y1="128"
+       x2="443.72726"
+       y2="150.54546"
+       stroke="#8b5cf6"
+       stroke-width="2.54545"
+       stroke-linecap="square"
+       id="line6-3" />
+    <line
+       x1="407.36365"
+       y1="105.45454"
+       x2="446.63635"
+       y2="105.45454"
+       stroke="#1e90ff"
+       stroke-width="1.09091"
+       opacity="0.3"
+       id="line7-6" />
+    <line
+       x1="446.63635"
+       y1="105.45454"
+       x2="452.45456"
+       y2="124.36364"
+       stroke="#1e90ff"
+       stroke-width="1.09091"
+       opacity="0.3"
+       id="line8-9" />
+    <line
+       x1="405.90909"
+       y1="143.27272"
+       x2="443.72726"
+       y2="150.54546"
+       stroke="#8b5cf6"
+       stroke-width="1.45455"
+       opacity="0.35"
+       id="line9-5" />
+    <circle
+       cx="407.36365"
+       cy="105.45454"
+       r="3.2727273"
+       fill="none"
+       stroke="#1e90ff"
+       stroke-width="1.45455"
+       id="circle9-4" />
+    <circle
+       cx="446.63635"
+       cy="105.45454"
+       r="2.5454545"
+       fill="none"
+       stroke="#1e90ff"
+       stroke-width="1.45455"
+       id="circle10-2" />
+    <circle
+       cx="452.45456"
+       cy="124.36364"
+       r="2.5454545"
+       fill="none"
+       stroke="#1e90ff"
+       stroke-width="1.45455"
+       id="circle11-1" />
+    <circle
+       cx="405.90909"
+       cy="143.27272"
+       r="2.5454545"
+       fill="none"
+       stroke="#1e90ff"
+       stroke-width="1.45455"
+       id="circle12-7" />
+    <circle
+       cx="443.72726"
+       cy="150.54546"
+       r="4"
+       fill="#8b5cf6"
+       id="circle13-1"
+       style="stroke-width:0.727273" />
+    <circle
+       cx="427"
+       cy="128"
+       r="5.090909"
+       fill="none"
+       stroke="#1e90ff"
+       stroke-width="2.18182"
+       id="circle14-9" />
+    <g
+       stroke="#5a6f8a"
+       stroke-width="1.5"
+       fill="none"
+       opacity="0.3"
+       id="g17-4"
+       transform="matrix(0.72727273,0,0,0.72727273,387,88)">
+      <polyline
+         points="8,20 8,8 20,8"
+         id="polyline14-7" />
+      <polyline
+         points="90,8 102,8 102,20"
+         id="polyline15-6" />
+      <polyline
+         points="102,90 102,102 90,102"
+         id="polyline16-6" />
+      <polyline
+         points="20,102 8,102 8,90"
+         id="polyline17-6" />
+    </g>
+  </g>
+  <text
+     x="60"
+     y="46"
+     font-family="Recursive, monospace"
+     font-weight="600"
+     font-size="11"
+     letter-spacing="0.2em"
+     fill="#5a6f8a"
+     id="text1"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE LOCKUPS — DARK BACKGROUND</text>
+  <line
+     x1="60"
+     y1="56"
+     x2="1140"
+     y2="56"
+     stroke="#1e2d44"
+     stroke-width="1"
+     id="line1" />
   <!-- HORIZONTAL PRIMARY -->
-  <text x="60" y="92" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">HORIZONTAL PRIMARY</text>
-  <g transform="translate(60,108)">
-    <svg width="80" height="80" viewBox="0 0 110 110">
-      <rect width="110" height="110" fill="#0c1220"/>
-      <line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/>
-      <line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/>
-      <line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/>
-      <line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" opacity="0.3"/>
-      <line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" opacity="0.35"/>
-      <circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/>
-      <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g>
+  <text
+     x="60"
+     y="92"
+     font-family="Recursive, monospace"
+     font-size="9"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text2"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">HORIZONTAL PRIMARY</text>
+  <g
+     transform="translate(60,108)"
+     id="g18">
+    <svg
+       width="80"
+       height="80"
+       viewBox="0 0 110 110"
+       version="1.1"
+       id="svg17">
+      <rect
+         width="110"
+         height="110"
+         fill="#0c1220"
+         id="rect2" />
+      <line
+         x1="55"
+         y1="55"
+         x2="28"
+         y2="24"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line2" />
+      <line
+         x1="55"
+         y1="55"
+         x2="82"
+         y2="24"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line3" />
+      <line
+         x1="55"
+         y1="55"
+         x2="90"
+         y2="50"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line4" />
+      <line
+         x1="55"
+         y1="55"
+         x2="26"
+         y2="76"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line5" />
+      <line
+         x1="55"
+         y1="55"
+         x2="78"
+         y2="86"
+         stroke="#8B5CF6"
+         stroke-width="3.5"
+         stroke-linecap="square"
+         id="line6" />
+      <line
+         x1="28"
+         y1="24"
+         x2="82"
+         y2="24"
+         stroke="#1E90FF"
+         stroke-width="1.5"
+         opacity="0.3"
+         id="line7" />
+      <line
+         x1="82"
+         y1="24"
+         x2="90"
+         y2="50"
+         stroke="#1E90FF"
+         stroke-width="1.5"
+         opacity="0.3"
+         id="line8" />
+      <line
+         x1="26"
+         y1="76"
+         x2="78"
+         y2="86"
+         stroke="#8B5CF6"
+         stroke-width="2"
+         opacity="0.35"
+         id="line9" />
+      <circle
+         cx="28"
+         cy="24"
+         r="4.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle9" />
+      <circle
+         cx="82"
+         cy="24"
+         r="3.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle10" />
+      <circle
+         cx="90"
+         cy="50"
+         r="3.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle11" />
+      <circle
+         cx="26"
+         cy="76"
+         r="3.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle12" />
+      <circle
+         cx="78"
+         cy="86"
+         r="5.5"
+         fill="#8B5CF6"
+         id="circle13" />
+      <circle
+         cx="55"
+         cy="55"
+         r="7"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="3"
+         id="circle14" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g17">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline14" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline15" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline16" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline17" />
+      </g>
     </svg>
-    <text x="100" y="50" font-family="Recursive, monospace" font-weight="400" font-size="38" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
+    <text
+       x="100"
+       y="50"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="38"
+       letter-spacing="0.2em"
+       fill="#A78BFA"
+       id="text17"
+       style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE</text>
   </g>
-
   <!-- HORIZONTAL WITH TAGLINE -->
-  <text x="540" y="92" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">HORIZONTAL WITH TAGLINE</text>
-  <g transform="translate(540,108)">
-    <svg width="80" height="80" viewBox="0 0 110 110">
-      <rect width="110" height="110" fill="#0c1220"/>
-      <line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/>
-      <line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5"/>
-      <line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/>
-      <line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" opacity="0.3"/>
-      <line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" opacity="0.35"/>
-      <circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/>
-      <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g>
+  <text
+     x="540"
+     y="92"
+     font-family="Recursive, monospace"
+     font-size="9"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text18"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">HORIZONTAL WITH TAGLINE</text>
+  <g
+     transform="translate(540,108)"
+     id="g34">
+    <svg
+       width="80"
+       height="80"
+       viewBox="0 0 110 110"
+       version="1.1"
+       id="svg33">
+      <rect
+         width="110"
+         height="110"
+         fill="#0c1220"
+         id="rect18" />
+      <line
+         x1="55"
+         y1="55"
+         x2="28"
+         y2="24"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         id="line18" />
+      <line
+         x1="55"
+         y1="55"
+         x2="82"
+         y2="24"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         id="line19" />
+      <line
+         x1="55"
+         y1="55"
+         x2="90"
+         y2="50"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         id="line20" />
+      <line
+         x1="55"
+         y1="55"
+         x2="26"
+         y2="76"
+         stroke="#1E90FF"
+         stroke-width="2.5"
+         id="line21" />
+      <line
+         x1="55"
+         y1="55"
+         x2="78"
+         y2="86"
+         stroke="#8B5CF6"
+         stroke-width="3.5"
+         id="line22" />
+      <line
+         x1="28"
+         y1="24"
+         x2="82"
+         y2="24"
+         stroke="#1E90FF"
+         stroke-width="1.5"
+         opacity="0.3"
+         id="line23" />
+      <line
+         x1="82"
+         y1="24"
+         x2="90"
+         y2="50"
+         stroke="#1E90FF"
+         stroke-width="1.5"
+         opacity="0.3"
+         id="line24" />
+      <line
+         x1="26"
+         y1="76"
+         x2="78"
+         y2="86"
+         stroke="#8B5CF6"
+         stroke-width="2"
+         opacity="0.35"
+         id="line25" />
+      <circle
+         cx="28"
+         cy="24"
+         r="4.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle25" />
+      <circle
+         cx="82"
+         cy="24"
+         r="3.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle26" />
+      <circle
+         cx="90"
+         cy="50"
+         r="3.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle27" />
+      <circle
+         cx="26"
+         cy="76"
+         r="3.5"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="2"
+         id="circle28" />
+      <circle
+         cx="78"
+         cy="86"
+         r="5.5"
+         fill="#8B5CF6"
+         id="circle29" />
+      <circle
+         cx="55"
+         cy="55"
+         r="7"
+         fill="none"
+         stroke="#1E90FF"
+         stroke-width="3"
+         id="circle30" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g33">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline30" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline31" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline32" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline33" />
+      </g>
     </svg>
-    <text x="100" y="42" font-family="Recursive, monospace" font-weight="400" font-size="32" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <text x="100" y="60" font-family="Recursive, monospace" font-weight="500" font-size="10" letter-spacing="0.15em" fill="#5a6f8a">ON-BOARD INTELLIGENCE</text>
+    <text
+       x="100"
+       y="42"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="32"
+       letter-spacing="0.2em"
+       fill="#A78BFA"
+       id="text33"
+       style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE</text>
+    <text
+       x="100"
+       y="60"
+       font-family="Recursive, monospace"
+       font-weight="500"
+       font-size="10"
+       letter-spacing="0.15em"
+       fill="#5a6f8a"
+       id="text34"
+       style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">ON-BOARD INTELLIGENCE</text>
   </g>
-
   <!-- STACKED -->
-  <text x="60" y="240" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">STACKED</text>
-  <g transform="translate(60,256)">
-    <svg x="26" width="80" height="80" viewBox="0 0 110 110">
-      <rect width="110" height="110" fill="#0c1220"/>
-      <line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/>
-      <line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5"/>
-      <line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/>
-      <circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/>
-      <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g>
-    </svg>
-    <text x="66" y="102" text-anchor="middle" font-family="Recursive, monospace" font-weight="400" font-size="26" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
+  <text
+     x="60"
+     y="240"
+     font-family="Recursive, monospace"
+     font-size="9"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text35"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">STACKED</text>
+  <g
+     transform="translate(60,256)"
+     id="g48">
+    <g
+       id="g102-54"
+       inkscape:label="logo"
+       transform="translate(-361,-88)">
+      <rect
+         width="80"
+         height="80"
+         fill="#0c1220"
+         id="rect2-4-0"
+         x="387"
+         y="88"
+         style="stroke-width:0.727273" />
+      <line
+         x1="427"
+         y1="128"
+         x2="407.36365"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line2-9-6" />
+      <line
+         x1="427"
+         y1="128"
+         x2="446.63635"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line3-6-3" />
+      <line
+         x1="427"
+         y1="128"
+         x2="452.45456"
+         y2="124.36364"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line4-3-00" />
+      <line
+         x1="427"
+         y1="128"
+         x2="405.90909"
+         y2="143.27272"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line5-2-5" />
+      <line
+         x1="427"
+         y1="128"
+         x2="443.72726"
+         y2="150.54546"
+         stroke="#8b5cf6"
+         stroke-width="2.54545"
+         stroke-linecap="square"
+         id="line6-3-2" />
+      <line
+         x1="407.36365"
+         y1="105.45454"
+         x2="446.63635"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.09091"
+         opacity="0.3"
+         id="line7-6-20" />
+      <line
+         x1="446.63635"
+         y1="105.45454"
+         x2="452.45456"
+         y2="124.36364"
+         stroke="#1e90ff"
+         stroke-width="1.09091"
+         opacity="0.3"
+         id="line8-9-8" />
+      <line
+         x1="405.90909"
+         y1="143.27272"
+         x2="443.72726"
+         y2="150.54546"
+         stroke="#8b5cf6"
+         stroke-width="1.45455"
+         opacity="0.35"
+         id="line9-5-2" />
+      <circle
+         cx="407.36365"
+         cy="105.45454"
+         r="3.2727273"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle9-4-5" />
+      <circle
+         cx="446.63635"
+         cy="105.45454"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle10-2-5" />
+      <circle
+         cx="452.45456"
+         cy="124.36364"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle11-1-7" />
+      <circle
+         cx="405.90909"
+         cy="143.27272"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle12-7-4" />
+      <circle
+         cx="443.72726"
+         cy="150.54546"
+         r="4"
+         fill="#8b5cf6"
+         id="circle13-1-7"
+         style="stroke-width:0.727273" />
+      <circle
+         cx="427"
+         cy="128"
+         r="5.090909"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2.18182"
+         id="circle14-9-4" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g17-4-0"
+         transform="matrix(0.72727273,0,0,0.72727273,387,88)">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline14-7-0" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline15-6-6" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline16-6-6" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline17-6-1" />
+      </g>
+    </g>
+    <text
+       x="66"
+       y="102"
+       text-anchor="middle"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="26"
+       letter-spacing="0.2em"
+       fill="#A78BFA"
+       id="text47"
+       style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE</text>
   </g>
-
   <!-- STACKED + TAGLINE -->
-  <text x="280" y="240" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">STACKED + TAGLINE</text>
-  <g transform="translate(280,256)">
-    <svg x="28" width="80" height="80" viewBox="0 0 110 110">
-      <rect width="110" height="110" fill="#0c1220"/>
-      <line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/>
-      <line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5"/>
-      <line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/>
-      <circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/>
-      <circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/>
-      <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g>
-    </svg>
-    <text x="68" y="98" text-anchor="middle" font-family="Recursive, monospace" font-weight="400" font-size="22" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <text x="68" y="114" text-anchor="middle" font-family="Recursive, monospace" font-weight="500" font-size="8" letter-spacing="0.15em" fill="#5a6f8a">ON-BOARD INTELLIGENCE</text>
+  <text
+     x="280"
+     y="240"
+     font-family="Recursive, monospace"
+     font-size="9"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text48"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">STACKED + TAGLINE</text>
+  <g
+     transform="translate(280,256)"
+     id="g61">
+    <g
+       id="g102-5"
+       inkscape:label="logo"
+       transform="translate(-359,-88)">
+      <rect
+         width="80"
+         height="80"
+         fill="#0c1220"
+         id="rect2-4-9"
+         x="387"
+         y="88"
+         style="stroke-width:0.727273" />
+      <line
+         x1="427"
+         y1="128"
+         x2="407.36365"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line2-9-8" />
+      <line
+         x1="427"
+         y1="128"
+         x2="446.63635"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line3-6-4" />
+      <line
+         x1="427"
+         y1="128"
+         x2="452.45456"
+         y2="124.36364"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line4-3-0" />
+      <line
+         x1="427"
+         y1="128"
+         x2="405.90909"
+         y2="143.27272"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line5-2-7" />
+      <line
+         x1="427"
+         y1="128"
+         x2="443.72726"
+         y2="150.54546"
+         stroke="#8b5cf6"
+         stroke-width="2.54545"
+         stroke-linecap="square"
+         id="line6-3-3" />
+      <line
+         x1="407.36365"
+         y1="105.45454"
+         x2="446.63635"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.09091"
+         opacity="0.3"
+         id="line7-6-2" />
+      <line
+         x1="446.63635"
+         y1="105.45454"
+         x2="452.45456"
+         y2="124.36364"
+         stroke="#1e90ff"
+         stroke-width="1.09091"
+         opacity="0.3"
+         id="line8-9-5" />
+      <line
+         x1="405.90909"
+         y1="143.27272"
+         x2="443.72726"
+         y2="150.54546"
+         stroke="#8b5cf6"
+         stroke-width="1.45455"
+         opacity="0.35"
+         id="line9-5-1" />
+      <circle
+         cx="407.36365"
+         cy="105.45454"
+         r="3.2727273"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle9-4-1" />
+      <circle
+         cx="446.63635"
+         cy="105.45454"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle10-2-0" />
+      <circle
+         cx="452.45456"
+         cy="124.36364"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle11-1-2" />
+      <circle
+         cx="405.90909"
+         cy="143.27272"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle12-7-9" />
+      <circle
+         cx="443.72726"
+         cy="150.54546"
+         r="4"
+         fill="#8b5cf6"
+         id="circle13-1-0"
+         style="stroke-width:0.727273" />
+      <circle
+         cx="427"
+         cy="128"
+         r="5.090909"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2.18182"
+         id="circle14-9-3" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g17-4-5"
+         transform="matrix(0.72727273,0,0,0.72727273,387,88)">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline14-7-8" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline15-6-4" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline16-6-8" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline17-6-4" />
+      </g>
+    </g>
+    <text
+       x="68"
+       y="98"
+       text-anchor="middle"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="22"
+       letter-spacing="0.2em"
+       fill="#A78BFA"
+       id="text60"
+       style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE</text>
+    <text
+       x="68"
+       y="114"
+       text-anchor="middle"
+       font-family="Recursive, monospace"
+       font-weight="500"
+       font-size="8"
+       letter-spacing="0.15em"
+       fill="#5a6f8a"
+       id="text61"
+       style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">ON-BOARD INTELLIGENCE</text>
   </g>
-
   <!-- WORDMARK ONLY -->
-  <text x="520" y="240" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">WORDMARK ONLY</text>
-  <text x="520" y="310" font-family="Recursive, monospace" font-weight="400" font-size="48" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-
+  <text
+     x="520"
+     y="240"
+     font-family="Recursive, monospace"
+     font-size="9"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text62"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">WORDMARK ONLY</text>
+  <text
+     x="520"
+     y="310"
+     font-family="Recursive, monospace"
+     font-weight="400"
+     font-size="48"
+     letter-spacing="0.2em"
+     fill="#A78BFA"
+     id="text63"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE</text>
   <!-- SIZE VARIATIONS -->
-  <text x="60" y="430" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">SIZE VARIATIONS</text>
-  <g transform="translate(60,448)">
-    <svg width="64" height="64" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/><g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g></svg>
-    <text x="80" y="42" font-family="Recursive, monospace" font-weight="400" font-size="30" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <text x="38" y="82" text-anchor="middle" font-family="Recursive, monospace" font-size="9" letter-spacing="0.1em" fill="#5a6f8a">64px</text>
-  </g>
-  <g transform="translate(390,458)">
-    <svg width="44" height="44" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/><circle cx="28" cy="24" r="4" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5" fill="#8B5CF6"/><circle cx="55" cy="55" r="6" fill="none" stroke="#1E90FF" stroke-width="3"/><g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"><polyline points="8,20 8,8 20,8"/><polyline points="90,8 102,8 102,20"/><polyline points="102,90 102,102 90,102"/><polyline points="20,102 8,102 8,90"/></g></svg>
-    <text x="56" y="30" font-family="Recursive, monospace" font-weight="400" font-size="20" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <text x="26" y="62" text-anchor="middle" font-family="Recursive, monospace" font-size="9" letter-spacing="0.1em" fill="#5a6f8a">44px</text>
-  </g>
-  <g transform="translate(620,466)">
-    <svg width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="3"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="3"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="4"/><circle cx="78" cy="86" r="7" fill="#8B5CF6"/><circle cx="55" cy="55" r="8" fill="none" stroke="#1E90FF" stroke-width="3.5"/></svg>
-    <text x="38" y="20" font-family="Recursive, monospace" font-weight="400" font-size="14" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <text x="18" y="44" text-anchor="middle" font-family="Recursive, monospace" font-size="9" letter-spacing="0.1em" fill="#5a6f8a">28px</text>
-  </g>
-  <g transform="translate(790,470)">
-    <svg width="20" height="20" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="4"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="4"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="5"/><circle cx="78" cy="86" r="8" fill="#8B5CF6"/><circle cx="55" cy="55" r="9" fill="none" stroke="#1E90FF" stroke-width="4"/></svg>
-    <text x="28" y="14" font-family="Recursive, monospace" font-weight="400" font-size="11" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <text x="14" y="36" text-anchor="middle" font-family="Recursive, monospace" font-size="9" letter-spacing="0.1em" fill="#5a6f8a">20px</text>
-  </g>
-
   <!-- BADGE -->
-  <text x="60" y="580" font-family="Recursive, monospace" font-size="9" letter-spacing="0.15em" fill="#5a6f8a">BADGE</text>
-  <g transform="translate(60,596)">
-    <rect width="260" height="60" fill="#101828" stroke="#1e2d44" stroke-width="1"/>
-    <svg x="12" y="10" width="40" height="40" viewBox="0 0 110 110"><rect width="110" height="110" fill="#0c1220"/><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
-    <text x="64" y="36" font-family="Recursive, monospace" font-weight="400" font-size="16" letter-spacing="0.2em" fill="#A78BFA">SYNAPSE</text>
-    <line x1="196" y1="14" x2="196" y2="46" stroke="#1e2d44" stroke-width="1"/>
-    <text x="210" y="32" font-family="Recursive, monospace" font-weight="600" font-size="14" letter-spacing="0.05em" fill="#A78BFA">&lt;1ms</text>
-    <text x="210" y="46" font-family="Recursive, monospace" font-weight="400" font-size="9" fill="#5a6f8a">Decision Latency</text>
+  <text
+     x="785.65155"
+     y="240.11148"
+     font-family="Recursive, monospace"
+     font-size="9px"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text94"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear';letter-spacing:2.64px">BADGE</text>
+  <g
+     transform="translate(785.65155,256.11148)"
+     id="g101">
+    <rect
+       width="354.71045"
+       height="59.833599"
+       fill="#101828"
+       stroke="#1e2d44"
+       stroke-width="1.1664"
+       id="rect94"
+       x="0.083199672"
+       y="0.083199672" />
+    <g
+       id="g102-53"
+       inkscape:label="logo"
+       transform="matrix(0.5,0,0,0.5,-181.5,-34)">
+      <rect
+         width="80"
+         height="80"
+         fill="#0c1220"
+         id="rect2-4-5"
+         x="387"
+         y="88"
+         style="stroke-width:0.727273" />
+      <line
+         x1="427"
+         y1="128"
+         x2="407.36365"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line2-9-63" />
+      <line
+         x1="427"
+         y1="128"
+         x2="446.63635"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line3-6-2" />
+      <line
+         x1="427"
+         y1="128"
+         x2="452.45456"
+         y2="124.36364"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line4-3-7" />
+      <line
+         x1="427"
+         y1="128"
+         x2="405.90909"
+         y2="143.27272"
+         stroke="#1e90ff"
+         stroke-width="1.81818"
+         stroke-linecap="square"
+         id="line5-2-1" />
+      <line
+         x1="427"
+         y1="128"
+         x2="443.72726"
+         y2="150.54546"
+         stroke="#8b5cf6"
+         stroke-width="2.54545"
+         stroke-linecap="square"
+         id="line6-3-9" />
+      <line
+         x1="407.36365"
+         y1="105.45454"
+         x2="446.63635"
+         y2="105.45454"
+         stroke="#1e90ff"
+         stroke-width="1.09091"
+         opacity="0.3"
+         id="line7-6-5" />
+      <line
+         x1="446.63635"
+         y1="105.45454"
+         x2="452.45456"
+         y2="124.36364"
+         stroke="#1e90ff"
+         stroke-width="1.09091"
+         opacity="0.3"
+         id="line8-9-1" />
+      <line
+         x1="405.90909"
+         y1="143.27272"
+         x2="443.72726"
+         y2="150.54546"
+         stroke="#8b5cf6"
+         stroke-width="1.45455"
+         opacity="0.35"
+         id="line9-5-7" />
+      <circle
+         cx="407.36365"
+         cy="105.45454"
+         r="3.2727273"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle9-4-6" />
+      <circle
+         cx="446.63635"
+         cy="105.45454"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle10-2-05" />
+      <circle
+         cx="452.45456"
+         cy="124.36364"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle11-1-6" />
+      <circle
+         cx="405.90909"
+         cy="143.27272"
+         r="2.5454545"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="1.45455"
+         id="circle12-7-1" />
+      <circle
+         cx="443.72726"
+         cy="150.54546"
+         r="4"
+         fill="#8b5cf6"
+         id="circle13-1-1"
+         style="stroke-width:0.727273" />
+      <circle
+         cx="427"
+         cy="128"
+         r="5.090909"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2.18182"
+         id="circle14-9-5" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g17-4-6"
+         transform="matrix(0.72727273,0,0,0.72727273,387,88)">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline14-7-9" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline15-6-0" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline16-6-4" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline17-6-7" />
+      </g>
+    </g>
+    <text
+       x="64"
+       y="36"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="16px"
+       letter-spacing="0.2em"
+       fill="#a78bfa"
+       id="text99"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear';letter-spacing:2.64px">SYNAPSE</text>
+    <line
+       x1="196"
+       y1="14"
+       x2="196"
+       y2="46"
+       stroke="#1e2d44"
+       stroke-width="1"
+       id="line99" />
+    <text
+       x="210"
+       y="32"
+       font-family="Recursive, monospace"
+       font-weight="600"
+       font-size="14px"
+       letter-spacing="0.05em"
+       fill="#a78bfa"
+       id="text100"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear';letter-spacing:2.64px">&lt;1ms</text>
+    <text
+       x="210"
+       y="46"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="9px"
+       fill="#5a6f8a"
+       id="text101"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear';letter-spacing:2.64px">Decision Latency</text>
   </g>
-
   <!-- FOOTER -->
-  <rect x="0" y="760" width="1200" height="40" fill="#0c1220"/>
-  <text x="600" y="784" text-anchor="middle" font-family="Recursive, monospace" font-size="10" letter-spacing="0.15em" fill="#5a6f8a">SYNAPSE BRAND LOCKUPS · ATLAS CREW · EDGE PROTECTION PLATFORM</text>
+  <rect
+     x="0"
+     y="760"
+     width="1200"
+     height="40"
+     fill="#0c1220"
+     id="rect101" />
+  <text
+     x="600"
+     y="784"
+     text-anchor="middle"
+     font-family="Recursive, monospace"
+     font-size="10"
+     letter-spacing="0.15em"
+     fill="#5a6f8a"
+     id="text102"
+     style="-inkscape-font-specification:'Rec Mono Linear';font-family:'Rec Mono Linear';font-weight:normal;font-style:normal;font-stretch:normal;font-variant:normal;letter-spacing:2.64px">SYNAPSE BRAND LOCKUPS · ATLAS CREW · EDGE PROTECTION PLATFORM</text>
 </svg>

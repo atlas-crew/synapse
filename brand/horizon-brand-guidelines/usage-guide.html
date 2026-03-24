@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Protection — Usage Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080e1a; --surface: #0c1220; --card: #101828; --border: #1e2d44;
+  --text: #e8ecf4; --text-sec: #8899b0; --muted: #5a6f8a;
+  --blue: #1E90FF; --violet: #8B5CF6; --coral: #F97316;
+  --red: #EF4444; --green: #10B981; --amber: #F59E0B;
+  --font: 'Recursive', ui-monospace, monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; padding:48px; max-width:1000px; margin:0 auto; }
+h1 { font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:32px; margin-bottom:8px; }
+.subtitle { font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:48px; }
+.section-title { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4; font-size:11px; letter-spacing:2px; color:var(--muted); margin:48px 0 20px; padding-bottom:10px; border-bottom:1px solid var(--border); text-transform:uppercase; }
+.section-title:first-of-type { margin-top:0; }
+p { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0; font-size:13px; color:var(--text-sec); line-height:1.7; margin-bottom:16px; max-width:700px; }
+p strong { color:var(--text); font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.3,'CRSV' 0.5,'slnt' 0; }
+
+.do-dont { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:32px; }
+.do, .dont { padding:16px; border:1px solid var(--border); }
+.do { border-left:3px solid var(--green); }
+.dont { border-left:3px solid var(--red); }
+.do-label, .dont-label { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; letter-spacing:1.5px; margin-bottom:10px; }
+.do-label { color:var(--green); }
+.dont-label { color:var(--red); }
+.do-item, .dont-item { font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0; font-size:11px; color:var(--text-sec); margin-bottom:6px; line-height:1.5; }
+
+.example-card { background:var(--card); border:1px solid var(--border); padding:20px; margin-bottom:16px; }
+.example-label { font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4; font-size:9px; letter-spacing:1.5px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; }
+
+.code-block { background:var(--surface); border:1px solid var(--border); padding:12px 16px; font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:11px; color:var(--blue); line-height:1.8; margin-bottom:16px; overflow-x:auto; white-space:pre; }
+
+.quick-ref { display:grid; grid-template-columns:140px 1fr; gap:0; margin-bottom:2px; }
+.quick-ref-key { padding:8px 12px; background:var(--card); border:1px solid var(--border); font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--text); }
+.quick-ref-val { padding:8px 12px; background:var(--card); border:1px solid var(--border); border-left:0; font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--text-sec); }
+
+.footer { margin-top:64px; padding-top:16px; border-top:1px solid var(--border); font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0; font-size:10px; color:var(--muted); letter-spacing:1px; }
+</style>
+</head>
+<body>
+<div id="dl-bar" style="position:sticky;top:0;z-index:999;display:flex;align-items:center;justify-content:space-between;padding:8px 48px;background:#101828;border-bottom:1px solid #1e2d44;font-family:'Recursive',ui-monospace,monospace;">
+  <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:1.5px;color:#5a6f8a;">USAGE GUIDE</span>
+  <div style="display:flex;gap:8px;">
+    <button onclick="dlMd()" style="padding:4px 12px;background:#1E90FF;color:#fff;border:none;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ Markdown</button>
+    <button onclick="dlHtml()" style="padding:4px 12px;background:transparent;color:#7EC8FF;border:1px solid #1e2d44;font-family:inherit;font-size:10px;font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;cursor:pointer;">↓ HTML</button>
+  </div>
+</div>
+<script>
+const _md="# Edge Protection Design System \u2014 Usage Guide\n\n> **For AI agents**: Practical rules for applying the Edge Protection design system. When generating UI code, follow these rules exactly. When in doubt, reference COLOR-REFERENCE.md and TYPOGRAPHY-REFERENCE.md for exact values.\n\n---\n\n## Quick Decisions\n\n| Question | Answer |\n|----------|--------|\n| What font? | Recursive (only Recursive, nothing else) |\n| Border radius? | 0 everywhere, no exceptions |\n| Primary color? | `#1E90FF` (blue) |\n| Accent color? | `#8B5CF6` (violet) |\n| Can I use orange? | Only in logo/icon marks, never in UI |\n| Body text CASL? | 0.6 (warm) |\n| Data text CASL? | 0 (clinical) |\n| Muted text min size? | 14px (fails WCAG AA below that) |\n\n---\n\n## Typography \u2014 When to Use What\n\n### Human-Facing Text (CASL 0.4\u20130.6)\n- Body copy, descriptions, tooltips \u2192 `.t-body` (CASL 0.6)\n- Headings \u2192 `.t-heading` (CASL 0.2)\n- Subheadings \u2192 `.t-subhead` (CASL 0.3)\n- Metric numbers \u2192 `.t-metric` (CASL 0.6 + MONO 1)\n\n### Machine Output (CASL 0)\n- Table cells, log entries \u2192 `.t-data` (CASL 0, MONO 1)\n- Code, config values \u2192 `.t-code` (CASL 0, MONO 1)\n- Timestamps \u2192 `.t-timestamp` (CASL 0, MONO 1)\n- Tags/badges \u2192 `.t-tag` (CASL 0)\n\n### Navigation (Hybrid)\n- Nav items \u2192 `.t-nav` (MONO 0.5, CASL 0.2, slnt -2)\n- Active nav \u2192 `.t-nav-active` (MONO 0.5, wght 700)\n- Links \u2192 `.t-link` (slnt -15 \u2014 full italic for kinetic energy)\n- Breadcrumbs \u2192 `.t-breadcrumb` (MONO 1, slnt -7, ls 2.5px)\n\n---\n\n## Color \u2014 When to Use What\n\n### Blue (#1E90FF)\n\u2713 Links, buttons, active indicators, primary CTAs, chart series 1, borders on focus\n\u2717 Never as a background fill for large areas\n\n### Violet (#8B5CF6)\n\u2713 Focus rings, anomaly accents, Synapse-specific elements, chart series 2, small badges\n\u2717 Never as a background. Never for small body text (fails AA). Never dominant.\n\n### Coral (#F97316)\n\u2713 Horizon icon arcs, logo warm accents\n\u2717 Never as UI buttons, links, backgrounds, text, or any interactive element\n\n### Status Colors\n\u2713 `#EF4444` = error/critical, `#F59E0B` = warning, `#10B981` = success, `#06B6D4` = info\n\u2717 Never decorative. Red always means error. Green always means success.\n\n### Surfaces (Dark Mode)\nUse the slate scale for layered depth:\n- `#080e1a` \u2014 deepest inset\n- `#0c1220` \u2014 default page background\n- `#101828` \u2014 cards\n- `#131c2e` \u2014 hover/active rows\n- `#182440` \u2014 dropdowns, modals\n- `#1e2d44` \u2014 borders\n\n---\n\n## Do / Don't\n\n| \u2713 DO | \u2717 DON'T |\n|------|---------|\n| Use Recursive for everything | Mix Inter, Rubik, or system fonts |\n| Sharp corners on all UI elements | Use rounded corners or pill shapes |\n| CASL 0.6 for body text | Use CASL 0 for human-facing copy |\n| CASL 0 for data/machine output | Use CASL 0.6 for table cells or IPs |\n| wght 300 for display/hero text | Bold the display role |\n| Coral for logos only | Use coral as a UI accent |\n| Status colors for alerts/data only | Use red/green decoratively |\n| `font-variation-settings` for all type | Tailwind `font-bold` / `font-light` |\n| Muted text (`#5a6f8a`) at 14px+ | Muted text at small sizes |\n| `#e8ecf4` for text on dark | Pure white `#ffffff` for text |\n\n---\n\n## Component Patterns\n\n### Stat Card\n```html\n<div class=\"stat-card\">\n  <span class=\"t-metric\">4,412</span>\n  <span class=\"t-metric-unit\">req/s</span>\n  <span class=\"t-label\">THROUGHPUT</span>\n</div>\n```\n\n### Table\n```html\n<th class=\"t-label\">SOURCE</th>      <!-- wght 600, MONO 1, CASL 0.3 -->\n<td class=\"t-data\">192.168.1.42</td>  <!-- wght 500, MONO 1, CASL 0 -->\n```\n\n### Navigation\n```html\n<a class=\"t-nav-active\" style=\"color: var(--ac-blue);\">Overview</a>  <!-- Active -->\n<a class=\"t-nav\" style=\"color: var(--text-secondary);\">Traffic</a>   <!-- Inactive -->\n```\n\n### Alert\n```html\n<div style=\"border-left: 3px solid var(--ac-red); padding: 8px; background: rgba(239,68,68,0.08);\">\n  <span class=\"t-tag\" style=\"color: var(--ac-red);\">CRITICAL</span>\n  <span class=\"t-body\">SQLi attempt blocked on /api/v2/users</span>\n</div>\n```\n\n---\n\n## Icon System\n\n- Corner brackets at sizes \u226528px (`#5a6f8a`, 30% opacity, 1.5px stroke)\n- Below 28px: brackets dropped, mark stands alone\n- Stroke-based geometry \u2014 no fills except accent nodes\n- Blue for structure, coral for Horizon accents, violet for Synapse accents\n- Dark variant: `#0c1220` background rect\n- Light variant: transparent background\n\n## CSS Variables Quick Reference\n\n```css\n/* Surfaces */\nvar(--surface-base)     /* #0c1220 (dark) / #F7F9FC (light) */\nvar(--surface-card)     /* #101828 (dark) / #FFFFFF (light) */\nvar(--border-subtle)    /* #1e2d44 (dark) / #D4DCE8 (light) */\n\n/* Text */\nvar(--text-primary)     /* #e8ecf4 (dark) / #1A2B42 (light) */\nvar(--text-secondary)   /* #8899b0 (dark) / #475A72 (light) */\nvar(--text-muted)       /* #5a6f8a (dark) / #6B7D96 (light) */\n\n/* Colors */\nvar(--ac-blue)          /* #1E90FF */\nvar(--ac-purple)        /* #8B5CF6 */\nvar(--ac-red)           /* #EF4444 */\nvar(--ac-green)         /* #10B981 */\nvar(--ac-orange)        /* #F59E0B */\n\n/* Interactive */\nvar(--link)             /* #1E90FF (dark) / #0A6ED8 (light) */\nvar(--focus-ring)       /* #8B5CF6 */\nvar(--accent)           /* #8B5CF6 */\n```\n";
+function dlMd(){var a=document.createElement("a");a.href="data:text/markdown;charset=utf-8,"+encodeURIComponent(_md);a.download="USAGE-GUIDE.md";a.click();}
+function dlHtml(){var a=document.createElement("a");a.href="data:text/html;charset=utf-8,"+encodeURIComponent(document.documentElement.outerHTML);a.download=document.title.replace(/[^a-zA-Z0-9]/g,"-").toLowerCase()+".html";a.click();}
+</script>
+
+
+<h1>Usage Guide</h1>
+<div class="subtitle">EDGE PROTECTION DESIGN SYSTEM · HOW TO APPLY IT</div>
+
+<!-- ── TYPOGRAPHY RULES ── -->
+<div class="section-title">Typography — When to Use What</div>
+
+<p><strong>The rule is simple:</strong> if the text is for humans to read, increase CASL. If it's machine output, keep CASL at 0. If it's navigation, use MONO 0.5 for the hybrid texture.</p>
+
+<div class="do-dont">
+  <div class="do">
+    <div class="do-label">DO</div>
+    <div class="do-item">Use <strong>.t-body</strong> (CASL 0.6) for descriptions, tooltips, help text</div>
+    <div class="do-item">Use <strong>.t-data</strong> (CASL 0) for table cells, IP addresses, log entries</div>
+    <div class="do-item">Use <strong>.t-metric</strong> (CASL 0.6, MONO 1) for KPI numbers — warmth + alignment</div>
+    <div class="do-item">Use <strong>.t-display</strong> (wght 300) for hero text — lightest weight for biggest text</div>
+    <div class="do-item">Use <strong>font-variation-settings</strong> directly when utility classes don't fit</div>
+  </div>
+  <div class="dont">
+    <div class="dont-label">DON'T</div>
+    <div class="dont-item">Use Tailwind <strong>font-bold</strong> / <strong>font-light</strong> — they don't set CASL/MONO/slnt axes</div>
+    <div class="dont-item">Mix Rubik, Inter, or any other font — Recursive does everything</div>
+    <div class="dont-item">Use CASL 0 for body text — it reads as sterile and unfriendly</div>
+    <div class="dont-item">Use CASL 0.6 for machine data — it reads as imprecise</div>
+    <div class="dont-item">Bold the display role — wght 300 is intentional, confidence not volume</div>
+  </div>
+</div>
+
+<!-- ── COLOR RULES ── -->
+<div class="section-title">Color — When to Use What</div>
+
+<p><strong>Blue (#1E90FF) is the primary.</strong> Use it for links, CTAs, active states, primary buttons, and chart series 1. It's the first color anyone should see on any page.</p>
+
+<p><strong>Violet (#8B5CF6) is the accent.</strong> Focus rings, anomaly indicators, Synapse-specific elements, chart series 2. Never as a background. Use sparingly — if you squint and violet dominates, you've overused it.</p>
+
+<p><strong>Coral (#F97316) is for logos only.</strong> The Horizon icon arcs, logo warm accents. Don't use coral as a UI color — it creates confusion with amber warning states.</p>
+
+<div class="do-dont">
+  <div class="do">
+    <div class="do-label">DO</div>
+    <div class="do-item">Use surfaces for 80% of visual space — let the dark slate breathe</div>
+    <div class="do-item">Use blue for interactive elements — links, buttons, active indicators</div>
+    <div class="do-item">Use status colors only for their semantic purpose (red=error, green=success)</div>
+    <div class="do-item">Use the slate scale (#080e1a → #1e2d44) for layered depth</div>
+    <div class="do-item">Check contrast ratios — muted text (#5a6f8a) only at 14px+</div>
+  </div>
+  <div class="dont">
+    <div class="dont-label">DON'T</div>
+    <div class="dont-item">Use coral/orange as a UI accent — it's a logo color, not a UI color</div>
+    <div class="dont-item">Use status colors decoratively — red means error, always</div>
+    <div class="dont-item">Use violet for small body text — fails AA contrast on dark surfaces</div>
+    <div class="dont-item">Put blue text on violet backgrounds or vice versa — cool-on-cool muddies</div>
+    <div class="dont-item">Use pure white (#fff) for large areas — use #e8ecf4 for text instead</div>
+  </div>
+</div>
+
+<!-- ── CSS VARIABLES ── -->
+<div class="section-title">Quick Reference — CSS Variables</div>
+
+<div class="quick-ref"><div class="quick-ref-key">Page background</div><div class="quick-ref-val">var(--surface-base) → #0c1220</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Card background</div><div class="quick-ref-val">var(--surface-card) → #101828</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Border</div><div class="quick-ref-val">var(--border-subtle) → #1e2d44</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Primary text</div><div class="quick-ref-val">var(--text-primary) → #e8ecf4</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Secondary text</div><div class="quick-ref-val">var(--text-secondary) → #8899b0</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Muted text</div><div class="quick-ref-val">var(--text-muted) → #5a6f8a (14px+ only)</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Primary blue</div><div class="quick-ref-val">var(--ac-blue) → #1E90FF</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Blue hover</div><div class="quick-ref-val">var(--ac-blue-shade) → #0A6ED8</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Accent violet</div><div class="quick-ref-val">var(--ac-purple) → #8B5CF6</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Focus ring</div><div class="quick-ref-val">var(--focus-ring) → #8B5CF6</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Font stack</div><div class="quick-ref-val">var(--font-stack) → 'Recursive', ui-monospace, sans-serif</div></div>
+
+<div style="height:16px;"></div>
+
+<div class="quick-ref"><div class="quick-ref-key">Tailwind: blue</div><div class="quick-ref-val">text-ac-blue · bg-ac-blue · border-ac-blue</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Tailwind: violet</div><div class="quick-ref-val">text-ac-purple · bg-ac-purple · border-ac-purple</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Tailwind: surface</div><div class="quick-ref-val">bg-navy-900 · bg-navy-800 · bg-navy-700</div></div>
+<div class="quick-ref"><div class="quick-ref-key">Tailwind: text</div><div class="quick-ref-val">text-ink-primary · text-ink-secondary · text-ink-muted</div></div>
+
+<!-- ── COMPONENT PATTERNS ── -->
+<div class="section-title">Component Patterns</div>
+
+<div class="example-card">
+  <div class="example-label">Stat Card</div>
+  <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;">
+    <span style="font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;">4,412</span>
+    <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;letter-spacing:0.5px;color:var(--muted);">req/s</span>
+  </div>
+  <span style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1px;color:var(--muted);">THROUGHPUT</span>
+</div>
+
+<div class="code-block">&lt;div class="stat-card"&gt;
+  &lt;span class="t-metric"&gt;4,412&lt;/span&gt;
+  &lt;span class="t-metric-unit"&gt;req/s&lt;/span&gt;
+  &lt;span class="t-label"&gt;THROUGHPUT&lt;/span&gt;
+&lt;/div&gt;</div>
+
+<div class="example-card">
+  <div class="example-label">Table Header + Row</div>
+  <div style="display:grid;grid-template-columns:200px 120px 80px 1fr;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:8px;">
+    <span style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1px;color:var(--muted);">SOURCE</span>
+    <span style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1px;color:var(--muted);">METHOD</span>
+    <span style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1px;color:var(--muted);">STATUS</span>
+    <span style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:12px;letter-spacing:1px;color:var(--muted);">PATH</span>
+  </div>
+  <div style="display:grid;grid-template-columns:200px 120px 80px 1fr;">
+    <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;">192.168.1.42</span>
+    <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;color:var(--green);">GET</span>
+    <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;">200</span>
+    <span style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;">/api/v2/sensors</span>
+  </div>
+</div>
+
+<div class="code-block">&lt;th class="t-label"&gt;SOURCE&lt;/th&gt;
+&lt;td class="t-data"&gt;192.168.1.42&lt;/td&gt;</div>
+
+<div class="example-card">
+  <div class="example-label">Sidebar Navigation</div>
+  <div style="display:flex;flex-direction:column;gap:4px;width:200px;">
+    <div style="padding:8px 12px;font-variation-settings:'wght' 700,'MONO' 0.5,'CASL' 0.1,'CRSV' 0.5,'slnt' -2;font-size:14px;letter-spacing:1px;color:var(--blue);background:rgba(30,144,255,0.08);border-left:2px solid var(--blue);">Overview</div>
+    <div style="padding:8px 12px;font-variation-settings:'wght' 500,'MONO' 0.5,'CASL' 0.2,'CRSV' 0.5,'slnt' -2;font-size:14px;letter-spacing:1px;color:var(--text-sec);">Traffic</div>
+    <div style="padding:8px 12px;font-variation-settings:'wght' 500,'MONO' 0.5,'CASL' 0.2,'CRSV' 0.5,'slnt' -2;font-size:14px;letter-spacing:1px;color:var(--text-sec);">Sensors</div>
+    <div style="padding:8px 12px;font-variation-settings:'wght' 500,'MONO' 0.5,'CASL' 0.2,'CRSV' 0.5,'slnt' -2;font-size:14px;letter-spacing:1px;color:var(--text-sec);">Campaigns</div>
+  </div>
+</div>
+
+<div class="code-block">&lt;!-- Active --&gt;
+&lt;a class="t-nav-active"&gt;Overview&lt;/a&gt;
+&lt;!-- Inactive --&gt;
+&lt;a class="t-nav"&gt;Traffic&lt;/a&gt;</div>
+
+<!-- ── ICON RULES ── -->
+<div class="section-title">Icon System Rules</div>
+<p><strong>Corner brackets</strong> frame every icon at sizes ≥28px. Stroke color #5a6f8a at 30% opacity, 1.5px stroke width. At 20px and below, brackets are dropped — the icon mark must stand alone.</p>
+<p><strong>Stroke-based geometry</strong> — no fills except for accent nodes. Consistent stroke weights across the family. Blue for primary structure, coral for Horizon accents, violet for Synapse accents.</p>
+<p><strong>Dark variant icons</strong> get a #0c1220 background rect. Light variant icons are transparent — the brackets and marks stand alone on any surface.</p>
+
+<!-- ── BORDER RADIUS ── -->
+<div class="section-title">Border Radius</div>
+<p><strong>Zero everywhere.</strong> The Tailwind config overrides default border-radius to 0. Buttons, cards, inputs, badges, modals, tooltips — all square corners. This is inherited from the A10 design system and is the single most recognizable visual element. No exceptions. No "just a little rounding."</p>
+
+<div class="footer">Edge Protection Usage Guide · Atlas Crew · Source: index.css + tailwind.config.js</div>
+</body>
+</html>
