@@ -107,6 +107,17 @@ Optional. Used for time-series and high-cardinality queries. Writes are asynchro
 
 ## Security Model
 
+### Authentication Layers
+
+| Layer | Method | Lifetime |
+| --- | --- | --- |
+| **Sensor → Horizon** | mTLS + API key | Permanent (revocable) |
+| **User → Dashboard** | OAuth 2.0 / SAML | Session-based |
+| **API access** | API key + scopes | Configurable |
+| **Dashboard session** | JWT | 60 minutes |
+
+### Key Principles
+
 - **API key auth** — keys stored as SHA-256 hashes, never plaintext
 - **Scope enforcement** — each route checks required scopes (`signal:write`, `dashboard:read`, `fleet:admin`)
 - **Tenant enforcement** — non-admin keys are filtered to their own tenant data

@@ -131,6 +131,23 @@ Synapse also flags fingerprints with characteristics uncommon in legitimate brow
 
 The session tracking system detects credential stuffing by correlating multiple signals: IPs sharing a session token (botnet replay), fingerprint changes on a single session (cookie hijacking), and high request rates to authentication endpoints (brute force). These signals feed into the cumulative risk score, meaning a credential stuffing campaign quickly exceeds the block threshold even if individual requests look benign.
 
+## Campaign Correlation
+
+When signals from multiple sensors are reported to Signal Horizon, the hub's Correlator detects coordinated attacks using eight detection methods:
+
+| Detector | What It Finds |
+|----------|---------------|
+| **Payload Clustering** | Similar attack signatures appearing across sensors |
+| **Temporal Clustering** | Coordinated attacks within the same time window |
+| **Actor Correlation** | Same actor (fingerprint/session) appearing across sensors |
+| **Fingerprint Matching** | JA4/JA4H fingerprint correlation across the fleet |
+| **Geo Clustering** | Attacks originating from the same geographic region |
+| **Graph Correlation** | Multi-hop relationships between IPs, fingerprints, and tokens |
+| **ASN Correlation** | Attack traffic concentrated in a single autonomous system |
+| **Behavioral Clustering** | Similar request patterns (paths, methods, timing) across actors |
+
+When a campaign is detected, Signal Horizon creates a Campaign object that groups all related signals. Analysts can investigate campaigns in the [Campaign Map](soc-tooling.md#campaign-map) or escalate to a [War Room](warroom.md).
+
 ## Behavioral Analysis
 
 All detection features feed into a unified behavioral model. Rather than relying on any single indicator, Synapse correlates path access patterns, session continuity, request velocity, WAF rule history, and TLS fingerprint characteristics. Sophisticated attackers who evade one detection method are still caught by the combination of others.

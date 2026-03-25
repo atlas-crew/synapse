@@ -150,3 +150,22 @@ The Hunt Service routes queries based on their time window:
 - **< 24 hours** — PostgreSQL for fresh, authoritative data
 - **> 24 hours** — ClickHouse for historical time-series
 - **Mixed ranges** — split at the 24h boundary, query both, merge results
+
+## Metric Retention
+
+| Category | Metrics | Retention | Resolution |
+| --- | --- | --- | --- |
+| **Traffic** | RPS, bandwidth, latency percentiles, status codes | 90 days | 1 minute |
+| **Security** | Blocks, attacks, campaigns, risk scores | 1 year | Raw events |
+| **Health** | CPU, memory, disk, connection count | 30 days | 1 minute |
+| **API** | Endpoint stats, schema violations, discovery | 90 days | Raw events |
+
+### Real-Time vs Historical Storage
+
+| Real-Time (Redis) | Historical (ClickHouse) |
+| --- | --- |
+| Last 5 minutes of events | Full event archive |
+| Live attack feeds | Trend analysis |
+| Active session counts | Threat hunting queries |
+| War Room state | Compliance reports |
+| Sub-second query latency | Complex aggregations |

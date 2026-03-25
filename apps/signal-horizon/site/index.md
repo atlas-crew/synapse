@@ -16,6 +16,8 @@ Welcome to Signal Horizon, the central command hub for managing Synapse sensor f
 - [Signal Array](features/signal-array.md) -- Multi-signal aggregation and composite alerting
 - [TestBed](features/testbed.md) -- Integrated security testing environment
 - [War Room](features/warroom.md) -- Collaborative incident response workspace
+- [SOC Analyst Tooling](features/soc-tooling.md) -- Sigma rules, CyberChef, Campaign Map, Live Threat Map
+- [Fleet Security Analytics](features/fleet-security.md) -- Protection dashboard, traffic analysis, API catalog
 
 ## Guides
 

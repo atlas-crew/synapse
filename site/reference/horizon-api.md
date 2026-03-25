@@ -149,6 +149,62 @@ Hunt endpoints are rate-limited to protect against expensive queries. The defaul
 | `unsubscribe` | Unsubscribe from a topic |
 | `snapshot-request` | Request a full state snapshot |
 
+## Intelligence API
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/v1/intel/campaigns` | List active campaigns |
+| `GET` | `/api/v1/intel/campaigns/:id` | Campaign details with IOCs |
+| `GET` | `/api/v1/intel/threats` | Recent threats with filtering |
+| `GET` | `/api/v1/intel/actors/:id` | Actor profile and history |
+
+## Graph Correlation API
+
+Navigate attack infrastructure relationships — IPs, fingerprints, session tokens, and ASNs.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/v1/graph/traverse` | Traverse from a starting node (IP, JA4, token, ASN) |
+| `GET` | `/api/v1/graph/campaign/:id` | Get full campaign graph |
+| `GET` | `/api/v1/graph/node/:type/:id` | Node details + connected edges |
+| `POST` | `/api/v1/graph/cluster` | Detect clusters of related nodes |
+| `POST` | `/api/v1/graph/block-cluster` | Block all IPs in a cluster/campaign |
+
+**Traverse example:**
+
+```sh
+curl -X POST https://horizon.example.com/api/v1/graph/traverse \
+  -H "X-API-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"start": {"type": "ip", "value": "192.168.1.100"}, "depth": 2}'
+```
+
+## SOC Toolkit API
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/v1/toolkit/cyberchef/recipe` | Execute a CyberChef recipe on input data |
+| `GET` | `/api/v1/toolkit/cyberchef/operations` | List available CyberChef operations |
+| `POST` | `/api/v1/toolkit/decode` | Auto-detect and decode (base64, URL, HTML) |
+| `POST` | `/api/v1/toolkit/hash` | Compute hashes (MD5, SHA-1, SHA-256) |
+| `POST` | `/api/v1/toolkit/regex` | Test and extract matches with regex |
+
+## Rate Limits
+
+| Endpoint Category | Limit | Window |
+| --- | --- | --- |
+| Fleet management | 100 requests | per minute |
+| Intelligence queries | 200 requests | per minute |
+| Hunt queries | 20 requests | per minute |
+| Graph traversal | 50 requests | per minute |
+| Toolkit operations | 200 requests | per minute |
+
+Rate limit headers are included in all responses:
+
+- `X-RateLimit-Limit` — maximum requests allowed
+- `X-RateLimit-Remaining` — requests remaining in window
+- `X-RateLimit-Reset` — window reset timestamp (Unix epoch)
+
 ## Error Responses
 
 All error responses follow this format:
@@ -161,11 +217,25 @@ All error responses follow this format:
 }
 ```
 
-| Status | Meaning |
-| --- | --- |
-| `400` | Invalid request body or parameters |
-| `401` | Missing or invalid API key |
-| `403` | Insufficient scope |
-| `404` | Resource not found |
-| `429` | Rate limit exceeded |
-| `503` | Service unavailable (e.g., ClickHouse disabled) |
+### API Error Codes
+
+| Code | Status | Description |
+| --- | --- | --- |
+| `AUTH_REQUIRED` | `401` | Missing or invalid API key |
+| `FORBIDDEN` | `403` | Insufficient permissions for operation |
+| `SENSOR_NOT_FOUND` | `404` | Sensor ID does not exist |
+| `SENSOR_OFFLINE` | `503` | Sensor is not connected |
+| `COMMAND_TIMEOUT` | `504` | Sensor did not ACK command in time |
+| `RATE_LIMITED` | `429` | Too many requests |
+| `QUERY_TOO_BROAD` | `400` | Hunt query would return too many results |
+| `INVALID_SIGMA` | `400` | Sigma rule syntax error |
+
+### Sensor Protocol Error Codes
+
+| Code | Description | Recovery |
+| --- | --- | --- |
+| `1001` | Invalid message format | Fix message structure |
+| `1002` | Authentication failed | Check credentials, re-register |
+| `1003` | Config hash mismatch | Pull fresh config |
+| `1004` | Command rejected | Check command parameters |
+| `1005` | Rate limited | Back off, reduce event rate |
