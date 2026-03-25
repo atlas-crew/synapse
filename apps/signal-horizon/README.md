@@ -94,6 +94,8 @@ Run the preflight via:
 bash ./apps/signal-horizon/scripts/render-preflight.sh
 ```
 
+GitHub Actions also runs the same preflight automatically on Render blueprint changes, root dependency/workspace file changes, plus Signal Horizon API, UI, `shared/`, and deployment-script changes via [`.github/workflows/signal-horizon-preflight.yml`](../../.github/workflows/signal-horizon-preflight.yml).
+
 ## Documentation
 
 Comprehensive documentation can be found in the [docs/](./docs/) directory:

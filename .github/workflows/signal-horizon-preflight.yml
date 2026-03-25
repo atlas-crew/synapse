@@ -1,0 +1,59 @@
+name: Signal Horizon deployment preflight
+
+on:
+  pull_request:
+    branches: [main]
+    # Keep this list in sync with push.paths below.
+    paths:
+      - '.github/workflows/signal-horizon-preflight.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'render.yaml'
+      - 'apps/signal-horizon/.node-version'
+      - 'apps/signal-horizon/api/**'
+      - 'apps/signal-horizon/ui/**'
+      - 'apps/signal-horizon/shared/**'
+      - 'apps/signal-horizon/scripts/**'
+  push:
+    branches: [main]
+    # Keep this list in sync with pull_request.paths above.
+    paths:
+      - '.github/workflows/signal-horizon-preflight.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'render.yaml'
+      - 'apps/signal-horizon/.node-version'
+      - 'apps/signal-horizon/api/**'
+      - 'apps/signal-horizon/ui/**'
+      - 'apps/signal-horizon/shared/**'
+      - 'apps/signal-horizon/scripts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signal-horizon-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@02f6c237bd2518259fed6c71566509edfb3f2b74 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: apps/signal-horizon/.node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Render deployment preflight
+        run: bash ./apps/signal-horizon/scripts/render-preflight.sh

@@ -161,6 +161,8 @@ Before the first platform deploy, run:
 bash ./apps/signal-horizon/scripts/render-preflight.sh
 ```
 
+The repo also runs this same check automatically in CI via the repo-root workflow file `.github/workflows/signal-horizon-preflight.yml` whenever the Render blueprint, root dependency/workspace files, or Signal Horizon API, UI, `shared/`, and deployment-script paths change.
+
 ### Option 2: Native Installation / VM
 
 For bare-metal or VM deployment:
@@ -198,7 +200,9 @@ Treat them as custom packaging work, not turnkey checked-in deployment targets.
 
 ## Load Balancer Configuration
 
-### Synapse-Pingora Example
+### Synapse WAF Example
+
+The Rust binary is `synapse-waf`, but the checked-in package directory and example config path still use `synapse-pingora`.
 
 ```yaml
 # /etc/synapse-pingora/config.yaml
