@@ -1,7 +1,7 @@
 {
   "name": "synapse-client",
   "version": "0.1.0",
-  "description": "TypeScript client and CLI for Synapse (risk-server) API",
+  "description": "TypeScript client and CLI for Synapse API",
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "dist/index.js",

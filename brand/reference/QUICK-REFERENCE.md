@@ -51,10 +51,18 @@ wght 300–900 · MONO 0–1 · CASL 0–1 · slnt -15–0 · CRSV 0.5 (locked)
 - Human text → CASL 0.6 (warm)
 - Machine data → CASL 0 (clinical)
 - Navigation → CASL 0.2 (hybrid)
+- Wordmarks → CASL 0 (always clinical)
 
 ### Wordmarks
-- **Colored uppercase**: wght 400, letter-spacing 0.2em. Horizon=#F97316, Synapse=#A78BFA
-- **Light mixed case**: wght 300, color #e8ecf4 (dark) / #0c1220 (light)
+
+| Variant | Font | wght | MONO | Case | Spacing | Context |
+|---------|------|------|------|------|---------|---------| 
+| **Primary** | Sans Linear Bold | 700 | 0 | UPPERCASE | 0.2em | Lockups, banners, badges, external |
+| **Secondary** | Sans Linear Bold | 700 | 0 | Mixed | default | In-app headers, sidebar, UI |
+| **Terminal** | Mono Linear Medium | 500 | 1 | UPPERCASE | default | CLI, terminal contexts only |
+
+- Primary colors: Horizon = `#F97316` (coral), Synapse = `#A78BFA` (violet light)
+- Secondary colors: `#e8ecf4` (dark) / `#1A2B42` (light)
 
 ## Rules
 
@@ -64,8 +72,9 @@ wght 300–900 · MONO 0–1 · CASL 0–1 · slnt -15–0 · CRSV 0.5 (locked)
 4. Status colors: functional only, never decorative
 5. Muted text (#5a6f8a): 14px+ only
 6. Display role: wght 300 (light), never bold
-7. Use `font-variation-settings`, not Tailwind font-weight utilities
-8. No pure white (#fff) for text — use #e8ecf4
+7. Wordmarks: wght 700 Sans Linear Bold, never thin (300) or regular (400)
+8. Use `font-variation-settings`, not Tailwind font-weight utilities
+9. No pure white (#fff) for text — use #e8ecf4
 
 ## Product Names
 - **Horizon** = edge protection hub (top-level name for both products)

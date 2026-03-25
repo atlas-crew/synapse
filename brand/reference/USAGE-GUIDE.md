@@ -15,6 +15,8 @@
 | Can I use orange? | Only in logo/icon marks, never in UI |
 | Body text CASL? | 0.6 (warm) |
 | Data text CASL? | 0 (clinical) |
+| Wordmark weight? | 700 (Sans Linear Bold) |
+| Wordmark CASL? | 0 (always clinical) |
 | Muted text min size? | 14px (fails WCAG AA below that) |
 
 ---
@@ -39,6 +41,11 @@
 - Links → `.t-link` (slnt -15 — full italic for kinetic energy)
 - Breadcrumbs → `.t-breadcrumb` (MONO 1, slnt -7, ls 2.5px)
 
+### Wordmarks (CASL 0, always clinical)
+- **Lockups, banners, badges** → Sans Linear Bold (wght 700, MONO 0), uppercase, ls 0.2em, product-colored
+- **In-app headers, sidebar** → Sans Linear Bold (wght 700, MONO 0), mixed case, white or dark
+- **CLI/terminal contexts** → Mono Linear Medium (wght 500, MONO 1), uppercase
+
 ---
 
 ## Color — When to Use What
@@ -52,7 +59,7 @@
 ✗ Never as a background. Never for small body text (fails AA). Never dominant.
 
 ### Coral (#F97316)
-✓ Horizon icon arcs, logo warm accents
+✓ Horizon icon arcs, logo warm accents, Horizon wordmark color
 ✗ Never as UI buttons, links, backgrounds, text, or any interactive element
 
 ### Status Colors
@@ -78,6 +85,8 @@ Use the slate scale for layered depth:
 | Sharp corners on all UI elements | Use rounded corners or pill shapes |
 | CASL 0.6 for body text | Use CASL 0 for human-facing copy |
 | CASL 0 for data/machine output | Use CASL 0.6 for table cells or IPs |
+| CASL 0 for wordmarks | Use casual (CASL > 0) in brand marks |
+| wght 700 Sans Linear Bold for wordmarks | Use thin (300) or regular (400) for brand marks |
 | wght 300 for display/hero text | Bold the display role |
 | Coral for logos only | Use coral as a UI accent |
 | Status colors for alerts/data only | Use red/green decoratively |
@@ -116,6 +125,22 @@ Use the slate scale for layered depth:
   <span class="t-tag" style="color: var(--ac-red);">CRITICAL</span>
   <span class="t-body">SQLi attempt blocked on /api/v2/users</span>
 </div>
+```
+
+### Wordmark (Primary Lockup)
+```html
+<span style="font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
+             letter-spacing: 0.2em; text-transform: uppercase; color: #F97316;">
+  HORIZON
+</span>
+```
+
+### Wordmark (In-App Header)
+```html
+<span style="font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
+             color: var(--text-primary);">
+  Horizon
+</span>
 ```
 
 ---

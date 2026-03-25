@@ -3,9 +3,17 @@ name = "synapse-pingora"
 version = "0.1.0"
 edition = "2021"
 description = "Synapse WAF detection engine on Cloudflare Pingora proxy framework"
-authors = ["Nicholas Ferguson"]
-license = "Apache-2.0"
-repository = "https://github.com/atlascrew/atlascrew-monorepo"
+authors = ["Nicholas Crew Ferguson"]
+license = "AGPL-3.0-only"
+repository = "https://github.com/atlas-crew/horizon-security-platform"
+homepage = "https://atlascrew.dev/horizon.html"
+documentation = "https://horizon.atlascrew.dev"
+readme = "README.md"
+keywords = ["security", "WAF", "firewall", "edge-computing", "api-security" ]
+categories = ["security"]
+
+[badges]
+maintenance = { status = "actively-developed"}
 
 [lib]
 name = "synapse_pingora"

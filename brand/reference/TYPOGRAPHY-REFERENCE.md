@@ -1,6 +1,6 @@
 # Edge Protection Design System — Typography Reference
 
-> **For AI agents**: This document contains exact `font-variation-settings` values for all 15 type roles. Use these values directly in inline styles or CSS. The font is **Recursive** (Google Fonts variable font). One font, 15 roles — no other fonts should be used.
+> **For AI agents**: This document contains exact `font-variation-settings` values for all 15 type roles and 3 wordmark styles. Use these values directly in inline styles or CSS. The font is **Recursive** (Google Fonts variable font). One font, 15 roles — no other fonts should be used.
 
 ## Font Import
 
@@ -34,8 +34,9 @@ CASL encodes the brand voice into the font itself:
 - **CASL 0.6** = human-facing text (body, descriptions, tooltips) — warm, approachable
 - **CASL 0.2–0.3** = headings, labels — slightly warm
 - **CASL 0** = machine output (data, code, timestamps, tables) — cold, clinical
+- **CASL 0** = wordmarks — always clinical, never casual
 
-If text is for humans to read → increase CASL. If it's machine output → CASL 0.
+If text is for humans to read → increase CASL. If it's machine output or brand marks → CASL 0.
 
 ---
 
@@ -140,19 +141,29 @@ If text is for humans to read → increase CASL. If it's machine output → CASL
 
 ## Wordmark Styles
 
-### Colored Uppercase (lockups, banners)
-```css
-font-variation-settings: 'wght' 400, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
-letter-spacing: 0.2em;
-text-transform: uppercase;
-/* Horizon: color #F97316; Synapse: color #A78BFA; */
-```
+### Primary — Sans Linear Bold, Uppercase (lockups, banners, README badges)
+- **Font**: Recursive Sans Linear Bold
+- **Use**: All external lockups, banners, brand marks, GitHub badges
+- **Settings**: `font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`
+- **Formatting**: `letter-spacing: 0.2em; text-transform: uppercase;`
+- **Colors**: Horizon = `#F97316` (coral), Synapse = `#A78BFA` (violet light)
+- **Note**: Proportional (Sans) for natural letter spacing. Bold weight gives authority without getting blocky. CASL 0 keeps it clinical.
 
-### Light Mixed Case (alternative, UI headers)
-```css
-font-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
-/* color: #e8ecf4 (dark) or #0c1220 (light) */
-```
+### Secondary — Sans Linear Bold, Mixed Case (in-app UI, sidebar headers)
+- **Font**: Recursive Sans Linear Bold
+- **Use**: In-app headers, sidebar product names, page titles where uppercase is too loud
+- **Settings**: `font-variation-settings: 'wght' 700, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`
+- **Formatting**: Mixed case (Horizon, Synapse), no extra letter-spacing
+- **Colors**: `#e8ecf4` (dark mode) or `#1A2B42` (light mode)
+
+### Terminal — Mono Linear Medium (CLI, terminal, code contexts only)
+- **Font**: Recursive Mono Linear Medium
+- **Use**: CLI tool output, terminal headers, code documentation headers
+- **Settings**: `font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;`
+- **Formatting**: Uppercase, standard letter-spacing
+- **Note**: Monospace gives the tactical/terminal flavor. Only use in contexts where code or terminal output surrounds the wordmark.
+
+---
 
 ## Rules
 
@@ -160,5 +171,7 @@ font-variation-settings: 'wght' 300, 'MONO' 0, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0;
 2. **Don't use Tailwind `font-bold`/`font-light`.** These don't set CASL/MONO/slnt axes.
 3. **CASL 0 for machine data.** Tables, logs, IPs, timestamps — always clinical.
 4. **CASL 0.6 for human text.** Body copy, descriptions, help text — always warm.
-5. **wght 300 for display.** Lightest weight at biggest size. Don't bold headlines.
-6. **Border radius: 0 everywhere.** No exceptions. Sharp corners on everything.
+5. **CASL 0 for wordmarks.** Brand marks are always clinical, never casual.
+6. **wght 300 for display.** Lightest weight at biggest size. Don't bold headlines.
+7. **wght 700 for wordmarks.** Sans Linear Bold for all lockups. Never thin (300) or regular (400) for brand marks.
+8. **Border radius: 0 everywhere.** No exceptions. Sharp corners on everything.
