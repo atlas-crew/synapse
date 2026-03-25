@@ -101,7 +101,6 @@ import {
 import {
   InMemorySavedQueryStore,
   PrismaSavedQueryStore,
-  RedisSavedQueryStore,
   ResilientSavedQueryStore,
 } from './services/hunt/saved-query-store.js';
 import {

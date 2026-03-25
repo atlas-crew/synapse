@@ -27,14 +27,6 @@ const authHeaders = {
 };
 
 const HEADER_NO_MARGIN_STYLE: CSSProperties = { marginBottom: 0 };
-const SUPPORT_HUB_TITLE_STYLE: CSSProperties = {
-  fontSize: '16px',
-  lineHeight: '22px',
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.1em',
-  color: colors.white,
-};
 const CATEGORY_TITLE_STYLE: CSSProperties = {
   fontSize: '11px',
   lineHeight: '16px',

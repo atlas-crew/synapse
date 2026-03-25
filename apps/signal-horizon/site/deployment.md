@@ -2,14 +2,17 @@
 
 This guide covers deploying Signal Horizon, the central command plane for Atlas Crew sensor fleets.
 
+The repo now includes a baseline Render Blueprint at [`render.yaml`](../../../render.yaml) for the current monorepo layout. Use it as the source of truth for a managed deployment of the UI, API, PostgreSQL, and Redis.
+
 ## Architecture Overview
 
 Signal Horizon consists of three main components:
 
 | Component | Purpose | Port |
 |-----------|---------|------|
-| API Server | REST API and WebSocket gateway | 3003 |
+| API Server | REST API and WebSocket gateway | 3100 by default, or platform-provided `PORT` |
 | PostgreSQL | Real-time data, configuration state | 5432 |
+| Redis | Job queue and distributed state | 6379 |
 | ClickHouse | Historical data, time-series analytics | 8123/9000 |
 
 ```mermaid
@@ -29,13 +32,37 @@ graph TD
     API --> RD
 ```
 
+## Dependency Tiers
+
+| Dependency | Required | Why it exists |
+|-----------|----------|---------------|
+| PostgreSQL | Yes | Prisma source of truth for tenants, sensors, auth, fleet state, rollouts, and core API data |
+| Redis | Recommended for production | BullMQ queues, rollout processing, and distributed caches/state fall back to in-memory without it |
+| ClickHouse | Optional | Historical hunting, telemetry retention, and larger time-series analytics |
+
+### Minimum Viable Deployment
+
+- UI static host
+- API web service
+- PostgreSQL
+
+This is enough to boot the product, but background job behavior and distributed state will degrade if Redis is absent, and historical hunt/analytics features will be limited without ClickHouse.
+
+### Recommended Production Deployment
+
+- UI static host
+- API web service
+- PostgreSQL
+- Redis
+- ClickHouse only if you want historical hunting and archive-scale analytics on day one
+
 ## Prerequisites
 
 - Node.js 20+
 - PostgreSQL 15+
-- ClickHouse 23.8+ (optional, for historical queries)
-- Redis 7+ (optional, for session caching)
-- Docker and Docker Compose (for containerized deployment)
+- Redis 7+ for production-grade queue/state behavior
+- ClickHouse 23.8+ only if historical queries are required
+- A host or platform that supports long-lived Node processes and WebSocket upgrades
 
 ## Environment Configuration
 
@@ -44,36 +71,29 @@ Create a `.env` file with the following variables:
 ```bash
 # Server Configuration
 NODE_ENV=production
-PORT=3003
-API_BASE_URL=https://signal-horizon.example.com
+HOST=0.0.0.0
+PORT=3100
 
 # PostgreSQL (Required)
 DATABASE_URL=postgresql://user:password@localhost:5432/signal_horizon
 
-# ClickHouse (Optional - enables historical queries)
-CLICKHOUSE_ENABLED=true
-CLICKHOUSE_HOST=clickhouse
-CLICKHOUSE_HTTP_PORT=8123
-CLICKHOUSE_NATIVE_PORT=9000
-CLICKHOUSE_DB=signal_horizon
-CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=your-secure-password
-
-# Redis (Optional - enables session caching)
+# Redis (Recommended for production - queues and distributed state)
 REDIS_URL=redis://localhost:6379
+ENABLE_JOB_QUEUE=true
 
 # Security
 JWT_SECRET=your-jwt-secret-min-32-chars
-API_KEY_SALT=your-api-key-salt
+TELEMETRY_JWT_SECRET=your-telemetry-jwt-secret-min-32-chars
+CONFIG_ENCRYPTION_KEY=your-config-encryption-key
+CORS_ORIGINS=https://app.signal-horizon.example.com
 
-# Fleet Management
-HEARTBEAT_INTERVAL_MS=60000
-STALE_SENSOR_THRESHOLD_MS=90000
-MAX_SENSORS=1000
-
-# Rate Limiting
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX_REQUESTS=1000
+# ClickHouse (Optional - enables historical queries)
+CLICKHOUSE_ENABLED=false
+CLICKHOUSE_HOST=clickhouse
+CLICKHOUSE_HTTP_PORT=8123
+CLICKHOUSE_DB=signal_horizon
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=your-secure-password
 ```
 
 ## Database Setup
@@ -109,81 +129,31 @@ Key tables:
 
 ## Deployment Options
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Render Blueprint (Recommended Managed Path)
 
-Use the provided compose file for a complete stack:
+Use the repo-root [`render.yaml`](../../../render.yaml) to create:
 
-```yaml
-# compose.yml
-version: '3.8'
+- `signal-horizon-ui` static site
+- `signal-horizon-api` Node web service
+- `signal-horizon-postgres` managed Postgres
+- `signal-horizon-redis` managed Key Value / Redis
 
-services:
-  signal-horizon:
-    image: atlascrew/signal-horizon:latest
-    ports:
-      - "3003:3003"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/signal_horizon
-      - CLICKHOUSE_ENABLED=true
-      - CLICKHOUSE_HOST=clickhouse
-    depends_on:
-      - postgres
-      - clickhouse
-    restart: unless-stopped
+The baseline blueprint intentionally leaves the following values for dashboard entry during initial creation:
 
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: signal_horizon
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+- `VITE_API_URL`
+- `VITE_WS_URL`
+- `VITE_HORIZON_API_KEY`
+- `CORS_ORIGINS`
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:23.8
-    environment:
-      CLICKHOUSE_DB: signal_horizon
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-    restart: unless-stopped
+Recommended custom-domain shape:
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
+- UI: `https://app.signal-horizon.example.com`
+- API: `https://api.signal-horizon.example.com`
+- Dashboard WebSocket: `wss://api.signal-horizon.example.com/ws/dashboard`
 
-volumes:
-  postgres_data:
-  clickhouse_data:
-```
+ClickHouse is not defined inside the Blueprint. If you need historical hunting on day one, create ClickHouse separately and set the `CLICKHOUSE_*` variables on the API service.
 
-Deploy with:
-
-```bash
-docker compose up -d
-```
-
-### Option 2: Kubernetes
-
-Apply the Kubernetes manifests:
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/postgres.yaml
-kubectl apply -f k8s/clickhouse.yaml
-kubectl apply -f k8s/signal-horizon.yaml
-kubectl apply -f k8s/ingress.yaml
-```
-
-Key considerations:
-- Use `PersistentVolumeClaims` for database storage
-- Configure `HorizontalPodAutoscaler` for API pods
-- Use `NetworkPolicy` to restrict database access
-
-### Option 3: Native Installation
+### Option 2: Native Installation / VM
 
 For bare-metal or VM deployment:
 
@@ -196,14 +166,27 @@ pnpm install --prod
 pnpm prisma migrate deploy
 
 # Start server
-NODE_ENV=production node dist/server.js
+NODE_ENV=production node dist/index.js
 ```
 
 Use a process manager like PM2:
 
 ```bash
-pm2 start dist/server.js --name signal-horizon -i max
+pm2 start dist/index.js --name signal-horizon -i max
 ```
+
+Pair this with:
+
+- a static host or reverse proxy serving `apps/signal-horizon/ui/dist`
+- PostgreSQL
+- Redis for queue-backed rollouts and distributed state
+- optional ClickHouse for historical analytics
+
+### Option 3: Docker / Kubernetes
+
+These are viable deployment shapes, but the repo does not currently ship production-ready `Dockerfile`, Compose, or `k8s/` assets for Signal Horizon.
+
+Treat them as custom packaging work, not turnkey checked-in deployment targets.
 
 ## Load Balancer Configuration
 
@@ -216,7 +199,7 @@ server:
 
 upstreams:
   - host: "127.0.0.1"
-    port: 3003
+    port: 3100
 
 logging:
   level: "info"
@@ -234,7 +217,7 @@ Ensure your edge proxy supports WebSocket upgrades for `/ws`.
 
 For AWS Application Load Balancer:
 
-1. Create target group with health check path `/api/health`
+1. Create target group with health check path `/health`
 2. Enable sticky sessions for WebSocket connections
 3. Configure idle timeout to 300 seconds (for long-lived WS connections)
 4. Use ACM certificate for HTTPS
@@ -244,14 +227,16 @@ For AWS Application Load Balancer:
 ### Generate Sensor Credentials
 
 ```bash
-# Create sensor via API
-curl -X POST https://signal-horizon.example.com/api/fleet/sensors \
+# Create onboarding token via API
+curl -X POST https://signal-horizon.example.com/api/v1/onboarding/tokens \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "US East Primary",
-    "region": "us-east-1",
-    "capabilities": ["waf", "bot-detection"]
+    "name": "US East Registration Token",
+    "expiresInHours": 24,
+    "metadata": {
+      "region": "us-east-1"
+    }
   }'
 ```
 
@@ -259,11 +244,13 @@ Response includes the sensor ID and authentication token:
 
 ```json
 {
-  "id": "sensor-abc123",
+  "id": "token-abc123",
   "token": "sensor-token-xyz789",
-  "wsEndpoint": "wss://signal-horizon.example.com/ws/sensor"
+  "wsEndpoint": "wss://signal-horizon.example.com/ws/sensors"
 }
 ```
+
+The onboarding token is not the final sensor ID. The sensor presents that token during registration or approval, and Signal Horizon then assigns a permanent sensor identifier such as `sensor-abc123`.
 
 ### Sensor Configuration
 
@@ -273,7 +260,7 @@ Configure the Atlas Crew sensor to connect to Signal Horizon:
 # sensor.yaml
 signal_horizon:
   enabled: true
-  endpoint: wss://signal-horizon.example.com/ws/sensor
+  endpoint: wss://signal-horizon.example.com/ws/sensors
   sensor_id: sensor-abc123
   token: sensor-token-xyz789
   heartbeat_interval: 60s
@@ -343,17 +330,15 @@ Considerations:
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/health` | Basic health check |
-| `GET /api/health/ready` | Readiness probe (DB connections) |
-| `GET /api/health/live` | Liveness probe |
+| `GET /health` | Basic service health check used for platform health probes; the API does not currently expose separate readiness or liveness endpoints |
+| `GET /metrics` | Prometheus metrics endpoint |
 
 ### Prometheus Metrics
 
-Enable metrics endpoint:
+Protect the metrics endpoint with a bearer token for non-local access:
 
 ```bash
-METRICS_ENABLED=true
-METRICS_PORT=9090
+METRICS_AUTH_TOKEN=your-metrics-bearer-token
 ```
 
 Key metrics:

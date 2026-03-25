@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import type { ReactElement, ReactNode } from 'react';
 import ActiveCampaignList from '../ActiveCampaignList';
 import type { Campaign } from '../../../stores/horizonStore';
 
@@ -29,11 +30,11 @@ const mockCampaigns: Campaign[] = [
   },
 ];
 
-function TestRouter({ children }: { children: any }) {
+function TestRouter({ children }: { children: ReactNode }) {
   return <BrowserRouter>{children}</BrowserRouter>;
 }
 
-const renderWithRouter = (ui: JSX.Element) => render(ui, { wrapper: TestRouter });
+const renderWithRouter = (ui: ReactElement) => render(ui, { wrapper: TestRouter });
 
 describe('ActiveCampaignList', () => {
   it('renders a list of campaigns', () => {

@@ -22,7 +22,7 @@ import {
   Database,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useHorizonStore, useTimeRange } from '../stores/horizonStore';
+import { useHorizonStore } from '../stores/horizonStore';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   StatsGridSkeleton,
@@ -159,8 +159,6 @@ const mapFilters = ['All Attacks', 'Top Bots (1h)', 'Cross-Tenant'];
 export default function OverviewPage() {
   useDocumentTitle('Overview');
   const { campaigns, threats, alerts, stats, isLoading: isStoreLoading } = useHorizonStore();
-  const timeRange = useTimeRange();
-  const timeRangeLabel = timeRange || '24h';
   const {
     points: mapPoints,
     routes: mapRoutes,
