@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import { RuleDistributor, TenantIsolationError } from './rule-distributor.js';
 import type { DeploymentStateStore } from './deployment-state-store.js';
 import type { PrismaClient } from '@prisma/client';
@@ -196,6 +197,8 @@ async function advanceUntilMicrotasks<T>(
 ): Promise<T> {
   // Use this when the code under test is promise-driven and advancing fake timers would
   // trigger unrelated timeout paths that are not part of the behavior being asserted.
+  // Each step flushes a single microtask tick, so callers may need a larger maxSteps value
+  // for promise chains that span multiple .then() hops.
   for (let i = 0; i < maxSteps; i += 1) {
     const result = condition();
     if (result) {
@@ -289,14 +292,38 @@ describe('RuleDistributor', () => {
   let mockPrisma: ReturnType<typeof createMockPrisma>;
   let mockLogger: ReturnType<typeof createMockLogger>;
   let mockFleetCommander: ReturnType<typeof createMockFleetCommander>;
+  let digestSpy: ReturnType<typeof vi.spyOn<typeof globalThis.crypto.subtle, 'digest'>>;
 
   const getSendCommandMock = () => vi.mocked(mockFleetCommander.sendCommand);
   const getSendCommandToMultipleMock = () => vi.mocked(mockFleetCommander.sendCommandToMultiple);
   const getLoggerInfoMock = () => vi.mocked(mockLogger.info);
+  const mapDigestAlgorithm = (algorithm: AlgorithmIdentifier): 'sha256' | 'sha384' | 'sha512' => {
+    const normalized = typeof algorithm === 'string' ? algorithm : algorithm.name;
+    switch (normalized) {
+      case 'SHA-256':
+        return 'sha256';
+      case 'SHA-384':
+        return 'sha384';
+      case 'SHA-512':
+        return 'sha512';
+      default:
+        throw new Error(`Unexpected digest algorithm in tests: ${normalized}`);
+    }
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+
+    // Keep hashing deterministic and independent from host WebCrypto scheduling while fake
+    // timers are active. Several deployment paths hash rules before sending commands.
+    digestSpy = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      const bytes = data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      const hash = createHash(mapDigestAlgorithm(algorithm)).update(bytes).digest();
+      return hash.buffer.slice(hash.byteOffset, hash.byteOffset + hash.byteLength);
+    });
 
     // Default: all sensors from tests are owned by TEST_TENANT_ID
     mockPrisma = createMockPrisma();
@@ -308,6 +335,7 @@ describe('RuleDistributor', () => {
   });
 
   afterEach(() => {
+    digestSpy.mockRestore();
     vi.useRealTimers();
   });
 
@@ -1067,10 +1095,6 @@ describe('RuleDistributor', () => {
       const sensorIds = ['sensor-1'];
       const rules1 = [createTestRule({ id: 'rule-1' })];
       const rules2 = [createTestRule({ id: 'rule-2' })];
-      // Make hashing resolve immediately so initialization can be flushed via microtasks.
-      const digestSpy = vi
-        .spyOn(globalThis.crypto.subtle, 'digest')
-        .mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
 
       vi.mocked(mockPrisma.sensorSyncState.findUnique).mockResolvedValue(null);
 
@@ -1082,55 +1106,55 @@ describe('RuleDistributor', () => {
         minStagedPercentage: 0,
       };
 
-      try {
-        // Start two deployments concurrently
-        const promise1 = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules1, config);
-        const promise2 = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules2, config);
+      // Start two deployments concurrently
+      const promise1 = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules1, config);
+      const promise2 = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules2, config);
 
-        const activeDeployments = await advanceUntilMicrotasks(
-          () => {
-            const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
-            return deployments.length === 2 &&
-              deployments.every((deployment) => deployment.sensorStatus.size === sensorIds.length)
-              ? deployments
-              : undefined;
-          },
-          { maxSteps: 100, description: 'concurrent blue/green deployment initialization' }
-        );
+      const activeDeployments = await advanceUntilMicrotasks(
+        () => {
+          const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
+          return deployments.length === 2 &&
+            deployments.every((deployment) => deployment.sensorStatus.size === sensorIds.length)
+            ? deployments
+            : undefined;
+        },
+        { maxSteps: 100, description: 'concurrent blue/green deployment initialization' }
+      );
 
-        // Complete staging for both deployments, then wait for the switch phase to begin.
-        for (const deployment of activeDeployments) {
-          distributor.updateSensorStagingStatus(deployment.deploymentId, sensorIds[0], true);
-        }
-
-        for (const deployment of activeDeployments) {
-          await waitForBlueGreenDeploymentStatus(
-            distributor,
-            TEST_TENANT_ID,
-            deployment.deploymentId,
-            'switching'
-          );
-        }
-
-        for (const deployment of activeDeployments) {
-          distributor.updateSensorActivationStatus(deployment.deploymentId, sensorIds[0], true);
-        }
-
-        const [result1, result2] = await advanceUntilSettled(Promise.all([promise1, promise2]), {
-          stepMs: TEST_POLL_INTERVAL_MS,
-          maxSteps: 20,
-          description: 'concurrent blue/green deployment completion',
-        });
-
-        // Verify both completed
-        expect(result1.success).toBe(true);
-        expect(result2.success).toBe(true);
-        expect(mockFleetCommander.sendCommand).toHaveBeenCalledTimes(2);
-        expect(activeDeployments[0].status).toBe('active');
-        expect(activeDeployments[1].status).toBe('active');
-      } finally {
-        digestSpy.mockRestore();
+      // Complete staging for both deployments, then wait for the switch phase to begin.
+      for (const deployment of activeDeployments) {
+        distributor.updateSensorStagingStatus(deployment.deploymentId, sensorIds[0], true);
       }
+
+      for (const deployment of activeDeployments) {
+        await waitForBlueGreenDeploymentStatus(
+          distributor,
+          TEST_TENANT_ID,
+          deployment.deploymentId,
+          'switching'
+        );
+      }
+
+      for (const deployment of activeDeployments) {
+        distributor.updateSensorActivationStatus(deployment.deploymentId, sensorIds[0], true);
+      }
+
+      const [result1, result2] = await advanceUntilSettled(Promise.all([promise1, promise2]), {
+        stepMs: TEST_POLL_INTERVAL_MS,
+        maxSteps: 20,
+        description: 'concurrent blue/green deployment completion',
+      });
+
+      // Verify both completed
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+      expect(mockFleetCommander.sendCommand).toHaveBeenCalledTimes(2);
+      expect(
+        distributor.getDeploymentStatus(TEST_TENANT_ID, activeDeployments[0].deploymentId)?.status
+      ).toBe('active');
+      expect(
+        distributor.getDeploymentStatus(TEST_TENANT_ID, activeDeployments[1].deploymentId)?.status
+      ).toBe('active');
     });
 
     it('should timeout if staging takes too long', async () => {
