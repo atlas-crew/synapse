@@ -12,6 +12,7 @@ Cargo.lock
 !**/.env.*.example
 .agents/fixes/
 .agents/reviews
+apps/signal-horizon/out/
 
 # ClickHouse local data (should live in /opt/homebrew/var/clickhouse/)
 access/

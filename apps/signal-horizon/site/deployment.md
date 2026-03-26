@@ -6,6 +6,8 @@ The repo now includes a baseline Render Blueprint at [`render.yaml`](../../../re
 
 Render-specific environment templates are available at [`api/.env.render.example`](../api/.env.render.example), [`ui/.env.render.example`](../ui/.env.render.example), and a local preflight script is available at [`scripts/render-preflight.sh`](../scripts/render-preflight.sh).
 
+For customer-managed installs, the repo also includes a standalone release bundle flow plus a dedicated runbook at [`guides/self-hosted-standalone.md`](./guides/self-hosted-standalone.md).
+
 ## Architecture Overview
 
 Signal Horizon consists of three main components:
@@ -165,7 +167,23 @@ The repo also runs this same check automatically in CI via the repo-root workflo
 
 ### Option 2: Native Installation / VM
 
-For bare-metal or VM deployment:
+For bare-metal or VM deployment, the preferred path is the standalone release artifact:
+
+```bash
+pnpm signal-horizon:release
+```
+
+That command packages the current UI + API build into `apps/signal-horizon/out/signal-horizon-standalone.tar.gz` and includes:
+
+- the bundled UI under `dist/public`
+- Prisma migrations and the Prisma CLI
+- helper scripts in `bin/`
+- same-origin proxy examples for Nginx and Caddy
+- a sample `systemd` unit
+
+For the exact install steps, follow [`guides/self-hosted-standalone.md`](./guides/self-hosted-standalone.md).
+
+If you want to run directly from the workspace instead of a release artifact:
 
 ```bash
 # Install dependencies
@@ -187,7 +205,7 @@ pm2 start dist/index.js --name signal-horizon -i max
 
 Pair this with:
 
-- a static host or reverse proxy serving `apps/signal-horizon/ui/dist`
+- the standalone bundle or a static host / reverse proxy serving `apps/signal-horizon/ui/dist`
 - PostgreSQL
 - Redis for queue-backed rollouts and distributed state
 - optional ClickHouse for historical analytics
@@ -224,6 +242,16 @@ tls:
 ```
 
 Ensure your edge proxy supports WebSocket upgrades for `/ws`.
+
+### Same-Origin Reverse Proxy Examples
+
+The standalone release bundle ships with:
+
+- `config/nginx/signal-horizon.conf`
+- `config/caddy/Caddyfile`
+- `config/systemd/signal-horizon.service`
+
+These examples keep the dashboard, REST API, and WebSocket endpoints on the same origin, which matches the single-process Node packaging flow.
 
 ### AWS ALB
 

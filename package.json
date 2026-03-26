@@ -13,6 +13,7 @@
     "signal-horizon:api": "pnpm --filter @atlascrew/signal-horizon-api dev",
     "signal-horizon:ui": "pnpm --filter @atlascrew/signal-horizon-ui dev",
     "signal-horizon:standalone": "pnpm exec nx run signal-horizon-api:build:standalone",
+    "signal-horizon:release": "node apps/signal-horizon/scripts/package-standalone-release.mjs",
     "synapse-client:build": "pnpm --filter @atlascrew/synapse-client build",
     "synapse-api:build": "pnpm --filter @atlascrew/synapse-api build",
     "synapse-waf:test": "pnpm --filter synapse-waf test"

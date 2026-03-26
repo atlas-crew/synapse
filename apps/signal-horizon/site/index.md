@@ -6,6 +6,7 @@ Welcome to Signal Horizon, the central command hub for managing Synapse sensor f
 
 - [Setup Guide](setup.md) -- Deploy Signal Horizon and connect your first sensor
 - [Deployment Guide](deployment.md) -- Production deployment, Kubernetes, and high availability
+- [Self-Hosted Standalone Bundle](guides/self-hosted-standalone.md) -- Single-process Node packaging, release bundle, and reverse-proxy install path
 
 ## Features
 

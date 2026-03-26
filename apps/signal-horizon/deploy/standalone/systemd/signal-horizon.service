@@ -1,0 +1,22 @@
+[Unit]
+Description=Signal Horizon standalone
+Wants=postgresql.service
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/signal-horizon
+EnvironmentFile=/opt/signal-horizon/.env
+ExecStart=/opt/signal-horizon/bin/start.sh
+Restart=always
+RestartSec=5
+User=signal-horizon
+Group=signal-horizon
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/signal-horizon
+
+[Install]
+WantedBy=multi-user.target

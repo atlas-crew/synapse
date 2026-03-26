@@ -1,0 +1,15 @@
+signal-horizon.example.com {
+    encode zstd gzip
+
+    # Caddy upgrades WebSocket connections automatically and forwards the standard
+    # proxy headers this Node service expects, so the shared backend block is enough.
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Content-Security-Policy "default-src 'self'; connect-src 'self' https://signal-horizon.example.com wss://signal-horizon.example.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';"
+    }
+
+    reverse_proxy 127.0.0.1:3100 {
+    }
+}

@@ -97,6 +97,31 @@ pnpm start
 
 When the bundled UI assets are present, the API serves the dashboard, static assets, and SPA routes itself. PostgreSQL remains required, and Redis/ClickHouse stay optional external dependencies.
 
+### Standalone Release Bundle
+
+To build a customer-handoff artifact for the non-Docker path:
+
+```bash
+pnpm signal-horizon:release
+```
+
+That creates:
+
+- `apps/signal-horizon/out/signal-horizon-standalone/`
+- `apps/signal-horizon/out/signal-horizon-standalone.tar.gz`
+
+The release bundle includes:
+
+- the standalone API+UI runtime
+- Prisma migrations and the Prisma CLI for `migrate deploy`
+- `.env.example`
+- helper scripts in `bin/`
+- Nginx, Caddy, and `systemd` examples under `config/`
+
+The release artifact is self-contained for migrations and runtime startup. It does not yet bundle a production-safe first-admin or demo-data bootstrap path.
+
+Use the self-hosted runbook in [`site/guides/self-hosted-standalone.md`](./site/guides/self-hosted-standalone.md) for the exact install flow.
+
 ## Deployment
 
 For the managed deployment path, use the repo-root [`render.yaml`](../../render.yaml) plus the Render-specific env templates:
@@ -112,6 +137,11 @@ bash ./apps/signal-horizon/scripts/render-preflight.sh
 ```
 
 GitHub Actions also runs the same preflight automatically on Render blueprint changes, root dependency/workspace file changes, plus Signal Horizon API, UI, `shared/`, and deployment-script changes via [`.github/workflows/signal-horizon-preflight.yml`](../../.github/workflows/signal-horizon-preflight.yml).
+
+For customer-managed installs, prefer the standalone bundle plus the self-hosted guide:
+
+- [`site/guides/self-hosted-standalone.md`](./site/guides/self-hosted-standalone.md)
+- [`site/deployment.md`](./site/deployment.md)
 
 ## Documentation
 
