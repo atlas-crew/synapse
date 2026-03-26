@@ -225,6 +225,27 @@ async function settleResult<T>(
   return advanceUntilSettled(promise, { description, ...options });
 }
 
+async function waitForBlueGreenDeploymentInitialized(
+  distributor: RuleDistributor,
+  tenantId: string,
+  expectedSensorCount: number
+): Promise<string> {
+  return advanceUntil(
+    () => {
+      const deployment = distributor.listActiveDeployments(tenantId)[0];
+      return deployment && deployment.sensorStatus.size === expectedSensorCount
+        ? deployment.deploymentId
+        : undefined;
+    },
+    {
+      stepMs: ASYNC_INIT_DELAY_MS,
+      // Generous headroom for CI fake-timer scheduling; local init is typically much faster.
+      maxSteps: 50,
+      description: 'blue/green deployment initialization',
+    }
+  );
+}
+
 describe('RuleDistributor', () => {
   let distributor: RuleDistributor;
   let mockPrisma: ReturnType<typeof createMockPrisma>;
@@ -775,7 +796,11 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      await resultPromise;
+      await advanceUntilSettled(resultPromise, {
+        stepMs: TEST_POLL_INTERVAL_MS,
+        maxSteps: 10,
+        description: 'blue/green staging completion',
+      });
     }, 15000);
 
     it('should execute atomic switchover', async () => {
@@ -796,15 +821,13 @@ describe('RuleDistributor', () => {
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       // Advance time to allow staging commands to be sent
-      await advanceUntil(
-        () => (getSendCommandMock().mock.calls.length > 0 ? true : undefined),
-        { stepMs: ASYNC_INIT_DELAY_MS, maxSteps: 20, description: 'sendCommand initialization' }
+      const deploymentId = await waitForBlueGreenDeploymentInitialized(
+        distributor,
+        TEST_TENANT_ID,
+        sensorIds.length
       );
 
       // Simulate staging complete by marking sensors as staged
-      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
-      expect(deployments.length).toBe(1);
-      const deploymentId = deployments[0].deploymentId;
       for (const sensorId of sensorIds) {
         distributor.updateSensorStagingStatus(deploymentId, sensorId, true);
       }
@@ -826,7 +849,11 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      await resultPromise;
+      await advanceUntilSettled(resultPromise, {
+        stepMs: TEST_POLL_INTERVAL_MS,
+        maxSteps: 10,
+        description: 'blue/green atomic switchover',
+      });
 
       // Verify broadcast command was called for switch
       expect(mockFleetCommander.broadcastCommand).toHaveBeenCalled();
@@ -855,7 +882,11 @@ describe('RuleDistributor', () => {
         await vi.advanceTimersByTimeAsync(500);
       }
 
-      const result = await resultPromise;
+      const result = await advanceUntilSettled(resultPromise, {
+        stepMs: 500,
+        maxSteps: 30,
+        description: 'blue/green staging failure',
+      });
 
       expect(result.success).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -920,7 +951,11 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      const result = await resultPromise;
+      const result = await advanceUntilSettled(resultPromise, {
+        stepMs: TEST_POLL_INTERVAL_MS,
+        maxSteps: 10,
+        description: 'blue/green cleanup completion',
+      });
       expect(result.success).toBe(true);
 
       // Advance past cleanup delay (500ms + margin)
@@ -952,15 +987,11 @@ describe('RuleDistributor', () => {
 
       const resultPromise = distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
-      // Advance time to allow staging commands to be sent
-      for (let i = 0; i < 10; i++) {
-        await vi.advanceTimersByTimeAsync(10);
-        await Promise.resolve();
-      }
-
-      const deployments = distributor.listActiveDeployments(TEST_TENANT_ID);
-      expect(deployments.length).toBe(1);
-      const deploymentId = deployments[0].deploymentId;
+      const deploymentId = await waitForBlueGreenDeploymentInitialized(
+        distributor,
+        TEST_TENANT_ID,
+        sensorIds.length
+      );
 
       for (const sensorId of sensorIds) {
         distributor.updateSensorStagingStatus(deploymentId, sensorId, true);
@@ -982,7 +1013,11 @@ describe('RuleDistributor', () => {
         await Promise.resolve();
       }
 
-      await resultPromise;
+      await advanceUntilSettled(resultPromise, {
+        stepMs: TEST_POLL_INTERVAL_MS,
+        maxSteps: 10,
+        description: 'blue/green status tracking completion',
+      });
 
       // Check listActiveDeployments
       const activeDeployments = distributor.listActiveDeployments(TEST_TENANT_ID);
@@ -1063,7 +1098,11 @@ describe('RuleDistributor', () => {
         await vi.advanceTimersByTimeAsync(500);
       }
 
-      const result = await resultPromise;
+      const result = await advanceUntilSettled(resultPromise, {
+        stepMs: 500,
+        maxSteps: 30,
+        description: 'blue/green sendCommand failure handling',
+      });
 
       expect(result.success).toBe(false);
       expect(result.results[0].error).toContain('Staging incomplete');
@@ -1159,7 +1198,11 @@ describe('RuleDistributor', () => {
         await vi.advanceTimersByTimeAsync(500);
       }
 
-      const result = await resultPromise;
+      const result = await advanceUntilSettled(resultPromise, {
+        stepMs: 500,
+        maxSteps: 30,
+        description: 'blue/green sendCommand failure handling',
+      });
 
       // Should fail because not all sensors staged
       expect(result.success).toBe(false);
@@ -1333,6 +1376,7 @@ describe('RuleDistributor', () => {
         strategy: 'immediate',
       };
 
+      // Immediate strategy resolves without timer-driven polling, so a direct await is stable here.
       const result = await distributor.pushRulesWithStrategy(TEST_TENANT_ID, sensorIds, rules, config);
 
       expect(result.success).toBe(true);
