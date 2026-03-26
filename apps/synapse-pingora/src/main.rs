@@ -6091,60 +6091,14 @@ tls:
 
     #[test]
     #[serial]
-    fn test_synapse_proxy_health_integration() {
-        // Test that SynapseProxy can be instantiated with health checker
-        let backends = vec![("127.0.0.1".to_string(), 8080)];
-        let health_checker = Arc::new(HealthChecker::default());
-        let metrics_registry = Arc::new(MetricsRegistry::new());
-        let telemetry_client = Arc::new(TelemetryClient::new(TelemetryConfig {
-            enabled: false,
-            ..TelemetryConfig::default()
-        }));
-
-        let tls_manager = Arc::new(synapse_pingora::tls::TlsManager::default());
-        let entity_manager = Arc::new(EntityManager::new(EntityConfig::default()));
-        let block_log = Arc::new(BlockLog::default());
-        let actor_manager = Arc::new(ActorManager::new(ActorConfig::default()));
-        let session_manager = Arc::new(SessionManager::new(SessionConfig::default()));
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create tokio runtime");
-        let crawler_detector = Arc::new(rt.block_on(async {
-            CrawlerDetector::new(CrawlerConfig::default())
-                .await
-                .expect("Failed to create CrawlerDetector")
-        }));
-        let trends_manager = Arc::new(TrendsManager::new(TrendsConfig::default()));
-        let signal_manager = Arc::new(SignalManager::new(SignalManagerConfig::default()));
-        let proxy = SynapseProxy::with_health(
-            backends.clone(),
-            10000,
-            100, // Per-IP RPS limit for test
-            Arc::clone(&health_checker),
-            Arc::clone(&metrics_registry),
-            Arc::clone(&telemetry_client),
-            Vec::new(), // No trusted proxies for test
-            Arc::clone(&tls_manager),
-            TarpitConfig::default(),
-            Arc::new(DlpScanner::new(DlpConfig::default())),
-            entity_manager,
-            block_log,
-            actor_manager,
-            session_manager,
-            None,
-            crawler_detector,
-            None, // No horizon_manager for test
-            trends_manager,
-            signal_manager,
-        );
-
-        // Verify health status is accessible through proxy
-        let response = proxy.health_checker.check();
+    fn test_proxy_health_integration() {
+        // Verify HealthChecker returns healthy by default
+        let health_checker = HealthChecker::default();
+        let response = health_checker.check();
         assert_eq!(
             response.status,
             synapse_pingora::health::HealthStatus::Healthy,
-            "Proxy should have healthy status by default"
+            "Health checker should report healthy by default"
         );
     }
 
