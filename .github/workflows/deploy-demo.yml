@@ -1,0 +1,46 @@
+name: Deploy demo site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/signal-horizon/ui/**'
+      - 'apps/signal-horizon/shared/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: cloudflare
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build demo
+        working-directory: apps/signal-horizon/ui
+        run: VITE_DEMO_MODE=true pnpm exec vite build
+
+      - name: Deploy to Cloudflare Workers
+        working-directory: apps/signal-horizon/ui
+        run: npx wrangler deploy --env=""
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

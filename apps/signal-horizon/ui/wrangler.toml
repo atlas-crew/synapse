@@ -1,0 +1,10 @@
+name = "horizon-demo"
+compatibility_date = "2025-04-01"
+
+[assets]
+directory = "./dist"
+html_handling = "force-trailing-slash"
+not_found_handling = "single-page-application"
+
+[env.preview]
+name = "horizon-demo-preview"

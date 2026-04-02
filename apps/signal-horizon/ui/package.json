@@ -12,7 +12,10 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build:demo": "VITE_DEMO_MODE=true vite build",
+    "deploy": "pnpm build:demo && wrangler deploy",
+    "deploy:preview": "pnpm build:demo && wrangler deploy --env preview"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",
@@ -81,7 +84,8 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.4.5",
     "vite": "^6.2.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.79.0"
   },
   "engines": {
     "node": ">=18.18.0"

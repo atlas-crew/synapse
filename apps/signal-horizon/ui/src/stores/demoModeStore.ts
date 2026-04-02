@@ -20,8 +20,8 @@ interface DemoModeState {
 export const useDemoModeStore = create<DemoModeState>()(
   persist(
     (set) => ({
-      // Initial state
-      isEnabled: false,
+      // Initial state — VITE_DEMO_MODE=true activates demo mode by default
+      isEnabled: import.meta.env.VITE_DEMO_MODE === 'true',
       scenario: 'normal',
 
       // Actions

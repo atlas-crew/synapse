@@ -15,6 +15,10 @@
   <img src="https://img.shields.io/badge/pingora-0.6-blue?logo=cloudflare" alt="Pingora" />
 </p>
 
+<p align="center">
+  <a href="https://horizon-demo.nickf4.workers.dev"><strong>Live Demo</strong></a> · <a href="https://atlascrew.dev">Documentation</a>
+</p>
+
 ## Architecture
 
 ```

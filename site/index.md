@@ -1,6 +1,18 @@
 ---
 layout: home
 
+hero:
+  name: Horizon
+  text: Edge Protection Platform
+  tagline: Fleet intelligence and WAF engine for collective defense
+  actions:
+    - theme: brand
+      text: Live Demo
+      link: https://horizon-demo.nickf4.workers.dev
+    - theme: alt
+      text: Get Started
+      link: /getting-started/
+
 features:
   - title: Synapse WAF Engine
     details: Pure Rust WAF built on Cloudflare Pingora. ~10 μs clean GET latency, 237 production rules, configurable detection and DLP scanning. Deploy standalone or as a fleet sensor.
