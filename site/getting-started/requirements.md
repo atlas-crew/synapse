@@ -4,6 +4,10 @@ title: System Requirements
 
 # System Requirements
 
+::: tip Using Docker or npm?
+If you're running Horizon and Synapse via [Docker](./installation#docker) or [npm](./installation#npm), most of the build dependencies below are not required. Docker needs only Docker Engine 20+. npm needs only Node.js 20+.
+:::
+
 ## Horizon (API + UI)
 
 | Dependency | Version | Notes |

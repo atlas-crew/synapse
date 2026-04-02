@@ -51,7 +51,7 @@ spec:
     spec:
       containers:
         - name: horizon-api
-          image: atlascrew/signal-horizon:latest
+          image: nickcrew/horizon:latest
           ports:
             - containerPort: 3100
           envFrom:
@@ -144,7 +144,7 @@ spec:
     spec:
       containers:
         - name: synapse
-          image: atlascrew/synapse-waf:latest
+          image: nickcrew/synapse-waf:latest
           ports:
             - containerPort: 6190
               hostPort: 6190

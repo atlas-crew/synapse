@@ -71,6 +71,7 @@ export default withMermaid(
             text: 'Getting Started',
             items: [
               { text: 'Overview', link: '/getting-started/' },
+              { text: 'Installation', link: '/getting-started/installation' },
               { text: 'Requirements', link: '/getting-started/requirements' },
               { text: 'Quick Start', link: '/getting-started/quickstart' },
             ],

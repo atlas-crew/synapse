@@ -4,6 +4,10 @@ title: Local Environment
 
 # Local Environment Setup
 
+::: info For contributors
+This guide is for developers who want to build and run the platform from source. If you just want to use Horizon or Synapse, see the [Installation guide](../getting-started/installation) for Docker and npm options.
+:::
+
 ## Prerequisites
 
 | Tool | Version | Install |

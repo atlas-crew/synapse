@@ -4,6 +4,10 @@ title: Building
 
 # Building from Source
 
+::: info For contributors
+Pre-built packages are available via [Docker and npm](../getting-started/installation). Building from source is only needed if you're modifying the platform.
+:::
+
 ## All Projects
 
 ```sh

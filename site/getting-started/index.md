@@ -54,5 +54,6 @@ Many teams start with Synapse standalone and add Horizon later. The migration is
 
 ## Next Steps
 
+- [Installation](./installation) — install via Docker, npm, or from source
 - [System Requirements](./requirements) — hardware and software prerequisites
-- [Quick Start](./quickstart) — get the development environment running
+- [Quick Start](./quickstart) — verify your installation and send test traffic

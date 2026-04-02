@@ -12,7 +12,29 @@ Run Synapse as a standalone WAF without the Horizon hub. This is the simplest de
 - You don't need centralized fleet management or cross-tenant correlation
 - You want to evaluate Synapse before deploying the full platform
 
-## Build from Source
+## Install
+
+### Docker (Recommended)
+
+```sh
+docker run -d \
+  --name synapse \
+  -p 6190:6190 \
+  -p 6191:6191 \
+  -v $(pwd)/config.yaml:/etc/synapse/config.yaml:ro \
+  nickcrew/synapse-waf:latest
+```
+
+### npm
+
+```sh
+npm install -g @atlascrew/synapse-waf
+synapse-waf --config config.yaml
+```
+
+### Build from Source
+
+For contributors and advanced users with the Rust nightly toolchain:
 
 ```sh
 cd apps/synapse-pingora

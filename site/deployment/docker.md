@@ -12,7 +12,7 @@ Deploy Horizon with all dependencies using Docker Compose:
 # compose.yml
 services:
   horizon:
-    image: atlascrew/signal-horizon:latest
+    image: nickcrew/horizon:latest
     ports:
       - "3100:3100"
     environment:
@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   synapse:
-    image: atlascrew/synapse-waf:latest
+    image: nickcrew/synapse-waf:latest
     ports:
       - "6190:6190"
       - "6191:6191"
@@ -82,16 +82,19 @@ docker run -d \
   -p 6190:6190 \
   -p 6191:6191 \
   -v $(pwd)/config.yaml:/etc/synapse/config.yaml:ro \
-  atlascrew/synapse-waf:latest
+  nickcrew/synapse-waf:latest
 ```
 
-## Building the Synapse Image
+## Building Images Locally
 
-The Synapse Dockerfile uses a multi-stage build:
+Both Dockerfiles use multi-stage builds. Build from the repo root:
 
 ```sh
-cd apps/synapse-pingora
-docker build -t synapse-waf:latest .
+# Synapse WAF
+docker build -f apps/synapse-pingora/Dockerfile -t synapse-waf:latest .
+
+# Horizon
+docker build -f apps/signal-horizon/Dockerfile -t horizon:latest .
 ```
 
 - **Builder stage:** `rust:1.77-bookworm` with cmake, openssl, clang
