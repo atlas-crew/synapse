@@ -18,26 +18,17 @@ interface IntegrationsResponse {
   apparatus: ApparatusStatus;
 }
 
+const DEMO_STATUS: ApparatusStatus = {
+  state: 'connected',
+  url: 'http://apparatus:8090',
+  version: '0.9.1',
+};
+
 export function useApparatusStatus(pollingIntervalMs = 30_000) {
   const { isEnabled: isDemo } = useDemoMode();
 
-  // Demo mode — return synthetic connected status
-  if (isDemo) {
-    return {
-      status: {
-        state: 'connected' as const,
-        url: 'http://apparatus:8090',
-        version: '0.9.1',
-        lastHealthCheck: new Date().toISOString(),
-      },
-      isLoading: false,
-      error: null,
-      refetch: async () => {},
-    };
-  }
-
   const [status, setStatus] = useState<ApparatusStatus>({ state: 'disabled' });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!isDemo);
   const [error, setError] = useState<Error | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -54,12 +45,18 @@ export function useApparatusStatus(pollingIntervalMs = 30_000) {
   }, []);
 
   useEffect(() => {
+    if (isDemo) {
+      setStatus({ ...DEMO_STATUS, lastHealthCheck: new Date().toISOString() });
+      setIsLoading(false);
+      return;
+    }
+
     fetchStatus();
     intervalRef.current = setInterval(fetchStatus, pollingIntervalMs);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchStatus, pollingIntervalMs]);
+  }, [isDemo, fetchStatus, pollingIntervalMs]);
 
-  return { status, isLoading, error, refetch: fetchStatus };
+  return { status, isLoading, error, refetch: isDemo ? async () => {} : fetchStatus };
 }

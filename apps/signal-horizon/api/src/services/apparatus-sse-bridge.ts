@@ -187,7 +187,8 @@ export class ApparatusSSEBridge {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
+        // Normalize CRLF → LF (SSE spec permits both)
+        const lines = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
         // Keep the last incomplete line in the buffer
         buffer = lines.pop() ?? '';
 
@@ -195,7 +196,8 @@ export class ApparatusSSEBridge {
           if (line.startsWith('event: ')) {
             currentEvent = line.slice(7).trim();
           } else if (line.startsWith('data: ')) {
-            currentData = line.slice(6);
+            // SSE spec: consecutive data lines are joined with \n
+            currentData = currentData ? currentData + '\n' + line.slice(6) : line.slice(6);
           } else if (line === '' && currentEvent && currentData) {
             // End of SSE message — dispatch
             this.handleEvent(currentEvent, currentData);
