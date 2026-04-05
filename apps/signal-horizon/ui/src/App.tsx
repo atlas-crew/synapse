@@ -25,6 +25,7 @@ import {
   HelpCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  Cpu,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -58,6 +59,8 @@ import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import DesignLabPage from './pages/DesignLabPage';
 const BreachDrillsPage = lazy(() => import('./pages/BreachDrillsPage'));
+const AutopilotPage = lazy(() => import('./pages/AutopilotPage'));
+const ScenariosPage = lazy(() => import('./pages/ScenariosPage'));
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -80,6 +83,7 @@ const primaryNavItems = [
   { path: '/auth-coverage', icon: Shield, label: 'Auth Coverage' },
   { path: '/warroom', icon: Users, label: 'War Room' },
   { path: '/drills', icon: Shield, label: 'Breach Drills' },
+  { path: '/autopilot', icon: Cpu, label: 'Autopilot' },
 ];
 
 const supportNavItems = [
@@ -93,6 +97,7 @@ const fleetNavItems = [
   { path: '/fleet/forecast', icon: BarChart3, label: 'Capacity Forecast' },
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
+  { path: '/scenarios', icon: Activity, label: 'Scenarios' },
   { path: '/fleet/rules', icon: Shield, label: 'Rule Distribution' },
   { path: '/fleet/connectivity', icon: Wifi, label: 'Connectivity' },
   { path: '/fleet/keys', icon: Key, label: 'API Keys' },
@@ -661,6 +666,8 @@ function App() {
                 <Route path="/support/:docId?" element={<SupportPage />} />
                 <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />
                 <Route path="/drills" element={<Suspense fallback={<LoadingSpinner message="Loading breach drills..." size="lg" />}><SignalHorizonPageWrapper><BreachDrillsPage /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/autopilot" element={<Suspense fallback={<LoadingSpinner message="Loading autopilot..." size="lg" />}><SignalHorizonPageWrapper><AutopilotPage /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/scenarios" element={<Suspense fallback={<LoadingSpinner message="Loading scenarios..." size="lg" />}><SignalHorizonPageWrapper><ScenariosPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/design-lab" element={<DesignLabPage />} />
                 
                 {fleetRoutes.map((route) => (
