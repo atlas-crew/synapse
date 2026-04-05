@@ -43,6 +43,7 @@ import { createPlaybookRoutes } from './playbooks.js';
 import docsRouter from './docs.js';
 import { UserAuthService } from '../../services/user-auth.js';
 import { createAuthManagementRoutes } from './auth-management.js';
+import { createApparatusRoutes } from './apparatus.js';
 import type { RedisKv } from '../../storage/redis/kv.js';
 import type { FleetSessionQueryService } from '../../services/fleet/session-query.js';
 import type { HuntService } from '../../services/hunt/index.js';
@@ -230,6 +231,14 @@ export function createApiRouter(
     apparatusService: options.apparatusService,
   }));
   logger.info('Management routes mounted at /api/v1/management');
+
+  // Mount Apparatus integration routes (drills, autopilot, etc.)
+  if (options.apparatusService) {
+    router.use('/apparatus', createApparatusRoutes(logger, {
+      apparatusService: options.apparatusService,
+    }));
+    logger.info('Apparatus routes mounted at /api/v1/apparatus');
+  }
 
   // Mount Tenant routes for settings
   router.use('/tenant', createTenantRoutes(prisma, logger, options.securityAuditService, options.preferenceService));
