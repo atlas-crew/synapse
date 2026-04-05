@@ -6,6 +6,7 @@ on:
     paths:
       - 'site/**'
       - 'brand/horizon-brand-guidelines/**'
+      - 'brand/infographics/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -46,8 +47,9 @@ jobs:
           cp -r site/.vitepress/dist/* _site/docs/
           # Landing page becomes the root
           cp site/horizon.html _site/index.html
-          # Copy infographics referenced by the landing page
-          cp -r site/infographics _site/infographics 2>/dev/null || true
+          # Copy HTML infographics from brand directory (referenced by landing page)
+          mkdir -p _site/infographics
+          cp brand/infographics/*.html _site/infographics/
 
       - uses: actions/upload-pages-artifact@v3
         with:
