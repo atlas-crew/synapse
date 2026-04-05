@@ -81,6 +81,7 @@ export interface ApiRouterOptions {
   fleetIntelService?: import('../../services/fleet/fleet-intel.js').FleetIntelService;
   playbookService?: import('../../services/warroom/playbook-service.js').PlaybookService;
   securityAuditService?: import('../../services/audit/security-audit.js').SecurityAuditService;
+  apparatusService?: import('../../services/apparatus.js').ApparatusService;
 }
 
 export function createApiRouter(
@@ -226,6 +227,7 @@ export function createApiRouter(
   // Mount Management routes for API keys and connectivity
   router.use('/management', createManagementRoutes(prisma, logger, {
     fleetCommander: options.fleetCommander,
+    apparatusService: options.apparatusService,
   }));
   logger.info('Management routes mounted at /api/v1/management');
 

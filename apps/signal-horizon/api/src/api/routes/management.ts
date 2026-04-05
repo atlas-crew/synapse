@@ -2082,6 +2082,7 @@ function generateApiKey(): { key: string; hash: string; prefix: string } {
  */
 export interface ManagementRouteOptions {
   fleetCommander?: FleetCommander;
+  apparatusService?: import('../../services/apparatus.js').ApparatusService;
 }
 
 export function createManagementRoutes(
@@ -2090,7 +2091,7 @@ export function createManagementRoutes(
   options: ManagementRouteOptions = {}
 ): Router {
   const router = Router();
-  const { fleetCommander } = options;
+  const { fleetCommander, apparatusService } = options;
 
   // =============================================================================
   // API Keys Management
@@ -2881,6 +2882,21 @@ export function createManagementRoutes(
       logger.error({ error }, 'Error updating hub config');
       res.status(500).json({ error: 'Failed to update hub configuration' });
     }
+  });
+
+  // =============================================================================
+  // Integrations Status
+  // =============================================================================
+
+  /**
+   * GET /integrations - External integration connection status
+   */
+  router.get('/integrations', requireScope('fleet:read'), (_req: Request, res: Response) => {
+    res.json({
+      apparatus: apparatusService
+        ? apparatusService.getStatus()
+        : { state: 'disabled', url: undefined, version: undefined, lastHealthCheck: undefined, lastError: undefined },
+    });
   });
 
   return router;

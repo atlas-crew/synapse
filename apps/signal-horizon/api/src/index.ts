@@ -77,6 +77,8 @@ import { TunnelBroker, type TunnelCapability } from './websocket/tunnel-broker.j
 import { SynapseProxyService } from './services/synapse-proxy.js';
 import { FleetIntelIngestionService } from './services/fleet-intel/ingestion-service.js';
 import { initSynapseDirectAdapter } from './services/synapse-direct.js';
+import { ApparatusService } from './services/apparatus.js';
+import { ApparatusSSEBridge } from './services/apparatus-sse-bridge.js';
 import { initSensorBridge, getSensorBridge } from './services/sensor-bridge.js';
 import { matchUpgradePath } from './websocket/upgrade-path.js';
 import {
@@ -320,6 +322,8 @@ let ruleDistributor: RuleDistributor;
 let preferenceService: PreferenceService;
 let impossibleTravelService: ImpossibleTravelService;
 let tunnelBroker: TunnelBroker;
+let apparatusService: ApparatusService;
+let apparatusSSEBridge: ApparatusSSEBridge | null = null;
 let tunnelSessionStore: TunnelSessionStore;
 let synapseProxy: SynapseProxyService;
 let fleetIntelIngestion: FleetIntelIngestionService;
@@ -693,6 +697,20 @@ async function start() {
     );
   }
 
+  // Initialize Apparatus integration (optional — for breach drills, streaming, chaos)
+  apparatusService = new ApparatusService({
+    url: config.apparatus.url,
+    timeoutMs: config.apparatus.timeoutMs,
+    healthIntervalMs: config.apparatus.healthIntervalMs,
+    logger,
+  });
+  if (config.apparatus.enabled) {
+    apparatusService.start().catch((err) => {
+      logger.error({ err }, 'Failed to start Apparatus service');
+    });
+    logger.info({ url: config.apparatus.url }, 'Apparatus integration initialized');
+  }
+
   apiIntelligenceService = new APIIntelligenceService(prisma, logger);
 
   // Initialize protocol handlers for fleet management
@@ -923,6 +941,7 @@ async function start() {
     apiIntelligenceService,
     playbookService,
     securityAuditService,
+    apparatusService,
   });
   app.use(API_V1_PREFIX, apiRouter);
   logger.info({ basePath: API_V1_PREFIX }, 'API routes mounted (includes fleet and synapse routes)');
@@ -1001,6 +1020,27 @@ async function start() {
     playbookTrigger,
     idempotencyStore
   );
+
+  // Start Apparatus SSE bridge (streams deception/tarpit/threat-intel events into the aggregator)
+  if (config.apparatus.enabled && config.apparatus.url) {
+    apparatusSSEBridge = new ApparatusSSEBridge(
+      {
+        apparatusUrl: config.apparatus.url,
+        tenantId: 'apparatus-default',
+        sensorId: 'apparatus-sse-1',
+      },
+      aggregator,
+      apparatusService,
+      logger,
+    );
+    // Delay start to let Apparatus service health check complete
+    setTimeout(() => {
+      apparatusSSEBridge?.start().catch((err) => {
+        logger.error({ err }, 'Failed to start Apparatus SSE bridge');
+      });
+    }, 3000);
+    logger.info('Apparatus SSE bridge initialized (will connect after health check)');
+  }
 
   // Initialize WebSocket gateways
   sensorGateway = new SensorGateway(prisma, logger, aggregator, fleetAggregator, {
@@ -1214,6 +1254,9 @@ async function shutdown(signal: string) {
     await sensorBridge.stop();
     logger.info('Sensor bridge stopped');
   }
+  apparatusSSEBridge?.stop();
+  apparatusService.stop();
+  logger.info('Apparatus service stopped');
 
   if (retentionInterval) {
     clearInterval(retentionInterval);

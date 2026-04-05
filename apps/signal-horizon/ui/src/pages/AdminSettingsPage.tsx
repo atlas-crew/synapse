@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useTenantSettings, SharingPreference } from '../hooks/useTenantSettings';
+import { useApparatusStatus } from '../hooks/useApparatusStatus';
 import { usePolicies, type PolicyTemplate } from '../hooks/fleet/usePolicies';
 import { useHubConfig, type HubConfig } from '../hooks/useHubConfig';
 import {
@@ -98,6 +99,8 @@ const AdminSettingsPage: React.FC = () => {
     testError: connectivityTestError,
     refreshStatus: refreshConnectivityStatus,
   } = useConnectivity();
+
+  const { status: apparatusStatus } = useApparatusStatus();
 
   // Toast & ConfirmDialog state
   const { toast } = useToast();
@@ -1957,31 +1960,56 @@ const AdminSettingsPage: React.FC = () => {
                 </div>
 
                 <section className="bg-ac-card-dark p-8 text-white space-y-6">
-                  <h3 className="text-lg font-light uppercase tracking-wider text-ac-sky-blue">
-                    Apparatus Connection
-                  </h3>
+                  <Stack direction="row" align="center" justify="space-between">
+                    <h3 className="text-lg font-light uppercase tracking-wider text-ac-sky-blue">
+                      Apparatus Connection
+                    </h3>
+                    <Stack direction="row" align="center" gap="sm">
+                      <span className={clsx(
+                        'w-2 h-2',
+                        apparatusStatus.state === 'connected' ? 'bg-ac-green animate-pulse' :
+                        apparatusStatus.state === 'connecting' ? 'bg-ac-orange animate-pulse' :
+                        apparatusStatus.state === 'disabled' ? 'bg-white/20' :
+                        'bg-ac-red'
+                      )} />
+                      <span className="text-xs font-mono uppercase text-white/60">
+                        {apparatusStatus.state}
+                      </span>
+                    </Stack>
+                  </Stack>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                        Cluster Host
+                        URL
                       </label>
                       <div className="text-sm font-mono text-ac-sky-blue">
-                        apparatus.internal.svc
+                        {apparatusStatus.url ?? 'Not configured'}
                       </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                        Command Port
+                        Version
                       </label>
-                      <div className="text-sm font-mono text-ac-sky-blue">4000</div>
+                      <div className="text-sm font-mono text-ac-sky-blue">
+                        {apparatusStatus.version ?? '—'}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                        API Secret
+                        Last Health Check
                       </label>
-                      <div className="text-sm font-mono text-ac-sky-blue">••••••••••••••••</div>
+                      <div className="text-sm font-mono text-ac-sky-blue">
+                        {apparatusStatus.lastHealthCheck
+                          ? new Date(apparatusStatus.lastHealthCheck).toLocaleTimeString()
+                          : '—'}
+                      </div>
                     </div>
                   </div>
+                  {apparatusStatus.lastError && (
+                    <div className="px-4 py-3 border border-ac-red/30 bg-ac-red/10 text-sm text-ac-red font-mono">
+                      {apparatusStatus.lastError}
+                    </div>
+                  )}
                 </section>
               </div>
             </ErrorBoundary>
