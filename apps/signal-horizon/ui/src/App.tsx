@@ -57,6 +57,7 @@ import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import DesignLabPage from './pages/DesignLabPage';
+const BreachDrillsPage = lazy(() => import('./pages/BreachDrillsPage'));
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -78,6 +79,7 @@ const primaryNavItems = [
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/auth-coverage', icon: Shield, label: 'Auth Coverage' },
   { path: '/warroom', icon: Users, label: 'War Room' },
+  { path: '/drills', icon: Shield, label: 'Breach Drills' },
 ];
 
 const supportNavItems = [
@@ -658,6 +660,7 @@ function App() {
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support/:docId?" element={<SupportPage />} />
                 <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />
+                <Route path="/drills" element={<Suspense fallback={<LoadingSpinner message="Loading breach drills..." size="lg" />}><SignalHorizonPageWrapper><BreachDrillsPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/design-lab" element={<DesignLabPage />} />
                 
                 {fleetRoutes.map((route) => (
