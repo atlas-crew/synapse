@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Request Processing Lifecycle — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+</style>
+</head>
+<body>
+<div class="page">
+<style>
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+</style>
+<style>
+/* Pipeline with gradient bottom accent */
+.pipeline-wrap{position:relative;margin-top:20px;}
+.pipeline{display:flex;gap:0;position:relative;z-index:1;}
+.pipe-stage{flex:1;border:1px solid var(--border);background:var(--card);padding:14px 12px;position:relative;text-align:center;overflow:hidden;}
+.pipe-stage:not(:last-child){border-right:none;}
+.pipe-stage::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--blue);opacity:0.3;}
+.pipe-stage:last-child::after{background:var(--green);}
+.pipe-num{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--blue);margin-bottom:4px;}
+.pipe-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;margin-bottom:4px;}
+.pipe-detail{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--text-sec);line-height:1.5;}
+/* Async bar with glow */
+.async-bar{margin-top:8px;padding:10px 16px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);display:flex;justify-content:space-between;align-items:center;position:relative;overflow:hidden;}
+.async-bar::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--violet),var(--blue));opacity:0.5;}
+.async-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;color:var(--violet);}
+.async-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);}
+/* Stage details with timing glow */
+.stages{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.stage{background:var(--card);border:1px solid var(--border);padding:16px;position:relative;overflow:hidden;}
+.stage::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--blue);opacity:0.3;}
+.stage:last-child::before{background:var(--violet);opacity:0.4;}
+.stage-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.stage-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;}
+.stage-timing{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--blue);padding:2px 8px;background:rgba(30,144,255,0.08);border:1px solid rgba(30,144,255,0.15);}
+.stage-items{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.7;margin-bottom:8px;}
+.stage-result{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--green);padding:6px 8px;background:rgba(16,185,129,0.06);border-left:2px solid rgba(16,185,129,0.3);}
+</style>
+<style>
+/* Escalation with color gradient */
+.escalation{display:flex;gap:0;margin-top:20px;}
+.esc-step{flex:1;padding:10px 8px;text-align:center;border:1px solid var(--border);background:var(--card);position:relative;overflow:hidden;}
+.esc-step:not(:last-child){border-right:none;}
+.esc-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;}
+.esc-step:nth-child(1)::after{background:var(--green);}
+.esc-step:nth-child(2)::after{background:var(--blue);}
+.esc-step:nth-child(3)::after{background:var(--amber);}
+.esc-step:nth-child(4)::after{background:var(--coral);}
+.esc-step:nth-child(5)::after{background:var(--red);}
+.esc-num{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;margin-bottom:2px;}
+.esc-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:11px;}
+/* Latency comparison with SVG bar visualization */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+.compare-col{padding:20px;border:1px solid var(--border);position:relative;overflow:hidden;}
+.compare-col.synapse{background:rgba(16,185,129,0.03);border-color:rgba(16,185,129,0.2);}
+.compare-col.cloud{background:rgba(239,68,68,0.03);}
+.compare-title{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;}
+.compare-col.synapse .compare-title{color:var(--green);}
+.compare-col.cloud .compare-title{color:var(--red);}
+.compare-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:28px;margin-bottom:4px;position:relative;}
+.compare-col.synapse .compare-metric{color:var(--green);}
+.compare-col.cloud .compare-metric{color:var(--red);}
+.compare-detail{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.6;}
+.compare-multiplier{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--red);margin-top:8px;}
+.compare-bar{height:8px;margin-top:10px;background:rgba(30,45,68,0.3);}
+.compare-bar-fill{height:100%;}
+/* Perf table */
+.perf-table{width:100%;border-collapse:collapse;margin-top:20px;}
+.perf-table th{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);}
+.perf-table td{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;padding:8px 12px;border-bottom:1px solid rgba(30,45,68,0.5);}
+.perf-table td:nth-child(2){color:var(--blue);}
+.perf-table td:nth-child(4){color:var(--green);}
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+</style>
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER — real synapse-icon-dark.svg internals -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Request Processing Lifecycle</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:700px;">Complete request lifecycle — identity, inspection, profiling, scoring, decision. All intelligence runs locally at the edge. No network hops. No backend calls.</p>
+
+<!-- HERO STATS with glow -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">&lt;50μs</div><div class="label t-label">WAF Detection</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric">29–71μs</div><div class="label t-label">DLP Scan</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">~450μs</div><div class="label t-label">E2E Proxy</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--coral);"></div><div class="value t-metric">0</div><div class="label t-label">Network Hops</div></div>
+</div>
+<!-- BLOCKING PATH PIPELINE with bottom accents -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Blocking Path — Sequential Pipeline</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">&lt;50μs detection latency</span></div>
+<div class="pipeline-wrap">
+<div class="pipeline">
+<div class="pipe-stage" style="flex:0.7;background:var(--subtle);"><div class="pipe-num">IN</div><div class="pipe-name">Request</div><div class="pipe-detail">HTTP/HTTPS<br>Headers + Body</div></div>
+<div class="pipe-stage"><div class="pipe-num">01</div><div class="pipe-name">TLS Fingerprint</div><div class="pipe-detail">JA4 / JA4H<br>Client identity</div></div>
+<div class="pipe-stage"><div class="pipe-num">02</div><div class="pipe-name">WAF Detection</div><div class="pipe-detail">237+ Rules<br>SQLi/XSS/RCE</div></div>
+<div class="pipe-stage"><div class="pipe-num">03</div><div class="pipe-name">API Profiling</div><div class="pipe-detail">Schema + Anomaly<br>~5μs validation</div></div>
+<div class="pipe-stage"><div class="pipe-num">04</div><div class="pipe-name">Actor Scoring</div><div class="pipe-detail">Risk 0–100<br>History + campaigns</div></div>
+<div class="pipe-stage" style="border-color:rgba(16,185,129,0.3);"><div class="pipe-num" style="color:var(--green);">05</div><div class="pipe-name">Decision</div><div class="pipe-detail">Allow / Block<br>Threshold: 70</div></div>
+</div>
+</div>
+<div class="async-bar">
+<div><span class="async-label">ASYNC — PARALLEL</span></div>
+<div class="async-desc">DLP Scanning — 22+ sensitive data patterns · PII, API keys, credentials · Aho-Corasick matching · Runs during response body streaming — zero added latency</div>
+</div></div>
+<!-- STAGE DETAILS with accent bars and timing badges -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Stage Details</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">No stage requires network calls or external dependencies</span></div>
+<div class="stages">
+<div class="stage">
+<div class="stage-header"><div class="stage-name">TLS Fingerprinting</div><div class="stage-timing">~1μs</div></div>
+<div class="stage-items">JA4 (TLS) + JA4H (HTTP) hashing<br>Detect spoofed User-Agents<br>Track actors across IP rotation</div>
+<div class="stage-result">→ Reputation tracking per fingerprint</div>
+</div>
+<div class="stage">
+<div class="stage-header"><div class="stage-name">WAF Detection Engine</div><div class="stage-timing">15–25μs</div></div>
+<div class="stage-items">237+ production rules (libsynapse)<br>30+ match types (SQLi, XSS, RCE...)<br>Hot reload without restart</div>
+<div class="stage-result">→ Attack detection: 15–25μs typical</div>
+</div>
+<div class="stage">
+<div class="stage-header"><div class="stage-name">API Profiling</div><div class="stage-timing">~5μs</div></div>
+<div class="stage-items">Schema learning (~5μs validation)<br>Endpoint baselines (rate, size, headers)<br>Anomaly detection (statistical deviation)</div>
+<div class="stage-result">→ Flags zero-day attacks by behavior</div>
+</div>
+<div class="stage">
+<div class="stage-header"><div class="stage-name">Actor Scoring</div><div class="stage-timing">~1μs</div></div>
+<div class="stage-items">100K actor cache (IP + JA4 + token)<br>Risk decay: 10 pts/min (configurable)<br>Campaign membership detection</div>
+<div class="stage-result">→ 7 correlation detectors identify coordinated attacks</div>
+</div>
+<div class="stage">
+<div class="stage-header"><div class="stage-name">Decision Engine</div><div class="stage-timing">&lt;1μs</div></div>
+<div class="stage-items">Threshold: 70 = block (configurable)<br>Actions: Allow, Challenge, Block<br>5-level challenge escalation</div>
+<div class="stage-result">→ Cookie → JS PoW → CAPTCHA → Tarpit → Block</div>
+</div>
+<div class="stage" style="border-color:rgba(139,92,246,0.2);">
+<div class="stage-header"><div class="stage-name">DLP Scanning</div><div class="stage-timing" style="color:var(--violet);background:rgba(139,92,246,0.08);border-color:rgba(139,92,246,0.15);">29–71μs</div></div>
+<div class="stage-items">22+ sensitive data patterns<br>4KB: 29μs / 8KB: 71μs (capped)<br>Content-type short circuit for binaries</div>
+<div class="stage-result">→ ~100μs hidden by running during backend I/O</div>
+</div>
+</div></div>
+<!-- 5-LEVEL CHALLENGE ESCALATION with color gradient bars -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">5-Level Challenge Escalation</span><div class="section-line"></div></div>
+<div class="escalation">
+<div class="esc-step"><div class="esc-num" style="color:var(--green);">L1</div><div class="esc-name">Cookie</div></div>
+<div class="esc-step"><div class="esc-num" style="color:var(--blue);">L2</div><div class="esc-name">JS PoW</div></div>
+<div class="esc-step"><div class="esc-num" style="color:var(--amber);">L3</div><div class="esc-name">CAPTCHA</div></div>
+<div class="esc-step"><div class="esc-num" style="color:var(--coral);">L4</div><div class="esc-name">Tarpit</div></div>
+<div class="esc-step"><div class="esc-num" style="color:var(--red);">L5</div><div class="esc-name">Block</div></div>
+</div></div>
+
+<!-- LATENCY COMPARISON with bar visualization -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Latency Comparison</span><div class="section-line"></div></div>
+<div class="compare">
+<div class="compare-col synapse">
+<div class="compare-title">Synapse (Edge)</div>
+<div class="compare-metric">~450μs</div>
+<div class="compare-detail">End-to-end proxy with WAF + DLP enabled. All detection runs in-process on the same binary. No network round-trips.</div>
+<div class="compare-bar"><div class="compare-bar-fill" style="width:2%;background:var(--green);"></div></div>
+</div>
+<div class="compare-col cloud">
+<div class="compare-title">Cloud WAF</div>
+<div class="compare-metric">1–2s</div>
+<div class="compare-detail">Network round-trip to decision backend. DNS resolution, TLS handshake, request forwarding, response inspection — all over the wire.</div>
+<div class="compare-bar"><div class="compare-bar-fill" style="width:100%;background:linear-gradient(90deg,var(--amber),var(--red));"></div></div>
+<div class="compare-multiplier">2,200–4,400× slower</div>
+</div>
+</div></div>
+<!-- PERFORMANCE BENCHMARKS -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--green);"></div><span class="t-label" style="color:var(--green);">Performance Benchmarks</span><div class="section-line"></div></div>
+<table class="perf-table">
+<tr><th>Scenario</th><th>Latency</th><th>Target</th><th>Status</th></tr>
+<tr><td>Fast path (GET, no body)</td><td>~300μs</td><td>&lt;500μs</td><td>✓ Met</td></tr>
+<tr><td>Standard (4–8KB body + DLP)</td><td>~450μs</td><td>&lt;500μs</td><td>✓ Met</td></tr>
+<tr><td>p95 under load (100 VUs)</td><td>&lt;1ms</td><td>&lt;1ms</td><td>✓ Met</td></tr>
+</table></div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">No network hops. No backend calls. All intelligence runs locally at the edge.</div><div class="tagline-sub">Complete request lifecycle in under 500 microseconds.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<!-- Real synapse-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<!-- Real horizon-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

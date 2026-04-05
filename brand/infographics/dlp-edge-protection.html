@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Loss Prevention at the Edge — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+</style>
+</head>
+<body>
+<div class="page">
+<style>
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+/* Hero stats with glow */
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+</style>
+<style>
+/* Detection categories with accent bars */
+.categories{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.category{background:var(--card);border:1px solid var(--border);padding:16px;display:flex;gap:14px;position:relative;overflow:hidden;}
+.category::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.category:nth-child(1)::before{background:var(--red);}
+.category:nth-child(2)::before{background:var(--amber);}
+.category:nth-child(3)::before{background:var(--violet);}
+.category:nth-child(4)::before{background:var(--cyan);}
+.category:nth-child(5)::before{background:var(--blue);}
+.cat-badge{width:44px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-variation-settings:'wght' 800,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;letter-spacing:1px;}
+.cat-badge.active{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:var(--green);}
+.cat-badge.config{background:rgba(30,144,255,0.08);border:1px solid rgba(30,144,255,0.15);color:var(--blue);}
+.cat-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;margin-bottom:4px;}
+.cat-items{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.7;}
+/* Flow with SVG connectors */
+.flow-wrap{margin-top:20px;position:relative;}
+.flow{display:flex;gap:0;position:relative;z-index:1;}
+.flow-step{flex:1;padding:14px;background:var(--card);border:1px solid var(--border);position:relative;text-align:center;}
+.flow-step:not(:last-child){border-right:none;}
+.flow-num{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--blue);margin-bottom:4px;}
+.flow-label{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;margin-bottom:4px;}
+.flow-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.4;}
+.flow-connector{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:16px;height:16px;}
+/* Actions with accent left borders */
+.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.action{background:var(--card);border:1px solid var(--border);padding:14px;position:relative;overflow:hidden;}
+.action::before{content:'';position:absolute;top:0;left:0;bottom:0;width:3px;}
+.action:nth-child(1)::before{background:var(--red);}
+.action:nth-child(2)::before{background:var(--amber);}
+.action:nth-child(3)::before{background:var(--blue);}
+.action:nth-child(4)::before{background:var(--green);}
+.action-name{font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;margin-bottom:6px;padding-left:8px;}
+.action-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;padding-left:8px;}
+</style>
+<style>
+/* Architecture comparison with SVG flow diagrams */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+.compare-col{padding:20px;border:1px solid var(--border);position:relative;overflow:hidden;}
+.compare-col.traditional{background:rgba(239,68,68,0.03);}
+.compare-col.synapse{background:rgba(16,185,129,0.03);border-color:rgba(16,185,129,0.2);}
+.compare-title{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;}
+.compare-col.traditional .compare-title{color:var(--red);}
+.compare-col.synapse .compare-title{color:var(--green);}
+.compare-result{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.6;margin-top:12px;}
+.compare-verdict{margin-top:10px;padding:8px 12px;font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;}
+.compare-col.traditional .compare-verdict{background:rgba(239,68,68,0.08);border-left:3px solid var(--red);color:var(--red);}
+.compare-col.synapse .compare-verdict{background:rgba(16,185,129,0.08);border-left:3px solid var(--green);color:var(--green);}
+/* Detection examples with better code blocks */
+.examples{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:20px;}
+.example{background:var(--card);border:1px solid var(--border);padding:14px;position:relative;overflow:hidden;}
+.example::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.example:nth-child(1)::before{background:var(--red);}
+.example:nth-child(2)::before{background:var(--amber);}
+.example:nth-child(3)::before{background:var(--violet);}
+.ex-type{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+.ex-code{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);background:var(--bg);padding:10px;margin-bottom:8px;line-height:1.6;border-left:2px solid rgba(30,144,255,0.15);overflow:hidden;}
+.ex-result{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;line-height:1.6;}
+.ex-result .blocked{color:var(--amber);}
+.ex-result .act{color:var(--muted);}
+/* Advantages */
+.advantages{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.advantage{background:var(--card);border:1px solid var(--border);padding:14px;}
+.adv-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;margin-bottom:6px;color:var(--blue);}
+.adv-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;}
+/* Compliance */
+.compliance{display:flex;gap:10px;margin-top:20px;}
+.compliance-badge{padding:8px 20px;border:1px solid var(--border);background:var(--card);font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:1px;color:var(--text-sec);}
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+</style>
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER — real synapse-icon-dark.svg internals -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Data Loss Prevention at the Edge</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:700px;">Inline response inspection. Real-time blocking. Zero additional latency. Sensitive data never leaves your infrastructure unprotected.</p>
+
+<!-- HERO STATS with glow -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">17–28μs</div><div class="label t-label">Decision Latency</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">Inline</div><div class="label t-label">Response Inspection</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric">5</div><div class="label t-label">Detection Categories</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--coral);"></div><div class="value t-metric">No Agent</div><div class="label t-label">Required</div></div>
+</div>
+<!-- DETECTION CATEGORIES with accent bars -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Detection Capabilities</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">Response body inspection — every category scans inline</span></div>
+<div class="categories">
+<div class="category"><div class="cat-badge active">PII</div><div><div class="cat-name">Personal Identifiable Information</div><div class="cat-items">SSN · Email addresses · Phone numbers<br>Names · Addresses · DOB · Driver's license</div></div></div>
+<div class="category"><div class="cat-badge active">FIN</div><div><div class="cat-name">Financial Data</div><div class="cat-items">Credit card numbers (PCI) · Bank accounts<br>Routing numbers · IBAN · Tax IDs</div></div></div>
+<div class="category"><div class="cat-badge active">SEC</div><div><div class="cat-name">Secrets &amp; Credentials</div><div class="cat-items">API keys · JWT tokens · OAuth secrets<br>AWS keys · Private keys · SSH keys</div></div></div>
+<div class="category"><div class="cat-badge active">PHI</div><div><div class="cat-name">Healthcare PHI</div><div class="cat-items">Medical record numbers · Health plan IDs<br>Diagnosis codes · Prescriptions · Lab results</div></div></div>
+<div class="category" style="grid-column:1/3;"><div class="cat-badge config">API</div><div><div class="cat-name">Custom Patterns</div><div class="cat-items">Organization-specific regex patterns via API — internal IDs, proprietary formats, domain-specific data. Fully configurable per site.</div></div></div>
+</div></div>
+
+<!-- INLINE PROTECTION FLOW -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Inline Protection Flow</span><div class="section-line"></div></div>
+<div class="flow-wrap">
+<div class="flow">
+<div class="flow-step"><div class="flow-num">01</div><div class="flow-label">Client Request</div><div class="flow-desc">Attacker sends API request</div></div>
+<div class="flow-step"><div class="flow-num">02</div><div class="flow-label">WAF Inspect</div><div class="flow-desc">Inbound detection &lt;50μs</div></div>
+<div class="flow-step"><div class="flow-num">03</div><div class="flow-label">Backend API</div><div class="flow-desc">Processes request normally</div></div>
+<div class="flow-step"><div class="flow-num">04</div><div class="flow-label">DLP Scan</div><div class="flow-desc">Inspects response body</div></div>
+<div class="flow-step" style="border-color:rgba(16,185,129,0.3);"><div class="flow-num" style="color:var(--green);">05</div><div class="flow-label">Action</div><div class="flow-desc">Block / Mask / Log / Alert</div></div>
+</div>
+<!-- SVG flow arrows overlay -->
+<svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;" viewBox="0 0 1104 70" preserveAspectRatio="none">
+<defs><marker id="arrowDlp" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L6,3 L0,6" fill="#1E90FF" opacity="0.5"/></marker></defs>
+<line x1="220" y1="35" x2="224" y2="35" stroke="#1E90FF" stroke-width="1" marker-end="url(#arrowDlp)" opacity="0.5"/>
+<line x1="441" y1="35" x2="445" y2="35" stroke="#1E90FF" stroke-width="1" marker-end="url(#arrowDlp)" opacity="0.5"/>
+<line x1="662" y1="35" x2="666" y2="35" stroke="#1E90FF" stroke-width="1" marker-end="url(#arrowDlp)" opacity="0.5"/>
+<line x1="883" y1="35" x2="887" y2="35" stroke="#10B981" stroke-width="1" marker-end="url(#arrowDlp)" opacity="0.5"/>
+</svg>
+</div></div>
+
+<!-- RESPONSE ACTIONS with accent borders -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Response Actions</span><div class="section-line"></div></div>
+<div class="actions">
+<div class="action"><div class="action-name" style="color:var(--red);">Block</div><div class="action-desc">Replace entire response with error. Sensitive data never transmitted.</div></div>
+<div class="action"><div class="action-name" style="color:var(--amber);">Mask</div><div class="action-desc">Redact matched patterns in-flight. Response delivered with data obscured.</div></div>
+<div class="action"><div class="action-name" style="color:var(--blue);">Log</div><div class="action-desc">Record detection event for audit. Response passes through unmodified.</div></div>
+<div class="action"><div class="action-name" style="color:var(--green);">Alert</div><div class="action-desc">Generate real-time notification. SOC visibility without blocking traffic.</div></div>
+</div></div>
+<!-- ARCHITECTURE COMPARISON with SVG flow diagrams -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Architecture — Why Edge DLP Matters</span><div class="section-line"></div></div>
+<div class="compare">
+<div class="compare-col traditional">
+<div class="compare-title">Traditional DLP</div>
+<!-- SVG flow diagram -->
+<svg width="100%" height="50" viewBox="0 0 480 50" fill="none">
+<rect x="0" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="35" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">App</text>
+<line x1="70" y1="25" x2="100" y2="25" stroke="#5a6f8a" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="100" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="135" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">Cloud WAF</text>
+<line x1="170" y1="25" x2="200" y2="25" stroke="#5a6f8a" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="200" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="235" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">DLP Proxy</text>
+<line x1="270" y1="25" x2="300" y2="25" stroke="#5a6f8a" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="300" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="335" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">SIEM</text>
+<line x1="370" y1="25" x2="400" y2="25" stroke="#5a6f8a" stroke-width="1" stroke-dasharray="3 2"/>
+<rect x="400" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="435" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">Internet</text>
+<text x="240" y="48" text-anchor="middle" fill="#EF4444" font-size="7" font-family="Recursive" opacity="0.6">+20-50ms added latency</text>
+</svg>
+<div class="compare-result">Multiple hops, added latency, blind spots. Response passes through — data exfiltrated. Breach discovered 200+ days later via audit.</div>
+<div class="compare-verdict">✗ BREACH</div>
+</div>
+<div class="compare-col synapse">
+<div class="compare-title">Synapse Edge DLP</div>
+<!-- SVG flow diagram -->
+<svg width="100%" height="50" viewBox="0 0 480 50" fill="none">
+<rect x="60" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="95" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">App</text>
+<line x1="130" y1="25" x2="180" y2="25" stroke="#10B981" stroke-width="1.5"/>
+<rect x="180" y="10" width="120" height="30" fill="none" stroke="#10B981" stroke-width="1.5"/><text x="240" y="28" text-anchor="middle" fill="#10B981" font-size="8" font-family="Recursive" font-weight="600">Synapse WAF + DLP</text>
+<line x1="300" y1="25" x2="350" y2="25" stroke="#10B981" stroke-width="1.5"/>
+<rect x="350" y="15" width="70" height="20" fill="none" stroke="#5a6f8a" stroke-width="1"/><text x="385" y="28" text-anchor="middle" fill="#8899b0" font-size="8" font-family="Recursive">Internet</text>
+<text x="240" y="48" text-anchor="middle" fill="#10B981" font-size="7" font-family="Recursive" opacity="0.6">17-28μs decision latency</text>
+</svg>
+<div class="compare-result">Single hop, inline inspection, real-time blocking. 847 SSNs, 10,000 emails detected. Action: BLOCK + Alert + Actor risk +85.</div>
+<div class="compare-verdict">✓ BLOCKED</div>
+</div>
+</div></div>
+<!-- DETECTION EXAMPLES with accent bars and better code blocks -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--green);"></div><span class="t-label" style="color:var(--green);">Detection Examples</span><div class="section-line"></div></div>
+<div class="examples">
+<div class="example">
+<div class="ex-type" style="color:var(--red);">Social Security Number</div>
+<div class="ex-code">{"user": {"ssn": "<span style="color:var(--red);">123-45-6789</span>", "name": "John"}}</div>
+<div class="ex-result"><span class="blocked">⚠ SSN pattern detected in response</span><br><span class="act">Pattern: \b\d{3}-\d{2}-\d{4}\b<br>Action: Block + Log + Actor risk +25</span></div>
+</div>
+<div class="example">
+<div class="ex-type" style="color:var(--amber);">Credit Card Number</div>
+<div class="ex-code">{"payment": {"card": "<span style="color:var(--amber);">4532015112830366</span>"}}</div>
+<div class="ex-result"><span class="blocked">⚠ Valid credit card (Luhn check passed)</span><br><span class="act">Pattern: 16-digit + Luhn validation<br>Action: Block + Alert + PCI flag</span></div>
+</div>
+<div class="example">
+<div class="ex-type" style="color:var(--violet);">AWS Secret Key</div>
+<div class="ex-code">{"config": {"aws_secret": "<span style="color:var(--violet);">wJalrXUtnFEMI/K7MDENG...</span>"}}</div>
+<div class="ex-result"><span class="blocked">⚠ AWS secret access key pattern</span><br><span class="act">Pattern: High entropy + known prefix<br>Action: Block + Critical alert + Incident</span></div>
+</div>
+</div></div>
+
+<!-- ADVANTAGES -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Edge Advantages</span><div class="section-line"></div></div>
+<div class="advantages">
+<div class="advantage"><div class="adv-name">Response Body Inspection</div><div class="adv-desc">Not just headers — full payload analysis. JSON, XML, HTML, raw bytes.</div></div>
+<div class="advantage"><div class="adv-name">Inline Blocking</div><div class="adv-desc">Block before data leaves the edge. Not detect-and-alert-later.</div></div>
+<div class="advantage"><div class="adv-name">Zero Additional Latency</div><div class="adv-desc">DLP runs in the WAF decision path. No separate proxy hop required.</div></div>
+<div class="advantage"><div class="adv-name">Actor Correlation</div><div class="adv-desc">DLP violations affect actor risk scores. Cross-session behavioral memory.</div></div>
+</div></div>
+
+<!-- COMPLIANCE -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--muted);"></div><span class="t-label" style="color:var(--muted);">Compliance Support</span><div class="section-line"></div></div>
+<div class="compliance">
+<div class="compliance-badge">PCI-DSS</div><div class="compliance-badge">HIPAA</div><div class="compliance-badge">GDPR</div><div class="compliance-badge">SOC 2</div><div class="compliance-badge">CCPA</div>
+</div></div>
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Your data never leaves your infrastructure unprotected.</div><div class="tagline-sub">Stop data breaches at the edge — before they happen.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

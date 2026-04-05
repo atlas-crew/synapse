@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interrogator System — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}.hero-stat{text-align:center;}.hero-stat .value{color:var(--blue);}.hero-stat .label{color:var(--muted);margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="page">
+<style>
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+/* Escalation flow */
+.escalation-flow{display:flex;flex-direction:column;gap:0;margin-top:20px;}
+.esc-row{display:grid;grid-template-columns:80px 1fr 200px;gap:0;align-items:stretch;}
+.esc-level{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 8px;position:relative;}
+.esc-level .num{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:1px;}
+.esc-level .diff{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:9px;letter-spacing:0.5px;margin-top:2px;}
+.esc-level::after{content:'↓';position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);font-size:14px;z-index:1;}
+.esc-row:last-child .esc-level::after{display:none;}
+.esc-content{background:var(--card);border:1px solid var(--border);padding:16px 20px;}
+.esc-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:15px;margin-bottom:4px;}
+.esc-method{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-bottom:6px;}
+.esc-catches{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);line-height:1.5;}
+.esc-catches strong{color:var(--violet-tint);font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;letter-spacing:0.5px;}
+.esc-outcome{display:flex;flex-direction:column;justify-content:center;padding:16px;border:1px solid var(--border);border-left:none;text-align:center;}
+.esc-outcome .pass{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--green);margin-bottom:6px;}
+.esc-outcome .fail{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--red);}
+.esc-outcome .reward{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);margin-top:4px;}
+
+/* Block row */
+.block-row{display:grid;grid-template-columns:80px 1fr;gap:0;margin-top:0;}
+.block-content{background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.2);padding:16px 20px;display:flex;gap:20px;align-items:center;}
+.block-label{font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:16px;color:var(--red);flex-shrink:0;}
+
+/* Tarpit detail */
+.tarpit{background:var(--card);border:1px solid var(--border);padding:20px;margin-top:20px;}
+.tarpit-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.tarpit-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:16px;color:var(--red);}
+.tarpit-items{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.tarpit-item .item-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--text);margin-bottom:4px;}
+.tarpit-item .item-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;}
+
+/* Two-path comparison */
+.two-path{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+.path-col{padding:20px;border:1px solid var(--border);}
+.path-col.human{background:rgba(16,185,129,0.03);border-color:rgba(16,185,129,0.2);}
+.path-col.bot{background:rgba(239,68,68,0.03);}
+.path-title{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;}
+.path-col.human .path-title{color:var(--green);}
+.path-col.bot .path-title{color:var(--red);}
+.path-steps{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.7;}
+.path-verdict{margin-top:10px;padding:8px 12px;font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:12px;}
+.path-col.human .path-verdict{background:rgba(16,185,129,0.08);border-left:3px solid var(--green);color:var(--green);}
+.path-col.bot .path-verdict{background:rgba(239,68,68,0.08);border-left:3px solid var(--red);color:var(--red);}
+
+/* Risk impact */
+.risk-impact{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.risk-card{background:var(--card);border:1px solid var(--border);padding:14px;text-align:center;}
+.risk-val{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:18px;margin-bottom:4px;}
+.risk-lbl{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+</style>
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER — real synapse-icon-dark.svg (no bg rect, no corner brackets) -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Interrogator System</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:700px;">Progressive challenges that escalate based on response — let humans prove themselves, trip up bots. The goal isn't to block everyone suspicious. It's to create asymmetric friction.</p>
+
+<div class="hero-stats">
+<div class="hero-stat"><div class="value t-metric">3</div><div class="label t-label">Challenge Levels</div></div>
+<div class="hero-stat"><div class="value t-metric">5-Level</div><div class="label t-label">Escalation Path</div></div>
+<div class="hero-stat"><div class="value t-metric">0</div><div class="label t-label">Backend Required</div></div>
+<div class="hero-stat"><div class="value t-metric">Async</div><div class="label t-label">Friction Model</div></div>
+</div>
+<!-- CHALLENGE ESCALATION FLOW -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Challenge Escalation Flow</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">Incoming suspicious request · Risk 40–70 · Not block, not allow</span></div>
+<div class="escalation-flow">
+
+<div class="esc-row">
+<div class="esc-level" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15);"><div class="num" style="color:var(--green);">L1</div><div class="diff" style="color:var(--green);">EASY</div></div>
+<div class="esc-content"><div class="esc-name">Cookie Challenge</div><div class="esc-method">Set-Cookie header · Check if client returns it</div><div class="esc-catches"><strong>CATCHES: </strong>curl, wget, simple scripts — anything that ignores cookies</div></div>
+<div class="esc-outcome"><div class="pass">✓ PASS → Allow</div><div class="fail">✗ FAIL → Level 2</div><div class="reward">Risk −10 on pass</div></div>
+</div>
+
+<div class="esc-row">
+<div class="esc-level" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);"><div class="num" style="color:var(--amber);">L2</div><div class="diff" style="color:var(--amber);">MEDIUM</div></div>
+<div class="esc-content"><div class="esc-name">JS Proof-of-Work</div><div class="esc-method">SHA-256 computational challenge · Client computes hash</div><div class="esc-catches"><strong>CATCHES: </strong>headless browsers, basic bots — can't execute JavaScript or fail PoW</div></div>
+<div class="esc-outcome"><div class="pass">✓ PASS → Allow</div><div class="fail">✗ FAIL → Level 3</div><div class="reward">Risk −15 on pass</div></div>
+</div>
+
+<div class="esc-row">
+<div class="esc-level" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);"><div class="num" style="color:var(--red);">L3</div><div class="diff" style="color:var(--red);">HARD</div></div>
+<div class="esc-content"><div class="esc-name">CAPTCHA</div><div class="esc-method">Image recognition · Human interaction required</div><div class="esc-catches"><strong>CATCHES: </strong>sophisticated automation — the last gate before enforcement</div></div>
+<div class="esc-outcome"><div class="pass">✓ PASS → Allow</div><div class="fail">✗ FAIL → Block + Tarpit</div><div class="reward">Risk −25 on pass (verified human)</div></div>
+</div>
+
+</div>
+
+<!-- BLOCK + TARPIT ROW -->
+<div class="block-row" style="margin-top:8px;">
+<div class="esc-level" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);"><div class="num" style="color:var(--red);">BLK</div></div>
+<div class="block-content"><div class="block-label">BLOCK + TARPIT</div><div style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);">All challenges failed. Connection held open with artificial delays (1–30s). Each failed challenge adds +20 risk. Retry window shrinks progressively. Attack becomes economically unviable.</div></div>
+</div>
+</div>
+<!-- TARPIT SYSTEM -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--red);"></div><span class="t-label" style="color:var(--red);">Tarpit System</span><div class="section-line"></div></div>
+<div class="tarpit">
+<div class="tarpit-header"><div class="tarpit-name">After all challenges fail: asymmetric resource drain</div></div>
+<div class="tarpit-items">
+<div class="tarpit-item"><div class="item-name" style="color:var(--red);">Resource Drain</div><div class="item-desc">Connection held open 1–30 seconds. Attackers must wait, consuming their resources — not ours.</div></div>
+<div class="tarpit-item"><div class="item-name" style="color:var(--amber);">Progressive Delay</div><div class="item-desc">Each subsequent attempt from the same actor gets a longer delay. Retry windows shrink exponentially.</div></div>
+<div class="tarpit-item"><div class="item-name" style="color:var(--coral);">Economic Impact</div><div class="item-desc">Attack becomes economically unviable. Their time and infrastructure are wasted. Attackers move on to easier targets.</div></div>
+</div></div></div>
+
+<!-- HUMAN VS BOT PATH -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--green);"></div><span class="t-label" style="color:var(--green);">Two Paths — Asymmetric Friction</span><div class="section-line"></div></div>
+<div class="two-path">
+<div class="path-col human">
+<div class="path-title">✓ Human / Legitimate User</div>
+<div class="path-steps">Browser accepts cookie → Level 1 passes → Access granted<br><br>Most users never see Level 2 or 3. Friction is minimal — cookie set/return is invisible to the user. Risk reduction: −10 to −25 points based on level passed.</div>
+<div class="path-verdict">Friction: Minimal</div>
+</div>
+<div class="path-col bot">
+<div class="path-title">✗ Bot / Attacker</div>
+<div class="path-steps">Script ignores cookies → JS fails → CAPTCHA fails → Blocked<br><br>Each failed challenge adds risk, reduces retry window. Tarpits make retry economically painful. Risk increase: +20 per failed challenge, eventual permanent block.</div>
+<div class="path-verdict">Friction: Maximum</div>
+</div>
+</div></div>
+<!-- RISK IMPACT -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Risk Score Impact</span><div class="section-line"></div></div>
+<div class="risk-impact">
+<div class="risk-card"><div class="risk-val" style="color:var(--green);">−10</div><div class="risk-lbl">Cookie pass (L1)</div></div>
+<div class="risk-card"><div class="risk-val" style="color:var(--green);">−15</div><div class="risk-lbl">JS PoW pass (L2)</div></div>
+<div class="risk-card"><div class="risk-val" style="color:var(--green);">−25</div><div class="risk-lbl">CAPTCHA pass (L3)</div></div>
+<div class="risk-card"><div class="risk-val" style="color:var(--red);">+20</div><div class="risk-lbl">Per failed challenge</div></div>
+</div></div>
+
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Humans pass quickly. Bots get stuck, slowed, and eventually blocked.</div><div class="tagline-sub">The goal is asymmetric friction — make attacking economically unviable without impacting legitimate users.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<!-- Real synapse-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<!-- Real horizon-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

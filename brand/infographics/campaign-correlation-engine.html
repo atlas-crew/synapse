@@ -5,8 +5,217 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Campaign Correlation Engine — Synapse Edge Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--blue-shade:#0A6ED8;--blue-tint:#7EC8FF;--navy:#0B4F8A;--violet:#8B5CF6;--violet-tint:#C4B5FD;--violet-shade:#6D28D9;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+</style>
 </head>
 <body>
-<!-- placeholder - real file copied next -->
-</body>
-</html>
+<div class="page">
+<style>
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+/* Hero stats with glow */
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+</style>
+<style>
+/* Detector cards with weight bars */
+.detectors{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.detector{background:var(--card);border:1px solid var(--border);padding:16px;display:flex;gap:14px;position:relative;overflow:hidden;}
+.detector::after{content:'';position:absolute;bottom:0;left:0;height:3px;background:linear-gradient(90deg,var(--blue),transparent);opacity:0.4;}
+.detector:nth-child(1)::after{width:100%;}
+.detector:nth-child(2)::after{width:90%;}
+.detector:nth-child(3)::after{width:80%;}
+.detector:nth-child(4)::after{width:70%;}
+.detector:nth-child(5)::after{width:60%;}
+.detector:nth-child(6)::after{width:50%;}
+.detector:nth-child(7)::after{width:30%;background:linear-gradient(90deg,var(--muted),transparent);}
+.detector-weight{width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:rgba(30,144,255,0.08);border:1px solid rgba(30,144,255,0.15);flex-shrink:0;position:relative;}
+.detector-weight span{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--blue);position:relative;z-index:1;}
+.detector-weight .w-glow{position:absolute;inset:0;filter:blur(8px);opacity:0.2;background:var(--blue);}
+.detector-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;margin-bottom:4px;}
+.detector-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);line-height:1.5;margin-bottom:6px;}
+.detector-catches{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);line-height:1.5;}
+.detector-catches strong{color:var(--violet-tint);font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;letter-spacing:0.5px;}
+</style>
+<style>
+/* Confidence gauge — horizontal like risk scoring */
+.gauge-section{display:flex;gap:24px;margin-top:20px;align-items:stretch;}
+.gauge-container{flex:0 0 520px;}
+.gauge-bar{display:flex;height:56px;overflow:hidden;}
+.gauge-zone{display:flex;align-items:center;justify-content:center;flex-direction:column;}
+.gauge-zone .zone-label{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.gauge-zone .zone-action{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:8px;letter-spacing:1px;margin-top:2px;}
+.gauge-zone.z1{flex:2;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);}
+.gauge-zone.z1 .zone-label,.gauge-zone.z1 .zone-action{color:var(--red);}
+.gauge-zone.z2{flex:2;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.25);border-left:none;}
+.gauge-zone.z2 .zone-label,.gauge-zone.z2 .zone-action{color:var(--amber);}
+.gauge-zone.z3{flex:2;background:rgba(30,144,255,0.12);border:1px solid rgba(30,144,255,0.25);border-left:none;}
+.gauge-zone.z3 .zone-label,.gauge-zone.z3 .zone-action{color:var(--blue);}
+.gauge-zone.z4{flex:2;background:rgba(90,111,138,0.08);border:1px solid rgba(90,111,138,0.15);border-left:none;}
+.gauge-zone.z4 .zone-label,.gauge-zone.z4 .zone-action{color:var(--muted);}
+.gauge-legend{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;}
+.legend-item{display:flex;align-items:center;gap:8px;}
+.legend-swatch{width:12px;height:12px;flex-shrink:0;}
+.legend-text{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);}
+
+/* Signal cards with top accent */
+.signals{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;}
+.signal-card{background:var(--card);border:1px solid var(--border);padding:14px;position:relative;overflow:hidden;}
+.signal-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.signal-card:nth-child(1)::before{background:var(--blue);}
+.signal-card:nth-child(2)::before{background:var(--violet);}
+.signal-card:nth-child(3)::before{background:var(--coral);}
+.signal-card:nth-child(4)::before{background:var(--green);}
+.signal-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;margin-bottom:6px;}
+.signal-items{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.8;}
+</style>
+<style>
+/* Fleet diagram with SVG connectors */
+.fleet{display:flex;gap:20px;margin-top:20px;align-items:stretch;}
+.fleet-diagram{flex:1;background:var(--card);border:1px solid var(--border);padding:20px;position:relative;min-height:200px;}
+.fleet-svg{width:100%;height:100%;position:absolute;top:0;left:0;pointer-events:none;}
+.fleet-sensors{display:flex;gap:16px;justify-content:center;position:relative;z-index:1;}
+.fleet-sensor{text-align:center;padding:10px 16px;border:1px solid var(--border);background:var(--subtle);}
+.fleet-sensor .name{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--blue);letter-spacing:0.5px;}
+.fleet-sensor .region{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--muted);margin-top:2px;}
+.fleet-hub-wrap{display:flex;justify-content:center;margin-top:48px;position:relative;z-index:1;}
+.fleet-hub{padding:12px 24px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);display:flex;align-items:center;gap:10px;}
+.fleet-hub .name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:13px;color:var(--violet-tint);}
+.fleet-hub .desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);margin-top:2px;}
+.fleet-capabilities{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fleet-cap{background:var(--card);border:1px solid var(--border);padding:12px;}
+.fleet-cap .cap-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--text);margin-bottom:4px;}
+.fleet-cap .cap-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+</style>
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER — real synapse-icon-dark.svg internals -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Campaign Correlation Engine</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:700px;">Seven weighted detectors automatically link related attacks into unified campaigns — the work SOC analysts do manually, done in microseconds at the edge.</p>
+
+<!-- HERO STATS with glow -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">7</div><div class="label t-label">Detection Algorithms</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--violet);"></div><div class="value t-metric" style="letter-spacing:0;">&lt;50μs</div><div class="label t-label">Correlation Latency</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">100%</div><div class="label t-label">Local — Zero Cloud</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--coral);"></div><div class="value t-metric">24hr</div><div class="label t-label">Signal Retention</div></div>
+</div>
+<!-- 7 DETECTORS with weight bars -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">7 Correlation Detectors</span><div class="section-line"></div><span class="t-body" style="color:var(--muted);font-size:11px;">Each detector runs independently, producing a weighted confidence score</span></div>
+<div class="detectors">
+<div class="detector"><div class="detector-weight"><div class="w-glow"></div><span>50</span></div><div><div class="detector-name">Attack Sequence</div><div class="detector-desc">Same attack payloads appearing across different source IPs.</div><div class="detector-catches"><strong>CATCHES: </strong>Coordinated vulnerability scanning, distributed SQLi/XSS campaigns</div></div></div>
+<div class="detector"><div class="detector-weight"><div class="w-glow"></div><span>45</span></div><div><div class="detector-name">Auth Token</div><div class="detector-desc">Same JWT structure or issuer appearing across multiple IPs.</div><div class="detector-catches"><strong>CATCHES: </strong>Credential stuffing, token replay, shared bot infrastructure</div></div></div>
+<div class="detector"><div class="detector-weight"><div class="w-glow"></div><span>40</span></div><div><div class="detector-name">HTTP Fingerprint</div><div class="detector-desc">Different IPs with identical browser fingerprints (JA4H).</div><div class="detector-catches"><strong>CATCHES: </strong>IP-rotating bots, residential proxy attacks, same tooling</div></div></div>
+<div class="detector"><div class="detector-weight"><div class="w-glow"></div><span>35</span></div><div><div class="detector-name">TLS Fingerprint</div><div class="detector-desc">Same TLS signature (JA4) across different sessions.</div><div class="detector-catches"><strong>CATCHES: </strong>Scanner frameworks, bot toolkits, headless browser farms</div></div></div>
+<div class="detector"><div class="detector-weight"><div class="w-glow"></div><span>30</span></div><div><div class="detector-name">Behavioral Similarity</div><div class="detector-desc">Identical navigation and timing patterns across actors.</div><div class="detector-catches"><strong>CATCHES: </strong>Scripted attacks, automated reconnaissance, identical crawl paths</div></div></div>
+<div class="detector"><div class="detector-weight"><div class="w-glow"></div><span>25</span></div><div><div class="detector-name">Timing Correlation</div><div class="detector-desc">Coordinated request timing patterns across IPs.</div><div class="detector-catches"><strong>CATCHES: </strong>Botnets, DDoS precursors, synchronized attack waves</div></div></div>
+<div class="detector" style="grid-column:1/3;"><div class="detector-weight" style="background:rgba(90,111,138,0.08);border-color:rgba(90,111,138,0.15);"><span style="color:var(--muted);">15</span></div><div><div class="detector-name">Network Proximity</div><div class="detector-desc">Same ASN or /24 subnet clustering. Lowest weight — supporting evidence, not primary signal.</div><div class="detector-catches"><strong>CATCHES: </strong>Hosting provider abuse, VPS farm attacks, related infrastructure</div></div></div>
+</div></div>
+<!-- CONFIDENCE THRESHOLDS — horizontal gauge -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Confidence Thresholds</span><div class="section-line"></div></div>
+<div class="gauge-section">
+<div class="gauge-container">
+<div class="gauge-bar">
+<div class="gauge-zone z1"><div class="zone-label">96+</div><div class="zone-action">AUTO-BLOCK</div></div>
+<div class="gauge-zone z2"><div class="zone-label">80–95</div><div class="zone-action">CHALLENGE</div></div>
+<div class="gauge-zone z3"><div class="zone-label">60–79</div><div class="zone-action">RATE LIMIT</div></div>
+<div class="gauge-zone z4"><div class="zone-label">40–59</div><div class="zone-action">MONITOR</div></div>
+</div>
+</div>
+<div class="gauge-legend">
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);"></div><div class="legend-text">Confirmed campaign — block all associated actors fleet-wide</div></div>
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(245,158,11,0.3);border:1px solid var(--amber);"></div><div class="legend-text">High confidence — issue progressive challenges via Interrogator</div></div>
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(30,144,255,0.3);border:1px solid var(--blue);"></div><div class="legend-text">Medium — apply rate limiting, continue monitoring signals</div></div>
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(90,111,138,0.2);border:1px solid var(--muted);"></div><div class="legend-text">Low — log signals for investigation, no enforcement action</div></div>
+</div>
+</div></div>
+<!-- SIGNAL INTELLIGENCE with accent bars -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Signal Intelligence — 4 Categories</span><div class="section-line"></div></div>
+<div class="signals">
+<div class="signal-card"><div class="signal-name" style="color:var(--blue);">Auth Tokens</div><div class="signal-items">JWT structure<br>Issuer pattern<br>Claims analysis<br>Rotation timing</div></div>
+<div class="signal-card"><div class="signal-name" style="color:var(--violet);">Device Fingerprints</div><div class="signal-items">Browser profile<br>Screen + plugins<br>Canvas hash<br>JA4H signature</div></div>
+<div class="signal-card"><div class="signal-name" style="color:var(--coral);">Network Signals</div><div class="signal-items">IP + ASN<br>TLS fingerprint<br>Geolocation<br>Subnet clustering</div></div>
+<div class="signal-card"><div class="signal-name" style="color:var(--green);">Behavioral Signals</div><div class="signal-items">Navigation paths<br>Request timing<br>Sequence patterns<br>Session cadence</div></div>
+</div></div>
+<!-- FLEET MODE with SVG connectors -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Fleet Mode — Cross-Sensor Correlation</span><div class="section-line"></div></div>
+<div class="fleet">
+<div class="fleet-diagram">
+<!-- SVG connector lines -->
+<svg class="fleet-svg" viewBox="0 0 460 200" preserveAspectRatio="xMidYMid meet">
+<defs><linearGradient id="sigGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1E90FF" stop-opacity="0.6"/><stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.6"/></linearGradient></defs>
+<!-- Lines from 3 sensors to hub -->
+<line x1="115" y1="75" x2="190" y2="155" stroke="url(#sigGrad)" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="230" y1="75" x2="230" y2="155" stroke="url(#sigGrad)" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="345" y1="75" x2="270" y2="155" stroke="url(#sigGrad)" stroke-width="1.5" stroke-dasharray="4 3"/>
+<!-- Animated dots would go here in an interactive version -->
+<circle cx="230" cy="115" r="3" fill="#1E90FF" opacity="0.5"/>
+<circle cx="170" cy="105" r="2" fill="#8B5CF6" opacity="0.4"/>
+<circle cx="295" cy="110" r="2" fill="#8B5CF6" opacity="0.4"/>
+</svg>
+<div class="fleet-sensors">
+<div class="fleet-sensor"><svg class="icon-sm" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg><div class="name">SYNAPSE</div><div class="region">US-East</div></div>
+<div class="fleet-sensor"><svg class="icon-sm" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg><div class="name">SYNAPSE</div><div class="region">EU-West</div></div>
+<div class="fleet-sensor"><svg class="icon-sm" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg><div class="name">SYNAPSE</div><div class="region">APAC</div></div>
+</div>
+<div class="fleet-hub-wrap">
+<div class="fleet-hub">
+<svg class="icon-sm" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<div><div class="name">Horizon</div><div class="desc">Correlates signals across all sensors</div></div>
+</div>
+</div>
+</div>
+<div class="fleet-capabilities">
+<div class="fleet-cap"><div class="cap-name">Cross-Sensor Campaigns</div><div class="cap-desc">Attacks spanning multiple locations unified into single campaigns</div></div>
+<div class="fleet-cap"><div class="cap-name">Global Block Lists</div><div class="cap-desc">Block propagated from one sensor to entire fleet instantly</div></div>
+<div class="fleet-cap"><div class="cap-name">Unified Actor Profiles</div><div class="cap-desc">Single view of threat actors across your entire fleet</div></div>
+<div class="fleet-cap"><div class="cap-name">War Rooms</div><div class="cap-desc">Real-time incident coordination with full campaign context</div></div>
+</div></div></div>
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">The brain is in the sensor. Campaign correlation happens at the edge.</div><div class="tagline-sub">No cloud latency. No backend bottleneck. Instant detection and response.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<!-- Real synapse-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<!-- Real horizon-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

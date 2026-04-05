@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Risk Scoring Lifecycle — Synapse Edge Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080e1a;--surface:#0c1220;--card:#101828;--subtle:#131c2e;--overlay:#182440;--border:#1e2d44;--border-strong:#2a3f5c;--text:#e8ecf4;--text-sec:#8899b0;--muted:#5a6f8a;--blue:#1E90FF;--violet:#8B5CF6;--violet-tint:#C4B5FD;--coral:#F97316;--red:#EF4444;--amber:#F59E0B;--green:#10B981;--cyan:#06B6D4;--font:'Recursive',ui-monospace,monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.4,'CRSV' 0.5,'slnt' 0;width:1200px;margin:0 auto;}
+.page{padding:48px;background:linear-gradient(rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.02) 1px,transparent 1px),linear-gradient(180deg,#131c2e 0%,#0c1220 100%);background-size:60px 60px,60px 60px,100% 100%;position:relative;}
+.bracket{position:absolute;width:32px;height:32px;pointer-events:none;}.bracket svg{width:100%;height:100%;}
+.bracket-tl{top:20px;left:20px;}.bracket-tr{top:20px;right:20px;}.bracket-bl{bottom:20px;left:20px;}.bracket-br{bottom:20px;right:20px;}
+</style>
+</head>
+<body>
+<div class="page">
+<style>
+.t-display{font-variation-settings:'wght' 300,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:36px;}
+.t-label{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0.3,'CRSV' 0.5,'slnt' -4;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.t-body{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.t-metric{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0.6,'CRSV' 0.5,'slnt' 0;font-size:32px;letter-spacing:-0.5px;}
+.header-mark{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.section{margin-top:40px;}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;}.section-line{flex:1;height:1px;background:var(--border);}.section-dot{width:6px;height:6px;}
+.icon-sm{width:28px;height:28px;}.icon-md{width:36px;height:36px;}.icon-footer{width:20px;height:20px;}
+
+/* Hero stats with glow */
+.hero-stats{display:flex;gap:32px;margin:32px 0;padding:20px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.hero-stat{text-align:center;position:relative;}
+.hero-stat .value{color:var(--blue);position:relative;z-index:1;}
+.hero-stat .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:100px;height:60px;border-radius:50%;filter:blur(20px);opacity:0.15;z-index:0;}
+.hero-stat .label{color:var(--muted);margin-top:4px;position:relative;z-index:1;}
+
+/* Threshold model — horizontal gauge */
+.gauge-section{display:flex;gap:24px;margin-top:20px;align-items:stretch;}
+.gauge-container{flex:0 0 480px;position:relative;}
+.gauge-bar{display:flex;height:56px;overflow:hidden;}
+.gauge-zone{display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative;}
+.gauge-zone .zone-label{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.gauge-zone .zone-action{font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:8px;letter-spacing:1px;margin-top:2px;}
+.gauge-zone.allow{flex:4;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);}
+.gauge-zone.allow .zone-label,.gauge-zone.allow .zone-action{color:var(--green);}
+.gauge-zone.challenge{flex:3;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.25);border-left:none;}
+.gauge-zone.challenge .zone-label,.gauge-zone.challenge .zone-action{color:var(--amber);}
+.gauge-zone.block{flex:3;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-left:none;}
+.gauge-zone.block .zone-label,.gauge-zone.block .zone-action{color:var(--red);}
+.gauge-markers{display:flex;margin-top:4px;}
+.gauge-markers .mark{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);}
+.gauge-markers .mark:first-child{flex:4;}.gauge-markers .mark:nth-child(2){flex:3;text-align:center;}.gauge-markers .mark:last-child{flex:3;text-align:right;}
+.gauge-legend{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;}
+.legend-item{display:flex;align-items:center;gap:8px;}
+.legend-swatch{width:12px;height:12px;flex-shrink:0;}
+.legend-text{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);}
+</style>
+<style>
+/* Risk sources with SVG connector dots */
+.sources{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:20px;}
+.source{background:var(--card);border:1px solid var(--border);padding:16px;position:relative;}
+.source-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.source-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:13px;}
+.source-pts{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:16px;padding:2px 8px;}
+.source-items{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.7;}
+.source-trigger{font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:9px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid rgba(30,45,68,0.4);}
+/* Source dot indicator */
+.source::before{content:'';position:absolute;top:16px;right:16px;width:8px;height:8px;border-radius:0;}
+
+/* Scenario timeline */
+.scenario{background:var(--card);border:1px solid var(--border);padding:24px;margin-top:20px;}
+.scenario-title{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:15px;margin-bottom:4px;}
+.scenario-sub{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);margin-bottom:20px;letter-spacing:0.5px;}
+.timeline{position:relative;padding-left:40px;}
+.timeline::before{content:'';position:absolute;left:15px;top:0;bottom:0;width:2px;background:linear-gradient(to bottom,var(--green),var(--amber),var(--red));}
+.tl-step{position:relative;padding:10px 0 10px 20px;display:grid;grid-template-columns:1fr 80px 120px;gap:12px;align-items:center;}
+.tl-step::before{content:'';position:absolute;left:-29px;top:50%;transform:translateY(-50%);width:10px;height:10px;border:2px solid;background:var(--card);}
+.tl-event{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--text-sec);}
+.tl-event strong{color:var(--text);font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;}
+.tl-delta{font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:13px;text-align:center;}
+.tl-bar-wrap{height:20px;background:rgba(30,45,68,0.3);position:relative;overflow:hidden;}
+.tl-bar{height:100%;transition:width 0.3s;}
+.tl-score{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-variation-settings:'wght' 700,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text);}
+/* Threshold lines on bars */
+.tl-bar-wrap::after{content:'';position:absolute;left:40%;top:0;bottom:0;width:1px;background:var(--amber);opacity:0.4;}
+.tl-bar-wrap::before{content:'';position:absolute;left:70%;top:0;bottom:0;width:1px;background:var(--red);opacity:0.4;}
+
+/* Decay section */
+.decay{display:flex;gap:20px;margin-top:20px;align-items:stretch;}
+.decay-visual{flex:0 0 280px;background:var(--card);border:1px solid var(--border);padding:20px;display:flex;align-items:center;justify-content:center;}
+.decay-info{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.decay-card{background:var(--card);border:1px solid var(--border);padding:14px;}
+.decay-card .dc-name{font-variation-settings:'wght' 600,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:12px;color:var(--text);margin-bottom:4px;}
+.decay-card .dc-desc{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);line-height:1.5;}
+
+/* Footer */
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+.tagline-bar{background:rgba(30,144,255,0.06);border-left:3px solid var(--blue);padding:12px 16px;margin-bottom:16px;}
+.tagline{font-variation-settings:'wght' 500,'MONO' 0,'CASL' 0.2,'CRSV' 0.5,'slnt' 0;font-size:14px;color:var(--text);}
+.tagline-sub{font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:11px;color:var(--text-sec);margin-top:4px;}
+.footer-brand{display:flex;justify-content:space-between;align-items:center;}
+.footer-brand .brand{display:flex;align-items:center;gap:12px;}
+.footer-brand .product{font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;}
+</style>
+<!-- Corner brackets -->
+<div class="bracket bracket-tl"><svg viewBox="0 0 32 32"><polyline points="0,24 0,0 24,0" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-tr"><svg viewBox="0 0 32 32"><polyline points="8,0 32,0 32,24" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-bl"><svg viewBox="0 0 32 32"><polyline points="0,8 0,32 24,32" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+<div class="bracket bracket-br"><svg viewBox="0 0 32 32"><polyline points="8,32 32,32 32,8" stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3"/></svg></div>
+
+<!-- HEADER — real synapse-icon-dark.svg internals -->
+<div class="header-mark">
+<svg class="icon-md" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><line x1="28" y1="24" x2="82" y2="24" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="82" y1="24" x2="90" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.3"/><line x1="26" y1="76" x2="78" y2="86" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.35"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span class="t-label" style="color:var(--violet);">Synapse</span><span class="t-label" style="color:var(--muted);">Edge Intelligence</span>
+</div>
+<h1 class="t-display">Risk Scoring Lifecycle</h1>
+<p style="font-variation-settings:'wght' 400,'MONO' 0,'CASL' 0.5,'CRSV' 0.5,'slnt' 0;font-size:15px;color:var(--text-sec);margin-top:8px;max-width:700px;">How actor risk accumulates, decays, and triggers actions. Dynamic risk scoring at the edge — sub-millisecond decisions, no backend required.</p>
+<!-- HERO STATS with glow effects -->
+<div class="hero-stats">
+<div class="hero-stat"><div class="glow" style="background:var(--green);"></div><div class="value t-metric">0–100</div><div class="label t-label">Risk Range</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--amber);"></div><div class="value t-metric">40</div><div class="label t-label">Challenge Threshold</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--red);"></div><div class="value t-metric">70</div><div class="label t-label">Block Threshold</div></div>
+<div class="hero-stat"><div class="glow" style="background:var(--blue);"></div><div class="value t-metric">−10/min</div><div class="label t-label">Decay Rate</div></div>
+</div>
+
+<!-- THRESHOLD MODEL — visual gauge -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--blue);"></div><span class="t-label" style="color:var(--blue);">Risk Score Threshold Model</span><div class="section-line"></div></div>
+<div class="gauge-section">
+<div class="gauge-container">
+<div class="gauge-bar">
+<div class="gauge-zone allow"><div class="zone-label">0–39</div><div class="zone-action">ALLOW</div></div>
+<div class="gauge-zone challenge"><div class="zone-label">40–69</div><div class="zone-action">CHALLENGE</div></div>
+<div class="gauge-zone block"><div class="zone-label">70–100</div><div class="zone-action">BLOCK</div></div>
+</div>
+<div class="gauge-markers"><span class="mark">0</span><span class="mark">40</span><span class="mark">100</span></div>
+</div>
+<div class="gauge-legend">
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(16,185,129,0.3);border:1px solid var(--green);"></div><div class="legend-text">Below threshold — request passes, actor monitored</div></div>
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(245,158,11,0.3);border:1px solid var(--amber);"></div><div class="legend-text">Interrogator engaged — progressive challenges issued</div></div>
+<div class="legend-item"><div class="legend-swatch" style="background:rgba(239,68,68,0.3);border:1px solid var(--red);"></div><div class="legend-text">Blocked on sight — request rejected, tarpit active</div></div>
+</div>
+</div></div>
+<!-- RISK SOURCES -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--coral);"></div><span class="t-label" style="color:var(--coral);">Risk Sources — What Adds Points</span><div class="section-line"></div></div>
+<div class="sources">
+<div class="source">
+<div class="source-header"><div class="source-name">Challenge Failures</div><div class="source-pts" style="color:var(--red);background:rgba(239,68,68,0.08);">+35</div></div>
+<div class="source-items">Failed Interrogator challenge<br>JavaScript execution failed<br>CAPTCHA timeout / wrong answer</div>
+<div class="source-trigger">Strong indicator of bot behavior</div>
+</div>
+<div class="source">
+<div class="source-header"><div class="source-name">Campaign Membership</div><div class="source-pts" style="color:var(--red);background:rgba(239,68,68,0.08);">+30</div></div>
+<div class="source-items">Linked to active campaign<br>Correlated via fingerprints<br>Shared attack patterns</div>
+<div class="source-trigger">Automatic when correlated</div>
+</div>
+<div class="source">
+<div class="source-header"><div class="source-name">WAF Detections</div><div class="source-pts" style="color:var(--amber);background:rgba(245,158,11,0.08);">+25</div></div>
+<div class="source-items">SQLi, XSS, path traversal<br>Command injection<br>Protocol violations</div>
+<div class="source-trigger">Per detection, configurable</div>
+</div>
+<div class="source">
+<div class="source-header"><div class="source-name">Threat Intelligence</div><div class="source-pts" style="color:var(--amber);background:rgba(245,158,11,0.08);">+20</div></div>
+<div class="source-items">Known bad IP lists<br>Tor exit nodes<br>Datacenter / VPN ranges</div>
+<div class="source-trigger">Configurable feeds</div>
+</div>
+<div class="source">
+<div class="source-header"><div class="source-name">Rate Violations</div><div class="source-pts" style="color:var(--blue);background:rgba(30,144,255,0.08);">+15</div></div>
+<div class="source-items">Exceeding request limits<br>Burst patterns<br>Endpoint hammering</div>
+<div class="source-trigger">Scales with severity</div>
+</div>
+<div class="source">
+<div class="source-header"><div class="source-name">Signal Anomalies</div><div class="source-pts" style="color:var(--blue);background:rgba(30,144,255,0.08);">+10</div></div>
+<div class="source-items">TLS / User-Agent mismatch<br>Session behavior anomalies<br>Auth token inconsistencies</div>
+<div class="source-trigger">Per anomaly type</div>
+</div>
+</div></div>
+<!-- SCENARIO TIMELINE — credential stuffing attack -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--violet);"></div><span class="t-label" style="color:var(--violet);">Example — Credential Stuffing Attack</span><div class="section-line"></div></div>
+<div class="scenario">
+<div class="scenario-title">Risk climbing from 0 → 90 in 6 requests</div>
+<div class="scenario-sub">ACTOR: 198.51.100.12 · JA4: a]b1c2d3e4f5 · SESSION: new</div>
+<div class="timeline">
+
+<div class="tl-step" style="border-bottom:1px solid rgba(30,45,68,0.3);">
+<div class="tl-event" style="color:var(--muted);font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;">EVENT</div>
+<div class="tl-delta" style="color:var(--muted);font-size:10px;">DELTA</div>
+<div style="font-variation-settings:'wght' 600,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' -4;font-size:10px;letter-spacing:1px;color:var(--muted);text-align:right;">SCORE</div>
+</div>
+
+<div class="tl-step">
+<div class="tl-event"><strong>Request 1:</strong> Rate limit triggered</div>
+<div class="tl-delta" style="color:var(--amber);">+15</div>
+<div class="tl-bar-wrap"><div class="tl-bar" style="width:15%;background:var(--green);"></div><div class="tl-score">15</div></div>
+</div>
+
+<div class="tl-step">
+<div class="tl-event"><strong>Request 5:</strong> Failed login pattern detected</div>
+<div class="tl-delta" style="color:var(--amber);">+10</div>
+<div class="tl-bar-wrap"><div class="tl-bar" style="width:25%;background:var(--green);"></div><div class="tl-score">25</div></div>
+</div>
+
+<div class="tl-step">
+<div class="tl-event"><strong>Request 10:</strong> Campaign correlation link</div>
+<div class="tl-delta" style="color:var(--red);">+30</div>
+<div class="tl-bar-wrap"><div class="tl-bar" style="width:55%;background:linear-gradient(90deg,var(--green) 0%,var(--amber) 73%,var(--amber) 100%);"></div><div class="tl-score">55</div></div>
+</div>
+
+<div class="tl-step" style="background:rgba(245,158,11,0.04);">
+<div class="tl-event"><strong style="color:var(--amber);">CHALLENGE</strong> — Interrogator challenge sent</div>
+<div class="tl-delta" style="color:var(--muted);">—</div>
+<div class="tl-bar-wrap"><div class="tl-bar" style="width:55%;background:linear-gradient(90deg,var(--green) 0%,var(--amber) 73%,var(--amber) 100%);"></div><div class="tl-score">55</div></div>
+</div>
+
+<div class="tl-step">
+<div class="tl-event"><strong>Challenge failed</strong> — JS PoW not computed</div>
+<div class="tl-delta" style="color:var(--red);">+35</div>
+<div class="tl-bar-wrap"><div class="tl-bar" style="width:90%;background:linear-gradient(90deg,var(--green) 0%,var(--amber) 44%,var(--red) 78%,var(--red) 100%);"></div><div class="tl-score">90</div></div>
+</div>
+
+<div class="tl-step" style="background:rgba(239,68,68,0.04);">
+<div class="tl-event"><strong style="color:var(--red);">BLOCKED</strong> — Request rejected · Tarpit engaged</div>
+<div class="tl-delta" style="color:var(--muted);">—</div>
+<div class="tl-bar-wrap"><div class="tl-bar" style="width:90%;background:linear-gradient(90deg,var(--green) 0%,var(--amber) 44%,var(--red) 78%,var(--red) 100%);"></div><div class="tl-score" style="color:var(--red);">90</div></div>
+</div>
+
+</div>
+<div style="margin-top:16px;padding:10px 16px;background:rgba(16,185,129,0.04);border-left:2px solid var(--green);font-variation-settings:'wght' 400,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--text-sec);">Decay: 5 minutes of good behavior to return below CHALLENGE threshold (if behavior improves)</div>
+</div></div>
+<!-- RISK DECAY -->
+<div class="section"><div class="section-head"><div class="section-dot" style="background:var(--green);"></div><span class="t-label" style="color:var(--green);">Risk Decay — How Risk Reduces</span><div class="section-line"></div></div>
+<div class="decay">
+<div class="decay-visual">
+<!-- SVG decay curve -->
+<svg width="240" height="120" viewBox="0 0 240 120" fill="none">
+<defs><linearGradient id="decayFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#EF4444" stop-opacity="0.15"/><stop offset="50%" stop-color="#F59E0B" stop-opacity="0.1"/><stop offset="100%" stop-color="#10B981" stop-opacity="0.05"/></linearGradient></defs>
+<!-- Threshold lines -->
+<line x1="0" y1="36" x2="240" y2="36" stroke="#EF4444" stroke-width="0.5" opacity="0.4" stroke-dasharray="4 4"/>
+<text x="235" y="33" fill="#EF4444" font-size="8" text-anchor="end" font-family="Recursive" opacity="0.6">70</text>
+<line x1="0" y1="72" x2="240" y2="72" stroke="#F59E0B" stroke-width="0.5" opacity="0.4" stroke-dasharray="4 4"/>
+<text x="235" y="69" fill="#F59E0B" font-size="8" text-anchor="end" font-family="Recursive" opacity="0.6">40</text>
+<!-- Decay curve path -->
+<path d="M0,12 C30,12 40,20 60,36 C80,52 90,58 120,72 C150,86 180,96 240,102" stroke="#1E90FF" stroke-width="2" fill="none"/>
+<path d="M0,12 C30,12 40,20 60,36 C80,52 90,58 120,72 C150,86 180,96 240,102 L240,120 L0,120 Z" fill="url(#decayFill)"/>
+<!-- Time labels -->
+<text x="0" y="116" fill="#5a6f8a" font-size="8" font-family="Recursive">0m</text>
+<text x="60" y="116" fill="#5a6f8a" font-size="8" font-family="Recursive" text-anchor="middle">2m</text>
+<text x="120" y="116" fill="#5a6f8a" font-size="8" font-family="Recursive" text-anchor="middle">4m</text>
+<text x="180" y="116" fill="#5a6f8a" font-size="8" font-family="Recursive" text-anchor="middle">6m</text>
+<text x="235" y="116" fill="#5a6f8a" font-size="8" font-family="Recursive" text-anchor="end">8m</text>
+<!-- Score at start -->
+<circle cx="0" cy="12" r="4" fill="none" stroke="#EF4444" stroke-width="1.5"/>
+<text x="12" y="15" fill="#EF4444" font-size="9" font-family="Recursive" font-weight="700">90</text>
+<!-- Score at end -->
+<circle cx="240" cy="102" r="4" fill="none" stroke="#10B981" stroke-width="1.5"/>
+<text x="224" y="100" fill="#10B981" font-size="9" font-family="Recursive" font-weight="700">0</text>
+</svg>
+</div>
+<div class="decay-info">
+<div class="decay-card"><div class="dc-name" style="color:var(--green);">−10 pts/min</div><div class="dc-desc">Configurable decay rate. Risk decreases every minute of good behavior — legitimate requests with no WAF triggers.</div></div>
+<div class="decay-card"><div class="dc-name" style="color:var(--blue);">Persistent</div><div class="dc-desc">Risk survives restarts. Actors can't reset their score by reconnecting or rotating IPs (fingerprint tracking).</div></div>
+<div class="decay-card"><div class="dc-name" style="color:var(--amber);">Configurable</div><div class="dc-desc">RISK_DECAY_RATE_PER_MINUTE adjustable via API or config file. Tune for your traffic patterns.</div></div>
+<div class="decay-card"><div class="dc-name" style="color:var(--violet);">Reward Good Behavior</div><div class="dc-desc">Returning users who behave see their risk drop naturally. No manual intervention needed.</div></div>
+</div>
+</div></div>
+<!-- FOOTER -->
+<div class="footer">
+<div class="tagline-bar"><div class="tagline">Dynamic risk scoring at the edge. No backend required.</div><div class="tagline-sub">Sub-millisecond decisions. Progressive enforcement. Risk that decays with good behavior.</div></div>
+<div class="footer-brand">
+<div class="brand">
+<!-- Real synapse-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--violet);text-transform:uppercase;">Synapse</span>
+<span style="color:var(--border);margin:0 4px;">·</span>
+<!-- Real horizon-icon-dark.svg internals -->
+<svg class="icon-footer" viewBox="0 0 110 110" fill="none"><line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/><path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/><path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/><circle cx="55" cy="50" r="4.5" fill="#F97316"/><line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/><line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/><line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/></svg>
+<span style="font-variation-settings:'wght' 700,'MONO' 0,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:11px;letter-spacing:0.15em;color:var(--coral);text-transform:uppercase;">Horizon</span>
+</div>
+<span class="product">Edge Protection Platform · Atlas Crew</span>
+</div></div>
+</div></body></html>

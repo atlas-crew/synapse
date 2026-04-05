@@ -20,9 +20,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.4956172"
-     inkscape:cx="548.81066"
-     inkscape:cy="463.05899"
+     inkscape:zoom="0.48749143"
+     inkscape:cx="511.80387"
+     inkscape:cy="366.16028"
      inkscape:window-width="1460"
      inkscape:window-height="712"
      inkscape:window-x="0"
@@ -304,7 +304,9 @@
      letter-spacing="3"
      text-anchor="middle"
      id="text37"
-     style="font-style:italic;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold Italic';font-size:18.66666667px">Edge Protection Platform</text>
+     style="font-style:italic;font-variant:normal;font-weight:600;font-stretch:normal;font-size:18.66666667px;font-family:'Recursive Sans Casual Static';-inkscape-font-specification:'Recursive Sans Casual Static Semi-Bold Italic'"><tspan
+       style="font-style:italic;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Casual Static';-inkscape-font-specification:'Recursive Sans Casual Static Semi-Bold Italic';font-size:18.66666667px"
+       id="tspan1">Edge Protection Platform</tspan></text>
   <!-- Center divider -->
   <line
      x1="640"
@@ -732,8 +734,8 @@
        fill="#5a6f8a"
        letter-spacing="2.5"
        id="text72"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Rec Mono Semicasual';-inkscape-font-specification:'Rec Mono Semicasual'"><tspan
-         style="font-style:italic;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Semicasual';-inkscape-font-specification:'Rec Mono Semicasual Bold Italic'"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:16px;font-family:'Rec Mono Semicasual';-inkscape-font-specification:'Rec Mono Semicasual Bold'"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Semicasual';-inkscape-font-specification:'Rec Mono Semicasual Bold';font-size:16px"
          id="tspan78">Fleet Intelligence · Embedded Detection · Collective Defense · SecOps Hub</tspan></text>
     <line
        x1="710"
