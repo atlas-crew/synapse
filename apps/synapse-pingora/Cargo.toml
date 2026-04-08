@@ -25,12 +25,12 @@ path = "src/main.rs"
 
 [dependencies]
 # Pingora core
-pingora = { version = "0.6", features = ["openssl"] }
-pingora-proxy = "0.6"
-pingora-http = "0.6"
-pingora-limits = "0.6"
-pingora-core = { version = "0.6", features = ["openssl"] }
-pingora-openssl = "0.6"
+pingora = { version = "0.8", features = ["openssl"] }
+pingora-proxy = "0.8"
+pingora-http = "0.8"
+pingora-limits = "0.8"
+pingora-core = { version = "0.8", features = ["openssl"] }
+pingora-openssl = "0.8"
 
 # Async runtime
 async-trait = "0.1"
