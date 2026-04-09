@@ -134,6 +134,22 @@ section { padding: 64px 0; }
 .callout { background: var(--bg-raised); border-left: 3px solid var(--blue); padding: 16px 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
 .callout strong { color: var(--text); }
 
+/* Action buttons */
+.actions-row { display: flex; gap: 12px; margin: 20px 0 28px; flex-wrap: wrap; }
+.btn { display: inline-block; font-family: 'Recursive', sans-serif; font-variation-settings: 'wght' 500, 'MONO' 1, 'CASL' 0, 'CRSV' 0.5, 'slnt' 0; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 28px; border-radius: 4px; text-decoration: none; transition: opacity 0.3s, transform 0.2s; }
+.btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn-primary { color: var(--bg); background: var(--coral); }
+.btn-secondary { color: var(--text); background: transparent; border: 1px solid var(--border-strong); }
+
+/* Comparison table for Why Edge section */
+.compare-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.compare-tbl th { text-align: left; font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' -4; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; padding: 10px 12px; color: var(--text); background: var(--bg-card); border-bottom: 1px solid var(--border-strong); }
+.compare-tbl td { padding: 12px; border-bottom: 1px solid rgba(30,45,68,0.5); color: var(--text-secondary); vertical-align: top; }
+.compare-tbl td:first-child { font-variation-settings: 'wght' 500, 'MONO' 0, 'CASL' 0.2, 'CRSV' 0.5, 'slnt' 0; color: var(--text); width: 28%; }
+.compare-tbl .row-cloud { color: var(--muted); }
+.compare-tbl .row-edge { color: var(--text); }
+.compare-tbl .row-edge strong { color: var(--coral); font-variation-settings: 'wght' 600, 'MONO' 1, 'CASL' 0.3, 'CRSV' 0.5, 'slnt' 0; }
+
 /* Footer */
 footer { padding: 40px 0; border-top: 1px solid var(--border); }
 .footer-inner { display: flex; justify-content: space-between; align-items: center; }
@@ -201,7 +217,12 @@ footer { padding: 40px 0; border-top: 1px solid var(--border); }
 
   <p class="hero-sub reveal rd1">Embedded intelligence for API security and application defense. All detection and blocking decisions happen locally at the edge. No cloud round-trips. No external dependencies. Full protection continues even with backend down.</p>
 
-  <div class="stats-row reveal rd2">
+  <div class="actions-row reveal rd2">
+    <a href="https://horizon-demo.atlascrew.dev" class="btn btn-primary">Live Demo →</a>
+    <a href="https://github.com/atlas-crew/horizon-security-platform" class="btn btn-secondary">View on GitHub</a>
+  </div>
+
+  <div class="stats-row reveal rd3">
     <div><div class="stat-val" style="color:var(--coral);">&lt;1ms</div><div class="stat-lbl">Detection Latency</div></div>
     <div><div class="stat-val" style="color:var(--amber);">72K+</div><div class="stat-lbl">Sustained RPS</div></div>
     <div><div class="stat-val" style="color:var(--blue);">25MB</div><div class="stat-lbl">Sensor Binary</div></div>
@@ -248,6 +269,46 @@ footer { padding: 40px 0; border-top: 1px solid var(--border); }
         <li><strong>Remote access</strong> — secure WebSocket tunnels to sensor shell + dashboards</li>
       </ul>
     </div>
+  </div>
+</div>
+</section>
+
+<!-- Why Edge Intelligence -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Architecture</div>
+  <div class="section-title reveal">Why Edge Intelligence?</div>
+  <div class="section-desc reveal">Traditional cloud WAFs add round-trip latency, become a single point of failure, and can't inspect response bodies without streaming data off-premises. Embedded intelligence keeps every decision local — at wire speed, with full context, and no third-party data exposure.</div>
+
+  <div class="two-col reveal rd1">
+    <div class="col-card">
+      <div class="section-label" style="margin-bottom:8px;color:var(--muted);">Traditional</div>
+      <div class="col-card-title" style="color:var(--muted);margin-bottom:12px;">Cloud WAF</div>
+      <ul class="feat-list">
+        <li><strong>50–200ms round-trip</strong> — every request crosses the internet twice</li>
+        <li><strong>Hard outage coupling</strong> — cloud provider down = your app down</li>
+        <li><strong>Blind to response bodies</strong> — no DLP without streaming data out</li>
+        <li><strong>Privacy exposure</strong> — payloads, tokens, and PII leave your perimeter</li>
+        <li><strong>Cache poisoning surface</strong> — shared edge caches, noisy-neighbor risk</li>
+        <li><strong>Detection lag</strong> — rule pushes take minutes to propagate globally</li>
+      </ul>
+    </div>
+    <div class="col-card">
+      <div class="section-label" style="margin-bottom:8px;color:var(--coral);">Synapse</div>
+      <div class="col-card-title" style="color:var(--coral);margin-bottom:12px;">Edge Intelligence</div>
+      <ul class="feat-list">
+        <li><strong>&lt;1ms local decision</strong> — detection runs in-process with your proxy</li>
+        <li><strong>Zero external dependencies</strong> — protection continues if Horizon is offline</li>
+        <li><strong>Inline response inspection</strong> — DLP scans every byte before it leaves</li>
+        <li><strong>Data sovereignty</strong> — payloads never leave the host, only anonymized signals</li>
+        <li><strong>Isolated cache per tenant</strong> — no shared state, no cross-contamination</li>
+        <li><strong>~240μs hot reload</strong> — rule updates take effect with zero dropped requests</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout reveal rd2" style="margin-top:2px;border-color:var(--coral);">
+    <strong>The tradeoff isn't latency vs accuracy — it's centralized control vs resilience.</strong> Horizon solves the first without sacrificing the second: the control plane orchestrates fleet-wide intelligence while each Synapse sensor remains independently authoritative at its own edge.
   </div>
 </div>
 </section>
@@ -334,8 +395,11 @@ footer { padding: 40px 0; border-top: 1px solid var(--border); }
 <!-- Session Intelligence + DLP -->
 <section>
 <div class="container">
-  <div class="two-col">
-    <div class="col-card reveal">
+  <div class="section-label reveal">Identity</div>
+  <div class="section-title reveal">Session &amp; Data Protection</div>
+  <div class="section-desc reveal">Composite identity tracking — JA4 + JA4H + IP + auth token — maintains actor continuity across fingerprint changes and cleared cookies. Inline DLP scanning catches credential and PII leaks before they leave the response pipeline.</div>
+  <div class="two-col reveal rd1">
+    <div class="col-card">
       <div class="section-label" style="margin-bottom:8px;">Sessions</div>
       <div class="col-card-title" style="color:var(--blue); margin-bottom: 12px;">Session Intelligence</div>
       <table class="data-tbl" style="margin-bottom:16px;">
@@ -352,7 +416,7 @@ footer { padding: 40px 0; border-top: 1px solid var(--border); }
         <strong>Composite Identity:</strong> JA4 + JA4H + IP + Auth Token → actor continuity even when cookies cleared. No cloud required.
       </div>
     </div>
-    <div class="col-card reveal rd1">
+    <div class="col-card">
       <div class="section-label" style="margin-bottom:8px;">DLP</div>
       <div class="col-card-title" style="color:var(--green); margin-bottom: 12px;">Data Loss Prevention</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
@@ -517,29 +581,68 @@ footer { padding: 40px 0; border-top: 1px solid var(--border); }
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">How Synapse links distributed attacks into unified campaigns. Seven detectors, confidence thresholds, fleet-wide correlation.</div>
     </a>
     <a href="infographics/dlp-edge-protection.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);border-right:none;">
-      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg></div>
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><path d="M55 14 L88 26 L88 58 Q88 84 55 96 Q22 84 22 58 L22 26 Z" fill="none" stroke="#10B981" stroke-width="3" stroke-linejoin="miter"/><line x1="34" y1="48" x2="76" y2="48" stroke="#10B981" stroke-width="2" stroke-linecap="square"/><line x1="34" y1="58" x2="66" y2="58" stroke="#10B981" stroke-width="2" stroke-linecap="square" opacity="0.6"/><line x1="34" y1="68" x2="76" y2="68" stroke="#F97316" stroke-width="2" stroke-linecap="square"/><circle cx="80" cy="68" r="3" fill="#F97316"/></svg></div>
       <div class="mod-name" style="color:var(--green);">DLP at the Edge</div>
       <div class="mod-domain">Inline Response Inspection</div>
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Data Loss Prevention built into the WAF decision path. 5 detection categories, real-time blocking, traditional vs edge architecture.</div>
     </a>
     <a href="infographics/request-processing-lifecycle.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);">
-      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><line x1="55" y1="55" x2="28" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="82" y2="24" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="90" y2="50" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="26" y2="76" stroke="#1E90FF" stroke-width="2.5" stroke-linecap="square"/><line x1="55" y1="55" x2="78" y2="86" stroke="#8B5CF6" stroke-width="3.5" stroke-linecap="square"/><circle cx="28" cy="24" r="4.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="82" cy="24" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="90" cy="50" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="26" cy="76" r="3.5" fill="none" stroke="#1E90FF" stroke-width="2"/><circle cx="78" cy="86" r="5.5" fill="#8B5CF6"/><circle cx="55" cy="55" r="7" fill="none" stroke="#1E90FF" stroke-width="3"/></svg></div>
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><rect x="14" y="44" width="18" height="22" fill="none" stroke="#1E90FF" stroke-width="2.5"/><rect x="46" y="44" width="18" height="22" fill="none" stroke="#1E90FF" stroke-width="2.5"/><rect x="78" y="44" width="18" height="22" fill="none" stroke="#1E90FF" stroke-width="2.5"/><line x1="32" y1="55" x2="44" y2="55" stroke="#F97316" stroke-width="2.5"/><polyline points="40,50 46,55 40,60" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/><line x1="64" y1="55" x2="76" y2="55" stroke="#F97316" stroke-width="2.5"/><polyline points="72,50 78,55 72,60" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/></svg></div>
       <div class="mod-name" style="color:var(--blue);">Request Processing</div>
       <div class="mod-domain">Complete Lifecycle</div>
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Six-stage sequential pipeline from TLS fingerprint to decision. Stage timing, challenge escalation, edge vs cloud latency comparison.</div>
     </a>
     <a href="infographics/risk-scoring-lifecycle.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);border-right:none;">
-      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><rect x="20" y="70" width="14" height="20" fill="#10B981" rx="0"/><rect x="40" y="50" width="14" height="40" fill="#F59E0B" rx="0"/><rect x="60" y="30" width="14" height="60" fill="#F97316" rx="0"/><rect x="80" y="15" width="14" height="75" fill="#EF4444" rx="0"/><line x1="15" y1="93" x2="100" y2="93" stroke="var(--border-strong)" stroke-width="1.5"/></svg></div>
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><rect x="20" y="70" width="14" height="20" fill="#10B981" rx="0"/><rect x="40" y="50" width="14" height="40" fill="#F59E0B" rx="0"/><rect x="60" y="30" width="14" height="60" fill="#F97316" rx="0"/><rect x="80" y="15" width="14" height="75" fill="#EF4444" rx="0"/><line x1="15" y1="93" x2="100" y2="93" stroke="#2a3f5c" stroke-width="1.5"/></svg></div>
       <div class="mod-name" style="color:var(--coral);">Risk Scoring</div>
       <div class="mod-domain">Lifecycle &amp; Thresholds</div>
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">How Synapse computes per-entity risk scores from multiple signal sources. Decay, escalation thresholds, and action triggers.</div>
     </a>
-    <a href="infographics/interrogator-system.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);">
-      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><circle cx="55" cy="40" r="18" fill="none" stroke="#8B5CF6" stroke-width="2.5"/><line x1="55" y1="58" x2="55" y2="90" stroke="#8B5CF6" stroke-width="2.5"/><line x1="35" y1="72" x2="75" y2="72" stroke="#8B5CF6" stroke-width="2.5"/><circle cx="55" cy="40" r="5" fill="#8B5CF6"/><circle cx="35" cy="72" r="3" fill="#1E90FF"/><circle cx="75" cy="72" r="3" fill="#1E90FF"/><circle cx="55" cy="90" r="3" fill="#1E90FF"/></svg></div>
+    <a href="infographics/interrogator-system.html" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);border-right:none;">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><circle cx="46" cy="46" r="26" fill="none" stroke="#8B5CF6" stroke-width="3"/><line x1="64" y1="64" x2="92" y2="92" stroke="#8B5CF6" stroke-width="4" stroke-linecap="square"/><text x="46" y="56" font-family="Recursive, sans-serif" font-size="28" font-weight="600" fill="#8B5CF6" text-anchor="middle">?</text></svg></div>
       <div class="mod-name" style="color:var(--violet);">Interrogator System</div>
-      <div class="mod-domain">Edge Intelligence Pipeline</div>
-      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Deep packet inspection and entity profiling. How Synapse builds behavioral models from traffic patterns in real time.</div>
+      <div class="mod-domain">Progressive Challenges</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Cookie → JS PoW → CAPTCHA → Tarpit. How Synapse separates bots from humans with escalating friction and automatic de-escalation.</div>
     </a>
+    <a href="/docs/" class="mod-card" style="text-decoration:none;color:inherit;transition:border-color 0.3s;border:1px solid var(--border);">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><rect x="22" y="18" width="56" height="76" fill="none" stroke="#c4a882" stroke-width="3"/><line x1="32" y1="34" x2="68" y2="34" stroke="#c4a882" stroke-width="2" stroke-linecap="square"/><line x1="32" y1="46" x2="68" y2="46" stroke="#c4a882" stroke-width="2" stroke-linecap="square" opacity="0.7"/><line x1="32" y1="58" x2="68" y2="58" stroke="#c4a882" stroke-width="2" stroke-linecap="square" opacity="0.7"/><line x1="32" y1="70" x2="56" y2="70" stroke="#c4a882" stroke-width="2" stroke-linecap="square" opacity="0.5"/><line x1="32" y1="82" x2="60" y2="82" stroke="#c4a882" stroke-width="2" stroke-linecap="square" opacity="0.5"/></svg></div>
+      <div class="mod-name" style="color:#c4a882;">Full Documentation</div>
+      <div class="mod-domain">Architecture &amp; Reference</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">Getting started guides, deployment playbooks, API reference, configuration schemas, and the complete architecture decision log.</div>
+    </a>
+  </div>
+</div>
+</section>
+
+<!-- Deployment & Integration -->
+<section>
+<div class="container">
+  <div class="section-label reveal">Deploy</div>
+  <div class="section-title reveal">Deployment &amp; Integration</div>
+  <div class="section-desc reveal">Synapse runs wherever your traffic terminates. Choose the mode that matches your architecture — from a single-binary WAF in front of a monolith to a fleet of sensors reporting to a self-hosted Horizon control plane.</div>
+
+  <div class="three-col reveal rd1">
+    <div class="mod-card" style="border:1px solid var(--border);border-right:none;">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><rect x="18" y="24" width="74" height="62" fill="none" stroke="#8B5CF6" stroke-width="3"/><line x1="18" y1="40" x2="92" y2="40" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square"/><circle cx="28" cy="32" r="2" fill="#8B5CF6"/><circle cx="36" cy="32" r="2" fill="#8B5CF6"/><circle cx="44" cy="32" r="2" fill="#8B5CF6"/><line x1="30" y1="56" x2="80" y2="56" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.6"/><line x1="30" y1="66" x2="70" y2="66" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.6"/><line x1="30" y1="76" x2="76" y2="76" stroke="#8B5CF6" stroke-width="2" stroke-linecap="square" opacity="0.6"/></svg></div>
+      <div class="mod-name" style="color:var(--violet);">Standalone WAF</div>
+      <div class="mod-domain">Single 25MB Binary</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;">Drop Synapse in front of any HTTP app. No control plane required — all detection, correlation, and blocking happens locally. Ideal for monoliths, internal tools, and air-gapped deployments.</div>
+      <div style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;">DOCKER · SYSTEMD · BARE METAL</div>
+    </div>
+    <div class="mod-card" style="border:1px solid var(--border);border-right:none;">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><circle cx="55" cy="30" r="10" fill="none" stroke="#F97316" stroke-width="3"/><circle cx="28" cy="78" r="8" fill="none" stroke="#1E90FF" stroke-width="2.5"/><circle cx="55" cy="78" r="8" fill="none" stroke="#1E90FF" stroke-width="2.5"/><circle cx="82" cy="78" r="8" fill="none" stroke="#1E90FF" stroke-width="2.5"/><line x1="48" y1="38" x2="30" y2="68" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.6"/><line x1="55" y1="40" x2="55" y2="68" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.6"/><line x1="62" y1="38" x2="80" y2="68" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.6"/></svg></div>
+      <div class="mod-name" style="color:var(--coral);">Fleet Mode</div>
+      <div class="mod-domain">Horizon + N Sensors</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;">Deploy Synapse sensors at every edge, reporting to a central Horizon control plane. Cross-sensor campaign correlation, centralized rule distribution, live threat map, and shared blocklists across the fleet.</div>
+      <div style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;">KUBERNETES · HELM · TERRAFORM</div>
+    </div>
+    <div class="mod-card" style="border:1px solid var(--border);">
+      <div class="mod-icon"><svg width="28" height="28" viewBox="0 0 110 110" fill="none"><rect x="14" y="20" width="82" height="70" fill="none" stroke="#1E90FF" stroke-width="3"/><rect x="24" y="32" width="30" height="10" fill="none" stroke="#1E90FF" stroke-width="2" opacity="0.5"/><rect x="60" y="32" width="26" height="10" fill="none" stroke="#1E90FF" stroke-width="2" opacity="0.5"/><rect x="24" y="50" width="62" height="28" fill="#1E90FF" opacity="0.15"/><line x1="24" y1="50" x2="86" y2="50" stroke="#10B981" stroke-width="2.5"/><polyline points="30,70 42,62 54,66 66,56 78,60" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="square"/></svg></div>
+      <div class="mod-name" style="color:var(--blue);">Embedded Library</div>
+      <div class="mod-domain">@atlascrew/apparatus-lib</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;">Integrate detection directly into your Node.js or Rust application. Expose signals to your own telemetry pipeline, or connect the library to Horizon for fleet-wide intelligence without running a separate proxy.</div>
+      <div style="font-variation-settings:'wght' 500,'MONO' 1,'CASL' 0,'CRSV' 0.5,'slnt' 0;font-size:10px;color:var(--muted);letter-spacing:1px;">NPM · CRATES.IO · SDK</div>
+    </div>
   </div>
 </div>
 </section>
