@@ -1269,6 +1269,14 @@ pub struct RequestContext {
     /// deferred WAF pass in `upstream_request_filter` to evaluate rules
     /// that reference the `dlp_violation` match kind.
     request_dlp_matches: Vec<synapse_pingora::dlp::DlpMatch>,
+    /// Whether the async DLP scan completed successfully (i.e. the oneshot
+    /// receiver produced a result rather than failing/being cancelled).
+    /// The deferred WAF pass is gated on this flag rather than on
+    /// `!request_dlp_matches.is_empty()` so that rules wrapping
+    /// `dlp_violation` in a NOT operator — which fire precisely when there
+    /// are zero matches — are still evaluated. If the scan never ran or
+    /// failed, the deferred pass is skipped entirely.
+    dlp_scan_completed: bool,
     /// Schema validation result from the body-phase schema validator. Attached
     /// to the WAF evaluation context so rules can match the `schema_violation`
     /// kind against the learned baseline.
@@ -2093,6 +2101,7 @@ impl ProxyHttp for SynapseProxy {
             request_dlp_match_count: 0,
             request_dlp_types: String::new(),
             request_dlp_matches: Vec::new(),
+            dlp_scan_completed: false,
             schema_result: None,
             request_content_type: None,
             skip_request_dlp: false,
@@ -3914,6 +3923,12 @@ impl ProxyHttp for SynapseProxy {
                     ctx.request_dlp_types = types;
                     ctx.dlp_scan_time_us = scan_time_us;
                     ctx.request_dlp_matches = matches;
+                    // Flag completion BEFORE checking match_count so the
+                    // deferred WAF pass can evaluate NOT(dlp_violation) rules
+                    // on zero-match scans. The flag remains false on the Err
+                    // arm below, so failed/cancelled scans still skip the
+                    // deferred pass entirely.
+                    ctx.dlp_scan_completed = true;
 
                     if match_count > 0 {
                         debug!(
@@ -3935,9 +3950,12 @@ impl ProxyHttp for SynapseProxy {
         // ===== Deferred WAF pass (post-DLP) =====
         // Evaluate the rules that were skipped during the body-phase pass
         // because they reference `dlp_violation` — the scan results are now
-        // available. Only runs when DLP returned at least one match, so the
-        // normal fast path has zero extra work.
-        if !ctx.request_dlp_matches.is_empty() {
+        // available. Gated on `dlp_scan_completed` rather than "matches were
+        // found" so rules wrapping `dlp_violation` in a NOT operator — which
+        // fire precisely when there are zero matches — are still evaluated.
+        // The normal fast path still has zero extra work for requests that
+        // skipped the DLP scan entirely (non-JSON bodies, etc.).
+        if ctx.dlp_scan_completed {
             let method = ctx
                 .request_method
                 .as_deref()

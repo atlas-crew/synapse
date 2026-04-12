@@ -2868,6 +2868,75 @@ mod tests {
         assert!(verdict.matched_rules.is_empty());
     }
 
+    #[test]
+    fn test_deferred_not_dlp_violation_fires_on_zero_matches() {
+        // TASK-35 correctness guarantee: a rule that wraps dlp_violation in
+        // a NOT operator must be evaluated by the deferred pass even when
+        // the DLP scanner produced zero matches. The engine itself has
+        // always handled this correctly — eval_dlp_violation returns false
+        // on empty matches and `not` inverts it to true — but the
+        // upstream_request_filter gate previously short-circuited on empty
+        // matches so the engine was never invoked. This test pins the
+        // engine-side contract so main.rs's gate fix has something to rely
+        // on.
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9010,
+            "description": "Block sensitive-path POSTs that skipped DLP entirely",
+            "risk": 30.0,
+            "blocking": true,
+            "matches": [
+                {"type": "method", "match": "POST"},
+                {
+                    "type": "boolean",
+                    "op": "not",
+                    "match": {"type": "dlp_violation"}
+                }
+            ]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // The NOT-wrapped dlp_violation still tags the rule as deferred —
+        // the walker recurses through boolean operands.
+        assert_eq!(engine.deferred_rule_indices.len(), 1);
+        assert!(engine.deferred_rule_id_set.contains(&9010));
+
+        // Deferred pass with zero DLP matches: the NOT path makes
+        // dlp_violation evaluate to true, and the method=POST path matches
+        // the request, so the rule fires and blocks.
+        let req = Request {
+            method: "POST",
+            path: "/api/sensitive",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&[]),
+            ..Default::default()
+        };
+        let verdict = engine.analyze_deferred_with_timeout(&req, DEFAULT_EVAL_TIMEOUT);
+        assert_eq!(verdict.action, Action::Block);
+        assert!(verdict.matched_rules.contains(&9010));
+
+        // Body-phase `analyze` still skips deferred rules entirely — the
+        // NOT-wrapped rule is deferred like any other dlp_violation rule.
+        let body_verdict = engine.analyze(&req);
+        assert_eq!(body_verdict.action, Action::Allow);
+        assert!(!body_verdict.matched_rules.contains(&9010));
+
+        // And when DLP did find matches, the NOT path now evaluates to
+        // false, so the rule correctly does NOT fire in the deferred pass.
+        let matches = vec![dlp_match(SensitiveDataType::Ssn)];
+        let req_with_matches = Request {
+            method: "POST",
+            path: "/api/sensitive",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&matches),
+            ..Default::default()
+        };
+        let verdict_with_matches =
+            engine.analyze_deferred_with_timeout(&req_with_matches, DEFAULT_EVAL_TIMEOUT);
+        assert_eq!(verdict_with_matches.action, Action::Allow);
+        assert!(!verdict_with_matches.matched_rules.contains(&9010));
+    }
+
     // Silence unused warnings for ViolationSeverity / ViolationType in tests.
     #[allow(dead_code)]
     fn _keep_enums_used() {
