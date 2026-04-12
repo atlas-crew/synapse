@@ -2609,7 +2609,7 @@ mod tests {
     use super::*;
     use crate::dlp::{DlpMatch, PatternSeverity, SensitiveDataType};
     use crate::fingerprint::{ClientFingerprint, Ja4Fingerprint, Ja4Protocol, Ja4SniType, Ja4hFingerprint};
-    use crate::profiler::{FieldType, SchemaViolation, ValidationResult, ViolationSeverity, ViolationType};
+    use crate::profiler::{FieldType, SchemaViolation, ValidationResult};
     use crate::waf::types::Header;
 
     fn sample_fingerprint(ja4_raw: &str, ja4h_raw: &str) -> ClientFingerprint {
@@ -2935,13 +2935,6 @@ mod tests {
             engine.analyze_deferred_with_timeout(&req_with_matches, DEFAULT_EVAL_TIMEOUT);
         assert_eq!(verdict_with_matches.action, Action::Allow);
         assert!(!verdict_with_matches.matched_rules.contains(&9010));
-    }
-
-    // Silence unused warnings for ViolationSeverity / ViolationType in tests.
-    #[allow(dead_code)]
-    fn _keep_enums_used() {
-        let _ = ViolationSeverity::High;
-        let _ = ViolationType::UnexpectedField;
     }
 
     #[test]
