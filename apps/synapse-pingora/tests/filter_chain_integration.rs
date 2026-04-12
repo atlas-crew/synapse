@@ -18,6 +18,7 @@ mod synapse_main;
 
 use synapse_pingora::actor::{ActorConfig, ActorManager};
 use synapse_pingora::block_log::BlockLog;
+use synapse_pingora::correlation::CampaignManager;
 use synapse_pingora::crawler::CrawlerDetector;
 use synapse_pingora::dlp::{DlpConfig, DlpScanner};
 use synapse_pingora::entity::{EntityConfig, EntityManager};
@@ -80,6 +81,7 @@ fn build_proxy(per_ip_rps_limit: usize) -> synapse_main::SynapseProxy {
         trends_manager: Arc::new(TrendsManager::new(TrendsConfig::default())),
         signal_manager: Arc::new(SignalManager::new(SignalManagerConfig::default())),
         progression_manager,
+        campaign_manager: Arc::new(CampaignManager::new()),
         tarpit_config,
         trusted_proxies: Vec::new(),
         rps_limit: 10_000,
@@ -227,6 +229,67 @@ async fn test_rate_limit_short_circuits_before_waf() {
     assert!(
         response.contains("per_ip_rate_limit_exceeded"),
         "expected rate limit error body"
+    );
+}
+
+/// TASK-54 wiring verification: after request_filter runs, the per-request
+/// JA4H fingerprint must be registered with the proxy's CampaignManager.
+/// Before the TASK-54 wiring, CampaignManager's detectors had no input data
+/// because the filter chain never called register_fingerprints. This test
+/// drives a request through early_request_filter + request_filter (which is
+/// where the fingerprint is computed and my TASK-54 call site lives), then
+/// queries the proxy's CampaignManager's fingerprint index to assert the
+/// JA4H fingerprint was registered for the test client IP.
+///
+/// JA4H is always produced (unlike JA4 which can be None when no TLS header
+/// is forwarded), so this test uses JA4H as the observable signal. The test
+/// constructs a unique user-agent so the resulting JA4H fingerprint does not
+/// collide with other tests' recorded state in the shared CampaignManager.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial]
+async fn test_request_filter_registers_fingerprint_with_campaign_manager() {
+    let proxy = build_proxy(10_000);
+    let campaign_manager = proxy.campaign_manager();
+    let fingerprint_index = campaign_manager.index();
+
+    // Snapshot the index stats BEFORE driving the request so we can detect
+    // a net-new registration. FingerprintIndex.stats() tracks total_ips
+    // (the number of distinct IPs registered in the index).
+    let stats_before = fingerprint_index.stats();
+    let ips_before = stats_before.total_ips;
+
+    let request =
+        "GET /task54-fingerprint-probe HTTP/1.1\r\n\
+         Host: example.com\r\n\
+         User-Agent: task54-fingerprint-probe/1.0\r\n\
+         Accept: */*\r\n\
+         \r\n";
+    let (mut session, _client) = make_session(request).await;
+    let mut ctx = proxy.new_ctx();
+
+    // Drive early_request_filter first — sets client_ip and request_id.
+    proxy
+        .early_request_filter(&mut session, &mut ctx)
+        .await
+        .expect("early_request_filter");
+
+    // Drive request_filter — this is where the fingerprint is computed
+    // and the TASK-54 register_fingerprints call fires.
+    let _handled = proxy
+        .request_filter(&mut session, &mut ctx)
+        .await
+        .expect("request_filter");
+
+    // The fingerprint index must have at least one new IP entry after the
+    // request_filter pass. Before TASK-54 this assertion would fail because
+    // register_fingerprints was never called and the index stayed empty.
+    let stats_after = fingerprint_index.stats();
+    assert!(
+        stats_after.total_ips > ips_before,
+        "CampaignManager fingerprint index must have gained an IP after request_filter; \
+         before={}, after={}",
+        ips_before,
+        stats_after.total_ips
     );
 }
 

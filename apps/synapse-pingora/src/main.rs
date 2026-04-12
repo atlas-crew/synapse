@@ -1437,6 +1437,11 @@ pub struct ProxyDependencies {
     pub trends_manager: Arc<TrendsManager>,
     pub signal_manager: Arc<SignalManager>,
     pub progression_manager: Arc<ProgressionManager>,
+    /// TASK-54: CampaignManager for correlation-based threat detection.
+    /// The filter chain feeds per-request fingerprints via register_fingerprints;
+    /// the background worker correlates them into detection signals and
+    /// auto-mitigates via AccessListManager.
+    pub campaign_manager: Arc<CampaignManager>,
     pub tarpit_config: TarpitConfig,
     pub trusted_proxies: Vec<CidrRange>,
     pub rps_limit: usize,
@@ -1502,6 +1507,11 @@ pub struct SynapseProxy {
     signal_manager: Arc<SignalManager>,
     /// Phase 10: Progression manager for challenge escalation
     progression_manager: Arc<ProgressionManager>,
+    /// TASK-54: Campaign manager for correlation-based threat detection
+    /// (JA4 rotation, shared fingerprints, attack sequences). Fed by
+    /// request_filter on each request via register_fingerprints so the
+    /// background worker has data to correlate.
+    campaign_manager: Arc<CampaignManager>,
     /// Phase 11: Auth coverage aggregator for endpoint telemetry
     auth_coverage: Arc<AuthCoverageAggregator>,
     /// Adaptive rate limiting for autonomous health management (TASK-075)
@@ -1565,6 +1575,7 @@ impl SynapseProxy {
             trends_manager,
             signal_manager,
             progression_manager,
+            campaign_manager: Arc::new(CampaignManager::new()),
             tarpit_config: TarpitConfig::default(),
             trusted_proxies: Vec::new(),
             rps_limit,
@@ -1609,6 +1620,7 @@ impl SynapseProxy {
             trends_manager: deps.trends_manager,
             signal_manager: deps.signal_manager,
             progression_manager: deps.progression_manager,
+            campaign_manager: deps.campaign_manager,
             auth_coverage,
             adaptive_rate_limiter: None, // Adaptive RL requires multi-site manager
         }
@@ -1662,6 +1674,7 @@ impl SynapseProxy {
             trends_manager,
             signal_manager,
             progression_manager,
+            campaign_manager: Arc::new(CampaignManager::new()),
             tarpit_config,
             trusted_proxies: Vec::new(),
             rps_limit,
@@ -1732,6 +1745,7 @@ impl SynapseProxy {
             trends_manager: deps.trends_manager,
             signal_manager: deps.signal_manager,
             progression_manager: deps.progression_manager,
+            campaign_manager: deps.campaign_manager,
             auth_coverage,
             adaptive_rate_limiter: Some(adaptive_rate_limiter),
         }
@@ -1759,6 +1773,14 @@ impl SynapseProxy {
 
     pub fn shadow_mirror_manager(&self) -> Option<Arc<ShadowMirrorManager>> {
         self.shadow_mirror_manager.clone()
+    }
+
+    /// TASK-54: accessor for tests and observability code that need to
+    /// inspect or interact with the correlation CampaignManager (e.g.
+    /// asserting a fingerprint was registered, querying campaign state,
+    /// or reading the fingerprint index).
+    pub fn campaign_manager(&self) -> Arc<CampaignManager> {
+        Arc::clone(&self.campaign_manager)
     }
 
     /// Extract client IP from headers or connection, validating X-Forwarded-For against trusted proxies.
@@ -2778,6 +2800,22 @@ impl ProxyHttp for SynapseProxy {
         debug!("Combined fingerprint hash: {}", fingerprint.combined_hash);
 
         ctx.fingerprint = Some(fingerprint.clone());
+
+        // TASK-54: register the per-request fingerprint with CampaignManager
+        // so its correlation detectors (JA4 rotation, shared fingerprint,
+        // attack sequence, network proximity, etc.) have data to process.
+        // Before this wiring the manager's detectors were idle because the
+        // filter chain never called register_fingerprints. Detection runs in
+        // the background worker; auto-mitigation via AccessListManager blocks
+        // future requests, so this call does NOT affect the current request's
+        // blocking decision — it feeds the correlation layer for delayed
+        // mitigation of subsequent requests from the same actor.
+        if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
+            let ja4_raw = fingerprint.ja4.as_ref().map(|j| j.raw.clone());
+            let ja4h_raw = Some(fingerprint.ja4h.raw.clone());
+            self.campaign_manager
+                .register_fingerprints(ip_addr, ja4_raw, ja4h_raw);
+        }
 
         // Phase 9: Crawler Verification
         // Verify user-agent against known crawler signatures and DNS
@@ -5938,6 +5976,7 @@ fn main() {
             trends_manager: Arc::clone(&shared_trends_manager),
             signal_manager: Arc::clone(&shared_signal_manager),
             progression_manager: Arc::clone(&progression_manager),
+            campaign_manager: Arc::clone(&campaign_manager),
             tarpit_config: config.tarpit.clone(),
             trusted_proxies: trusted_proxies.clone(),
             rps_limit: config.rate_limit.rps,
@@ -5970,6 +6009,7 @@ fn main() {
             trends_manager: Arc::clone(&shared_trends_manager),
             signal_manager: Arc::clone(&shared_signal_manager),
             progression_manager: Arc::clone(&progression_manager),
+            campaign_manager: Arc::clone(&campaign_manager),
             tarpit_config: config.tarpit.clone(),
             trusted_proxies: trusted_proxies.clone(),
             rps_limit: config.rate_limit.rps,
