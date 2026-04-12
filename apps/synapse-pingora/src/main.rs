@@ -6151,6 +6151,42 @@ fn main() {
         );
     }
 
+    // TASK-60: Eagerly force the SYNAPSE Lazy static BEFORE Server::run_forever.
+    //
+    // create_synapse_engine panics if the embedded production_rules.json
+    // fails to load (TASK-45 deliberate fail-fast). Without this explicit
+    // force, the Lazy's first access could happen inside a Pingora worker
+    // thread handling a real request, meaning the panic would drop in-flight
+    // traffic mid-request rather than preventing the proxy from starting at
+    // all.
+    //
+    // Forcing at this point — after all other startup is complete but
+    // before run_forever() hands control to Pingora's accept loop — moves
+    // the panic to a known startup-time location where ops sees it loudly.
+    // The CI compat test guarantees the panic can't actually fire on a
+    // healthy binary; this force is defense-in-depth for binary corruption
+    // or future refactors that might introduce a runtime rule-load path.
+    //
+    // We intentionally call rule_count() instead of a bare SYNAPSE.read()
+    // so the log line below surfaces a visible signal that rules loaded.
+    let synapse_rule_count = DetectionEngine::rule_count();
+    info!(
+        "SYNAPSE engine eagerly initialized: {} rules loaded (TASK-60: panic-at-Lazy-init is now a startup-time failure mode, not mid-request)",
+        synapse_rule_count
+    );
+    if synapse_rule_count == 0 {
+        // Paranoia: if the engine loaded zero rules (empty rules file?
+        // silent parse failure?), refuse to start. A WAF with 0 rules is
+        // worse than no WAF because ops believe they have protection.
+        panic!(
+            "FATAL: SYNAPSE engine initialized with 0 rules. This should never \
+             happen in a released binary because test_production_rules_load_into_current_engine \
+             gates it in CI. If you see this panic, the embedded production_rules.json \
+             is corrupted, empty, or a runtime reload failed silently. Do not run a \
+             WAF proxy with zero rules."
+        );
+    }
+
     // Launch TUI if requested, otherwise run server normally
     if cli.tui {
         let metrics_for_tui = Arc::clone(&metrics_registry);
