@@ -1099,6 +1099,49 @@ impl DetectionEngine {
     }
 }
 
+/// Build a `TelemetryEvent::WafBlock` for the deferred post-DLP WAF pass.
+///
+/// Extracted as a pure free function so the event shape (rule_id prefix,
+/// severity mapping, site/path copying) can be unit-tested without spinning
+/// up a full `SynapseProxy` or a mock `TelemetryClient`. The caller is
+/// responsible for gating emission on `telemetry_client.is_enabled()` and
+/// dispatching via `tokio::spawn` to keep the hot path non-blocking.
+///
+/// Severity mapping mirrors the existing body-phase post-detection site:
+/// risk_score > 80 → "critical", > 50 → "high", otherwise "medium".
+/// When `matched_rules` is empty the rule_id falls back to `"DLP_DEFERRED"`
+/// so the event is still routable, though in practice a blocking deferred
+/// verdict always carries at least one rule id.
+fn build_deferred_waf_block_event(
+    request_id: String,
+    matched_rules: &[u32],
+    risk_score: u16,
+    client_ip: String,
+    site: String,
+    path: String,
+) -> synapse_pingora::telemetry::TelemetryEvent {
+    let rule_id = matched_rules
+        .first()
+        .map(|r| format!("DLP_DEFERRED:{}", r))
+        .unwrap_or_else(|| "DLP_DEFERRED".to_string());
+    let severity = if risk_score > 80 {
+        "critical"
+    } else if risk_score > 50 {
+        "high"
+    } else {
+        "medium"
+    }
+    .to_string();
+    synapse_pingora::telemetry::TelemetryEvent::WafBlock {
+        request_id: Some(request_id),
+        rule_id,
+        severity,
+        client_ip,
+        site,
+        path,
+    }
+}
+
 /// Categorize a rule ID into an attack category for actor history tracking.
 /// Rule IDs are generally numeric, with ranges indicating attack types.
 fn categorize_rule_id(rule_id: u32) -> String {
@@ -3864,6 +3907,31 @@ impl ProxyHttp for SynapseProxy {
                     ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
                 ));
 
+                // Fire-and-forget WafBlock telemetry so Hub sees deferred
+                // DLP blocks in the same stream as body-phase and bad-bot blocks.
+                // Never awaits — telemetry must not block the hot path.
+                if self.telemetry_client.is_enabled() {
+                    let site = ctx
+                        .matched_site
+                        .as_ref()
+                        .map(|s| s.hostname.clone())
+                        .unwrap_or_else(|| "_default".to_string());
+                    let event = build_deferred_waf_block_event(
+                        ctx.request_id.clone(),
+                        &deferred.matched_rules,
+                        deferred.risk_score,
+                        client_ip.to_string(),
+                        site,
+                        uri_owned.clone(),
+                    );
+                    let client = Arc::clone(&self.telemetry_client);
+                    tokio::spawn(async move {
+                        if let Err(e) = client.report(event).await {
+                            debug!("Failed to report deferred WAF telemetry: {}", e);
+                        }
+                    });
+                }
+
                 ctx.detection = Some(deferred);
 
                 return Err(pingora_core::Error::explain(
@@ -6495,5 +6563,95 @@ key_path: "/etc/keys/example.key"
         assert!(buf.is_empty());
         assert!(buf.capacity() >= 8192);
         return_buffer(buf);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Deferred WAF telemetry shape (TASK-32)
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_build_deferred_waf_block_event_populates_fields_from_inputs() {
+        use synapse_pingora::telemetry::TelemetryEvent;
+
+        let event = build_deferred_waf_block_event(
+            "req-abc123".to_string(),
+            &[9005, 9006],
+            85,
+            "203.0.113.7".to_string(),
+            "example.com".to_string(),
+            "/api/users".to_string(),
+        );
+
+        match event {
+            TelemetryEvent::WafBlock {
+                request_id,
+                rule_id,
+                severity,
+                client_ip,
+                site,
+                path,
+            } => {
+                assert_eq!(request_id, Some("req-abc123".to_string()));
+                // First matched rule is surfaced, prefixed so Hub can distinguish
+                // deferred DLP blocks from body-phase and bad-bot blocks.
+                assert_eq!(rule_id, "DLP_DEFERRED:9005");
+                assert_eq!(severity, "critical");
+                assert_eq!(client_ip, "203.0.113.7");
+                assert_eq!(site, "example.com");
+                assert_eq!(path, "/api/users");
+            }
+            other => panic!("expected WafBlock variant, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_build_deferred_waf_block_event_severity_tiers() {
+        use synapse_pingora::telemetry::TelemetryEvent;
+
+        // Helper to extract severity for a given risk score.
+        let sev_for = |score: u16| -> String {
+            match build_deferred_waf_block_event(
+                "r".to_string(),
+                &[1],
+                score,
+                "1.1.1.1".to_string(),
+                "s".to_string(),
+                "/p".to_string(),
+            ) {
+                TelemetryEvent::WafBlock { severity, .. } => severity,
+                _ => unreachable!(),
+            }
+        };
+
+        // Boundary cases: > 80 critical, > 50 high, otherwise medium.
+        assert_eq!(sev_for(100), "critical");
+        assert_eq!(sev_for(81), "critical");
+        assert_eq!(sev_for(80), "high"); // NOT critical — mapping is strict >
+        assert_eq!(sev_for(51), "high");
+        assert_eq!(sev_for(50), "medium"); // NOT high — mapping is strict >
+        assert_eq!(sev_for(0), "medium");
+    }
+
+    #[test]
+    fn test_build_deferred_waf_block_event_empty_rules_falls_back() {
+        use synapse_pingora::telemetry::TelemetryEvent;
+
+        // A blocking verdict without matched_rules is pathological but the
+        // helper must still produce a routable event instead of panicking
+        // on .first().unwrap().
+        let event = build_deferred_waf_block_event(
+            "req".to_string(),
+            &[],
+            60,
+            "1.1.1.1".to_string(),
+            "site".to_string(),
+            "/".to_string(),
+        );
+        match event {
+            TelemetryEvent::WafBlock { rule_id, .. } => {
+                assert_eq!(rule_id, "DLP_DEFERRED");
+            }
+            _ => unreachable!(),
+        }
     }
 }
