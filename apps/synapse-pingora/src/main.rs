@@ -802,7 +802,7 @@ static SYNAPSE: Lazy<Arc<parking_lot::RwLock<Synapse>>> =
 // Global Schema Learner for API anomaly detection
 // Learns request/response JSON schemas per endpoint and validates against them.
 // Thread-safe via DashMap, minimal contention for high-throughput scenarios.
-static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
+pub(crate) static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
     SchemaLearner::with_config(SchemaLearnerConfig {
         max_schemas: 5000,
         min_samples_for_validation: 10,
@@ -1319,6 +1319,19 @@ pub struct RequestContext {
     /// are zero matches — are still evaluated. If the scan never ran or
     /// failed, the deferred pass is skipped entirely.
     dlp_scan_completed: bool,
+    /// TASK-59: parsed JSON body stashed during `request_body_filter` for
+    /// deferred schema learning. Consumed at the end of
+    /// `upstream_request_filter` — ONLY after both the body-phase WAF
+    /// verdict AND the deferred WAF pass have decided not to block. This
+    /// closes the TASK-41 poisoning gap for rules that only block in the
+    /// deferred phase (e.g. `dlp_violation` rules 220001-220007): previously
+    /// `learn_from_request` was called at the end of `request_body_filter`,
+    /// which was too early — the deferred pass had not yet run, so attackers
+    /// could train the learner on payloads that were about to be blocked
+    /// by DLP-correlation rules. With consumption moved to
+    /// `upstream_request_filter` after the deferred pass, the learner only
+    /// trains on bodies that survive the full WAF decision chain.
+    pending_learn: Option<(String, serde_json::Value)>,
     /// Schema validation result from the body-phase schema validator. Attached
     /// to the WAF evaluation context so rules can match the `schema_violation`
     /// kind against the learned baseline.
@@ -2166,6 +2179,7 @@ impl ProxyHttp for SynapseProxy {
             request_dlp_types: String::new(),
             request_dlp_matches: Vec::new(),
             dlp_scan_completed: false,
+            pending_learn: None,
             schema_result: None,
             request_content_type: None,
             skip_request_dlp: false,
@@ -3734,12 +3748,14 @@ impl ProxyHttp for SynapseProxy {
                 .map(|ct| ct.contains("json"))
                 .unwrap_or(false);
 
-            // Stashed (template_path, json_body) for deferred learning. None
-            // when the body isn't JSON or parsing failed. Consumed after the
-            // body-phase WAF verdict so attackers cannot pollute the learned
-            // baseline with payloads that the WAF is about to reject.
-            let mut pending_learn: Option<(String, serde_json::Value)> = None;
-
+            // TASK-59: pending_learn now lives on RequestContext and is
+            // consumed at the end of `upstream_request_filter` after the
+            // deferred WAF pass decides. Stashing here and consuming there
+            // closes the TASK-41 poisoning gap for rules that block in the
+            // deferred phase (e.g. dlp_violation rules 220001-220007): the
+            // old code consumed at the end of this function, which was
+            // before the deferred pass ran, so attackers could train the
+            // learner on bodies that were about to be rejected by DLP.
             if is_json_content {
                 if let Ok(json_body) =
                     serde_json::from_slice::<serde_json::Value>(&ctx.request_body_buffer)
@@ -3793,10 +3809,11 @@ impl ProxyHttp for SynapseProxy {
                     // surface it via the `schema_violation` match kind.
                     ctx.schema_result = Some(validation_result);
 
-                    // Stash the parsed body for deferred learning. Moved
-                    // here so the WAF runs FIRST; the learn call below only
-                    // fires if the WAF did not block.
-                    pending_learn = Some((template_path, json_body));
+                    // Stash the parsed body on RequestContext for deferred
+                    // learning. Consumed at the end of upstream_request_filter
+                    // so it survives across both the body-phase WAF decision
+                    // AND the deferred WAF pass. See TASK-59.
+                    ctx.pending_learn = Some((template_path, json_body));
                 }
             }
 
@@ -3850,22 +3867,21 @@ impl ProxyHttp for SynapseProxy {
 
                     // Response already sent; upstream call will be short-circuited
                     // by the verdict check in upstream_request_filter.
-                    // NOTE: pending_learn is dropped here without being
-                    // consumed, which is exactly the behavior TASK-41
-                    // requires: attackers cannot pollute the learned schema
-                    // baseline with bodies the WAF is about to reject.
+                    // NOTE: ctx.pending_learn is left intact here. It is
+                    // only consumed in upstream_request_filter AFTER the
+                    // deferred WAF pass — since that pass never runs on this
+                    // block path (we early-return), the pending_learn state
+                    // is dropped when ctx is dropped, and the learner is
+                    // never trained on this body. TASK-59.
                     return Ok(());
                 }
             }
 
-            // ---- Deferred schema learning. We only reach this point if
-            //      the body-phase WAF did NOT block, so training on the
-            //      parsed JSON body is safe. This preserves pre-TASK-41
-            //      learning semantics for legitimate traffic while
-            //      excluding blocked payloads from the baseline. ----
-            if let Some((template_path, json_body)) = pending_learn {
-                SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
-            }
+            // TASK-59: schema learning is deferred to upstream_request_filter
+            // (after the deferred WAF pass completes) rather than fired here.
+            // Consuming pending_learn at this point would have poisoned the
+            // baseline for deferred-phase blocks (DLP-correlation rules) —
+            // see the TASK-59 task description for the full exploit chain.
 
             if self.dlp_scanner.is_enabled() {
                 // Take ownership of the buffer to send to the async task
@@ -4165,6 +4181,24 @@ impl ProxyHttp for SynapseProxy {
                     }
                 }
             }
+        }
+
+        // ===== TASK-59: Deferred schema learning =====
+        // If we reach this point, NEITHER the body-phase WAF (which early-returns
+        // from request_body_filter on block) NOR the deferred WAF pass (which
+        // returns Err above on block) decided to block this request. It is
+        // therefore safe to train the schema learner on the parsed body.
+        //
+        // This consume-and-train MUST NOT move earlier than this line, or the
+        // TASK-41/TASK-59 poisoning guards will break again. If you need to
+        // move it for lifetime or refactor reasons, place it in response_filter
+        // behind a status-code gate (< 300) instead — but do not move it back
+        // into request_body_filter or before the deferred-pass early-return.
+        //
+        // Option::take() leaves None on ctx so repeat calls to
+        // upstream_request_filter (e.g. on upstream retries) cannot retrain.
+        if let Some((template_path, json_body)) = ctx.pending_learn.take() {
+            SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
         }
 
         // ===== Header Manipulation (Request) =====
@@ -6996,85 +7030,19 @@ key_path: "/etc/keys/example.key"
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Schema learner poisoning prevention (TASK-41)
+    // TASK-41 schema learner poisoning prevention
+    //
+    // The original TASK-41 test (`test_schema_learner_not_poisoned_by_blocked_bodies`)
+    // was deleted under TASK-59. It was a "false-confidence" test that mirrored
+    // the `drop()` pattern with a local Option rather than driving the real
+    // filter chain — it passed even after the real code was shown to be broken
+    // for deferred-pass blocks (see TASK-59 for the exploit chain).
+    //
+    // The replacement lives in `tests/filter_chain_integration.rs` as
+    // `test_schema_learner_not_poisoned_by_deferred_dlp_block`. That test
+    // drives the real filter chain against a deferred DLP rule and asserts
+    // the real SCHEMA_LEARNER state. See TASK-59 for rationale.
     // ────────────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn test_schema_learner_not_poisoned_by_blocked_bodies() {
-        // TASK-41 correctness guarantee: in request_body_filter, parsing a
-        // JSON body now stashes (template_path, json_body) into a local
-        // `pending_learn: Option<(String, Value)>` and calls the schema
-        // validator immediately (so schema_violation rules fire in the
-        // body-phase WAF pass). The body-phase WAF runs next. On block,
-        // the filter calls `return Ok(())` — pending_learn is dropped
-        // without consumption, so the blocked body is never added to the
-        // learner's baseline. On allow, the post-WAF code runs
-        // `if let Some((t, b)) = pending_learn { SCHEMA_LEARNER.learn_from_request(&t, &b) }`
-        // which trains the learner.
-        //
-        // This test mirrors the exact pattern above against the real
-        // global SCHEMA_LEARNER. It does NOT drive request_body_filter
-        // directly (which would require a full SynapseProxy harness) —
-        // instead it establishes that the two code paths used by
-        // request_body_filter produce the right learner state, and
-        // relies on code review to confirm that request_body_filter uses
-        // these paths exactly. The assertions use unique template paths
-        // so parallel test execution cannot pollute the global learner.
-        use serde_json::json;
-
-        let template_blocked = "/api/task41/blocked/unique-marker-a1b2c3";
-        let template_allowed = "/api/task41/allowed/unique-marker-a1b2c3";
-
-        // Precondition: neither template exists in the learner yet.
-        // (If a parallel test starts using these paths, use fresh markers.)
-        assert!(
-            SCHEMA_LEARNER.get_schema(template_blocked).is_none(),
-            "precondition: blocked template must not already be in the learner"
-        );
-        assert!(
-            SCHEMA_LEARNER.get_schema(template_allowed).is_none(),
-            "precondition: allowed template must not already be in the learner"
-        );
-
-        // --- Blocked-body control flow ---
-        // Mirrors the `if result.blocked { ... return Ok(()) }` branch:
-        // build pending_learn, then drop it without consuming. This is
-        // structurally identical to what `return Ok(())` does to the
-        // stack-local `pending_learn` in request_body_filter.
-        let blocked_body = json!({
-            "attack": "'; DROP TABLE users; --",
-            "sqli_marker": "task41-blocked",
-        });
-        let pending_learn_blocked: Option<(String, serde_json::Value)> =
-            Some((template_blocked.to_string(), blocked_body));
-        drop(pending_learn_blocked); // ← the "return Ok(())" effect
-
-        // --- Allowed-body control flow ---
-        // Mirrors the post-WAF `if let Some(...)` in request_body_filter:
-        // build pending_learn, then consume it to train the learner.
-        let benign_body = json!({
-            "name": "alice",
-            "email": "alice@example.com",
-        });
-        let pending_learn_allowed: Option<(String, serde_json::Value)> =
-            Some((template_allowed.to_string(), benign_body));
-        if let Some((template_path, json_body)) = pending_learn_allowed {
-            SCHEMA_LEARNER.learn_from_request(&template_path, &json_body);
-        }
-
-        // --- Assertions ---
-        // AC#4: blocked body must be absent from the baseline.
-        assert!(
-            SCHEMA_LEARNER.get_schema(template_blocked).is_none(),
-            "AC#4: blocked SQLi body must NOT appear in the learned schema baseline"
-        );
-
-        // AC#5 (regression guard): benign allowed body must be present.
-        assert!(
-            SCHEMA_LEARNER.get_schema(template_allowed).is_some(),
-            "AC#5: benign allowed body must appear in the learned schema baseline"
-        );
-    }
 
     // ────────────────────────────────────────────────────────────────────────
     // Unified WAF block response (TASK-34)

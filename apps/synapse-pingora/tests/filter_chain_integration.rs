@@ -476,3 +476,194 @@ async fn test_deferred_dlp_block_returns_403_with_canonical_envelope() {
     synapse_main::DetectionEngine::reload_rules(production_rules.as_bytes())
         .expect("restore production rules after TASK-40 test");
 }
+
+/// TASK-59 correctness verification: the schema learner must not train on
+/// bodies that get blocked by the DEFERRED WAF pass, not just the body-phase
+/// pass. The original TASK-41 fix was incomplete — it consumed `pending_learn`
+/// at the end of `request_body_filter`, which runs BEFORE the deferred WAF
+/// pass in `upstream_request_filter`. Any rule that blocks via
+/// `dlp_violation` (rules 220001-220007 and future deferred rules) was
+/// racing the learner: the deferred block would fire AFTER the learner had
+/// already trained on the attacker's schema.
+///
+/// The fix (TASK-59): move `pending_learn` from a stack-local in
+/// request_body_filter to a field on RequestContext, and consume it at the
+/// end of `upstream_request_filter` AFTER the deferred pass completes. This
+/// way a deferred block leaves `pending_learn` unconsumed, and the learner
+/// stays clean.
+///
+/// This test replaces the old main.rs unit test
+/// `test_schema_learner_not_poisoned_by_blocked_bodies` which was
+/// "false-confidence" — it mirrored the `drop()` pattern with a local Option
+/// rather than driving the real filter chain, so it kept passing even after
+/// the TASK-59 bug was present.
+///
+/// The test uses the TASK-40 UnixStream harness, injects a deferred DLP
+/// rule via `reload_rules`, POSTs a body that trips the deferred rule,
+/// and asserts the real SCHEMA_LEARNER state.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial]
+async fn test_schema_learner_not_poisoned_by_deferred_dlp_block() {
+    // --- Setup: inject a deferred-blocking DLP rule ---
+    // This rule fires on any DLP match, which the test body will trip via
+    // an SSN. The rule is tagged deferred at load time because it
+    // references the dlp_violation match kind, so it does NOT fire during
+    // the body-phase WAF pass — it fires in the deferred pass inside
+    // upstream_request_filter. This is the exact code path TASK-59 fixes.
+    let test_rule = r#"[{
+        "id": 9998,
+        "description": "TASK-59: block any DLP hit for poisoning-guard verification",
+        "risk": 85.0,
+        "blocking": true,
+        "matches": [{"type": "dlp_violation", "match": 1}]
+    }]"#;
+    synapse_main::DetectionEngine::reload_rules(test_rule.as_bytes())
+        .expect("test rules must load");
+
+    // Unique template path so this test cannot pollute or be polluted by
+    // any other test's learner state. If a parallel test starts using the
+    // same path, change the marker.
+    //
+    // `normalize_path_to_template` is the internal helper that
+    // request_body_filter uses to derive the learner key. Numeric segments
+    // are replaced with `{id}`; our path has none so it stays literal.
+    let template_path = "/api/task59-poisoning-probe";
+
+    // Precondition: the learner has no schema for this template.
+    assert!(
+        synapse_main::SCHEMA_LEARNER.get_schema(template_path).is_none(),
+        "precondition: template must not already be in learner (unique marker in path)"
+    );
+
+    // --- Drive a request that trips the deferred rule ---
+    let proxy = build_proxy(10_000);
+
+    let body = r#"{"ssn":"123-45-6789","marker":"task59"}"#;
+    let request = format!(
+        "POST {} HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        template_path,
+        body.len(),
+        body
+    );
+
+    let (mut session, _client) = make_session(&request).await;
+    let mut ctx = proxy.new_ctx();
+
+    proxy
+        .early_request_filter(&mut session, &mut ctx)
+        .await
+        .expect("early_request_filter");
+    let handled = proxy
+        .request_filter(&mut session, &mut ctx)
+        .await
+        .expect("request_filter");
+    assert!(!handled, "request should reach body filter");
+
+    // Stream the body. This is where the old code would have called
+    // learn_from_request at end of request_body_filter, poisoning the
+    // baseline before the deferred pass had a chance to block. With the
+    // TASK-59 fix, pending_learn now lives on ctx and is NOT consumed here.
+    loop {
+        let mut chunk = session
+            .read_request_body()
+            .await
+            .expect("read request body");
+        let end_of_stream = chunk.is_none();
+        proxy
+            .request_body_filter(&mut session, &mut chunk, end_of_stream, &mut ctx)
+            .await
+            .expect("request_body_filter");
+        if end_of_stream {
+            break;
+        }
+    }
+
+    // Drive upstream_request_filter. This is where the deferred pass runs,
+    // the DLP rule fires, and we expect Err(HTTPStatus(403)) returned.
+    // Critically, the TASK-59 consume-and-train at the end of this function
+    // must NOT fire because we return Err before reaching it.
+    let mut upstream_request = session.req_header().clone();
+    let result = proxy
+        .upstream_request_filter(&mut session, &mut upstream_request, &mut ctx)
+        .await;
+    assert!(
+        result.is_err(),
+        "deferred DLP block must return Err from upstream_request_filter; got {:?}",
+        result.as_ref().map(|_| "Ok")
+    );
+
+    // --- TASK-59 core assertion: learner must be clean ---
+    // If TASK-59 is broken (consume at wrong place), this assertion fails.
+    // If TASK-59 is correct (consume gated on deferred pass not blocking),
+    // this assertion passes because the Err return above prevented the
+    // consume from firing.
+    assert!(
+        synapse_main::SCHEMA_LEARNER.get_schema(template_path).is_none(),
+        "TASK-59: learner must NOT have trained on a deferred-blocked body. \
+         If this assertion fails, a deferred block is still poisoning the baseline. \
+         See TASK-59 for the exploit chain and fix."
+    );
+
+    // --- Regression guard: a benign body on the same template DOES train ---
+    // This proves the fix doesn't break legitimate learning. We use a
+    // separate template path (different marker) so the benign body doesn't
+    // collide with the previous assertion.
+    let benign_template = "/api/task59-benign-probe";
+    assert!(
+        synapse_main::SCHEMA_LEARNER.get_schema(benign_template).is_none(),
+        "precondition: benign template must not already be in learner"
+    );
+
+    // Restore the production ruleset so the benign request doesn't trip
+    // the injected deferred rule (and also so subsequent tests see the
+    // correct baseline).
+    let production_rules = include_str!("../src/production_rules.json");
+    synapse_main::DetectionEngine::reload_rules(production_rules.as_bytes())
+        .expect("restore production rules mid-test");
+
+    let benign_body = r#"{"name":"alice","email":"alice@example.com"}"#;
+    let benign_request = format!(
+        "POST {} HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        benign_template,
+        benign_body.len(),
+        benign_body
+    );
+    let (mut session2, _client2) = make_session(&benign_request).await;
+    let mut ctx2 = proxy.new_ctx();
+
+    proxy
+        .early_request_filter(&mut session2, &mut ctx2)
+        .await
+        .expect("early_request_filter benign");
+    let _ = proxy
+        .request_filter(&mut session2, &mut ctx2)
+        .await
+        .expect("request_filter benign");
+
+    loop {
+        let mut chunk = session2
+            .read_request_body()
+            .await
+            .expect("read benign request body");
+        let end_of_stream = chunk.is_none();
+        proxy
+            .request_body_filter(&mut session2, &mut chunk, end_of_stream, &mut ctx2)
+            .await
+            .expect("request_body_filter benign");
+        if end_of_stream {
+            break;
+        }
+    }
+
+    let mut upstream_request2 = session2.req_header().clone();
+    proxy
+        .upstream_request_filter(&mut session2, &mut upstream_request2, &mut ctx2)
+        .await
+        .expect("upstream_request_filter should Ok for benign body");
+
+    assert!(
+        synapse_main::SCHEMA_LEARNER.get_schema(benign_template).is_some(),
+        "regression guard: benign non-blocked body MUST train the learner \
+         (otherwise the TASK-59 fix is over-aggressive)"
+    );
+}
