@@ -505,6 +505,7 @@ impl ApiHandler {
             body,
             client_ip,
             is_static: false,
+            ..Default::default()
         };
 
         // Run detection
@@ -547,6 +548,7 @@ impl ApiHandler {
             body,
             client_ip,
             is_static: false,
+            ..Default::default()
         };
 
         let verdict = engine.read().analyze_with_trace(&request, trace);

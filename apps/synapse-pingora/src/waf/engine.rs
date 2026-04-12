@@ -1,7 +1,7 @@
 //! Core WAF rule engine implementation.
 
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -368,6 +368,11 @@ static JSON_PROTO_POLLUTION: Lazy<Regex> = Lazy::new(|| {
         .expect("json proto pollution regex")
 });
 
+/// Match kinds whose values are not available during the body-phase WAF pass.
+/// Rules containing any of these are evaluated in a separate deferred pass
+/// after the DLP scanner completes.
+const DEFERRED_MATCH_KINDS: &[&str] = &["dlp_violation"];
+
 /// Compiled rules and indices for fast swapping (labs-tui optimization).
 pub struct CompiledRules {
     pub rules: Vec<WafRule>,
@@ -375,6 +380,10 @@ pub struct CompiledRules {
     pub rule_index: RuleIndex,
     pub regex_cache: HashMap<String, Regex>,
     pub word_regex_cache: HashMap<String, Regex>,
+    /// Indices of rules that must be evaluated in the deferred pass
+    /// (because they reference a match kind with data unavailable during
+    /// the body-phase pass, e.g. `dlp_violation`).
+    pub deferred_rule_indices: Vec<usize>,
 }
 
 /// Main WAF rule engine.
@@ -390,6 +399,13 @@ pub struct Engine {
     max_risk: RwLock<f64>,
     /// Whether to apply repeat offender multipliers.
     enable_repeat_multipliers: RwLock<bool>,
+    /// Sorted indices of rules handled by the deferred post-DLP pass.
+    /// Used to skip them during body-phase evaluation and to scope the
+    /// deferred pass.
+    deferred_rule_indices: Vec<usize>,
+    /// Rule ids mirroring `deferred_rule_indices`, for O(1) skip checks
+    /// during body-phase iteration.
+    deferred_rule_id_set: HashSet<u32>,
 }
 
 impl Engine {
@@ -405,6 +421,8 @@ impl Engine {
             candidate_cache: RwLock::new(CandidateCache::new(2048)),
             max_risk: RwLock::new(100.0),
             enable_repeat_multipliers: RwLock::new(true),
+            deferred_rule_indices: Vec::new(),
+            deferred_rule_id_set: HashSet::new(),
         }
     }
 
@@ -484,12 +502,15 @@ impl Engine {
             word_regex_cache.insert(word, compiled);
         }
 
+        let deferred_rule_indices = compute_deferred_rule_indices(&rules);
+
         Ok(CompiledRules {
             rules,
             rule_id_to_index,
             rule_index,
             regex_cache,
             word_regex_cache,
+            deferred_rule_indices,
         })
     }
 
@@ -500,6 +521,12 @@ impl Engine {
         self.rule_index = compiled.rule_index;
         self.regex_cache = compiled.regex_cache;
         self.word_regex_cache = compiled.word_regex_cache;
+        self.deferred_rule_indices = compiled.deferred_rule_indices;
+        self.deferred_rule_id_set = self
+            .deferred_rule_indices
+            .iter()
+            .map(|&i| self.rules[i].id)
+            .collect();
         self.candidate_cache.write().clear();
     }
 
@@ -518,6 +545,12 @@ impl Engine {
             .map(|(idx, rule)| (rule.id, idx))
             .collect();
         self.rule_index = build_rule_index(&self.rules);
+        self.deferred_rule_indices = compute_deferred_rule_indices(&self.rules);
+        self.deferred_rule_id_set = self
+            .deferred_rule_indices
+            .iter()
+            .map(|&i| self.rules[i].id)
+            .collect();
         self.candidate_cache.write().clear();
         self.regex_cache.clear();
         self.word_regex_cache.clear();
@@ -620,6 +653,88 @@ impl Engine {
         self.analyze_with_timeout(req, DEFAULT_EVAL_TIMEOUT)
     }
 
+    /// Evaluate only the rules tagged as deferred (currently: rules that
+    /// reference `dlp_violation`). The caller is expected to populate
+    /// `req.dlp_matches` before calling this.
+    ///
+    /// Rules evaluated here are excluded from the normal `analyze`/`analyze_with_timeout`
+    /// candidate set, so there is no risk of double-matching.
+    pub fn analyze_deferred_with_timeout(&self, req: &Request, timeout: Duration) -> Verdict {
+        if self.deferred_rule_indices.is_empty() {
+            return Verdict::default();
+        }
+        let effective_timeout = timeout.min(MAX_EVAL_TIMEOUT);
+        let deadline = Instant::now() + effective_timeout;
+        let ctx = EvalContext::from_request_with_deadline(req, deadline);
+        let mut trace_state = TraceState::disabled();
+        self.evaluate_subset(&ctx, &self.deferred_rule_indices, &mut trace_state)
+    }
+
+    fn evaluate_subset(
+        &self,
+        ctx: &EvalContext,
+        rule_indices: &[usize],
+        trace: &mut TraceState,
+    ) -> Verdict {
+        let mut matched_rules = Vec::new();
+        let mut total_risk = 0.0;
+        let mut should_block = false;
+        let mut timed_out = false;
+        let mut rules_evaluated: u32 = 0;
+
+        let max_risk = *self.max_risk.read();
+
+        for &rule_idx in rule_indices.iter() {
+            if ctx.is_deadline_exceeded() {
+                timed_out = true;
+                break;
+            }
+            let rule = &self.rules[rule_idx];
+            rules_evaluated += 1;
+            let matched = self.eval_rule(rule, ctx, trace);
+            if matched {
+                matched_rules.push(rule.id);
+                total_risk += rule.effective_risk();
+                if rule.blocking.unwrap_or(false) {
+                    should_block = true;
+                }
+            }
+        }
+
+        let risk_score = total_risk.min(max_risk).max(0.0) as u16;
+
+        Verdict {
+            action: if should_block {
+                Action::Block
+            } else {
+                Action::Allow
+            },
+            risk_score,
+            matched_rules,
+            entity_risk: 0.0,
+            entity_blocked: false,
+            block_reason: if should_block {
+                Some("Rule-based block (deferred)".to_string())
+            } else if timed_out {
+                Some("Deferred evaluation timeout (partial result)".to_string())
+            } else {
+                None
+            },
+            risk_contributions: Vec::new(),
+            endpoint_template: None,
+            endpoint_risk: None,
+            anomaly_score: None,
+            adjusted_threshold: None,
+            anomaly_signals: Vec::new(),
+            timed_out,
+            rules_evaluated: if timed_out {
+                Some(rules_evaluated)
+            } else {
+                None
+            },
+        }
+    }
+
     fn evaluate_with_trace(&self, ctx: &EvalContext, trace: &mut TraceState) -> Verdict {
         let mut matched_rules = Vec::new();
         let mut total_risk = 0.0;
@@ -685,6 +800,11 @@ impl Engine {
             }
 
             let rule = &self.rules[rule_idx];
+            // Skip rules handled by the deferred post-DLP pass so we don't
+            // evaluate them twice (or match them here with an empty dlp context).
+            if self.deferred_rule_id_set.contains(&rule.id) {
+                continue;
+            }
             rules_evaluated += 1;
 
             if trace.is_enabled() {
@@ -872,6 +992,10 @@ impl Engine {
                 .and_then(|m| m.as_bool())
                 .map(|target| ctx.is_static == target)
                 .unwrap_or(false),
+            "ja4" => self.eval_ja4(condition, ctx, trace, rule_id, depth),
+            "ja4h" => self.eval_ja4h(condition, ctx, trace, rule_id, depth),
+            "dlp_violation" => eval_dlp_violation(condition, ctx),
+            "schema_violation" => eval_schema_violation(condition, ctx),
             "compare" => eval_compare(condition, value),
             "count_odd" => eval_count_odd(condition.match_value.as_ref(), value),
             "sql_analyzer" => self.eval_sql_analyzer(condition, value, ctx, trace, rule_id, depth),
@@ -1037,6 +1161,64 @@ impl Engine {
         }
         if let Some(child) = match_value.as_cond() {
             return self.eval_condition(child, ctx, Some(uri), trace, rule_id, depth + 1);
+        }
+        false
+    }
+
+    /// JA4 TLS fingerprint match. Returns false if JA4 is not available
+    /// (e.g. non-TLS connection or upstream did not forward the fingerprint).
+    /// A bare string match is treated as a substring check on the raw
+    /// fingerprint. A nested condition receives the raw fingerprint as its value.
+    fn eval_ja4(
+        &self,
+        condition: &MatchCondition,
+        ctx: &EvalContext,
+        trace: &mut TraceState,
+        rule_id: u32,
+        depth: u32,
+    ) -> bool {
+        let Some(fp) = ctx.fingerprint else {
+            return false;
+        };
+        let Some(ja4) = fp.ja4.as_ref() else {
+            return false;
+        };
+        let raw = ja4.raw.as_str();
+        let Some(match_value) = condition.match_value.as_ref() else {
+            return false;
+        };
+        if let Some(s) = match_value.as_str() {
+            return raw.contains(s);
+        }
+        if let Some(child) = match_value.as_cond() {
+            return self.eval_condition(child, ctx, Some(raw), trace, rule_id, depth + 1);
+        }
+        false
+    }
+
+    /// JA4H HTTP fingerprint match. JA4H is always computed for HTTP requests,
+    /// so a bare string match is a substring check on the raw fingerprint
+    /// and a nested condition receives the raw fingerprint as its value.
+    fn eval_ja4h(
+        &self,
+        condition: &MatchCondition,
+        ctx: &EvalContext,
+        trace: &mut TraceState,
+        rule_id: u32,
+        depth: u32,
+    ) -> bool {
+        let Some(fp) = ctx.fingerprint else {
+            return false;
+        };
+        let raw = fp.ja4h.raw.as_str();
+        let Some(match_value) = condition.match_value.as_ref() else {
+            return false;
+        };
+        if let Some(s) = match_value.as_str() {
+            return raw.contains(s);
+        }
+        if let Some(child) = match_value.as_cond() {
+            return self.eval_condition(child, ctx, Some(raw), trace, rule_id, depth + 1);
         }
         false
     }
@@ -2260,6 +2442,124 @@ fn matches_selector(engine: &Engine, selector: &MatchCondition, candidate: &str)
     }
 }
 
+/// Numeric comparison helper shared by `dlp_violation` and `schema_violation`
+/// match kinds. `op` defaults to `"gte"` when omitted, matching the most
+/// common threshold-style rule.
+fn compare_threshold(value: f64, op: Option<&str>, target: f64) -> bool {
+    match op.unwrap_or("gte") {
+        "gte" => value >= target,
+        "gt" => value > target,
+        "eq" => (value - target).abs() < f64::EPSILON,
+        "neq" => (value - target).abs() >= f64::EPSILON,
+        "lte" => value <= target,
+        "lt" => value < target,
+        _ => false,
+    }
+}
+
+/// `dlp_violation` match kind. Counts DLP matches in `ctx.dlp_matches`,
+/// optionally restricted to a specific data type via `field`, and compares
+/// the count against `match` using `op` (default `gte`). Returns false
+/// when no DLP scan results are available (i.e. during the body-phase pass).
+///
+/// Rule shapes supported:
+///
+/// ```json
+/// { "type": "dlp_violation" }                             // ≥ 1 match of any type
+/// { "type": "dlp_violation", "op": "gte", "match": 3 }    // ≥ 3 total matches
+/// { "type": "dlp_violation", "field": "ssn", "match": 1 } // ≥ 1 SSN match
+/// ```
+fn eval_dlp_violation(condition: &MatchCondition, ctx: &EvalContext) -> bool {
+    if ctx.dlp_matches.is_empty() {
+        return false;
+    }
+    let count = match condition.field.as_deref() {
+        Some(filter) => ctx
+            .dlp_matches
+            .iter()
+            .filter(|m| m.data_type.as_str() == filter)
+            .count() as f64,
+        None => ctx.dlp_matches.len() as f64,
+    };
+    if count <= 0.0 {
+        return false;
+    }
+    match condition.match_value.as_ref().and_then(|m| m.as_num()) {
+        Some(target) => compare_threshold(count, condition.op.as_deref(), target),
+        None => true,
+    }
+}
+
+/// `schema_violation` match kind. Matches when the learned-schema validator
+/// produced violations, optionally thresholded on `total_score`. Returns false
+/// when no validation result is attached or the request validated cleanly.
+///
+/// Rule shapes supported:
+///
+/// ```json
+/// { "type": "schema_violation" }                                 // any violation
+/// { "type": "schema_violation", "op": "gte", "match": 15 }       // score ≥ 15
+/// ```
+fn eval_schema_violation(condition: &MatchCondition, ctx: &EvalContext) -> bool {
+    let Some(result) = ctx.schema_result else {
+        return false;
+    };
+    if result.is_valid() {
+        return false;
+    }
+    let score = result.total_score as f64;
+    match condition.match_value.as_ref().and_then(|m| m.as_num()) {
+        Some(target) => compare_threshold(score, condition.op.as_deref(), target),
+        None => true,
+    }
+}
+
+/// Returns true if any condition in the subtree is a match kind whose value
+/// only becomes available after the body-phase WAF pass (see `DEFERRED_MATCH_KINDS`).
+fn condition_is_deferred(condition: &MatchCondition) -> bool {
+    if DEFERRED_MATCH_KINDS.contains(&condition.kind.as_str()) {
+        return true;
+    }
+    if let Some(mv) = condition.match_value.as_ref() {
+        if let Some(child) = mv.as_cond() {
+            if condition_is_deferred(child) {
+                return true;
+            }
+        } else if let Some(arr) = mv.as_arr() {
+            for item in arr {
+                if let Some(child) = item.as_cond() {
+                    if condition_is_deferred(child) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    if let Some(selector) = condition.selector.as_ref() {
+        if condition_is_deferred(selector) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Compute the sorted list of rule indices that reference any deferred match
+/// kind. Called at rule load time so the hot path can short-circuit on a
+/// small `HashSet<u32>` lookup per rule.
+fn compute_deferred_rule_indices(rules: &[WafRule]) -> Vec<usize> {
+    let mut out = Vec::new();
+    for (idx, rule) in rules.iter().enumerate() {
+        if rule
+            .matches
+            .iter()
+            .any(|cond| condition_is_deferred(cond))
+        {
+            out.push(idx);
+        }
+    }
+    out
+}
+
 fn collect_regex_patterns(condition: &MatchCondition, out: &mut Vec<String>) {
     if condition.kind == "regex" {
         if let Some(MatchValue::Str(s)) = condition.match_value.as_ref() {
@@ -2307,12 +2607,272 @@ fn collect_word_values(condition: &MatchCondition, out: &mut Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dlp::{DlpMatch, PatternSeverity, SensitiveDataType};
+    use crate::fingerprint::{ClientFingerprint, Ja4Fingerprint, Ja4Protocol, Ja4SniType, Ja4hFingerprint};
+    use crate::profiler::{FieldType, SchemaViolation, ValidationResult, ViolationSeverity, ViolationType};
     use crate::waf::types::Header;
+
+    fn sample_fingerprint(ja4_raw: &str, ja4h_raw: &str) -> ClientFingerprint {
+        ClientFingerprint {
+            ja4: Some(Ja4Fingerprint {
+                raw: ja4_raw.to_string(),
+                protocol: Ja4Protocol::TCP,
+                tls_version: 13,
+                sni_type: Ja4SniType::Domain,
+                cipher_count: 15,
+                ext_count: 16,
+                alpn: "h2".to_string(),
+                cipher_hash: "aaaaaaaaaaaa".to_string(),
+                ext_hash: "bbbbbbbbbbbb".to_string(),
+            }),
+            ja4h: Ja4hFingerprint {
+                raw: ja4h_raw.to_string(),
+                method: "ge".to_string(),
+                http_version: 11,
+                has_cookie: false,
+                has_referer: false,
+                accept_lang: "en".to_string(),
+                header_hash: "cccccccccccc".to_string(),
+                cookie_hash: "000000000000".to_string(),
+            },
+            combined_hash: "deadbeefcafef00d".to_string(),
+        }
+    }
+
+    fn dlp_match(data_type: SensitiveDataType) -> DlpMatch {
+        DlpMatch {
+            pattern_name: "test",
+            data_type,
+            severity: PatternSeverity::High,
+            masked_value: "***".to_string(),
+            start: 0,
+            end: 3,
+            stream_offset: None,
+        }
+    }
 
     #[test]
     fn test_empty_engine() {
         let engine = Engine::empty();
         assert_eq!(engine.rule_count(), 0);
+    }
+
+    #[test]
+    fn test_ja4_substring_match_fires() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9001,
+            "description": "Block python-requests TLS stack",
+            "risk": 50.0,
+            "blocking": true,
+            "matches": [{"type": "ja4", "match": "t13d1516"}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let fp = sample_fingerprint("t13d1516h2_8daaf6152771_e5627efa2ab1", "ge11nn00_abcdef012345_000000000000");
+        let verdict = engine.analyze(&Request {
+            method: "GET",
+            path: "/",
+            client_ip: "1.2.3.4",
+            fingerprint: Some(&fp),
+            ..Default::default()
+        });
+
+        assert_eq!(verdict.action, Action::Block);
+        assert!(verdict.matched_rules.contains(&9001));
+    }
+
+    #[test]
+    fn test_ja4_absent_does_not_match() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9002,
+            "description": "Block any TLS",
+            "risk": 10.0,
+            "blocking": true,
+            "matches": [{"type": "ja4", "match": "t13"}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // No fingerprint attached → rule must not fire.
+        let verdict = engine.analyze(&Request {
+            method: "GET",
+            path: "/",
+            client_ip: "1.2.3.4",
+            ..Default::default()
+        });
+
+        assert_eq!(verdict.action, Action::Allow);
+        assert!(verdict.matched_rules.is_empty());
+    }
+
+    #[test]
+    fn test_ja4h_substring_match_fires() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9003,
+            "description": "Detect cookieless GET",
+            "risk": 5.0,
+            "blocking": false,
+            "matches": [{"type": "ja4h", "match": "ge11nn"}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let fp = sample_fingerprint("t13d1516h2_8daaf6152771_e5627efa2ab1", "ge11nn00_abcdef012345_000000000000");
+        let verdict = engine.analyze(&Request {
+            method: "GET",
+            path: "/",
+            client_ip: "1.2.3.4",
+            fingerprint: Some(&fp),
+            ..Default::default()
+        });
+
+        assert!(verdict.matched_rules.contains(&9003));
+    }
+
+    #[test]
+    fn test_schema_violation_threshold() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9004,
+            "description": "Block on severe schema deviation",
+            "risk": 40.0,
+            "blocking": true,
+            "matches": [{"type": "schema_violation", "op": "gte", "match": 10}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let mut result = ValidationResult::new();
+        result.add(SchemaViolation::unexpected_field("/foo"));
+        result.add(SchemaViolation::type_mismatch(
+            "/bar",
+            FieldType::String,
+            FieldType::Number,
+        ));
+        // Ensure we're above the 10-score threshold.
+        assert!(result.total_score >= 10);
+
+        let verdict = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            schema_result: Some(&result),
+            ..Default::default()
+        });
+        assert_eq!(verdict.action, Action::Block);
+        assert!(verdict.matched_rules.contains(&9004));
+
+        // Same rule without a schema result attached should not fire.
+        let verdict_empty = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            ..Default::default()
+        });
+        assert_eq!(verdict_empty.action, Action::Allow);
+    }
+
+    #[test]
+    fn test_dlp_violation_is_deferred_not_body_phase() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9005,
+            "description": "Block >= 2 DLP hits",
+            "risk": 60.0,
+            "blocking": true,
+            "matches": [{"type": "dlp_violation", "op": "gte", "match": 2}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // The rule must be tagged as deferred at load time.
+        assert_eq!(engine.deferred_rule_indices.len(), 1);
+        assert!(engine.deferred_rule_id_set.contains(&9005));
+
+        // Body-phase `analyze` must skip the deferred rule even if DLP matches
+        // were (erroneously) available — the index set blocks it.
+        let matches = vec![dlp_match(SensitiveDataType::Ssn), dlp_match(SensitiveDataType::Ssn)];
+        let req = Request {
+            method: "POST",
+            path: "/api",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&matches),
+            ..Default::default()
+        };
+        let verdict = engine.analyze(&req);
+        assert_eq!(verdict.action, Action::Allow);
+        assert!(verdict.matched_rules.is_empty());
+
+        // The deferred pass must see the same rule and fire.
+        let deferred = engine.analyze_deferred_with_timeout(&req, DEFAULT_EVAL_TIMEOUT);
+        assert_eq!(deferred.action, Action::Block);
+        assert!(deferred.matched_rules.contains(&9005));
+    }
+
+    #[test]
+    fn test_dlp_violation_type_filter() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 9006,
+            "description": "Block on any SSN leak",
+            "risk": 80.0,
+            "blocking": true,
+            "matches": [{"type": "dlp_violation", "field": "ssn", "op": "gte", "match": 1}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // Credit card match should not count against an SSN filter.
+        let only_cc = vec![dlp_match(SensitiveDataType::CreditCard)];
+        let req_cc = Request {
+            method: "POST",
+            path: "/pay",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&only_cc),
+            ..Default::default()
+        };
+        let verdict_cc = engine.analyze_deferred_with_timeout(&req_cc, DEFAULT_EVAL_TIMEOUT);
+        assert_eq!(verdict_cc.action, Action::Allow);
+
+        // SSN match triggers the rule.
+        let ssn = vec![dlp_match(SensitiveDataType::Ssn)];
+        let req_ssn = Request {
+            method: "POST",
+            path: "/pay",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&ssn),
+            ..Default::default()
+        };
+        let verdict_ssn = engine.analyze_deferred_with_timeout(&req_ssn, DEFAULT_EVAL_TIMEOUT);
+        assert_eq!(verdict_ssn.action, Action::Block);
+        assert!(verdict_ssn.matched_rules.contains(&9006));
+    }
+
+    #[test]
+    fn test_deferred_pass_empty_without_deferred_rules() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 1,
+            "description": "Non-deferred rule",
+            "risk": 10.0,
+            "blocking": true,
+            "matches": [{"type": "uri", "match": {"type": "contains", "match": "evil"}}]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        assert!(engine.deferred_rule_indices.is_empty());
+
+        let verdict = engine.analyze_deferred_with_timeout(
+            &Request::default(),
+            DEFAULT_EVAL_TIMEOUT,
+        );
+        assert_eq!(verdict.action, Action::Allow);
+        assert!(verdict.matched_rules.is_empty());
+    }
+
+    // Silence unused warnings for ViolationSeverity / ViolationType in tests.
+    #[allow(dead_code)]
+    fn _keep_enums_used() {
+        let _ = ViolationSeverity::High;
+        let _ = ViolationType::UnexpectedField;
     }
 
     #[test]

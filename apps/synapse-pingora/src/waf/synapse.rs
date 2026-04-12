@@ -122,6 +122,19 @@ impl Synapse {
         self.engine.analyze_safe(req)
     }
 
+    /// Evaluate the deferred rule set (rules that reference signals only
+    /// available after the body-phase pass — currently `dlp_violation`).
+    ///
+    /// The caller must populate `req.dlp_matches` before calling this.
+    /// Returns a default (Allow) verdict when no deferred rules are loaded.
+    pub fn analyze_deferred_with_timeout(
+        &self,
+        req: &Request,
+        timeout: std::time::Duration,
+    ) -> Verdict {
+        self.engine.analyze_deferred_with_timeout(req, timeout)
+    }
+
     /// Record response status code for profiling.
     ///
     /// Updates the endpoint profile with the observed status code,

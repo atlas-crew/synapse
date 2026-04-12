@@ -962,6 +962,7 @@ impl DetectionEngine {
             body,
             client_ip,
             is_static: false,
+            ..Default::default()
         };
 
         // Get configured timeout (atomic load for lock-free access in hot path)
@@ -971,6 +972,104 @@ impl DetectionEngine {
         // Run the real detection engine with timeout protection (prevents ReDoS)
         let verdict = SYNAPSE.read().analyze_with_timeout(&request, timeout);
 
+        let elapsed = start.elapsed();
+
+        DetectionResult {
+            detection_time_us: elapsed.as_micros() as u64,
+            ..verdict.into()
+        }
+    }
+
+    /// Analyze a request with behavioral/structural signals attached.
+    /// Passes fingerprint + schema-validation result to the engine so rules
+    /// using the `ja4`, `ja4h`, and `schema_violation` match kinds can fire.
+    ///
+    /// Rules that use `dlp_violation` are evaluated separately by
+    /// [`DetectionEngine::analyze_deferred`] after the async DLP scan completes.
+    #[inline]
+    pub fn analyze_with_signals(
+        method: &str,
+        uri: &str,
+        headers: &[HeaderSnapshot],
+        body: Option<&[u8]>,
+        client_ip: &str,
+        fingerprint: Option<&synapse_pingora::fingerprint::ClientFingerprint>,
+        schema_result: Option<&synapse_pingora::profiler::ValidationResult>,
+    ) -> DetectionResult {
+        let start = Instant::now();
+
+        let mut synapse_headers = Vec::with_capacity(headers.len());
+        for (name, value) in headers {
+            if let Ok(value_str) = value.to_str() {
+                synapse_headers.push(SynapseHeader::new(name.as_str(), value_str));
+            }
+        }
+
+        let request = SynapseRequest {
+            method,
+            path: uri,
+            query: None,
+            headers: synapse_headers,
+            body,
+            client_ip,
+            is_static: false,
+            fingerprint,
+            dlp_matches: None,
+            schema_result,
+        };
+
+        let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
+        let timeout = Duration::from_micros(timeout_us);
+        let verdict = SYNAPSE.read().analyze_with_timeout(&request, timeout);
+        let elapsed = start.elapsed();
+
+        DetectionResult {
+            detection_time_us: elapsed.as_micros() as u64,
+            ..verdict.into()
+        }
+    }
+
+    /// Evaluate only the deferred rule set (currently: rules referencing the
+    /// `dlp_violation` match kind). The caller passes the DLP scan matches
+    /// that became available after the body-phase pass completed.
+    ///
+    /// Returns a default (Allow) verdict when no deferred rules are loaded.
+    #[inline]
+    pub fn analyze_deferred(
+        method: &str,
+        uri: &str,
+        headers: &[HeaderSnapshot],
+        body: Option<&[u8]>,
+        client_ip: &str,
+        fingerprint: Option<&synapse_pingora::fingerprint::ClientFingerprint>,
+        schema_result: Option<&synapse_pingora::profiler::ValidationResult>,
+        dlp_matches: &[synapse_pingora::dlp::DlpMatch],
+    ) -> DetectionResult {
+        let start = Instant::now();
+
+        let mut synapse_headers = Vec::with_capacity(headers.len());
+        for (name, value) in headers {
+            if let Ok(value_str) = value.to_str() {
+                synapse_headers.push(SynapseHeader::new(name.as_str(), value_str));
+            }
+        }
+
+        let request = SynapseRequest {
+            method,
+            path: uri,
+            query: None,
+            headers: synapse_headers,
+            body,
+            client_ip,
+            is_static: false,
+            fingerprint,
+            dlp_matches: Some(dlp_matches),
+            schema_result,
+        };
+
+        let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
+        let timeout = Duration::from_micros(timeout_us);
+        let verdict = SYNAPSE.read().analyze_deferred_with_timeout(&request, timeout);
         let elapsed = start.elapsed();
 
         DetectionResult {
@@ -1029,8 +1128,15 @@ fn categorize_rule_id(rule_id: u32) -> String {
 // Pingora Proxy Implementation
 // ============================================================================
 
-/// Result from async DLP scan task
-pub type DlpScanResult = (usize, String, u64); // (match_count, types, scan_time_us)
+/// Result from async DLP scan task: (match_count, types, scan_time_us, matches).
+/// The `matches` vec powers the deferred WAF pass's `dlp_violation` match kind
+/// and is empty when no matches were found.
+pub type DlpScanResult = (
+    usize,
+    String,
+    u64,
+    Vec<synapse_pingora::dlp::DlpMatch>,
+);
 
 type HeaderSnapshot = (HeaderName, HeaderValue);
 
@@ -1076,6 +1182,14 @@ pub struct RequestContext {
     request_dlp_match_count: usize,
     /// Phase 4: DLP matched types from request body (comma-separated)
     request_dlp_types: String,
+    /// Structured DLP matches from the async request scanner, used by the
+    /// deferred WAF pass in `upstream_request_filter` to evaluate rules
+    /// that reference the `dlp_violation` match kind.
+    request_dlp_matches: Vec<synapse_pingora::dlp::DlpMatch>,
+    /// Schema validation result from the body-phase schema validator. Attached
+    /// to the WAF evaluation context so rules can match the `schema_violation`
+    /// kind against the learned baseline.
+    schema_result: Option<synapse_pingora::profiler::ValidationResult>,
     /// Request Content-Type header for DLP skip optimization
     request_content_type: Option<String>,
     /// Whether to skip DLP scanning for this request (binary content)
@@ -1847,6 +1961,8 @@ impl ProxyHttp for SynapseProxy {
             request_body_buffer: get_buffer(),
             request_dlp_match_count: 0,
             request_dlp_types: String::new(),
+            request_dlp_matches: Vec::new(),
+            schema_result: None,
             request_content_type: None,
             skip_request_dlp: false,
             dlp_scan_rx: None,
@@ -3376,76 +3492,9 @@ impl ProxyHttp for SynapseProxy {
         // On end of stream: spawn DLP scan as background task for parallel execution
         // This allows DLP to run in parallel with upstream_peer and upstream_request_filter
         if end_of_stream && !ctx.request_body_buffer.is_empty() {
-            // Run full WAF detection on the body
-            if !ctx.skip_request_dlp {
-                let req_header = _session.req_header();
-                let method = req_header.method.as_str();
-                let uri = req_header.uri.to_string();
-                let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
-
-                let result = DetectionEngine::analyze(
-                    method,
-                    &uri,
-                    &ctx.headers,
-                    Some(&ctx.request_body_buffer),
-                    client_ip,
-                );
-
-                if result.blocked {
-                    warn!(
-                        "BLOCKED (Body): {} from {} - risk={}, rules={:?}, reason={}",
-                        uri,
-                        client_ip,
-                        result.risk_score,
-                        result.matched_rules,
-                        result.block_reason.as_deref().unwrap_or("unknown")
-                    );
-
-                    // Record block event for dashboard visibility
-                    self.block_log.record(BlockEvent::new(
-                        client_ip.to_string(),
-                        method.to_string(),
-                        uri.clone(),
-                        result.risk_score,
-                        result.matched_rules.clone(),
-                        result
-                            .block_reason
-                            .clone()
-                            .unwrap_or_else(|| "body_payload".to_string()),
-                        ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
-                    ));
-
-                    // Update detection result in context
-                    ctx.detection = Some(result);
-
-                    // Send 403 response
-                    // Security: Generic error to prevent info disclosure
-                    let body = r#"{"error": "access_denied"}"#;
-                    let mut resp = ResponseHeader::build(403, None)?;
-                    Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                    headers::apply_security_response_headers(
-                        &mut resp,
-                        Self::is_https_request(_session),
-                    );
-                    resp.insert_header("content-type", "application/json")?;
-                    resp.insert_header("content-length", body.len().to_string())?;
-                    _session
-                        .write_response_header(Box::new(resp), false)
-                        .await?;
-                    _session
-                        .write_response_body(Some(Bytes::from(body)), true)
-                        .await?;
-
-                    // We can't easily abort the upstream request here without returning an error
-                    // But returning an error might cause Pingora to log a 502/error
-                    // Since we wrote the response, returning Ok(()) might be ambiguous
-                    // Let's rely on the response being sent.
-                    return Ok(());
-                }
-            }
-
-            // Schema Learning and Validation (API Anomaly Detection)
-            // Only process JSON content types for schema learning
+            // ---- Schema Learning and Validation (runs BEFORE the body-phase WAF
+            //      pass so rules using the `schema_violation` match kind can fire
+            //      in the same pass). Only JSON content is processed. ----
             let is_json_content = ctx
                 .request_content_type
                 .as_ref()
@@ -3453,15 +3502,11 @@ impl ProxyHttp for SynapseProxy {
                 .unwrap_or(false);
 
             if is_json_content {
-                // Try to parse the body as JSON
                 if let Ok(json_body) =
                     serde_json::from_slice::<serde_json::Value>(&ctx.request_body_buffer)
                 {
                     let req_header = _session.req_header();
                     let uri = req_header.uri.path();
-
-                    // Normalize path to template (replace numeric IDs with {id})
-                    // e.g., /api/users/123/posts/456 -> /api/users/{id}/posts/{id}
                     let template_path = normalize_path_to_template(uri);
 
                     // Schema learning: train the learner with this request.
@@ -3472,11 +3517,10 @@ impl ProxyHttp for SynapseProxy {
                     // Schema validation: check for anomalies against learned baseline
                     let validation_result =
                         SCHEMA_LEARNER.validate_request(&template_path, &json_body);
+
                     if !validation_result.is_valid() {
-                        // Calculate risk contribution from schema violations
                         let severity_score = validation_result.total_score.min(25) as f32;
 
-                        // Log schema violations for observability
                         debug!(
                             "Schema violations detected for {}: {} violations, score={}, max_severity={:?}",
                             template_path,
@@ -3499,7 +3543,6 @@ impl ProxyHttp for SynapseProxy {
                             );
                         }
 
-                        // Add schema violation risk to entity
                         ctx.entity_risk += severity_score as f64;
                         if let Some(ref ip) = ctx.client_ip {
                             self.entity_manager.apply_external_risk(
@@ -3509,6 +3552,77 @@ impl ProxyHttp for SynapseProxy {
                             );
                         }
                     }
+
+                    // Store the validation result so the body-phase WAF pass can
+                    // surface it via the `schema_violation` match kind.
+                    ctx.schema_result = Some(validation_result);
+                }
+            }
+
+            // ---- Body-phase WAF evaluation, enriched with fingerprint and
+            //      schema signals. Rules that reference the `dlp_violation`
+            //      match kind are automatically skipped here and evaluated in
+            //      the deferred post-DLP pass inside `upstream_request_filter`. ----
+            if !ctx.skip_request_dlp {
+                let req_header = _session.req_header();
+                let method = req_header.method.as_str();
+                let uri = req_header.uri.to_string();
+                let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+
+                let result = DetectionEngine::analyze_with_signals(
+                    method,
+                    &uri,
+                    &ctx.headers,
+                    Some(&ctx.request_body_buffer),
+                    client_ip,
+                    ctx.fingerprint.as_ref(),
+                    ctx.schema_result.as_ref(),
+                );
+
+                if result.blocked {
+                    warn!(
+                        "BLOCKED (Body): {} from {} - risk={}, rules={:?}, reason={}",
+                        uri,
+                        client_ip,
+                        result.risk_score,
+                        result.matched_rules,
+                        result.block_reason.as_deref().unwrap_or("unknown")
+                    );
+
+                    self.block_log.record(BlockEvent::new(
+                        client_ip.to_string(),
+                        method.to_string(),
+                        uri.clone(),
+                        result.risk_score,
+                        result.matched_rules.clone(),
+                        result
+                            .block_reason
+                            .clone()
+                            .unwrap_or_else(|| "body_payload".to_string()),
+                        ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
+                    ));
+
+                    ctx.detection = Some(result);
+
+                    let body = r#"{"error": "access_denied"}"#;
+                    let mut resp = ResponseHeader::build(403, None)?;
+                    Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
+                    headers::apply_security_response_headers(
+                        &mut resp,
+                        Self::is_https_request(_session),
+                    );
+                    resp.insert_header("content-type", "application/json")?;
+                    resp.insert_header("content-length", body.len().to_string())?;
+                    _session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    _session
+                        .write_response_body(Some(Bytes::from(body)), true)
+                        .await?;
+
+                    // Response already sent; upstream call will be short-circuited
+                    // by the verdict check in upstream_request_filter.
+                    return Ok(());
                 }
             }
 
@@ -3529,9 +3643,10 @@ impl ProxyHttp for SynapseProxy {
                 // Spawn DLP scan as background task - runs in PARALLEL with routing
                 tokio::spawn(async move {
                     let scan_result = scanner.scan_bytes(&body_data);
+                    let scan_time_us = scan_result.scan_time_us;
 
                     // Process results
-                    let (match_count, types_str, scan_time_us) = if scan_result.has_matches {
+                    let (match_count, types_str, matches) = if scan_result.has_matches {
                         // Collect unique types
                         let mut types: Vec<&str> = scan_result
                             .matches
@@ -3548,7 +3663,7 @@ impl ProxyHttp for SynapseProxy {
                             "DLP EXFILTRATION: {} matches found in request body ({} bytes, {}us) - types: {} from {:?}",
                             scan_result.match_count,
                             scan_result.content_length,
-                            scan_result.scan_time_us,
+                            scan_time_us,
                             types_str,
                             client_ip
                         );
@@ -3564,9 +3679,9 @@ impl ProxyHttp for SynapseProxy {
                             );
                         }
 
-                        (scan_result.match_count, types_str, scan_result.scan_time_us)
+                        (scan_result.match_count, types_str, scan_result.matches)
                     } else {
-                        (0, String::new(), scan_result.scan_time_us)
+                        (0, String::new(), Vec::new())
                     };
 
                     // Log truncation if it occurred
@@ -3578,7 +3693,7 @@ impl ProxyHttp for SynapseProxy {
                     }
 
                     // Send result back (ignore error if receiver dropped)
-                    let _ = tx.send((match_count, types_str, scan_time_us));
+                    let _ = tx.send((match_count, types_str, scan_time_us, matches));
                 });
 
                 // Store receiver for awaiting in upstream_request_filter
@@ -3676,10 +3791,11 @@ impl ProxyHttp for SynapseProxy {
         // while we selected the backend and established the connection.
         if let Some(rx) = ctx.dlp_scan_rx.take() {
             match rx.await {
-                Ok((match_count, types, scan_time_us)) => {
+                Ok((match_count, types, scan_time_us, matches)) => {
                     ctx.request_dlp_match_count = match_count;
                     ctx.request_dlp_types = types;
                     ctx.dlp_scan_time_us = scan_time_us;
+                    ctx.request_dlp_matches = matches;
 
                     if match_count > 0 {
                         debug!(
@@ -3694,6 +3810,81 @@ impl ProxyHttp for SynapseProxy {
                         "DLP scan task failed or was cancelled, request_id={}",
                         ctx.request_id
                     );
+                }
+            }
+        }
+
+        // ===== Deferred WAF pass (post-DLP) =====
+        // Evaluate the rules that were skipped during the body-phase pass
+        // because they reference `dlp_violation` — the scan results are now
+        // available. Only runs when DLP returned at least one match, so the
+        // normal fast path has zero extra work.
+        if !ctx.request_dlp_matches.is_empty() {
+            let method = ctx
+                .request_method
+                .as_deref()
+                .unwrap_or_else(|| _session.req_header().method.as_str());
+            let uri_owned = ctx
+                .request_path
+                .clone()
+                .unwrap_or_else(|| _session.req_header().uri.to_string());
+            let client_ip = ctx.client_ip.as_deref().unwrap_or("0.0.0.0");
+
+            let deferred = DetectionEngine::analyze_deferred(
+                method,
+                &uri_owned,
+                &ctx.headers,
+                Some(&ctx.request_body_buffer),
+                client_ip,
+                ctx.fingerprint.as_ref(),
+                ctx.schema_result.as_ref(),
+                &ctx.request_dlp_matches,
+            );
+
+            if deferred.blocked {
+                warn!(
+                    "BLOCKED (Deferred DLP): {} from {} - risk={}, rules={:?}, reason={}",
+                    uri_owned,
+                    client_ip,
+                    deferred.risk_score,
+                    deferred.matched_rules,
+                    deferred.block_reason.as_deref().unwrap_or("unknown")
+                );
+
+                self.block_log.record(BlockEvent::new(
+                    client_ip.to_string(),
+                    method.to_string(),
+                    uri_owned.clone(),
+                    deferred.risk_score,
+                    deferred.matched_rules.clone(),
+                    deferred
+                        .block_reason
+                        .clone()
+                        .unwrap_or_else(|| "dlp_violation".to_string()),
+                    ctx.fingerprint.as_ref().map(|fp| fp.combined_hash.clone()),
+                ));
+
+                ctx.detection = Some(deferred);
+
+                return Err(pingora_core::Error::explain(
+                    pingora_core::ErrorType::HTTPStatus(403),
+                    "blocked by deferred WAF pass",
+                ));
+            } else if !deferred.matched_rules.is_empty() {
+                // Non-blocking deferred matches still contribute to observability
+                // and to the cached detection result so downstream phases see them.
+                match ctx.detection.as_mut() {
+                    Some(existing) => {
+                        existing.risk_score = existing.risk_score.max(deferred.risk_score);
+                        for rule in &deferred.matched_rules {
+                            if !existing.matched_rules.contains(rule) {
+                                existing.matched_rules.push(*rule);
+                            }
+                        }
+                    }
+                    None => {
+                        ctx.detection = Some(deferred);
+                    }
                 }
             }
         }

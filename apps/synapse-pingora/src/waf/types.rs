@@ -5,6 +5,10 @@ use std::collections::HashMap;
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 
+use crate::dlp::DlpMatch;
+use crate::fingerprint::ClientFingerprint;
+use crate::profiler::ValidationResult;
+
 /// HTTP request to analyze.
 #[derive(Debug, Clone, Default)]
 pub struct Request<'a> {
@@ -22,6 +26,13 @@ pub struct Request<'a> {
     pub client_ip: &'a str,
     /// Whether this is static content
     pub is_static: bool,
+    /// JA4/JA4H client fingerprint, if computed for this connection.
+    pub fingerprint: Option<&'a ClientFingerprint>,
+    /// DLP scanner matches for the request body. Empty slice when absent —
+    /// populated only for the post-DLP deferred evaluation pass.
+    pub dlp_matches: Option<&'a [DlpMatch]>,
+    /// Schema validation result against the learned baseline, if available.
+    pub schema_result: Option<&'a ValidationResult>,
 }
 
 /// HTTP header key-value pair.
@@ -376,6 +387,13 @@ pub struct EvalContext<'a> {
     pub raw_body: Option<&'a [u8]>,
     pub is_static: bool,
     pub json_text: Option<String>,
+    /// JA4/JA4H fingerprint for `ja4`/`ja4h` match kinds. `None` when not yet computed.
+    pub fingerprint: Option<&'a ClientFingerprint>,
+    /// DLP scanner matches for the `dlp_violation` match kind. Empty slice
+    /// during body-phase evaluation; populated for the deferred post-DLP pass.
+    pub dlp_matches: &'a [DlpMatch],
+    /// Schema validation result for the `schema_violation` match kind.
+    pub schema_result: Option<&'a ValidationResult>,
     /// Deadline for rule evaluation (prevents DoS via complex regexes)
     pub deadline: Option<std::time::Instant>,
 }
@@ -458,6 +476,9 @@ impl<'a> EvalContext<'a> {
             raw_body: req.body,
             is_static: req.is_static,
             json_text,
+            fingerprint: req.fingerprint,
+            dlp_matches: req.dlp_matches.unwrap_or(&[]),
+            schema_result: req.schema_result,
             deadline: None,
         }
     }
