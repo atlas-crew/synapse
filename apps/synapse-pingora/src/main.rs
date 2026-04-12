@@ -1966,6 +1966,54 @@ impl SynapseProxy {
         Ok(())
     }
 
+    /// Canonical WAF block response body. Single source of truth for the
+    /// JSON envelope returned by every WAF block site (body-phase, deferred,
+    /// and future sites). Clients that parse the error shape depend on this
+    /// being stable — treat changes here as an API break.
+    const WAF_BLOCK_BODY: &'static str = r#"{"error": "access_denied"}"#;
+
+    /// Build the canonical 403 ResponseHeader for a WAF block. Pure and
+    /// testable — the only observable effect is allocation. Separated from
+    /// `send_waf_block_response` so tests can inspect the header shape
+    /// without constructing a full Pingora `Session`.
+    ///
+    /// Contract:
+    /// - status 403
+    /// - `x-request-id` echoes the caller-provided request id
+    /// - `content-type: application/json`
+    /// - `content-length` matches `WAF_BLOCK_BODY.len()`
+    /// - Security headers via `headers::apply_security_response_headers`
+    ///   (HSTS is conditionally emitted only on HTTPS)
+    fn build_waf_block_response_header(
+        request_id: &str,
+        is_https: bool,
+    ) -> Result<ResponseHeader> {
+        let mut resp = ResponseHeader::build(403, None)?;
+        Self::apply_request_id_header(&mut resp, request_id)?;
+        headers::apply_security_response_headers(&mut resp, is_https);
+        resp.insert_header("content-type", "application/json")?;
+        resp.insert_header("content-length", Self::WAF_BLOCK_BODY.len().to_string())?;
+        Ok(resp)
+    }
+
+    /// Write the canonical WAF block response (header + body) to the client.
+    /// This is the ONLY call every WAF block site should use to emit a
+    /// client-visible 403 — keeping it centralized guarantees byte-identical
+    /// responses regardless of which block site fires (body-phase,
+    /// deferred DLP, or future additions).
+    async fn send_waf_block_response(
+        session: &mut Session,
+        request_id: &str,
+        is_https: bool,
+    ) -> Result<()> {
+        let resp = Self::build_waf_block_response_header(request_id, is_https)?;
+        session.write_response_header(Box::new(resp), false).await?;
+        session
+            .write_response_body(Some(Bytes::from(Self::WAF_BLOCK_BODY)), true)
+            .await?;
+        Ok(())
+    }
+
     fn is_https_request(session: &Session) -> bool {
         let headers = &session.req_header().headers;
 
@@ -3687,21 +3735,8 @@ impl ProxyHttp for SynapseProxy {
 
                     ctx.detection = Some(result);
 
-                    let body = r#"{"error": "access_denied"}"#;
-                    let mut resp = ResponseHeader::build(403, None)?;
-                    Self::apply_request_id_header(&mut resp, &ctx.request_id)?;
-                    headers::apply_security_response_headers(
-                        &mut resp,
-                        Self::is_https_request(_session),
-                    );
-                    resp.insert_header("content-type", "application/json")?;
-                    resp.insert_header("content-length", body.len().to_string())?;
-                    _session
-                        .write_response_header(Box::new(resp), false)
-                        .await?;
-                    _session
-                        .write_response_body(Some(Bytes::from(body)), true)
-                        .await?;
+                    let is_https = Self::is_https_request(_session);
+                    Self::send_waf_block_response(_session, &ctx.request_id, is_https).await?;
 
                     // Response already sent; upstream call will be short-circuited
                     // by the verdict check in upstream_request_filter.
@@ -3973,6 +4008,14 @@ impl ProxyHttp for SynapseProxy {
                 }
 
                 ctx.detection = Some(deferred);
+
+                // Write the canonical WAF block response body so clients see
+                // the same JSON envelope regardless of which block site fired.
+                // Returning Err after the write signals Pingora to abort
+                // upstream forwarding; the already-written response is not
+                // overwritten.
+                let is_https = Self::is_https_request(_session);
+                Self::send_waf_block_response(_session, &ctx.request_id, is_https).await?;
 
                 return Err(pingora_core::Error::explain(
                     pingora_core::ErrorType::HTTPStatus(403),
@@ -6598,6 +6641,104 @@ key_path: "/etc/keys/example.key"
         assert!(buf.is_empty());
         assert!(buf.capacity() >= 8192);
         return_buffer(buf);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Unified WAF block response (TASK-34)
+    // ────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_waf_block_body_is_stable_json_envelope() {
+        // Stability contract — if this assertion needs changing, it is an
+        // API break for every client that parses the WAF error body.
+        assert_eq!(SynapseProxy::WAF_BLOCK_BODY, r#"{"error": "access_denied"}"#);
+        // Also valid JSON.
+        let parsed: serde_json::Value =
+            serde_json::from_str(SynapseProxy::WAF_BLOCK_BODY).expect("WAF_BLOCK_BODY is valid JSON");
+        assert_eq!(parsed["error"], "access_denied");
+    }
+
+    #[test]
+    fn test_build_waf_block_response_header_canonical_shape() {
+        let resp = SynapseProxy::build_waf_block_response_header("req-abc", true)
+            .expect("builder must succeed on well-formed inputs");
+
+        assert_eq!(resp.status.as_u16(), 403);
+
+        // X-Request-ID echoes the caller input so Hub can pivot on it.
+        let req_id = resp
+            .headers
+            .get("x-request-id")
+            .expect("x-request-id must be present")
+            .to_str()
+            .expect("x-request-id is valid ASCII");
+        assert_eq!(req_id, "req-abc");
+
+        // Content-type always application/json.
+        assert_eq!(
+            resp.headers
+                .get("content-type")
+                .expect("content-type must be present")
+                .to_str()
+                .unwrap(),
+            "application/json"
+        );
+
+        // Content-length matches the canonical body byte length.
+        assert_eq!(
+            resp.headers
+                .get("content-length")
+                .expect("content-length must be present")
+                .to_str()
+                .unwrap(),
+            SynapseProxy::WAF_BLOCK_BODY.len().to_string()
+        );
+    }
+
+    #[test]
+    fn test_build_waf_block_response_header_hsts_conditional_on_https() {
+        // HSTS is only emitted for HTTPS — emitting it on cleartext HTTP is
+        // at best useless, at worst confusing. The security-headers helper
+        // enforces this; this test pins the behavior so a future refactor
+        // that centralizes WAF blocks doesn't accidentally emit HSTS over
+        // plain HTTP.
+        let resp_https = SynapseProxy::build_waf_block_response_header("r", true).unwrap();
+        let resp_http = SynapseProxy::build_waf_block_response_header("r", false).unwrap();
+
+        assert!(
+            resp_https.headers.get("strict-transport-security").is_some(),
+            "HSTS must be present on HTTPS responses"
+        );
+        assert!(
+            resp_http.headers.get("strict-transport-security").is_none(),
+            "HSTS must NOT be present on HTTP responses"
+        );
+    }
+
+    #[test]
+    fn test_build_waf_block_response_header_is_deterministic() {
+        // Two calls with the same inputs must produce byte-identical headers
+        // so body-phase and deferred block sites are genuinely unified, not
+        // just "similar".
+        let a = SynapseProxy::build_waf_block_response_header("same-req", true).unwrap();
+        let b = SynapseProxy::build_waf_block_response_header("same-req", true).unwrap();
+
+        for name in [
+            "x-request-id",
+            "content-type",
+            "content-length",
+            "strict-transport-security",
+            "x-content-type-options",
+            "x-frame-options",
+        ] {
+            assert_eq!(
+                a.headers.get(name).map(|v| v.as_bytes().to_vec()),
+                b.headers.get(name).map(|v| v.as_bytes().to_vec()),
+                "header {} must be byte-identical between builder calls",
+                name
+            );
+        }
+        assert_eq!(a.status.as_u16(), b.status.as_u16());
     }
 
     // ────────────────────────────────────────────────────────────────────────
