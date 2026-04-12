@@ -2969,6 +2969,197 @@ mod tests {
     }
 
     #[test]
+    fn test_dlp_violation_compare_threshold_op_variants() {
+        // TASK-39 coverage: compare_threshold supports gte / gt / eq / neq /
+        // lte / lt and defaults to gte when op is absent. Existing tests
+        // only exercised the default gte path, so silent regressions in any
+        // other op would go unnoticed. This test loads one rule per op
+        // (plus an unknown-op rule that must always return false) against
+        // the same numeric threshold (3), then varies the actual match
+        // count across below / equal / above the threshold and asserts the
+        // expected fire / no-fire outcome for every cell in the 7×3 table.
+        //
+        // dlp_violation is a deferred match kind, so the test uses
+        // analyze_deferred_with_timeout rather than analyze().
+        let mut engine = Engine::empty();
+        let rules = r#"[
+            {"id": 101, "description": "gte",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "gte", "match": 3}]},
+            {"id": 102, "description": "gt",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "gt", "match": 3}]},
+            {"id": 103, "description": "eq",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "eq", "match": 3}]},
+            {"id": 104, "description": "neq",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "neq", "match": 3}]},
+            {"id": 105, "description": "lte",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "lte", "match": 3}]},
+            {"id": 106, "description": "lt",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "lt", "match": 3}]},
+            {"id": 107, "description": "unknown op must never fire",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "dlp_violation", "op": "approximately", "match": 3}]}
+        ]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // Run the deferred pass with `count` DLP matches and return the
+        // matched_rules set. We build fresh Vec<DlpMatch> each call so the
+        // borrow on `matches` lives long enough for `dlp_matches: Some(&m)`.
+        let run = |count: usize| -> Vec<u32> {
+            let m: Vec<DlpMatch> = (0..count).map(|_| dlp_match(SensitiveDataType::Ssn)).collect();
+            let req = Request {
+                method: "POST",
+                path: "/",
+                client_ip: "1.2.3.4",
+                dlp_matches: Some(&m),
+                ..Default::default()
+            };
+            engine
+                .analyze_deferred_with_timeout(&req, DEFAULT_EVAL_TIMEOUT)
+                .matched_rules
+        };
+
+        let below = run(2); // count < 3
+        let equal = run(3); // count == 3
+        let above = run(4); // count > 3
+
+        // gte (id 101): fires when count >= 3
+        assert!(!below.contains(&101), "gte: 2 >= 3 must be false");
+        assert!(equal.contains(&101), "gte: 3 >= 3 must be true");
+        assert!(above.contains(&101), "gte: 4 >= 3 must be true");
+
+        // gt (id 102): fires when count > 3
+        assert!(!below.contains(&102), "gt: 2 > 3 must be false");
+        assert!(!equal.contains(&102), "gt: 3 > 3 must be false");
+        assert!(above.contains(&102), "gt: 4 > 3 must be true");
+
+        // eq (id 103): fires when count == 3
+        assert!(!below.contains(&103), "eq: 2 == 3 must be false");
+        assert!(equal.contains(&103), "eq: 3 == 3 must be true");
+        assert!(!above.contains(&103), "eq: 4 == 3 must be false");
+
+        // neq (id 104): fires when count != 3
+        assert!(below.contains(&104), "neq: 2 != 3 must be true");
+        assert!(!equal.contains(&104), "neq: 3 != 3 must be false");
+        assert!(above.contains(&104), "neq: 4 != 3 must be true");
+
+        // lte (id 105): fires when count <= 3
+        assert!(below.contains(&105), "lte: 2 <= 3 must be true");
+        assert!(equal.contains(&105), "lte: 3 <= 3 must be true");
+        assert!(!above.contains(&105), "lte: 4 <= 3 must be false");
+
+        // lt (id 106): fires when count < 3
+        assert!(below.contains(&106), "lt: 2 < 3 must be true");
+        assert!(!equal.contains(&106), "lt: 3 < 3 must be false");
+        assert!(!above.contains(&106), "lt: 4 < 3 must be false");
+
+        // Unknown op (id 107): compare_threshold returns false for any
+        // op it doesn't recognize, so the rule must never fire regardless
+        // of the actual count. This is the AC#3 negative case.
+        assert!(!below.contains(&107), "unknown op must never fire");
+        assert!(!equal.contains(&107), "unknown op must never fire");
+        assert!(!above.contains(&107), "unknown op must never fire");
+    }
+
+    #[test]
+    fn test_schema_violation_compare_threshold_op_variants() {
+        // Mirror of test_dlp_violation_compare_threshold_op_variants for the
+        // schema_violation match kind. schema_violation is NOT deferred, so
+        // rules are evaluated via the normal analyze() path. The threshold
+        // (20) and the three test scores (15, 20, 25) are arbitrary — only
+        // the below/equal/above relationship matters.
+        let mut engine = Engine::empty();
+        let rules = r#"[
+            {"id": 201, "description": "gte",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "gte", "match": 20}]},
+            {"id": 202, "description": "gt",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "gt", "match": 20}]},
+            {"id": 203, "description": "eq",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "eq", "match": 20}]},
+            {"id": 204, "description": "neq",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "neq", "match": 20}]},
+            {"id": 205, "description": "lte",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "lte", "match": 20}]},
+            {"id": 206, "description": "lt",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "lt", "match": 20}]},
+            {"id": 207, "description": "unknown op must never fire",
+             "risk": 10.0, "blocking": true,
+             "matches": [{"type": "schema_violation", "op": "approximately", "match": 20}]}
+        ]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        // Run body-phase analyze with a ValidationResult of the given score
+        // and return the matched_rules set. The sample violation exists only
+        // so is_valid() returns false; its own severity is overridden by the
+        // explicit total_score in the struct literal.
+        let sample_violation = SchemaViolation::unexpected_field("/foo");
+        let run = |score: u32| -> Vec<u32> {
+            let result = ValidationResult {
+                violations: vec![sample_violation.clone()],
+                total_score: score,
+            };
+            let req = Request {
+                method: "POST",
+                path: "/",
+                client_ip: "1.2.3.4",
+                schema_result: Some(&result),
+                ..Default::default()
+            };
+            engine.analyze(&req).matched_rules
+        };
+
+        let below = run(15); // score < 20
+        let equal = run(20); // score == 20
+        let above = run(25); // score > 20
+
+        // gte (id 201): fires when score >= 20
+        assert!(!below.contains(&201), "gte: 15 >= 20 must be false");
+        assert!(equal.contains(&201), "gte: 20 >= 20 must be true");
+        assert!(above.contains(&201), "gte: 25 >= 20 must be true");
+
+        // gt (id 202): fires when score > 20
+        assert!(!below.contains(&202), "gt: 15 > 20 must be false");
+        assert!(!equal.contains(&202), "gt: 20 > 20 must be false");
+        assert!(above.contains(&202), "gt: 25 > 20 must be true");
+
+        // eq (id 203): fires when score == 20
+        assert!(!below.contains(&203), "eq: 15 == 20 must be false");
+        assert!(equal.contains(&203), "eq: 20 == 20 must be true");
+        assert!(!above.contains(&203), "eq: 25 == 20 must be false");
+
+        // neq (id 204): fires when score != 20
+        assert!(below.contains(&204), "neq: 15 != 20 must be true");
+        assert!(!equal.contains(&204), "neq: 20 != 20 must be false");
+        assert!(above.contains(&204), "neq: 25 != 20 must be true");
+
+        // lte (id 205): fires when score <= 20
+        assert!(below.contains(&205), "lte: 15 <= 20 must be true");
+        assert!(equal.contains(&205), "lte: 20 <= 20 must be true");
+        assert!(!above.contains(&205), "lte: 25 <= 20 must be false");
+
+        // lt (id 206): fires when score < 20
+        assert!(below.contains(&206), "lt: 15 < 20 must be true");
+        assert!(!equal.contains(&206), "lt: 20 < 20 must be false");
+        assert!(!above.contains(&206), "lt: 25 < 20 must be false");
+
+        // Unknown op (id 207): never fires. AC#3 negative case.
+        assert!(!below.contains(&207), "unknown op must never fire");
+        assert!(!equal.contains(&207), "unknown op must never fire");
+        assert!(!above.contains(&207), "unknown op must never fire");
+    }
+
+    #[test]
     fn test_condition_is_deferred_walks_nested_boolean_operators() {
         // TASK-38 coverage: condition_is_deferred recursively inspects
         // match_value sub-conditions and boolean operand arrays. Before
