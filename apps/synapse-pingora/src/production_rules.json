@@ -16155,9 +16155,9 @@
   },
   {
     "id": 220005,
-    "description": "DLP: JWT in request body (JWTs belong in Authorization header, body placement indicates misuse)",
-    "risk": 70.0,
-    "blocking": true,
+    "description": "DLP: JWT detected in request body (non-blocking signal — JWTs can legitimately appear in OAuth/OIDC form-POST flows; surfaces in entity risk for correlation, does not block outright — see TASK-62 rationale)",
+    "risk": 30.0,
+    "blocking": false,
     "matches": [
       {
         "type": "dlp_violation",

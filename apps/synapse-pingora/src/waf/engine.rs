@@ -3052,7 +3052,12 @@ mod tests {
             "220004 (private_key in body) must fire on 1 private_key match"
         );
 
-        // Rule 220005: any jwt match in body.
+        // Rule 220005: any jwt match in body. Non-blocking since TASK-62
+        // (was blocking=true, downgraded to risk contribution to avoid
+        // OAuth/OIDC false positives). The rule still fires and appears
+        // in matched_rules, so this assertion is unchanged. The separate
+        // test `test_rule_220005_jwt_in_body_is_non_blocking_after_task_62`
+        // pins the non-blocking behavior specifically.
         let hits = run(&[typed_match(SensitiveDataType::Jwt)]);
         assert!(
             hits.contains(&220005),
@@ -3100,6 +3105,85 @@ mod tests {
                 hits
             );
         }
+    }
+
+    /// TASK-62: rule 220005 (JWT in body) was originally blocking=true with
+    /// risk=70, which would brick OAuth2 refresh-token flows, OIDC
+    /// back-channel logout, Apple/Google form-POST ID token callbacks, and
+    /// SAML-bearer exchange endpoints. Downgraded to non-blocking risk
+    /// contribution (blocking=false, risk=30) so the detection still surfaces
+    /// in entity risk and observability but does not produce a hard 403 on
+    /// its own.
+    ///
+    /// This test pins the non-blocking behavior: a request that trips ONLY
+    /// rule 220005 must produce `Action::Allow`, not `Action::Block`. The
+    /// pre-existing `test_signal_correlation_dlp_rules_fire_on_intended_triggers`
+    /// asserts that 220005 appears in `matched_rules` on a JWT input (still
+    /// correct after TASK-62), but it doesn't verify the verdict action.
+    /// This test closes that gap.
+    ///
+    /// If someone re-enables blocking on 220005 without replacing this test,
+    /// the assertion fails with a precise message pointing at TASK-62 and
+    /// the OAuth/OIDC false-positive concern.
+    #[test]
+    fn test_rule_220005_jwt_in_body_is_non_blocking_after_task_62() {
+        let engine = load_production_rules_engine();
+
+        // Fabricate a request with ONLY a JWT DLP match — no other signals.
+        // The deferred pass should evaluate rule 220005 against this, mark
+        // it as matched, but NOT produce a blocking verdict.
+        let jwt_match = DlpMatch {
+            pattern_name: "test",
+            data_type: SensitiveDataType::Jwt,
+            severity: PatternSeverity::High,
+            masked_value: "***".to_string(),
+            start: 0,
+            end: 3,
+            stream_offset: None,
+        };
+        let matches = vec![jwt_match];
+        let req = Request {
+            method: "POST",
+            // Common OAuth callback path. The rule isn't path-scoped, but
+            // using this path documents the FP scenario the downgrade
+            // protects against.
+            path: "/oauth/token",
+            client_ip: "1.2.3.4",
+            dlp_matches: Some(&matches),
+            ..Default::default()
+        };
+
+        let verdict = engine.analyze_deferred_with_timeout(&req, DEFAULT_EVAL_TIMEOUT);
+
+        // The rule must still fire (detection still surfaces for
+        // observability and entity risk accumulation).
+        assert!(
+            verdict.matched_rules.contains(&220005),
+            "TASK-62: rule 220005 must still fire on JWT-in-body as a non-blocking signal; matched_rules={:?}",
+            verdict.matched_rules
+        );
+
+        // The verdict must be Allow, not Block. This is the TASK-62
+        // guarantee: JWT-in-body alone does not block. If any future
+        // refactor re-enables blocking on 220005, this assertion fails
+        // with a clear pointer to the OAuth/OIDC false-positive concern.
+        assert_eq!(
+            verdict.action,
+            Action::Allow,
+            "TASK-62: rule 220005 (JWT in body) must be non-blocking. \
+             If it blocks, OAuth/OIDC refresh-token flows, Apple/Google \
+             form-POST callbacks, and SAML-bearer exchanges will 403 on \
+             legitimate traffic. See TASK-62 for the list of affected flows."
+        );
+
+        // Sanity: risk score is non-zero (the rule contributed to risk).
+        // 220005 is risk=30 after TASK-62.
+        assert!(
+            verdict.risk_score >= 30,
+            "TASK-62: rule 220005 risk contribution must be at least 30 \
+             (current value). Got risk_score={}.",
+            verdict.risk_score
+        );
     }
 
     #[test]
