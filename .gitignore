@@ -27,3 +27,4 @@ tmp/
 uuid
 status
 _site/
+.claude/

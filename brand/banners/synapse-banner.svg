@@ -7,6 +7,9 @@
    id="svg79"
    sodipodi:docname="synapse-banner.svg"
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:export-filename="synapse-banner.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -20,11 +23,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.53926798"
-     inkscape:cx="603.596"
-     inkscape:cy="241.99471"
-     inkscape:window-width="1460"
-     inkscape:window-height="684"
+     inkscape:zoom="0.39772815"
+     inkscape:cx="671.3128"
+     inkscape:cy="203.65669"
+     inkscape:window-width="1213"
+     inkscape:window-height="615"
      inkscape:window-x="0"
      inkscape:window-y="33"
      inkscape:window-maximized="0"
@@ -584,8 +587,9 @@
      font-weight="700"
      fill="#8b5cf6"
      letter-spacing="2"
-     id="text68"><tspan
-       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'"
+     id="text68"
+     style="-inkscape-font-specification:'Recursive Sans Linear Static Bold';font-family:'Recursive Sans Linear Static';font-weight:bold;font-style:normal;font-stretch:normal;font-variant:normal"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold'"
        id="tspan79">SYNAPSE</tspan></text>
   <!-- Rule + tagline (violet rule) -->
   <line
@@ -598,15 +602,15 @@
      opacity="0.6"
      id="line68" />
   <text
-     x="614"
-     y="328"
+     x="613.92346"
+     y="329.83551"
      font-family="'Recursive', monospace"
      font-size="13px"
      font-weight="500"
      fill="#5a6f8a"
-     letter-spacing="3"
+     letter-spacing="3.57359"
      id="text69"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear'">ON-BOARD INTELLIGENCE</text>
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15.8826px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';stroke-width:1.19119">DETECT. DECIDE. FIRE.</text>
   <!-- Feature labels -->
   <g
      transform="translate(570, 380)"

@@ -77,6 +77,16 @@ wght 300–900 · MONO 0–1 · CASL 0–1 · slnt -15–0 · CRSV 0.5 (locked)
 9. No pure white (#fff) for text — use #e8ecf4
 
 ## Product Names
-- **Horizon** = edge protection hub (top-level name for both products)
-- **Synapse** = API/WAF sensor (runs standalone, "Defense" module within Horizon)
-- Taglines: Horizon = "See Further. Act Faster." / Synapse = "On-Board Intelligence"
+- **Synapse** = edge defense product (Pingora-based inline proxy: 248-rule WAF, schema learning, DLP, risk scoring, correlation, interrogator)
+- **Horizon** = fleet command for Synapse sensors + SOC tooling + collective defense intel (feeds back into Synapse enforcement)
+- **Platform URL**: `atlascrew.dev/synapse` (container for both products)
+
+## Descriptors (header lockup, small caps)
+- **Synapse** · `EDGE DEFENSE`
+- **Horizon** · `EDGE FLEET COMMAND`
+- **Platform** · `EDGE PROTECTION PLATFORM` (used only on `full-architecture` infographic)
+
+## Taglines
+- **Synapse**: `Detect. Decide. Fire.` — three-beat hammer cadence, alliterated D-D-F, neural-firing payoff that leans into the product name
+- **Horizon**: `See Further. Act Faster.` — verb+adverb pair, long-view observation framing
+- Used in infographic footer brand-accent slot, text-transform:uppercase. Synapse tagline also used on the `full-architecture` platform infographic (since `/synapse` is the platform URL container)

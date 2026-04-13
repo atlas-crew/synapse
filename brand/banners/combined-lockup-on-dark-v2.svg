@@ -5,8 +5,33 @@
    viewBox="0 0 960 120"
    version="1.1"
    id="svg29"
+   sodipodi:docname="combined-lockup-on-dark-v2.svg"
+   inkscape:export-filename="combined-lockup-on-dark-v2.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.56668506"
+     inkscape:cx="511.74809"
+     inkscape:cy="88.232429"
+     inkscape:window-width="1213"
+     inkscape:window-height="615"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg29" />
   <defs
      id="defs1">
     <style
@@ -155,7 +180,7 @@
        letter-spacing="0.15em"
        fill="#1e90ff"
        id="text12"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">Fleet Intelligence</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">See Further. Act Faster.</text>
   </g>
   <!-- Divider -->
   <line
@@ -332,6 +357,6 @@
        letter-spacing="0.15em"
        fill="#8b5cf6"
        id="text29"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">On-Board Intelligence</text>
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">Detect. Decide. Fire.</text>
   </g>
 </svg>
