@@ -73,12 +73,34 @@ impl TrendsManager {
     }
 
     /// Start background anomaly detection.
+    ///
+    /// # STUB — TASK-66
+    ///
+    /// This function is currently a stub: the spawned task ticks on an
+    /// interval but performs no actual detection work. Real-time
+    /// detection via [`Self::record_request`] and
+    /// [`Self::record_payload_anomaly`] still fires `handle_anomaly`
+    /// (and the `apply_risk` callback) synchronously — that path is
+    /// live. What is missing is cross-signal batch analysis over the
+    /// TimeStore history (velocity spikes, session sharing, impossible
+    /// travel correlated across users, etc.).
+    ///
+    /// The function is currently NOT invoked from `main.rs` startup,
+    /// so calling it from production code is a no-op that only emits a
+    /// `warn!` line at boot. Batch detection implementation is tracked
+    /// as a follow-up task; until it lands, do not add new callers that
+    /// assume this loop performs work.
     pub fn start_background_detection(&self) -> tokio::task::JoinHandle<()> {
         let shutdown = Arc::clone(&self.shutdown);
         let interval_ms = self.config.anomaly_check_interval_ms;
 
-        // Note: In production, this would spawn a task that runs detection
-        // For now, return a dummy task
+        tracing::warn!(
+            interval_ms,
+            "TrendsManager::start_background_detection is a STUB (TASK-66): \
+             real-time detection via record_request is live, but cross-signal \
+             batch detection is not yet implemented. See follow-up task."
+        );
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(interval_ms));
 
@@ -89,7 +111,7 @@ impl TrendsManager {
                     break;
                 }
 
-                // Batch detection would run here
+                // STUB — TASK-66: batch detection would run here.
             }
         })
     }
