@@ -1162,6 +1162,32 @@ const MAX_EXTERNAL_RISK_PER_REQUEST: f64 = 25.0;
 /// on transient client issues.
 const INVALID_SESSION_RISK_WEIGHT: f64 = 12.0;
 
+/// TASK-55 / TASK-67: build a production-shaped TrendsManager with its
+/// `apply_risk` callback wired through to an EntityManager. Extracted from
+/// the inline main() wiring so integration tests can drive the same code
+/// path that production uses. If someone deletes the body of this helper
+/// (or the call from main()), TASK-67's integration tests fail — preventing
+/// silent regression to a dormant callback.
+///
+/// The callback casts u32 → f64 because TrendsManager stores anomaly risk
+/// as u32 but EntityManager takes f64. The reason string is prefixed with
+/// `trends_anomaly:` so log greps can identify the contribution source.
+pub(crate) fn build_trends_manager_with_risk_callback(
+    config: synapse_pingora::trends::TrendsConfig,
+    entity_manager: Arc<EntityManager>,
+) -> Arc<TrendsManager> {
+    let deps = synapse_pingora::trends::TrendsManagerDependencies {
+        apply_risk: Some(Box::new(move |entity_id: &str, risk: u32, reason: &str| {
+            entity_manager.apply_external_risk(
+                entity_id,
+                risk as f64,
+                &format!("trends_anomaly:{}", reason),
+            );
+        })),
+    };
+    Arc::new(TrendsManager::with_dependencies(config, deps))
+}
+
 /// Merge a non-blocking deferred-pass verdict into an already-populated
 /// `DetectionResult` in place. Used by the deferred WAF path in
 /// `upstream_request_filter` when the deferred pass produced matches that
@@ -2909,8 +2935,12 @@ impl ProxyHttp for SynapseProxy {
         // blocking decision — it feeds the correlation layer for delayed
         // mitigation of subsequent requests from the same actor.
         if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
-            let ja4_raw = fingerprint.ja4.as_ref().map(|j| j.raw.clone());
-            let ja4h_raw = Some(fingerprint.ja4h.raw.clone());
+            // TASK-64: raw is Arc<str>, so these clones are refcount bumps,
+            // not heap allocations. register_fingerprints takes Option<Arc<str>>
+            // and propagates the Arc to the rotation detector's observation
+            // store without any further String allocation on the hot path.
+            let ja4_raw = fingerprint.ja4.as_ref().map(|j| Arc::clone(&j.raw));
+            let ja4h_raw = Some(Arc::clone(&fingerprint.ja4h.raw));
             self.campaign_manager
                 .register_fingerprints(ip_addr, ja4_raw, ja4h_raw);
         }
@@ -3055,7 +3085,7 @@ impl ProxyHttp for SynapseProxy {
         // This tracks per-IP state for risk accumulation and blocking decisions
         if self.entity_manager.is_enabled() {
             // Touch entity with fingerprint for correlation
-            let ja4_str = fingerprint.ja4.as_ref().map(|j| j.raw.as_str());
+            let ja4_str = fingerprint.ja4.as_ref().map(|j| &*j.raw);
             let _entity_snapshot = self.entity_manager.touch_entity_with_fingerprint(
                 client_ip,
                 ja4_str,
@@ -3210,7 +3240,7 @@ impl ProxyHttp for SynapseProxy {
             // Get or create actor based on IP + fingerprint correlation
             let actor_id = self
                 .actor_manager
-                .get_or_create_actor(ip_addr, fingerprint.ja4.as_ref().map(|j| j.raw.as_str()));
+                .get_or_create_actor(ip_addr, fingerprint.ja4.as_ref().map(|j| &*j.raw));
             ctx.actor_id = Some(actor_id.clone());
 
             // Record rule matches to actor's history
@@ -3312,7 +3342,7 @@ impl ProxyHttp for SynapseProxy {
                 let token_hash = format!("{:x}", hasher.finalize());
 
                 if let Ok(ip_addr) = client_ip.parse::<std::net::IpAddr>() {
-                    let ja4_str = fingerprint.ja4.as_ref().map(|j| j.raw.as_str());
+                    let ja4_str = fingerprint.ja4.as_ref().map(|j| &*j.raw);
                     let session_decision =
                         self.session_manager
                             .validate_request(&token_hash, ip_addr, ja4_str);
@@ -3415,8 +3445,8 @@ impl ProxyHttp for SynapseProxy {
                 Some(client_ip),
                 ctx.fingerprint
                     .as_ref()
-                    .and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.as_str())),
-                ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.as_str()),
+                    .and_then(|fp| fp.ja4.as_ref().map(|j| &*j.raw)),
+                ctx.fingerprint.as_ref().map(|fp| &*fp.ja4h.raw),
                 None, // last_request_time - not tracked yet
             );
         }
@@ -3500,7 +3530,7 @@ impl ProxyHttp for SynapseProxy {
                         ctx.fingerprint
                             .as_ref()
                             .and_then(|fp| fp.ja4.as_ref())
-                            .map(|j| j.raw.as_str()),
+                            .map(|j| &*j.raw),
                     );
                     ctx.actor_id = Some(actor_id.clone());
                     actor_id
@@ -3735,9 +3765,9 @@ impl ProxyHttp for SynapseProxy {
                     .with_ja4(
                         ctx.fingerprint
                             .as_ref()
-                            .and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.clone())),
+                            .and_then(|fp| fp.ja4.as_ref().map(|j| j.raw.to_string())),
                     )
-                    .with_ja4h(ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.clone()))
+                    .with_ja4h(ctx.fingerprint.as_ref().map(|fp| fp.ja4h.raw.to_string()))
                     .with_rules(
                         result
                             .matched_rules
@@ -4334,11 +4364,11 @@ impl ProxyHttp for SynapseProxy {
         // with Pingora's calculations during the migration period.
         if let Some(ref fp) = ctx.fingerprint {
             // JA4H fingerprint (always available, generated from HTTP headers)
-            upstream_request.insert_header("X-JA4H-Fingerprint-Pingora", &fp.ja4h.raw)?;
+            upstream_request.insert_header("X-JA4H-Fingerprint-Pingora", &*fp.ja4h.raw)?;
 
             // JA4 fingerprint (only if X-JA4-Fingerprint header was provided)
             if let Some(ref ja4) = fp.ja4 {
-                upstream_request.insert_header("X-JA4-Fingerprint-Pingora", &ja4.raw)?;
+                upstream_request.insert_header("X-JA4-Fingerprint-Pingora", &*ja4.raw)?;
             }
 
             // Combined fingerprint hash (for entity correlation)
@@ -5787,33 +5817,15 @@ fn main() {
 
     // Phase 9: Shared TrendsManager for anomaly detection + dashboard reporting.
     //
-    // TASK-55: wire TrendsManagerDependencies.apply_risk to the shared
-    // EntityManager so that when the anomaly detector produces an anomaly
-    // with risk_applied=Some(_), the risk automatically flows into
-    // entity_manager.apply_external_risk. Without this wiring, anomalies
-    // are recorded into self.anomalies but never contribute to the entity
-    // blocking threshold — the detection runs and goes nowhere.
-    //
-    // The callback casts u32 → f64 because TrendsManager stores anomaly
-    // risk as u32 but EntityManager takes f64. The reason string is
-    // prefixed with 'trends_anomaly:' so log greps can identify the
-    // contribution source.
-    let trends_deps = {
-        let entity_manager_for_trends = Arc::clone(&shared_entity_manager);
-        synapse_pingora::trends::TrendsManagerDependencies {
-            apply_risk: Some(Box::new(move |entity_id: &str, risk: u32, reason: &str| {
-                entity_manager_for_trends.apply_external_risk(
-                    entity_id,
-                    risk as f64,
-                    &format!("trends_anomaly:{}", reason),
-                );
-            })),
-        }
-    };
-    let shared_trends_manager = Arc::new(TrendsManager::with_dependencies(
+    // TASK-55 / TASK-67: construction is extracted into
+    // [`build_trends_manager_with_risk_callback`] so that integration tests
+    // can drive the exact same wiring path as main() and assert the
+    // apply_risk callback actually reaches EntityManager. Do NOT inline
+    // this back into main() without also updating TASK-67 integration tests.
+    let shared_trends_manager = build_trends_manager_with_risk_callback(
         TrendsConfig::default(),
-        trends_deps,
-    ));
+        Arc::clone(&shared_entity_manager),
+    );
     metrics_registry.set_trends_manager(Arc::clone(&shared_trends_manager));
     info!(
         "TrendsManager initialized with default config + apply_risk callback \
