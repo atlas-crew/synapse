@@ -16,36 +16,85 @@ default:
     @just --list --unsorted
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DEV SERVERS
+# DEV SERVERS (tmux-backed via `cortex tmux`)
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Each long-running dev server runs in its own tmux window inside a shared
+# session. This replaces the old `trap 'kill 0' EXIT` foreground pattern:
+#   - services survive terminal exits
+#   - logs don't interleave
+#   - each window can be started, stopped, tailed, or restarted independently
+#
+# Session name: $TMUX_SESSION or `edge-protection` (default).
+# Attach:       `just dev-shell`
+# Status:       `just dev-status`
+# Stop all:     `just dev-stop`
 
-# Start Signal Horizon API + UI in parallel
-dev-horizon:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Starting Signal Horizon API (port 3100) + UI (port 5180)..."
-    trap 'kill 0' EXIT
-    cd "{{root}}" && pnpm exec nx run signal-horizon-api:dev &
-    cd "{{root}}" && pnpm exec nx run signal-horizon-ui:dev &
-    wait
+_dev_session := env_var_or_default("TMUX_SESSION", "edge-protection")
 
-# Start Synapse Pingora in dev mode
-dev-synapse:
-    cd "{{root}}" && pnpm exec nx run synapse-pingora:dev
+# Ensure the tmux session exists (idempotent)
+_dev-init:
+    @tmux has-session -t "{{_dev_session}}" 2>/dev/null || tmux new-session -d -s "{{_dev_session}}"
 
-# Start everything: Signal Horizon + Synapse Pingora in parallel
-dev:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Starting all services..."
-    echo "  Signal Horizon API → :3100"
-    echo "  Signal Horizon UI  → :5180"
-    echo "  Synapse Pingora    → :6190 (proxy) / :6191 (admin)"
-    trap 'kill 0' EXIT
-    cd "{{root}}" && pnpm exec nx run signal-horizon-api:dev &
-    cd "{{root}}" && pnpm exec nx run signal-horizon-ui:dev &
-    cd "{{root}}" && pnpm exec nx run synapse-pingora:dev &
-    wait
+# Start Signal Horizon API in its own tmux window
+dev-horizon-api: _dev-init
+    @cortex tmux new signal-horizon-api 2>/dev/null || true
+    @cortex tmux running signal-horizon-api 2>/dev/null || cortex tmux send signal-horizon-api "cd '{{root}}' && pnpm exec nx run signal-horizon-api:dev"
+
+# Start Signal Horizon UI in its own tmux window
+dev-horizon-ui: _dev-init
+    @cortex tmux new signal-horizon-ui 2>/dev/null || true
+    @cortex tmux running signal-horizon-ui 2>/dev/null || cortex tmux send signal-horizon-ui "cd '{{root}}' && pnpm exec nx run signal-horizon-ui:dev"
+
+# Start Synapse Pingora in its own tmux window
+dev-synapse: _dev-init
+    @cortex tmux new synapse-pingora 2>/dev/null || true
+    @cortex tmux running synapse-pingora 2>/dev/null || cortex tmux send synapse-pingora "cd '{{root}}' && pnpm exec nx run synapse-pingora:dev"
+
+# Start Signal Horizon API + UI in parallel tmux windows
+dev-horizon: dev-horizon-api dev-horizon-ui
+    @echo "Signal Horizon:  API → :3100  ·  UI → :5180"
+    @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
+
+# Start everything: Signal Horizon + Synapse Pingora in parallel tmux windows
+dev: dev-horizon-api dev-horizon-ui dev-synapse
+    @echo "Dev services running in tmux session '{{_dev_session}}':"
+    @echo "  Signal Horizon API → :3100"
+    @echo "  Signal Horizon UI  → :5180"
+    @echo "  Synapse Pingora    → :6190 (proxy) / :6191 (admin)"
+    @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
+
+# Show status of all dev windows (running vs not)
+dev-status:
+    @cortex tmux running signal-horizon-api >/dev/null 2>&1 && echo "signal-horizon-api: running" || echo "signal-horizon-api: not running"
+    @cortex tmux running signal-horizon-ui  >/dev/null 2>&1 && echo "signal-horizon-ui:  running" || echo "signal-horizon-ui:  not running"
+    @cortex tmux running synapse-pingora    >/dev/null 2>&1 && echo "synapse-pingora:    running" || echo "synapse-pingora:    not running"
+
+# Tail the last N lines (default 50) from a dev window
+dev-tail name n='50':
+    cortex tmux read {{name}} {{n}}
+
+# Stop all dev windows
+dev-stop:
+    -cortex tmux kill signal-horizon-api
+    -cortex tmux kill signal-horizon-ui
+    -cortex tmux kill synapse-pingora
+
+# Stop a single dev window by name
+dev-stop-one name:
+    cortex tmux kill {{name}}
+
+# Restart everything (stop + start)
+dev-restart: dev-stop dev
+
+# Attach to the dev tmux session
+dev-shell:
+    tmux attach-session -t "{{_dev_session}}" 2>/dev/null || tmux new-session -s "{{_dev_session}}"
+
+# Kill and recreate the entire tmux session
+dev-reset:
+    -tmux kill-session -t "{{_dev_session}}"
+    tmux new-session -d -s "{{_dev_session}}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BUILD
