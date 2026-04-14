@@ -29,6 +29,12 @@ Markdown under `docs/` is for engineers working on this codebase. It
 covers implementation details, troubleshooting recipes, and design
 notes that are not part of the product documentation.
 
+- [docs/architecture/platform-map.md](./architecture/platform-map.md) —
+  One-page operator reference listing every service, data seam, port,
+  maturity state (production / dormant-but-wired / placeholder /
+  in-flight), and `just` launcher across the Edge Protection platform
+  plus its `../Apparatus` and `../Chimera` siblings. Read this first
+  when joining services or picking the demo back up.
 - [docs/development/demo-simulator.md](./development/demo-simulator.md) —
   Architecture of the procedural traffic simulator that drives demo
   mode (archetypes, tick model, state mirrors, HorizonManager wiring).
