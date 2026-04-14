@@ -297,7 +297,14 @@ pub struct SimulatorLoop {
     /// Tick interval. Default 200ms = 5 ticks/sec.
     tick_interval: Duration,
     /// How many synthetic requests to generate per tick. Multiplied across
-    /// archetypes — at 5 ticks/sec × 4 requests × 1 archetype = 20 RPS.
+    /// archetypes — at the default 1 tick/sec × 2 requests × 2 archetypes
+    /// you get ~4 RPS, well within dev horizon's Prisma throughput.
+    ///
+    /// 20 RPS (the original 200ms × 4) saturates dev-mode horizon after
+    /// a few minutes because every signal is an INSERT + SELECT +
+    /// idempotency round-trip, and the Node event loop can't drain fast
+    /// enough. Tuned down so the demo can run for hours without
+    /// backpressure.
     requests_per_tick: usize,
 }
 
@@ -319,8 +326,8 @@ impl SimulatorLoop {
             block_log,
             waf_stats,
             horizon_manager,
-            tick_interval: Duration::from_millis(200),
-            requests_per_tick: 4,
+            tick_interval: Duration::from_millis(1000),
+            requests_per_tick: 2,
         }
     }
 
