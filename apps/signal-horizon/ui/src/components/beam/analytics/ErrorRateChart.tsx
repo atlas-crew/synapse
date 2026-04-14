@@ -11,11 +11,14 @@ import {
 import {
   axisDefaults,
   barDefaults,
+  CARD_HEADER_TITLE_STYLE,
   colors,
   darken,
   gridDefaults,
   legendDefaults,
   lighten,
+  Panel,
+  SectionHeader,
   tooltipDefaults,
 } from '@/ui';
 
@@ -38,15 +41,18 @@ const SERIES = {
 
 export function ErrorRateChart() {
   return (
-    <div className="bg-surface-card border border-border-subtle p-5 shadow-card">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-xl font-light text-ink-primary">Service Health</h3>
-          <p className="text-sm text-ink-secondary">Response codes breakdown by service</p>
-        </div>
-      </div>
+    <Panel tone="default">
+      <Panel.Header>
+        <SectionHeader
+          title="Service Health"
+          description="Response codes breakdown by service"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
+      </Panel.Header>
 
-      <div className="h-64">
+      <Panel.Body className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={DEMO_ERROR_DATA}
@@ -105,7 +111,7 @@ export function ErrorRateChart() {
             />
           </BarChart>
         </ResponsiveContainer>
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }

@@ -12,11 +12,14 @@ import {
 import {
   axisDefaults,
   ChartValueLabel,
+  CARD_HEADER_TITLE_STYLE,
   colors,
   darken,
   formatValue,
   gridDefaults,
   lighten,
+  Panel,
+  SectionHeader,
   tooltipDefaults,
   xAxisNoLine,
 } from '@/ui';
@@ -36,19 +39,22 @@ const uniqueColors = [...new Set(DEMO_LATENCY_DATA.map((d) => d.color))];
 
 export function LatencyHistogram() {
   return (
-    <div className="bg-surface-card border border-border-subtle p-5 shadow-card">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h3 className="text-xl font-light text-ink-primary">Latency Distribution</h3>
-          <p className="text-sm text-ink-secondary">Request processing time buckets</p>
-        </div>
+    <Panel tone="default">
+      <Panel.Header>
+        <SectionHeader
+          title="Latency Distribution"
+          description="Request processing time buckets"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
         <div className="text-right">
           <p className="text-xs text-ink-secondary uppercase tracking-wider">P95 Latency</p>
           <p className="text-xl font-mono text-ink-primary">184ms</p>
         </div>
-      </div>
+      </Panel.Header>
 
-      <div className="h-64">
+      <Panel.Body className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={DEMO_LATENCY_DATA} margin={{ top: 24, right: 0, left: 0, bottom: 0 }}>
             <defs>
@@ -83,7 +89,7 @@ export function LatencyHistogram() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }

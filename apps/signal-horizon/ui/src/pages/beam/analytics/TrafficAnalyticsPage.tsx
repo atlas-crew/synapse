@@ -5,14 +5,14 @@
 
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, TrendingUp, ArrowUpRight, ArrowDownRight, Clock } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Activity, TrendingUp, Clock } from 'lucide-react';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
 import {
   AreaChart,
   Area,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -27,6 +27,11 @@ import { ErrorRateChart } from '../../../components/beam/analytics/ErrorRateChar
 import {
   SectionHeader,
   Stack,
+  Panel,
+  StatCard,
+  DataTable,
+  ValuePill,
+  TimeRangeSelector,
   alpha,
   axisDefaults,
   colors,
@@ -34,23 +39,25 @@ import {
   tooltipDefaults,
   xAxisNoLine,
   PAGE_TITLE_STYLE,
+  CARD_HEADER_TITLE_STYLE,
 } from '@/ui';
 
+// Matches the @/ui TimeRangeSelector PresetRange type — only the subset
+// this page exposes. The selector is intentionally unwired until the
+// traffic query accepts a range parameter; state is preserved so the
+// component works as a visual affordance without silently disabling.
 type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
+const TIME_RANGE_PRESETS: TimeRange[] = ['1h', '6h', '24h', '7d', '30d'];
 
-const TIME_RANGES: { value: TimeRange; label: string }[] = [
-  { value: '1h', label: '1 Hour' },
-  { value: '6h', label: '6 Hours' },
-  { value: '24h', label: '24 Hours' },
-  { value: '7d', label: '7 Days' },
-  { value: '30d', label: '30 Days' },
-];
-
-// Demo data
+// Demo data. Deterministic per-hour curve rather than Math.random() so
+// values don't shuffle on hot-reload or re-mount — shuffling values in a
+// dev environment made it impossible to eyeball chart tweaks.
 const DEMO_TRAFFIC_HOURLY = Array.from({ length: 24 }, (_, i) => {
-  const requests = Math.floor(Math.random() * 5000) + 1000;
-  const blocked = Math.floor(Math.random() * 100) + 10;
+  // Gentle diurnal-ish curve: low overnight, peak mid-afternoon.
+  const wave = Math.sin(((i - 3) / 24) * Math.PI * 2) * 0.45 + 0.55;
+  const requests = Math.round(1500 + wave * 4500);
+  const blocked = Math.round(15 + wave * 80);
   return {
     time: `${String(i).padStart(2, '0')}:00`,
     requests,
@@ -84,92 +91,18 @@ const CHART_COLORS = {
   delete: colors.magenta,
 };
 
-// Time Range Selector
-function TimeRangeSelector({
-  value,
-  onChange,
-}: {
-  value: TimeRange;
-  onChange: (v: TimeRange) => void;
-}) {
-  return (
-    <div className="flex gap-1 bg-surface-card p-1">
-      {TIME_RANGES.map((range) => (
-        <button
-          key={range.value}
-          onClick={() => onChange(range.value)}
-          className={clsx(
-            'px-3 py-1.5 text-sm font-medium transition-colors',
-            value === range.value
-              ? 'bg-horizon-600 text-ink-primary'
-              : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-subtle',
-          )}
-        >
-          {range.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// Stat Card
-function StatCard({
-  label,
-  value,
-  trend,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  trend?: { value: number; label: string };
-  icon: React.ElementType;
-}) {
-  const isPositive = trend && trend.value >= 0;
-  const TrendIcon = isPositive ? ArrowUpRight : ArrowDownRight;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-surface-card border border-border-subtle p-5"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-ink-secondary">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-ink-primary">{value}</p>
-          {trend && (
-            <Stack
-              direction="row"
-              align="center"
-              gap="xs"
-              className={clsx('mt-2 text-sm', isPositive ? 'text-green-400' : 'text-red-400')}
-            >
-              <TrendIcon className="w-4 h-4" />
-              <span>
-                {Math.abs(trend.value)}% {trend.label}
-              </span>
-            </Stack>
-          )}
-        </div>
-        <div className="p-3 bg-surface-subtle/50">
-          <Icon className="w-6 h-6 text-horizon-400" />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
 // Traffic Timeline Chart
 function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
   return (
-    <div className="bg-surface-card border border-border-subtle p-5 shadow-card">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-xl font-light text-ink-primary">Traffic Over Time</h3>
-          <p className="text-sm text-ink-secondary mt-1">
-            Allowed + Blocked requests per hour (total implied)
-          </p>
-        </div>
+    <Panel tone="default">
+      <Panel.Header>
+        <SectionHeader
+          title="Traffic Over Time"
+          description="Allowed + Blocked requests per hour (total implied)"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
         <Stack direction="row" align="center" gap="md" className="text-sm">
           <Stack direction="row" align="center" gap="sm">
             <div className="w-3 h-3" style={{ backgroundColor: CHART_COLORS.allowed }} />
@@ -180,8 +113,8 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
             <span className="text-ink-secondary">Blocked</span>
           </Stack>
         </Stack>
-      </div>
-      <div className="h-80">
+      </Panel.Header>
+      <Panel.Body className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -240,8 +173,8 @@ function TrafficTimelineChart({ data }: { data: typeof DEMO_TRAFFIC_HOURLY }) {
             />
           </AreaChart>
         </ResponsiveContainer>
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }
 
@@ -255,9 +188,17 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
   };
 
   return (
-    <div className="bg-surface-card border border-border-subtle p-5">
-      <h3 className="text-lg font-semibold text-ink-primary mb-4">Request Methods</h3>
-      <div className="h-60">
+    <Panel tone="default">
+      <Panel.Header>
+        <SectionHeader
+          title="Request Methods"
+          description="HTTP verb distribution"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
+      </Panel.Header>
+      <Panel.Body className="h-60">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
             <CartesianGrid {...gridDefaultsSoft} horizontal={false} />
@@ -280,29 +221,18 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
               {...tooltipDefaults}
               formatter={(value: number) => [value.toLocaleString(), 'Requests']}
             />
-            <Bar
-              dataKey="count"
-              fill={CHART_COLORS.allowed}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              shape={(props: any) => {
-                const { x, y, width, height, payload } = props;
-                return (
-                  <rect
-                    x={x}
-                    y={y}
-                    width={width}
-                    height={height}
-                    fill={methodColors[payload.method] || CHART_COLORS.allowed}
-                    rx={0}
-                    ry={0}
-                  />
-                );
-              }}
-            />
+            <Bar dataKey="count">
+              {data.map((entry) => (
+                <Cell
+                  key={entry.method}
+                  fill={methodColors[entry.method] || CHART_COLORS.allowed}
+                />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
-      </div>
-      <div className="mt-4 grid grid-cols-4 gap-2">
+      </Panel.Body>
+      <div className="px-6 pb-6 grid grid-cols-4 gap-2">
         {data.map((item) => (
           <div key={item.method} className="text-center">
             <div
@@ -314,72 +244,99 @@ function MethodBreakdownChart({ data }: { data: typeof DEMO_METHOD_BREAKDOWN }) 
           </div>
         ))}
       </div>
-    </div>
+    </Panel>
   );
 }
 
 // Top Endpoints Table
+//
+// Wrapped in <Panel> with Panel.Body padding="none" so Panel owns the
+// card chrome and <DataTable card={false}> renders without its own
+// second border. Block-rate pill color is chosen by a small helper
+// mapping that reuses the design-system ValuePill component rather
+// than hand-rolled colored spans.
+function blockRatePillColor(rate: number): 'green' | 'orange' | 'red' {
+  if (rate < 1) return 'green';
+  if (rate < 3) return 'orange';
+  return 'red';
+}
+
 function TopEndpointsTable({ data }: { data: typeof DEMO_TOP_ENDPOINTS }) {
+  // Pre-compute block rate once per row so it's available for both the
+  // sort-safe value display and the pill color. Building the row shape
+  // DataTable expects (flat Record<string, any>) lets the column render
+  // functions stay focused on presentation.
+  const rows = data.map((item, idx) => ({
+    idx: idx + 1,
+    endpoint: item.endpoint,
+    requests: item.requests,
+    blocked: item.blocked,
+    blockRate: (item.blocked / item.requests) * 100,
+  }));
+
   return (
-    <div className="bg-surface-card border border-border-subtle">
-      <div className="px-5 py-4 border-b border-border-subtle">
-        <h3 className="text-lg font-semibold text-ink-primary">Top Endpoints</h3>
-        <p className="text-sm text-ink-secondary mt-1">Highest traffic endpoints</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <caption className="sr-only">Top endpoints by traffic volume and block rate</caption>
-          <thead>
-            <tr className="text-left text-sm text-ink-secondary border-b border-border-subtle">
-              <th className="px-5 py-3 font-medium">Endpoint</th>
-              <th className="px-5 py-3 font-medium text-right">Requests</th>
-              <th className="px-5 py-3 font-medium text-right">Blocked</th>
-              <th className="px-5 py-3 font-medium text-right">Block Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((item, idx) => {
-              const blockRate = ((item.blocked / item.requests) * 100).toFixed(2);
-              return (
-                <tr
-                  key={item.endpoint}
-                className="border-b border-border-subtle/50 hover:bg-surface-subtle transition-colors"
-              >
-                <td className="px-5 py-3">
-                  <Stack direction="row" align="center" gap="smPlus">
-                    <span className="text-ink-muted text-sm w-6">{idx + 1}</span>
-                    <code className="text-blue-400 bg-blue-500/10 px-2 py-0.5 text-sm">
-                      {item.endpoint}
-                    </code>
-                  </Stack>
-                </td>
-                  <td className="px-5 py-3 text-right text-ink-primary font-medium">
-                    {item.requests.toLocaleString()}
-                  </td>
-                  <td className="px-5 py-3 text-right text-red-400">
-                    {item.blocked.toLocaleString()}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <span
-                      className={clsx(
-                        'px-2 py-0.5 text-xs font-medium',
-                        parseFloat(blockRate) < 1
-                          ? 'text-green-400 bg-green-500/20'
-                          : parseFloat(blockRate) < 3
-                            ? 'text-sky-400 bg-sky-500/20'
-                            : 'text-red-400 bg-red-500/20',
-                      )}
-                    >
-                      {blockRate}%
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <Panel tone="default">
+      <Panel.Header>
+        <SectionHeader
+          title="Top Endpoints"
+          description="Highest traffic endpoints"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
+      </Panel.Header>
+      <Panel.Body padding="none">
+        <DataTable
+          card={false}
+          columns={[
+            {
+              key: 'endpoint',
+              label: 'Endpoint',
+              render: (_v, row) => (
+                <Stack direction="row" align="center" gap="smPlus">
+                  <span className="text-ink-muted text-sm w-6">{row.idx}</span>
+                  <code className="text-ac-blue bg-ac-blue/10 px-2 py-0.5 text-sm">
+                    {row.endpoint}
+                  </code>
+                </Stack>
+              ),
+            },
+            {
+              key: 'requests',
+              label: 'Requests',
+              align: 'right',
+              render: (v) => (
+                <span className="text-ink-primary font-medium">
+                  {Number(v).toLocaleString()}
+                </span>
+              ),
+            },
+            {
+              key: 'blocked',
+              label: 'Blocked',
+              align: 'right',
+              render: (v) => (
+                <span className="text-status-error">
+                  {Number(v).toLocaleString()}
+                </span>
+              ),
+            },
+            {
+              key: 'blockRate',
+              label: 'Block Rate',
+              align: 'right',
+              render: (v) => (
+                <ValuePill
+                  value={`${Number(v).toFixed(2)}%`}
+                  color={blockRatePillColor(Number(v))}
+                />
+              ),
+            },
+          ]}
+          data={rows}
+        />
+      </Panel.Body>
+    </Panel>
   );
 }
 
@@ -443,34 +400,50 @@ export default function TrafficAnalyticsPage() {
         size="h1"
         style={PAGE_HEADER_STYLE}
         titleStyle={PAGE_TITLE_STYLE}
-        actions={<TimeRangeSelector value={timeRange} onChange={setTimeRange} />}
+        actions={
+          <TimeRangeSelector
+            value={timeRange}
+            onChange={(v) => setTimeRange(v as TimeRange)}
+            presets={TIME_RANGE_PRESETS}
+          />
+        }
       />
 
-      {/* Stats Grid */}
+      {/* Stats Grid. Each card wraps the @/ui <StatCard> in a motion.div
+          so the entrance animation stays (framer-motion was the one
+          thing worth preserving from the old local component). */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          label="Total Requests"
-          value={`${(totalRequests / 1000).toFixed(1)}k`}
-          trend={{ value: 12, label: 'vs previous' }}
-          icon={Activity}
-        />
-        <StatCard
-          label="Blocked Requests"
-          value={totalBlocked.toLocaleString()}
-          trend={{ value: -8, label: 'vs previous' }}
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="Avg Requests/Hour"
-          value={avgRequestsPerHour.toLocaleString()}
-          trend={{ value: 5, label: 'vs previous' }}
-          icon={Clock}
-        />
-        <StatCard
-          label="Block Rate"
-          value={`${((totalBlocked / totalRequests) * 100).toFixed(2)}%`}
-          icon={TrendingUp}
-        />
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <StatCard
+            label="Total Requests"
+            value={`${(totalRequests / 1000).toFixed(1)}k`}
+            trend={{ value: 12, label: 'vs previous' }}
+            icon={<Activity className="w-6 h-6" />}
+          />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <StatCard
+            label="Blocked Requests"
+            value={totalBlocked.toLocaleString()}
+            trend={{ value: -8, label: 'vs previous' }}
+            icon={<TrendingUp className="w-6 h-6" />}
+          />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <StatCard
+            label="Avg Requests/Hour"
+            value={avgRequestsPerHour.toLocaleString()}
+            trend={{ value: 5, label: 'vs previous' }}
+            icon={<Clock className="w-6 h-6" />}
+          />
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <StatCard
+            label="Block Rate"
+            value={`${((totalBlocked / totalRequests) * 100).toFixed(2)}%`}
+            icon={<TrendingUp className="w-6 h-6" />}
+          />
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
