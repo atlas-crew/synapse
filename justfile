@@ -16,11 +16,11 @@ default:
     @just --list --unsorted
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DEV SERVERS (tmux-backed via `cortex tmux`)
+# DEV SERVERS (tmux-backed)
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # Each long-running dev server runs in its own tmux window inside a shared
-# session. This replaces the old `trap 'kill 0' EXIT` foreground pattern:
+# session. Replaces the old `trap 'kill 0' EXIT` foreground pattern:
 #   - services survive terminal exits
 #   - logs don't interleave
 #   - each window can be started, stopped, tailed, or restarted independently
@@ -32,57 +32,118 @@ default:
 
 _dev_session := env_var_or_default("TMUX_SESSION", "edge-protection")
 
-# Ensure the tmux session exists (idempotent)
+# Ensure the tmux session exists (idempotent, detached)
 _dev-init:
     @tmux has-session -t "{{_dev_session}}" 2>/dev/null || tmux new-session -d -s "{{_dev_session}}"
 
 # Start Signal Horizon API in its own tmux window
 dev-horizon-api: _dev-init
-    @cortex tmux new signal-horizon-api 2>/dev/null || true
-    @cortex tmux running signal-horizon-api 2>/dev/null || cortex tmux send signal-horizon-api "cd '{{root}}' && pnpm exec nx run signal-horizon-api:dev"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="signal-horizon-api"
+    cmd="cd '{{root}}' && pnpm exec nx run signal-horizon-api:dev"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in existing window" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started"
+    fi
 
 # Start Signal Horizon UI in its own tmux window
 dev-horizon-ui: _dev-init
-    @cortex tmux new signal-horizon-ui 2>/dev/null || true
-    @cortex tmux running signal-horizon-ui 2>/dev/null || cortex tmux send signal-horizon-ui "cd '{{root}}' && pnpm exec nx run signal-horizon-ui:dev"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="signal-horizon-ui"
+    cmd="cd '{{root}}' && pnpm exec nx run signal-horizon-ui:dev"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in existing window" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started"
+    fi
 
 # Start Synapse Pingora in its own tmux window
 dev-synapse: _dev-init
-    @cortex tmux new synapse-pingora 2>/dev/null || true
-    @cortex tmux running synapse-pingora 2>/dev/null || cortex tmux send synapse-pingora "cd '{{root}}' && pnpm exec nx run synapse-pingora:dev"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="synapse-pingora"
+    cmd="cd '{{root}}' && pnpm exec nx run synapse-waf:dev"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in existing window" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started"
+    fi
 
-# Start Signal Horizon API + UI in parallel tmux windows
+# Start Signal Horizon API + UI in tmux windows
 dev-horizon: dev-horizon-api dev-horizon-ui
     @echo "Signal Horizon:  API → :3100  ·  UI → :5180"
     @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
 
-# Start everything: Signal Horizon + Synapse Pingora in parallel tmux windows
+# Start everything: Signal Horizon + Synapse Pingora in tmux windows
 dev: dev-horizon-api dev-horizon-ui dev-synapse
+    @echo ""
     @echo "Dev services running in tmux session '{{_dev_session}}':"
     @echo "  Signal Horizon API → :3100"
     @echo "  Signal Horizon UI  → :5180"
     @echo "  Synapse Pingora    → :6190 (proxy) / :6191 (admin)"
     @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
 
-# Show status of all dev windows (running vs not)
+# Show status of all dev windows (running vs idle vs not running)
 dev-status:
-    @cortex tmux running signal-horizon-api >/dev/null 2>&1 && echo "signal-horizon-api: running" || echo "signal-horizon-api: not running"
-    @cortex tmux running signal-horizon-ui  >/dev/null 2>&1 && echo "signal-horizon-ui:  running" || echo "signal-horizon-ui:  not running"
-    @cortex tmux running synapse-pingora    >/dev/null 2>&1 && echo "synapse-pingora:    running" || echo "synapse-pingora:    not running"
+    #!/usr/bin/env bash
+    session="{{_dev_session}}"
+    for name in signal-horizon-api signal-horizon-ui synapse-pingora; do
+        if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+            cmd=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' 2>/dev/null | awk -v n="$name" '$1 == n { print $2; exit }')
+            case "$cmd" in
+                zsh|bash|fish|sh) printf '  %-22s idle (at shell prompt)\n' "$name" ;;
+                "")               printf '  %-22s unknown\n' "$name" ;;
+                *)                printf '  %-22s running (%s)\n' "$name" "$cmd" ;;
+            esac
+        else
+            printf '  %-22s not running\n' "$name"
+        fi
+    done
 
 # Tail the last N lines (default 50) from a dev window
 dev-tail name n='50':
-    cortex tmux read {{name}} {{n}}
+    tmux capture-pane -t "{{_dev_session}}:{{name}}" -p -S -{{n}}
 
 # Stop all dev windows
 dev-stop:
-    -cortex tmux kill signal-horizon-api
-    -cortex tmux kill signal-horizon-ui
-    -cortex tmux kill synapse-pingora
+    -tmux kill-window -t "{{_dev_session}}:signal-horizon-api" 2>/dev/null
+    -tmux kill-window -t "{{_dev_session}}:signal-horizon-ui"  2>/dev/null
+    -tmux kill-window -t "{{_dev_session}}:synapse-pingora"    2>/dev/null
+    @echo "all dev windows stopped"
 
 # Stop a single dev window by name
 dev-stop-one name:
-    cortex tmux kill {{name}}
+    tmux kill-window -t "{{_dev_session}}:{{name}}"
 
 # Restart everything (stop + start)
 dev-restart: dev-stop dev
@@ -93,8 +154,9 @@ dev-shell:
 
 # Kill and recreate the entire tmux session
 dev-reset:
-    -tmux kill-session -t "{{_dev_session}}"
+    -tmux kill-session -t "{{_dev_session}}" 2>/dev/null
     tmux new-session -d -s "{{_dev_session}}"
+    @echo "tmux session '{{_dev_session}}' reset"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BUILD
