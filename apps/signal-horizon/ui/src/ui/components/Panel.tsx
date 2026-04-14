@@ -130,7 +130,100 @@ const spacingClass: Record<PanelSpacing, string> = {
   lg: 'space-y-8',
 };
 
-export const Panel: React.FC<PanelProps> = ({
+// ───────────────────────────────────────────────────────────────────────────
+// Compound slots: <Panel.Header> and <Panel.Body>
+// ───────────────────────────────────────────────────────────────────────────
+//
+// When a Panel contains at least one Panel.Header or Panel.Body child, it
+// automatically drops its own padding and spacing so the slots can control
+// the internal layout directly. This lets Header bleed a subtle background
+// tint all the way to the Panel's edges (minus the accent bar), matching
+// the existing `.card-header` / `.card-body` pattern used in OverviewPage's
+// Top Attackers / Top Fingerprints sections and across most Hunting pages.
+//
+// Detection is by React element type comparison — no context, no prop
+// threading, no hooks. The cost is that `<Panel.Header>` and `<Panel.Body>`
+// must be direct children of Panel (not nested inside another wrapper)
+// for the detection to fire. This is intentional: if you're wrapping slots
+// in a fragment or another div, you probably don't want the auto-padding
+// behavior anyway.
+
+interface PanelHeaderProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+interface PanelBodyProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * Override the body's internal padding. Defaults to `md` (p-6). Use
+   * `none` when the body wraps a full-bleed child like a DataTable or
+   * a list that manages its own padding.
+   */
+  padding?: PanelPadding | 'none';
+}
+
+/**
+ * Panel.Header — optional dense header bar at the top of a Panel.
+ *
+ * Styled with a subtle background tint and a bottom separator so the
+ * header visually distinguishes itself from the body. Defaults to a
+ * flex row with `justify-between align-center` so a title and actions
+ * naturally lay out on opposite sides.
+ *
+ * Usage:
+ *   <Panel tone="default">
+ *     <Panel.Header>
+ *       <SectionHeader title="Top Attackers" size="h4" />
+ *       <Button variant="ghost" size="sm">View all</Button>
+ *     </Panel.Header>
+ *     <Panel.Body>...</Panel.Body>
+ *   </Panel>
+ */
+const PanelHeader: React.FC<PanelHeaderProps> = ({
+  className,
+  children,
+  ...rest
+}) => (
+  <div
+    className={clsx(
+      'px-6 py-4 bg-surface-subtle/50 border-b border-border-subtle',
+      'flex items-center justify-between gap-4',
+      'shrink-0',
+      className,
+    )}
+    {...rest}
+  >
+    {children}
+  </div>
+);
+PanelHeader.displayName = 'Panel.Header';
+
+/**
+ * Panel.Body — optional content slot beneath a Panel.Header.
+ *
+ * Defaults to `padding="md"` (p-6). Use `padding="none"` for full-bleed
+ * children like lists, tables, or iframes that manage their own padding.
+ */
+const PanelBody: React.FC<PanelBodyProps> = ({
+  padding = 'md',
+  className,
+  children,
+  ...rest
+}) => (
+  <div
+    className={clsx(
+      padding !== 'none' && paddingClass[padding],
+      className,
+    )}
+    {...rest}
+  >
+    {children}
+  </div>
+);
+PanelBody.displayName = 'Panel.Body';
+
+// ───────────────────────────────────────────────────────────────────────────
+// Panel parent component
+// ───────────────────────────────────────────────────────────────────────────
+
+const PanelImpl: React.FC<PanelProps> = ({
   tone = 'default',
   padding = 'lg',
   spacing = 'md',
@@ -140,13 +233,41 @@ export const Panel: React.FC<PanelProps> = ({
   children,
   ...rest
 }) => {
+  // Auto-detect slotted usage: if any direct child is Panel.Header or
+  // Panel.Body, drop Panel's own padding and spacing so slots control
+  // the interior layout.
+  const childArray = React.Children.toArray(children);
+  const hasSlots = childArray.some(
+    (child) =>
+      React.isValidElement(child) &&
+      (child.type === PanelHeader || child.type === PanelBody),
+  );
+
+  const effectivePadding = hasSlots ? undefined : paddingClass[padding];
+  const effectiveSpacing = hasSlots ? '' : spacingClass[spacing];
+
   const Component = as as keyof React.JSX.IntrinsicElements;
   const classes = clsx(
     'bg-surface-card shadow-card',
     noAccent ? 'border border-border-subtle' : ['border-t-4', toneAccentClass[tone]],
-    paddingClass[padding],
-    spacingClass[spacing],
+    effectivePadding,
+    effectiveSpacing,
+    // When slots take over, the parent becomes a flex column so Body can
+    // flex-grow and Header can stay pinned at the top. Without this, a
+    // Panel.Body with flex-grow inside a non-flex Panel does nothing.
+    hasSlots && 'flex flex-col',
     className,
   );
   return React.createElement(Component, { className: classes, ...rest }, children);
 };
+
+// Attach compound slots to Panel as static properties so users can write
+// <Panel.Header> and <Panel.Body> via standard compound-component syntax.
+type PanelComponent = React.FC<PanelProps> & {
+  Header: typeof PanelHeader;
+  Body: typeof PanelBody;
+};
+
+export const Panel = PanelImpl as PanelComponent;
+Panel.Header = PanelHeader;
+Panel.Body = PanelBody;

@@ -378,21 +378,16 @@ export default function OverviewPage() {
       </div>
 
       {/* ─── Active Campaigns ─────────────────────────────────────────
-           POC: converted from ad-hoc `<section className="card border-t-4
-           border-ac-blue">` to the new @/ui <Panel> component. The
-           `tone="info"` prop produces the same 4px blue top accent that
-           was previously hand-rolled. padding="md" matches the old p-6-ish
-           feel; spacing="none" because the ActiveCampaignList child manages
-           its own layout. See docs/development/design-system.md (TBD)
-           for the Panel migration guide. */}
+           Uses <Panel> with the slot compound API: <Panel.Header>
+           renders the dense header bar (subtle background + border-
+           bottom), <Panel.Body padding="none"> wraps the full-bleed
+           campaign list which manages its own padding internally. */}
       <Panel
         tone="info"
-        padding="md"
-        spacing="none"
-        className="flex flex-col min-h-[300px]"
+        className="min-h-[300px]"
         aria-labelledby="campaigns-heading"
       >
-        <div className="flex items-center justify-between shrink-0 pb-3 border-b border-border-subtle">
+        <Panel.Header>
           <SectionHeader
             titleId="campaigns-heading"
             title="Active Campaigns"
@@ -418,12 +413,14 @@ export default function OverviewPage() {
               View All Campaigns &gt;
             </Button>
           </Stack>
-        </div>
-        <ErrorBoundary fallback={<CampaignListSkeleton />}>
-          <Suspense fallback={<CampaignListSkeleton />}>
-            <ActiveCampaignList campaigns={campaigns} />
-          </Suspense>
-        </ErrorBoundary>
+        </Panel.Header>
+        <Panel.Body padding="none" className="flex-1">
+          <ErrorBoundary fallback={<CampaignListSkeleton />}>
+            <Suspense fallback={<CampaignListSkeleton />}>
+              <ActiveCampaignList campaigns={campaigns} />
+            </Suspense>
+          </ErrorBoundary>
+        </Panel.Body>
       </Panel>
 
       {/* ─── Strategic Insights + Top Metrics ────────────────────────── */}
@@ -490,11 +487,12 @@ export default function OverviewPage() {
         </div>
 
         {/* Top Attackers */}
-        <section
-          className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]"
+        <Panel
+          tone="default"
+          className="h-full min-h-[450px]"
           aria-labelledby="attackers-heading"
         >
-          <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
+          <Panel.Header>
             <SectionHeader
               titleId="attackers-heading"
               title="Top Attackers (24h)"
@@ -510,8 +508,8 @@ export default function OverviewPage() {
                 color: colors.gray.mid,
               }}
             />
-          </div>
-          <div className="card-body space-y-5 overflow-auto flex-grow">
+          </Panel.Header>
+          <Panel.Body className="space-y-5 overflow-auto flex-1">
             {topAttackers.map((a) => (
               <Stack key={a.label} direction="column" style={{ gap: '0.375rem' }}>
                 <div className="flex items-center justify-between text-xs font-mono">
@@ -529,15 +527,16 @@ export default function OverviewPage() {
                 </div>
               </Stack>
             ))}
-          </div>
-        </section>
+          </Panel.Body>
+        </Panel>
 
         {/* Top Fingerprints */}
-        <section
-          className="card border-t border-border-subtle flex flex-col h-full min-h-[450px]"
+        <Panel
+          tone="default"
+          className="h-full min-h-[450px]"
           aria-labelledby="fingerprints-heading"
         >
-          <div className="card-header py-3 bg-surface-subtle/30 shrink-0">
+          <Panel.Header>
             <SectionHeader
               titleId="fingerprints-heading"
               title="Top Fingerprints (24h)"
@@ -553,8 +552,8 @@ export default function OverviewPage() {
                 color: colors.gray.mid,
               }}
             />
-          </div>
-          <div className="card-body space-y-5 overflow-auto flex-grow">
+          </Panel.Header>
+          <Panel.Body className="space-y-5 overflow-auto flex-1">
             {topFingerprints.map((f) => (
               <Stack key={f.label} direction="column" style={{ gap: '0.375rem' }}>
                 <div className="flex items-center justify-between text-xs font-mono">
@@ -572,8 +571,8 @@ export default function OverviewPage() {
                 </div>
               </Stack>
             ))}
-          </div>
-        </section>
+          </Panel.Body>
+        </Panel>
       </div>
     </div>
   );

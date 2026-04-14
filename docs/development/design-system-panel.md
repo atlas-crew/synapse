@@ -123,6 +123,67 @@ Both pages type-check and build clean (`pnpm type-check`,
 `pnpm build` in `apps/signal-horizon/ui`) with no visual regression
 in the retained conventions.
 
+## Compound slots: `Panel.Header` and `Panel.Body`
+
+**Added in the second Panel commit.** For panels with an internal
+header/body split (previously the ad-hoc `.card` + `card-header` +
+`card-body` pattern), use the compound API:
+
+```tsx
+<Panel tone="default" className="min-h-[450px]">
+  <Panel.Header>
+    <SectionHeader title="Top Attackers" size="h4" />
+    <Button variant="ghost" size="sm">View all</Button>
+  </Panel.Header>
+  <Panel.Body className="space-y-5 overflow-auto flex-1">
+    {rows.map(...)}
+  </Panel.Body>
+</Panel>
+```
+
+### What the slots do
+
+- **`Panel.Header`** — dense header bar with `px-6 py-4` padding, a
+  subtle `bg-surface-subtle/50` tint, a `border-b border-border-subtle`
+  separator, and a default `flex justify-between items-center gap-4`
+  layout so a title and actions naturally sit on opposite sides.
+  Also includes `shrink-0` so it stays pinned when the Panel flexes.
+- **`Panel.Body`** — content slot beneath the header. Takes an
+  optional `padding` prop (`sm` | `md` | `lg` | `none`, default `md`
+  which is `p-6`). Use `padding="none"` for full-bleed children like
+  lists, tables, or iframes that manage their own padding.
+
+### Auto-detection behavior
+
+When Panel detects that one of its direct children is `Panel.Header`
+or `Panel.Body`, it **automatically**:
+
+1. Drops its own `padding` — slots control internal spacing
+2. Drops its own `spacing` (the `space-y-*` between children)
+3. Switches to `flex flex-col` so `Panel.Body className="flex-1"`
+   grows to fill available height and pins the header to the top
+
+Panels without slots still use their own padding/spacing normally.
+This means the compound API is **opt-in**: existing Panel usage
+doesn't change behavior when you add Header/Body to a new panel.
+
+### Detection caveat
+
+The auto-detect logic does a `React.Children.toArray(children).some()`
+check by element type. It only fires for **direct children** — if you
+wrap `Panel.Header` in a fragment or another div, the detection
+misses it and Panel keeps its own padding. This is intentional: if
+you're wrapping slots in something else, you probably want manual
+control of layout anyway.
+
+## Migrated (current)
+
+- `OverviewPage.tsx` — **Active Campaigns** (info tone, slotted),
+  **Top Attackers** (default tone, slotted), **Top Fingerprints**
+  (default tone, slotted)
+- `fleet/SensorConfigPage.tsx` — Apparatus Echo Target preset row
+  (default tone, non-slotted, `as="div"`)
+
 ## Not yet migrated
 
 - `OverviewPage.tsx`'s **Live Attack Map** section uses `.card scanlines
@@ -130,36 +191,35 @@ in the retained conventions.
   effects (grid overlay, scanlines) that aren't part of Panel's
   vocabulary. Leave as-is until we decide whether to add a
   `variant="tactical"` prop to Panel or keep it as a themed exception.
-- `OverviewPage.tsx`'s **Top Attackers** and **Top Fingerprints**
-  sections use `.card border-t border-border-subtle` with internal
-  `card-header`/`card-body` split. Those need a Panel API for
-  slotted headers before they can be converted cleanly.
+- `OverviewPage.tsx`'s **Strategic Insight hero card** uses navy
+  background with diagonal-split overlays — also a themed exception,
+  not a Panel candidate without a hero variant.
 - `AdminSettingsSkeleton.tsx` duplicates the AdminSettings pattern
-  inline for its loading state. Convert to `<Panel>` in the same
-  sweep that migrates AdminSettingsPage itself (deliberately held
-  off for now to keep the POC scoped).
-- Most Hunting pages use `.card`/`card-header`/`card-body` — same
-  header-slot issue as the Top Attackers section.
-
-These deferrals tell us the next Panel feature work: **slotted
-headers** (a `<Panel.Header>` / `<Panel.Body>` split) so Panel can
-absorb the remaining `.card-header`/`card-body` usage sites.
+  inline for its loading state. Convert in the same sweep that
+  migrates `AdminSettingsPage.tsx` itself.
+- `AdminSettingsPage.tsx` — the canonical pattern the Panel was
+  modeled on. Migration is mechanical but touches ~8 sections, so
+  it needs its own commit.
+- Most Hunting pages (`HuntResultsTable`, `SavedQueries`,
+  `SigmaLeadsPanel`, `SigmaRulesPanel`, `BehavioralAnomaliesPanel`,
+  `ClickHouseOpsPanel`, `RecentRequestsPanel`) — mostly
+  header-body splits that can now use the compound slot API. Queue
+  up as a focused "Hunting section migration" commit.
 
 ## Next steps
 
-The POC proves Panel works for straightforward wrapper migrations.
-Before a full sweep, decide:
+With compound slots landed, the remaining Panel feature work is:
 
-1. **Header slot support**: should Panel ship a `<Panel.Header>`
-   compound component that styles a header bar with bottom border
-   and reduced padding, matching the existing `card-header` pattern?
-   This would unlock the OverviewPage Top Attackers / Top Fingerprints
-   conversions and most Hunting page conversions.
-2. **Tactical variant**: should Panel gain a `variant="tactical"`
+1. **Tactical variant**: should Panel gain a `variant="tactical"`
    prop that layers on `scanlines`/`tactical-bg` effects for themed
    pages like the attack map? Or should those stay outside Panel's
-   responsibility entirely?
-3. **Deprecate `.card`**: once headers are slotted and enough pages
-   have migrated, mark `.card` in `src/index.css` as deprecated with
-   a comment and a grep-count target (e.g., "remove when .card usage
-   drops below 10 files").
+   responsibility entirely? Decision needed before the attack map
+   migration.
+2. **Deprecate `.card`**: once enough pages have migrated to Panel,
+   mark `.card` in `src/index.css` as deprecated with a comment and
+   a grep-count target. When usage drops below ~5 files, delete the
+   CSS class.
+3. **Sweep migrations**: run a focused migration commit per page
+   cluster (AdminSettings + skeleton, Hunting section, remaining
+   fleet pages) rather than a single megadiff. Each commit should
+   touch one section of the codebase and be independently reversible.
