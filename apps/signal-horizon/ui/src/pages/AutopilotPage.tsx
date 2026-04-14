@@ -19,6 +19,37 @@ import { Stack, SectionHeader, Button, PAGE_TITLE_STYLE } from '@/ui';
 
 interface AutopilotTool { id: string; name: string; description: string; category: string }
 interface AutopilotConfig { tools: AutopilotTool[]; maxIterationsDefault: number; timeoutSeconds: number; safetyMode: boolean }
+
+// Apparatus returns a flatter shape than this UI was written against:
+//   { availableTools: string[], defaultAllowedTools: string[], personas: [...],
+//     maxIterationsDefault?: number, ... }
+// Adapt it to the AutopilotTool shape the UI renders. Each tool id like
+// "chaos.cpu" becomes { id, name: 'Chaos Cpu', category: 'chaos', description: '' }
+// so the page renders something meaningful without a round-trip redesign.
+interface ApparatusAutopilotConfigResponse {
+  availableTools?: string[];
+  defaultAllowedTools?: string[];
+  maxIterationsDefault?: number;
+  timeoutSeconds?: number;
+  safetyMode?: boolean;
+}
+
+function adaptApparatusConfig(raw: ApparatusAutopilotConfigResponse): AutopilotConfig {
+  const toolIds = raw.availableTools ?? [];
+  const tools: AutopilotTool[] = toolIds.map((id) => {
+    const [category, rawName] = id.includes('.') ? id.split('.', 2) : [id, id];
+    const name = (rawName ?? id)
+      .replace(/[_-]/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    return { id, name, description: '', category: category ?? '' };
+  });
+  return {
+    tools,
+    maxIterationsDefault: raw.maxIterationsDefault ?? 50,
+    timeoutSeconds: raw.timeoutSeconds ?? 3600,
+    safetyMode: raw.safetyMode ?? true,
+  };
+}
 type SessionState = 'idle' | 'running' | 'stopping' | 'completed' | 'failed';
 interface SessionStatus { active: boolean; session?: { state: SessionState; objective?: string; iteration?: number; maxIterations?: number; startedAt?: string } }
 interface SessionReport { id: string; objective: string; state: string; iterations: number; findings: number; startedAt: string; durationSeconds: number }
@@ -78,7 +109,13 @@ export default function AutopilotPage() {
   // Fetch config + reports
   useEffect(() => {
     if (isDemo) { setConfig(DEMO_CONFIG); setMaxIter(50); setReports(DEMO_REPORTS); return; }
-    apiFetch<AutopilotConfig>('/apparatus/autopilot/config').then((c) => { setConfig(c); setMaxIter(c.maxIterationsDefault); }).catch(() => {});
+    apiFetch<ApparatusAutopilotConfigResponse>('/apparatus/autopilot/config')
+      .then((raw) => {
+        const adapted = adaptApparatusConfig(raw);
+        setConfig(adapted);
+        setMaxIter(adapted.maxIterationsDefault);
+      })
+      .catch(() => {});
     apiFetch<{ reports: SessionReport[] }>('/apparatus/autopilot/reports').then((r) => setReports(r.reports ?? [])).catch(() => {});
   }, [isDemo]);
 
@@ -160,7 +197,7 @@ export default function AutopilotPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] text-ink-muted font-medium">Available Tools</p>
             </div>
             <div className="p-4 space-y-2">
-              {config?.tools.map((tool) => (
+              {config?.tools?.map((tool) => (
                 <div key={tool.id} className="flex items-start gap-3 px-3 py-2 bg-surface-subtle border border-border-subtle">
                   <Cpu className="w-4 h-4 mt-0.5 text-ac-cyan flex-shrink-0" />
                   <div>
