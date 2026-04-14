@@ -30,18 +30,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import {
-  SectionHeader,
-  Stack,
-  Text,
-  alpha,
-  axisDefaults,
-  barDefaults,
-  chartColors,
-  colors,
-  tooltipDefaults,
-  PAGE_TITLE_STYLE,
-} from '@/ui';
+import { PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, Text, alpha, axisDefaults, barDefaults, chartColors, colors, tooltipDefaults } from '@/ui';
 import {
   useBandwidthDashboard,
   type BandwidthDataPoint,
@@ -112,7 +101,7 @@ function StatCard({ icon: Icon, label, value, subValue, trend, color, bgColor }:
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface-card border border-border-subtle p-5"
+      className="bg-surface-card border-t-4 border-border-subtle shadow-card p-6"
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
@@ -167,7 +156,7 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
   );
 
   return (
-    <div className="bg-surface-card border border-border-subtle p-5">
+    <Panel tone="default" padding="md" spacing="none" as="div">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-ink-primary">Bandwidth Timeline</h3>
         <Stack direction="row" align="center" gap="md" className="text-sm">
@@ -221,7 +210,7 @@ function TimelineChart({ data, granularity }: TimelineChartProps) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -235,7 +224,7 @@ interface TopEndpointsTableProps {
 
 function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
   return (
-    <div className="bg-surface-card border border-border-subtle">
+    <Panel tone="default" padding="none" spacing="none" as="div">
       <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between">
         <h3 className="text-lg font-semibold text-ink-primary">Top Endpoints by Bandwidth</h3>
         <span className="text-sm text-ink-secondary">{endpoints.length} endpoints</span>
@@ -299,7 +288,7 @@ function TopEndpointsTable({ endpoints }: TopEndpointsTableProps) {
           </tbody>
         </table>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -335,7 +324,7 @@ function BillingPanel({
   const endDate = new Date(periodEnd).toLocaleDateString();
 
   return (
-    <div className="bg-surface-card border border-border-subtle p-5">
+    <Panel tone="default" padding="md" spacing="none" as="div">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-ink-primary">Billing Summary</h3>
         <span className="text-xs text-ink-muted">
@@ -393,7 +382,7 @@ function BillingPanel({
           </PieChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -424,7 +413,7 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
   );
 
   return (
-    <div className="bg-surface-card border border-border-subtle p-5">
+    <Panel tone="default" padding="md" spacing="none" as="div">
       <h3 className="text-lg font-semibold text-ink-primary mb-4">Bandwidth by Sensor</h3>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
@@ -460,7 +449,7 @@ function SensorBreakdown({ sensors }: SensorBreakdownProps) {
           </div>
         ))}
       </div>
-    </div>
+    </Panel>
   );
 }
 

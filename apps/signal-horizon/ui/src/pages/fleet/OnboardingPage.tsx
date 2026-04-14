@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import { Button, Modal, SectionHeader, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, Modal, PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, colors } from '@/ui';
 
 interface RegistrationToken {
   id: string;
@@ -287,7 +287,7 @@ export function OnboardingPage(): React.ReactElement {
 
       {/* Registration Tokens Tab */}
       {activeTab === 'tokens' && (
-        <div className="bg-surface-card border border-border-subtle">
+        <Panel tone="default" padding="none" spacing="none" as="div">
           {tokensLoading ? (
             <div className="p-8 text-center text-ink-muted">Loading tokens...</div>
           ) : tokensError ? (
@@ -366,12 +366,12 @@ export function OnboardingPage(): React.ReactElement {
               </tbody>
             </table>
           )}
-        </div>
+        </Panel>
       )}
 
       {/* Pending Sensors Tab */}
       {activeTab === 'pending' && (
-        <div className="bg-surface-card border border-border-subtle">
+        <Panel tone="default" padding="none" spacing="none" as="div">
           {pendingLoading ? (
             <div className="p-8 text-center text-ink-muted">Loading pending sensors...</div>
           ) : pendingError ? (
@@ -463,7 +463,7 @@ export function OnboardingPage(): React.ReactElement {
               </tbody>
             </table>
           )}
-        </div>
+        </Panel>
       )}
 
       {/* Create Token Modal */}

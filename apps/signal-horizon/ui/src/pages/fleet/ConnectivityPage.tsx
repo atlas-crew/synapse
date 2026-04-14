@@ -37,17 +37,7 @@ import {
 } from 'recharts';
 import { MetricCard } from '../../components/fleet';
 import { apiFetch } from '../../lib/api';
-import {
-  SectionHeader,
-  Stack,
-  alpha,
-  axisDefaults,
-  colors,
-  gridDefaultsSoft,
-  tooltipDefaults,
-  xAxisNoLine,
-  PAGE_TITLE_STYLE,
-} from '@/ui';
+import { PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, alpha, axisDefaults, colors, gridDefaultsSoft, tooltipDefaults, xAxisNoLine } from '@/ui';
 
 const xAxisSmall = { ...xAxisNoLine, tick: { ...xAxisNoLine.tick, fontSize: 11 } } as const;
 const yAxisSmall = { ...axisDefaults.y, tick: { ...axisDefaults.y.tick, fontSize: 11 } } as const;
@@ -465,7 +455,7 @@ export function ConnectivityPage(): React.ReactElement {
       {/* Connectivity Tests */}
       <section
         aria-labelledby="diagnostic-tests-heading"
-        className="bg-surface-card border border-border-subtle p-6"
+        className="bg-surface-card border-t-4 border-border-subtle shadow-card p-6"
       >
         <SectionHeader
           title="Network Diagnostic Tests"
@@ -776,7 +766,7 @@ export function ConnectivityPage(): React.ReactElement {
       </section>
 
       {/* Sensor Connectivity Table */}
-      <div className="bg-surface-card border border-border-subtle overflow-hidden">
+      <Panel tone="default" padding="none" spacing="none" as="div" className="overflow-hidden">
         <div className="p-6 border-b border-border-subtle">
           <SectionHeader
             title="Sensor Connectivity Status"
@@ -861,12 +851,12 @@ export function ConnectivityPage(): React.ReactElement {
             </tbody>
           </table>
         </div>
-      </div>
+      </Panel>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Latency Trend Chart */}
-        <div className="bg-surface-card border border-border-subtle p-6">
+        <Panel tone="default" padding="md" spacing="none" as="div">
           <SectionHeader
             title="Latency Trend (24h)"
             size="h4"
@@ -895,10 +885,10 @@ export function ConnectivityPage(): React.ReactElement {
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </Panel>
 
         {/* Connection Events Chart */}
-        <div className="bg-surface-card border border-border-subtle p-6">
+        <Panel tone="default" padding="md" spacing="none" as="div">
           <SectionHeader
             title="Connection Events (Weekly)"
             size="h4"
@@ -925,7 +915,7 @@ export function ConnectivityPage(): React.ReactElement {
               />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </Panel>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { clsx } from 'clsx';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 import { apiFetch } from '../../lib/api';
-import { Button, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
+import { Button, Panel, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
 
 interface DlpStats {
   totalScans: number;
@@ -220,7 +220,7 @@ export function DlpDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
-        <div className="card p-6 bg-surface-card border border-border-subtle">
+        <Panel tone="info" padding="md" spacing="none" as="div">
           <h3 className="text-lg font-medium text-ink-primary mb-6 flex items-center gap-2">
             <Shield className="w-5 h-5 text-ac-blue" />
             Compliance Coverage
@@ -257,9 +257,9 @@ export function DlpDashboardPage() {
               color="bg-ac-blue"
             />
           </div>
-        </div>
+        </Panel>
 
-        <div className="card p-6 bg-surface-card border border-border-subtle flex flex-col">
+        <Panel tone="advanced" padding="md" spacing="none" as="div" className="flex flex-col">
           <h3 className="text-lg font-medium text-ink-primary mb-6 flex items-center gap-2">
             <Search className="w-5 h-5 text-ac-purple" />
             Violation Distribution
@@ -272,7 +272,7 @@ export function DlpDashboardPage() {
               </p>
             </div>
           </div>
-        </div>
+        </Panel>
       </div>
     </div>
   );

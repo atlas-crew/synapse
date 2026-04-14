@@ -25,7 +25,7 @@ import { clsx } from 'clsx';
 import { useReleases, type Release } from '../../hooks/fleet/useReleases';
 import { RolloutManager } from '../../components/fleet/RolloutManager';
 import { MetricCard } from '../../components/fleet';
-import { colors, Modal, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
+import { colors, Modal, Panel, SectionHeader, Spinner, Stack, PAGE_TITLE_STYLE } from '@/ui';
 
 // ============================================================================
 // Types
@@ -743,8 +743,8 @@ export function ReleasesPage() {
 
       {/* Active Rollout Panel */}
       {(activeRollout || showRolloutManager) && (
-        <div className="card">
-          <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
+        <Panel tone="info">
+          <Panel.Header>
             <SectionHeader
               title={activeRollout ? 'Active Rollout' : 'New Rollout'}
               size="h4"
@@ -764,8 +764,8 @@ export function ReleasesPage() {
                 ) : undefined
               }
             />
-          </div>
-          <div className="p-6">
+          </Panel.Header>
+          <Panel.Body>
             <RolloutManager
               releases={
                 deployingRelease
@@ -778,13 +778,13 @@ export function ReleasesPage() {
               onRolloutStart={handleRolloutStart}
               onRolloutCancel={handleRolloutCancel}
             />
-          </div>
-        </div>
+          </Panel.Body>
+        </Panel>
       )}
 
       {/* Releases Table */}
-      <div className="card">
-        <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
+      <Panel tone="default">
+        <Panel.Header>
           <SectionHeader
             title="Available Releases"
             size="h4"
@@ -792,8 +792,9 @@ export function ReleasesPage() {
             titleStyle={SECTION_HEADER_TITLE_STYLE}
             actions={<span className="text-sm text-ink-muted">{safeReleases.length} releases</span>}
           />
-        </div>
+        </Panel.Header>
 
+        <Panel.Body padding="none">
         {isLoadingReleases ? (
           <div className="p-12 text-center">
             <Spinner size={32} color={colors.gray.mid} style={{ margin: '0 auto' }} />
@@ -850,12 +851,13 @@ export function ReleasesPage() {
             </table>
           </div>
         )}
-      </div>
+        </Panel.Body>
+      </Panel>
 
       {/* Recent Rollout History */}
       {recentRollouts.length > 0 && (
-        <div className="card">
-          <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between">
+        <Panel tone="default">
+          <Panel.Header>
             <SectionHeader
               title="Recent Rollouts"
               icon={<History className="w-5 h-5 text-ink-muted" />}
@@ -863,8 +865,8 @@ export function ReleasesPage() {
               style={{ marginBottom: 0 }}
               titleStyle={SECTION_HEADER_TITLE_STYLE}
             />
-          </div>
-          <div className="divide-y divide-border-subtle">
+          </Panel.Header>
+          <Panel.Body padding="none" className="divide-y divide-border-subtle">
             {recentRollouts.map((rollout) => (
               <div key={rollout.id} className="px-6 py-4 flex items-center justify-between">
                 <Stack direction="row" align="center" gap="md">
@@ -891,8 +893,8 @@ export function ReleasesPage() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+          </Panel.Body>
+        </Panel>
       )}
 
       {/* Modals */}

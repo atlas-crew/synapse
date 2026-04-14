@@ -68,7 +68,7 @@ function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface-card border border-border-subtle p-5"
+      className="bg-surface-card border-t-4 border-border-subtle shadow-card p-6"
     >
       <div className="flex items-center justify-between">
         <div>

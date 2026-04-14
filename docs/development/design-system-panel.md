@@ -222,6 +222,46 @@ control of layout anyway.
   available on both `Panel` itself and `Panel.Body`, unifying the
   type across the two slots.
 
+- **Fleet page sweep (6 files, 14 wrappers)** — migrated every
+  fleet page that had an ad-hoc card wrapper:
+  - **BandwidthDashboardPage** — 3 wrappers (script-migrated:
+    1 inline class swap + 2 div→Panel conversions)
+  - **RuleDistributionPage** — 1 inline class swap
+  - **ConnectivityPage** — 4 wrappers (1 inline + 3 div→Panel)
+  - **OnboardingPage** — 2 full-bleed Panel conversions
+  - **DlpDashboardPage** — 2 hand-migrated cards using `info`
+    and `advanced` tones for Compliance Coverage + Violation
+    Distribution (the first fleet page to use non-`default`
+    tones, semantically matching the page's two-zone layout)
+  - **ReleasesPage** — 3 `.card` wrappers (Active Rollout, Releases
+    Table, Recent Rollouts), all using compound slots with
+    `info`/`default`/`default` tones respectively
+
+  Note on the inline class swaps: three wrappers (BandwidthDashboard
+  line 115, RuleDistribution line 71, Connectivity line 468) used
+  `className` on a non-`<div>` element (Stack/section) and
+  couldn't be cleanly converted to `<Panel>` without rewriting the
+  element type. For those, the classes were swapped inline to
+  `bg-surface-card border-t-4 border-border-subtle shadow-card p-6`
+  — producing the same visual result as a Panel but through raw
+  Tailwind. These are candidates for proper Panel conversion when
+  the surrounding element gets refactored.
+
+  **p-5 → p-6 subtle padding change**: several Bandwidth and
+  RuleDistribution wrappers used `p-5` (20px) which doesn't map
+  to any Panel padding token. They were migrated to `padding="md"`
+  (p-6, 24px) — a 2px per-side increase that's imperceptible
+  visually but keeps the token set clean.
+
+  Fleet pages NOT touched in this sweep (no card wrappers to
+  migrate): FleetOverviewPage, FleetHealthPage, CapacityForecastPage,
+  ConfigManagerPage, FleetUpdatesPage, GlobalSessionSearchPage,
+  SensorKeysPage, SensorDetailPage. These rely entirely on @/ui
+  widget components (MetricCard, ChartPanel, KpiStrip, DataTable)
+  for their card chrome and are already design-system-compliant
+  at the widget level. They're the reference for "how a fleet
+  page should look" going forward.
+
 The AdminSettings migration was the regression test for Panel's
 defaults: since AdminSettings was the canonical source the pattern
 was modeled on, the visual result had to be pixel-identical to the
