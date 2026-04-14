@@ -10,7 +10,7 @@ import type {
   GlobalSessionSearchResult,
   SensorSession,
 } from '../../hooks/fleet/useSessionSearch';
-import { Stack } from '@/ui';
+import { Panel, Stack } from '@/ui';
 
 // =============================================================================
 // Type Definitions
@@ -246,7 +246,7 @@ export function SessionSearchResults({
 
       {/* Results Table */}
       {viewMode === 'flat' ? (
-        <div className="card overflow-hidden">
+        <Panel tone="default" padding="none" spacing="none" className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border-default">
               <caption className="sr-only">Session search results across fleet sensors</caption>
@@ -349,12 +349,18 @@ export function SessionSearchResults({
               No sessions found matching your criteria
             </div>
           )}
-        </div>
+        </Panel>
       ) : (
         /* Grouped View */
         <div className="space-y-4">
           {results.results.map((sensorResult) => (
-            <div key={sensorResult.sensorId} className="card overflow-hidden">
+            <Panel
+              key={sensorResult.sensorId}
+              tone="default"
+              padding="none"
+              spacing="none"
+              className="overflow-hidden"
+            >
               {/* Sensor Header */}
               <button
                 className="w-full px-4 py-3 flex items-center justify-between bg-surface-raised hover:bg-surface-raised/80 transition-colors"
@@ -439,7 +445,7 @@ export function SessionSearchResults({
                   )}
                 </div>
               )}
-            </div>
+            </Panel>
           ))}
         </div>
       )}

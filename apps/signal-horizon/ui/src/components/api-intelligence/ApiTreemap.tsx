@@ -1,6 +1,6 @@
 import { ResponsiveContainer, Treemap, Tooltip } from 'recharts';
 import type { InventoryService } from '../../hooks/useApiIntelligence';
-import { colors, fontFamily } from '@/ui';
+import { Panel, SectionHeader, CARD_HEADER_TITLE_STYLE, colors, fontFamily } from '@/ui';
 
 const DEMO_TREEMAP_DATA = [
   {
@@ -86,14 +86,17 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
     : DEMO_TREEMAP_DATA;
 
   return (
-    <div className="card h-[400px] flex flex-col">
-      <div className="card-header flex justify-between items-center">
-        <div>
-          <h3 className="text-xl font-light text-ink-primary">API Surface Area</h3>
-          <p className="text-sm text-ink-secondary">Size = Request Volume</p>
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 p-4">
+    <Panel tone="default" className="h-[400px]">
+      <Panel.Header>
+        <SectionHeader
+          title="API Surface Area"
+          description="Size = Request Volume"
+          size="h4"
+          style={{ marginBottom: 0 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+        />
+      </Panel.Header>
+      <Panel.Body className="flex-1 min-h-0">
         {treemapData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <Treemap
@@ -132,8 +135,10 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
             No API inventory data available yet.
           </div>
         )}
-      </div>
-      {/* Legend — square markers per brand */}
+      </Panel.Body>
+      {/* Legend — square markers per brand. Rendered outside Panel.Body
+          so it sits flush to the bottom of the Panel without inheriting
+          the Body's padding. */}
       {treemapData.length > 0 && (
         <div className="px-4 pb-4 flex flex-wrap gap-4">
           {treemapData.map((service, i) => (
@@ -147,6 +152,6 @@ export function ApiTreemap({ services }: ApiTreemapProps) {
           ))}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

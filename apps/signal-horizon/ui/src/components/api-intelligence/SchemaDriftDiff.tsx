@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 import { ArrowRight, AlertTriangle } from 'lucide-react';
-import { Stack } from '@/ui';
+import { Panel, Stack } from '@/ui';
 
 interface SchemaChange {
   field: string;
@@ -18,8 +18,12 @@ interface SchemaDriftDiffProps {
 }
 
 export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: SchemaDriftDiffProps) {
+  // Previously used `border-l-4 border-l-ac-orange` (left accent) — a
+  // one-off deviation from the design system. Collapsing to
+  // `tone="warning"` gives a top-accent orange bar consistent with
+  // every other warning panel in the app.
   return (
-    <div className="card border-l-4 border-l-ac-orange">
+    <Panel tone="warning" padding="none" spacing="none">
       <div className="p-4 border-b border-border-subtle flex justify-between items-start">
         <div>
           <Stack direction="row" align="center" gap="sm" className="mb-1">
@@ -74,6 +78,6 @@ export function SchemaDriftDiff({ endpoint, method, detectedAt, changes }: Schem
           </div>
         ))}
       </div>
-    </div>
+    </Panel>
   );
 }

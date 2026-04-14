@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
 import type { ApiEndpoint } from '../../hooks/useApiIntelligence';
-import { SectionHeader } from '@/ui';
+import { Panel, SectionHeader, CARD_HEADER_TITLE_STYLE } from '@/ui';
 
 export interface EndpointsTableProps {
   endpoints: ApiEndpoint[];
@@ -12,20 +12,22 @@ export interface EndpointsTableProps {
 
 export function EndpointsTable({ endpoints, totalCount, isLoading, emptyMessage }: EndpointsTableProps) {
   return (
-    <div className="card">
-      <div className="card-header flex justify-between items-center">
+    <Panel tone="default">
+      <Panel.Header>
         <SectionHeader
           title="Discovered Endpoints"
           size="h4"
           mb="xs"
           style={{ marginBottom: 0 }}
-          titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
-          actions={totalCount !== undefined ? (
-            <span className="text-xs text-ink-muted">{totalCount} total</span>
-          ) : undefined}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
+          actions={
+            totalCount !== undefined ? (
+              <span className="text-xs text-ink-muted">{totalCount} total</span>
+            ) : undefined
+          }
         />
-      </div>
-      <div className="overflow-x-auto">
+      </Panel.Header>
+      <Panel.Body padding="none" className="overflow-x-auto">
         <table className="w-full text-sm text-left" aria-label="Discovered API endpoints">
           <caption className="sr-only">Discovered API endpoints with risk levels and schema status</caption>
           <thead className="text-xs text-ink-muted uppercase bg-surface-subtle border-b border-border-subtle">
@@ -73,8 +75,8 @@ export function EndpointsTable({ endpoints, totalCount, isLoading, emptyMessage 
             )}
           </tbody>
         </table>
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }
 

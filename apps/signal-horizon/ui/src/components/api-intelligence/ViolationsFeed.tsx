@@ -1,6 +1,6 @@
 import { Clock } from 'lucide-react';
 import type { ApiSignal } from '../../hooks/useApiIntelligence';
-import { SectionHeader } from '@/ui';
+import { Panel, SectionHeader, CARD_HEADER_TITLE_STYLE } from '@/ui';
 
 export interface ViolationsFeedProps {
   signals: ApiSignal[];
@@ -8,26 +8,24 @@ export interface ViolationsFeedProps {
 
 export function ViolationsFeed({ signals }: ViolationsFeedProps) {
   return (
-    <div className="card">
-      <div className="card-header">
+    <Panel tone="default">
+      <Panel.Header>
         <SectionHeader
           title="Recent Violations"
           size="h4"
           mb="xs"
           style={{ marginBottom: 0 }}
-          titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
+          titleStyle={CARD_HEADER_TITLE_STYLE}
         />
-      </div>
-      <div className="card-body space-y-4 max-h-[600px] overflow-y-auto">
+      </Panel.Header>
+      <Panel.Body className="space-y-4 max-h-[600px] overflow-y-auto">
         {signals.length === 0 ? (
           <div className="text-center text-ink-muted py-8">No recent violations</div>
         ) : (
-          signals.map((signal) => (
-            <ViolationCard key={signal.id} signal={signal} />
-          ))
+          signals.map((signal) => <ViolationCard key={signal.id} signal={signal} />)
         )}
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }
 

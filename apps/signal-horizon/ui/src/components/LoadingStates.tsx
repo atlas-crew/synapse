@@ -4,7 +4,7 @@
  */
 
 import { clsx } from 'clsx';
-import { colors, Spinner as UiSpinner, Stack } from '@/ui';
+import { colors, Panel, Spinner as UiSpinner, Stack } from '@/ui';
 
 /**
  * Skeleton loading placeholder
@@ -30,7 +30,7 @@ export function Skeleton({
  */
 export function CardSkeleton() {
   return (
-    <div className="card p-4" aria-busy="true" aria-label="Loading card">
+    <Panel tone="default" padding="sm" spacing="none" aria-busy="true" aria-label="Loading card">
       <Stack direction="row" align="center" gap="smPlus">
         <Skeleton className="w-10 h-10" />
         <div className="flex-1 space-y-2">
@@ -38,7 +38,7 @@ export function CardSkeleton() {
           <Skeleton className="h-4 w-16" />
         </div>
       </Stack>
-    </div>
+    </Panel>
   );
 }
 
@@ -64,11 +64,11 @@ export function StatsGridSkeleton() {
  */
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="card" aria-busy="true" aria-label="Loading table data">
-      <div className="card-header">
+    <Panel tone="default" aria-busy="true" aria-label="Loading table data">
+      <Panel.Header>
         <Skeleton className="h-5 w-32" />
-      </div>
-      <div className="overflow-x-auto">
+      </Panel.Header>
+      <Panel.Body padding="none" className="overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
@@ -91,8 +91,8 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }
 
@@ -101,12 +101,12 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
  */
 export function CampaignListSkeleton() {
   return (
-    <div className="card" aria-busy="true" aria-label="Loading campaigns">
-      <div className="card-header flex items-center justify-between">
+    <Panel tone="default" aria-busy="true" aria-label="Loading campaigns">
+      <Panel.Header>
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-4 w-16" />
-      </div>
-      <div className="card-body space-y-3">
+      </Panel.Header>
+      <Panel.Body className="space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
@@ -125,8 +125,8 @@ export function CampaignListSkeleton() {
             </Stack>
           </div>
         ))}
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }
 
@@ -135,12 +135,12 @@ export function CampaignListSkeleton() {
  */
 export function AlertFeedSkeleton() {
   return (
-    <div className="card" aria-busy="true" aria-label="Loading alerts">
-      <div className="card-header flex items-center justify-between">
+    <Panel tone="default" aria-busy="true" aria-label="Loading alerts">
+      <Panel.Header>
         <Skeleton className="h-5 w-28" />
         <Skeleton className="h-4 w-4" />
-      </div>
-      <div className="card-body max-h-80 overflow-y-auto space-y-2">
+      </Panel.Header>
+      <Panel.Body className="max-h-80 overflow-y-auto space-y-2">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="p-2 border-l-2 border-border-subtle bg-surface-inset">
             <Skeleton className="h-4 w-full mb-1" />
@@ -148,8 +148,8 @@ export function AlertFeedSkeleton() {
             <Skeleton className="h-3 w-16" />
           </div>
         ))}
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }
 
@@ -243,11 +243,11 @@ export function SensorDetailSkeleton() {
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="card p-4 space-y-2">
+          <Panel key={i} tone="default" padding="sm" spacing="sm">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-8 w-16" />
             <Skeleton className="h-3 w-24" />
-          </div>
+          </Panel>
         ))}
       </div>
     </div>
@@ -301,20 +301,20 @@ export function FleetOverviewSkeleton() {
       {/* Stats Row */}
       <div className="grid grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="card p-4 space-y-2">
+          <Panel key={i} tone="default" padding="sm" spacing="sm">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-8 w-16" />
-          </div>
+          </Panel>
         ))}
       </div>
 
       {/* Sensors List */}
-      <div className="card">
-        <div className="card-header flex items-center justify-between">
+      <Panel tone="default">
+        <Panel.Header>
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-8 w-24" />
-        </div>
-        <div className="divide-y divide-border-subtle">
+        </Panel.Header>
+        <Panel.Body padding="none" className="divide-y divide-border-subtle">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="p-4 flex items-center justify-between">
               <Stack direction="row" align="center" gap="smPlus">
@@ -331,8 +331,8 @@ export function FleetOverviewSkeleton() {
               </Stack>
             </div>
           ))}
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
     </div>
   );
 }
@@ -350,7 +350,12 @@ export function RulesListSkeleton({ rows = 8 }: { rows?: number }) {
           <Skeleton className="h-9 w-24" />
         </div>
       </div>
-      <div className="card divide-y divide-border-subtle">
+      <Panel
+        tone="default"
+        padding="none"
+        spacing="none"
+        className="divide-y divide-border-subtle"
+      >
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="p-4 flex items-center justify-between">
             <Stack direction="row" align="center" gap="smPlus">
@@ -366,7 +371,7 @@ export function RulesListSkeleton({ rows = 8 }: { rows?: number }) {
             </Stack>
           </div>
         ))}
-      </div>
+      </Panel>
     </div>
   );
 }
