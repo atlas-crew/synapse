@@ -90,6 +90,14 @@ jobs:
       - name: Lint UI
         run: pnpm --filter @atlascrew/signal-horizon-ui lint
 
+      - name: Lint UI — deleted CSS class references
+        # Catches references to .card / .card-header / .card-body / etc.
+        # that were deleted in commit 3ef5a81. The previous .card sweep
+        # missed a template-literal usage in fleet/MetricCard.tsx — this
+        # guard prevents that regression class from recurring. See
+        # apps/signal-horizon/ui/scripts/check-deleted-css-classes.sh.
+        run: pnpm --filter @atlascrew/signal-horizon-ui lint:css-classes
+
       - name: Type-check UI
         run: pnpm --filter @atlascrew/signal-horizon-ui type-check
 
