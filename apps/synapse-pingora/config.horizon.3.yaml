@@ -1,0 +1,101 @@
+# Synapse WAF local sensor #3 config for the fleet demo.
+#
+# Ports shifted by +200 from config.horizon.yaml. See config.horizon.2.yaml
+# for the full port allocation scheme.
+#
+# Sensor identity matches the BRIDGE_SENSORS[2] entry in
+# apps/signal-horizon/api/prisma/seed/seed-postgres.ts.
+
+server:
+  listen: "127.0.0.1:6390"
+  admin_listen: "127.0.0.1:6391"
+  workers: 0
+  waf_threshold: 75
+  waf_enabled: true
+  trusted_proxies:
+    - "127.0.0.1/32"
+
+upstreams:
+  - host: "127.0.0.1"
+    port: 5555
+
+rate_limit:
+  rps: 10000
+  enabled: true
+
+logging:
+  level: "info"
+  format: "text"
+  access_log: true
+
+detection:
+  sqli: true
+  xss: true
+  path_traversal: true
+  command_injection: true
+  action: "block"
+  block_status: 403
+
+telemetry:
+  enabled: false
+  endpoint: "http://localhost:3100/telemetry"
+  api_key: null
+  batch_size: 100
+  flush_interval:
+    secs: 10
+    nanos: 0
+  max_retries: 3
+  initial_backoff:
+    secs: 0
+    nanos: 100000000
+  max_backoff:
+    secs: 30
+    nanos: 0
+  max_buffer_size: 10000
+  circuit_breaker_threshold: 5
+  circuit_breaker_timeout:
+    secs: 60
+    nanos: 0
+  enabled_events: []
+  instance_id: "synapse-waf-3"
+  dry_run: false
+
+horizon:
+  enabled: true
+  hub_url: "ws://localhost:3100/ws/sensors"
+  api_key: "sk-sensor-bridge-dev-3"
+  sensor_id: "synapse-waf-3"
+  # MUST match BRIDGE_SENSORS[2].name in seed-postgres.ts.
+  sensor_name: "Synapse WAF 3"
+  version: "1.0.0"
+  reconnect_delay_ms: 5000
+  max_reconnect_attempts: 0
+  circuit_breaker_threshold: 5
+  circuit_breaker_cooldown_ms: 300000
+  signal_batch_size: 100
+  signal_batch_delay_ms: 1000
+  heartbeat_interval_ms: 30000
+  max_queued_signals: 1000
+  blocklist_cache_ttl_secs: 3600
+
+# Tunnel disabled on fleet sensors 2/3 — see config.horizon.2.yaml for rationale.
+tunnel:
+  enabled: false
+  url: "ws://localhost:3100/ws/tunnel/sensor"
+  api_key: "B3zq_eIIMbCd8C-rIAMdLXTEZtku4jXCVVRjsn13yaQ"
+  sensor_id: "sensor-acme-3"
+  sensor_name: "acme-sensor-prod-3"
+  version: "1.0.0"
+  capabilities:
+    - "shell"
+    - "dashboard"
+    - "logs"
+    - "diag"
+    - "control"
+    - "files"
+    - "update"
+  heartbeat_interval_ms: 30000
+  reconnect_delay_ms: 5000
+  max_reconnect_attempts: 0
+  auth_timeout_ms: 10000
+  shell_enabled: true

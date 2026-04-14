@@ -179,6 +179,90 @@ demo: dev-horizon-api dev-horizon-ui demo-synapse
     @echo ""
     @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FLEET DEMO MODE (3 sensors)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# `just demo-fleet` starts three synapse-waf processes side by side, each
+# with its own sensor identity and its own proxy/admin port pair. All three
+# connect to the same horizon hub, so the Fleet Overview page shows them as
+# three distinct sensors — useful for demoing horizon's multi-sensor
+# capabilities without needing separate machines.
+#
+# Port allocation:
+#   synapse-waf-1: proxy 6190, admin 6191
+#   synapse-waf-2: proxy 6290, admin 6291
+#   synapse-waf-3: proxy 6390, admin 6391
+#
+# Sensor identities match the BRIDGE_SENSORS array in the horizon seed at
+# apps/signal-horizon/api/prisma/seed/seed-postgres.ts. A fresh seed
+# (`pnpm --filter @atlascrew/signal-horizon-api db:seed`) creates all
+# three rows; if you wipe the DB, re-seed before launching the fleet.
+
+# Start Synapse WAF sensor #2 (release binary, --demo, sensor identity 2)
+demo-synapse-2: _dev-init _demo-build-waf
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="synapse-pingora-2"
+    cmd="cd '{{root}}/apps/synapse-pingora' && SYNAPSE_PRODUCTION=0 SYNAPSE_DEMO=1 SYNAPSE_ADMIN_AUTH_DISABLED=1 RUST_LOG=warn,synapse_waf=info,synapse_waf::simulator=info,synapse_pingora::horizon=info ./target/release/synapse-waf --config config.horizon.2.yaml --demo"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in --demo mode" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started in --demo mode"
+    fi
+
+# Start Synapse WAF sensor #3 (release binary, --demo, sensor identity 3)
+demo-synapse-3: _dev-init _demo-build-waf
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="synapse-pingora-3"
+    cmd="cd '{{root}}/apps/synapse-pingora' && SYNAPSE_PRODUCTION=0 SYNAPSE_DEMO=1 SYNAPSE_ADMIN_AUTH_DISABLED=1 RUST_LOG=warn,synapse_waf=info,synapse_waf::simulator=info,synapse_pingora::horizon=info ./target/release/synapse-waf --config config.horizon.3.yaml --demo"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in --demo mode" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started in --demo mode"
+    fi
+
+# Start the fleet demo: Horizon + three Synapse WAF instances
+demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-synapse-3
+    @echo ""
+    @echo "Fleet demo running in tmux session '{{_dev_session}}':"
+    @echo "  Signal Horizon API → http://localhost:3100"
+    @echo "  Signal Horizon UI  → http://localhost:5180  ← open this in your browser"
+    @echo "  Synapse WAF #1     → :6190 / :6191  (sensor_id synapse-waf-1)"
+    @echo "  Synapse WAF #2     → :6290 / :6291  (sensor_id synapse-waf-2)"
+    @echo "  Synapse WAF #3     → :6390 / :6391  (sensor_id synapse-waf-3)"
+    @echo ""
+    @echo "Navigate to Fleet Overview in the dashboard to see all three sensors."
+    @echo "Each sensor runs its own procedural simulator against the same engine"
+    @echo "so signals appear tagged per-sensor in horizon's ingestion."
+    @echo ""
+    @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop-fleet"
+
+# Stop only the fleet sensor windows (#2 and #3); leaves the main demo alone
+dev-stop-fleet:
+    -tmux kill-window -t "{{_dev_session}}:synapse-pingora-2" 2>/dev/null
+    -tmux kill-window -t "{{_dev_session}}:synapse-pingora-3" 2>/dev/null
+    @echo "fleet sensors #2 and #3 stopped"
+
 # Show status of all dev windows (running vs idle vs not running)
 dev-status:
     #!/usr/bin/env bash

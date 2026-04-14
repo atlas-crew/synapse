@@ -157,10 +157,46 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
   // Compatibility: allow sensor-bridge to work with defaults from config.ts
   // SENSOR_BRIDGE_SENSOR_ID defaults to 'synapse-waf-1'
   // SENSOR_BRIDGE_SENSOR_NAME defaults to 'Synapse WAF'
-  const BRIDGE_SENSOR_ID = 'synapse-waf-1';
-  const BRIDGE_SENSOR_NAME = 'Synapse WAF';
-  const BRIDGE_SENSOR_API_KEY = 'sk-sensor-bridge-dev';
-  const BRIDGE_SENSOR_FINGERPRINT = sha256Hex(`${BRIDGE_SENSOR_ID}:${BRIDGE_SENSOR_API_KEY}`).slice(0, 32);
+  //
+  // Fleet demo: three bridge sensors are seeded for the acme tenant so the
+  // demo can run a 3-sensor fleet (see `just demo-fleet`). Each sensor
+  // needs its own id / name / api key / listen ports (ports are configured
+  // in apps/synapse-pingora/config.horizon.N.yaml, not here).
+  //
+  // Fingerprint is deliberately left null: synapse-pingora's horizon client
+  // does not compute or send a fingerprint value on connect, so the
+  // verifySensorIdentity path at sensor-gateway.ts:946 would fail if the
+  // column were populated. Leaving it null hits the "no fingerprint stored
+  // yet - allow connection" fallback at line ~975, and the gateway
+  // populates the column from whatever the client sends on first connect.
+  const BRIDGE_SENSORS = [
+    {
+      id: 'synapse-waf-1',
+      name: 'Synapse WAF',
+      apiKey: 'sk-sensor-bridge-dev',
+      hostname: 'synapse-waf-1',
+      tags: ['bridge', 'primary'],
+    },
+    {
+      id: 'synapse-waf-2',
+      name: 'Synapse WAF 2',
+      apiKey: 'sk-sensor-bridge-dev-2',
+      hostname: 'synapse-waf-2',
+      tags: ['bridge', 'secondary'],
+    },
+    {
+      id: 'synapse-waf-3',
+      name: 'Synapse WAF 3',
+      apiKey: 'sk-sensor-bridge-dev-3',
+      hostname: 'synapse-waf-3',
+      tags: ['bridge', 'tertiary'],
+    },
+  ];
+  // Primary bridge identifiers retained for summary-reporting compatibility
+  // with earlier consumers of the seed log output.
+  const BRIDGE_SENSOR_ID = BRIDGE_SENSORS[0].id;
+  const BRIDGE_SENSOR_NAME = BRIDGE_SENSORS[0].name;
+  const BRIDGE_SENSOR_API_KEY = BRIDGE_SENSORS[0].apiKey;
   // Compatibility: UI defaults assume this API key value exists.
   const DEFAULT_DASHBOARD_API_KEY = 'dev-dashboard-key';
 
@@ -508,87 +544,95 @@ export async function seedPostgres(prisma: PrismaClient, opts: SeedOptions): Pro
     // Sensors
     const sensors: string[] = [];
 
-    // Seed a stable bridge sensor for tenant 0 (Acme) so the sensor-bridge can auth
-    // without a registration token (it matches by sensorName).
+    // Seed the fleet of bridge sensors for tenant 0 (Acme) so the
+    // sensor-bridge can auth each one without a registration token
+    // (gateway matches by sensorName at sensor-gateway.ts:727).
     if (t === 0) {
-      const region = rng.pick(REGIONS);
-      await prisma.sensor.create({
-        data: {
-          id: BRIDGE_SENSOR_ID,
-          tenantId,
-          name: BRIDGE_SENSOR_NAME,
-          hostname: 'synapse-waf',
-          region,
-          version: '1.0.0-bridge',
-          connectionState: ConnectionState.CONNECTED,
-          lastHeartbeat: new Date(now - rng.int(5_000, 60_000)),
-          lastSignalAt: new Date(now - rng.int(10_000, 120_000)),
-          signalsReported: rng.int(50_000, 250_000),
-          blocksApplied: rng.int(500, 12_000),
-          ipAddress: tenantScopedIp(t),
-          publicIp: tenantScopedIp(t),
-          privateIp: `10.${rng.int(0, 255)}.${rng.int(0, 255)}.${rng.int(2, 254)}`,
-          os: rng.pick(OS_STRINGS),
-          kernel: `5.15.0-${rng.int(60, 130)}-generic`,
-          architecture: 'x86_64',
-          instanceType: rng.pick(INSTANCE_TYPES),
-          uptime: rng.int(3600, 86400 * 30),
-          tunnelActive: false,
-          registrationMethod: RegistrationMethod.MANUAL,
-          approvalStatus: ApprovalStatus.APPROVED,
-          approvedAt: new Date(now - rng.int(60_000, 86_400_000)),
-          approvedBy: adminId,
-          fingerprint: BRIDGE_SENSOR_FINGERPRINT,
-          metadata: { tags: ['bridge', 'primary'], seeded: true } as Prisma.InputJsonValue,
-        },
-      });
+      for (const bridge of BRIDGE_SENSORS) {
+        const region = rng.pick(REGIONS);
+        await prisma.sensor.create({
+          data: {
+            id: bridge.id,
+            tenantId,
+            name: bridge.name,
+            hostname: bridge.hostname,
+            region,
+            version: '1.0.0-bridge',
+            connectionState: ConnectionState.CONNECTED,
+            lastHeartbeat: new Date(now - rng.int(5_000, 60_000)),
+            lastSignalAt: new Date(now - rng.int(10_000, 120_000)),
+            signalsReported: rng.int(50_000, 250_000),
+            blocksApplied: rng.int(500, 12_000),
+            ipAddress: tenantScopedIp(t),
+            publicIp: tenantScopedIp(t),
+            privateIp: `10.${rng.int(0, 255)}.${rng.int(0, 255)}.${rng.int(2, 254)}`,
+            os: rng.pick(OS_STRINGS),
+            kernel: `5.15.0-${rng.int(60, 130)}-generic`,
+            architecture: 'x86_64',
+            instanceType: rng.pick(INSTANCE_TYPES),
+            uptime: rng.int(3600, 86400 * 30),
+            tunnelActive: false,
+            registrationMethod: RegistrationMethod.MANUAL,
+            approvalStatus: ApprovalStatus.APPROVED,
+            approvedAt: new Date(now - rng.int(60_000, 86_400_000)),
+            approvedBy: adminId,
+            // Deliberately null: synapse-pingora's horizon client does not
+            // compute/send a fingerprint on connect, so the gateway's
+            // verifySensorIdentity path falls through to "allow + populate
+            // on first connect" when the column is null. Setting it here
+            // would break first-connect auth for every bridge sensor.
+            fingerprint: null,
+            metadata: { tags: bridge.tags, seeded: true } as Prisma.InputJsonValue,
+          },
+        });
 
-      // Stable API key for bridge upgrades + auth message
-      await prisma.sensorApiKey.create({
-        data: {
-          name: 'Sensor Bridge Key',
-          keyHash: sha256Hex(BRIDGE_SENSOR_API_KEY),
-          keyPrefix: BRIDGE_SENSOR_API_KEY.slice(0, 8),
-          sensorId: BRIDGE_SENSOR_ID,
-          status: 'ACTIVE',
-          permissions: ['signal:write', 'blocklist:read', 'beam:write'],
-          createdBy: adminId,
-        },
-      });
+        // Stable API key for bridge upgrades + auth message
+        await prisma.sensorApiKey.create({
+          data: {
+            name: 'Sensor Bridge Key',
+            keyHash: sha256Hex(bridge.apiKey),
+            keyPrefix: bridge.apiKey.slice(0, 8),
+            sensorId: bridge.id,
+            status: 'ACTIVE',
+            permissions: ['signal:write', 'blocklist:read', 'beam:write'],
+            createdBy: adminId,
+          },
+        });
 
-      // Basic config/sync state so fleet pages look realistic
-      await prisma.sensorPingoraConfig.create({
-        data: {
-          sensorId: BRIDGE_SENSOR_ID,
-          wafEnabled: true,
-          wafThreshold: 0.5,
-          wafOverrides: { 'rule-sqli-001': { enabled: true, action: 'block' } } as Prisma.InputJsonValue,
-          rateLimitEnabled: true,
-          rps: 120,
-          burst: 60,
-          allowList: ['127.0.0.1/32'],
-          denyList: [],
-          fullConfig: { version: 1, seeded: true } as Prisma.InputJsonValue,
-          version: 1,
-        },
-      });
+        // Basic config/sync state so fleet pages look realistic
+        await prisma.sensorPingoraConfig.create({
+          data: {
+            sensorId: bridge.id,
+            wafEnabled: true,
+            wafThreshold: 0.5,
+            wafOverrides: { 'rule-sqli-001': { enabled: true, action: 'block' } } as Prisma.InputJsonValue,
+            rateLimitEnabled: true,
+            rps: 120,
+            burst: 60,
+            allowList: ['127.0.0.1/32'],
+            denyList: [],
+            fullConfig: { version: 1, seeded: true } as Prisma.InputJsonValue,
+            version: 1,
+          },
+        });
 
-      await prisma.sensorSyncState.create({
-        data: {
-          sensorId: BRIDGE_SENSOR_ID,
-          expectedConfigHash: sha256Hex(`${tenantId}:${BRIDGE_SENSOR_ID}:cfg:expected`),
-          expectedRulesHash: sha256Hex(`${tenantId}:${BRIDGE_SENSOR_ID}:rules:expected`),
-          expectedBlocklistHash: sha256Hex(`${tenantId}:${BRIDGE_SENSOR_ID}:blocklist:expected`),
-          actualConfigHash: sha256Hex(`${tenantId}:${BRIDGE_SENSOR_ID}:cfg:expected`),
-          actualRulesHash: sha256Hex(`${tenantId}:${BRIDGE_SENSOR_ID}:rules:expected`),
-          actualBlocklistHash: sha256Hex(`${tenantId}:${BRIDGE_SENSOR_ID}:blocklist:expected`),
-          lastSyncAttempt: new Date(now - rng.int(60_000, 600_000)),
-          lastSyncSuccess: new Date(now - rng.int(60_000, 600_000)),
-          syncErrors: [],
-        },
-      });
+        await prisma.sensorSyncState.create({
+          data: {
+            sensorId: bridge.id,
+            expectedConfigHash: sha256Hex(`${tenantId}:${bridge.id}:cfg:expected`),
+            expectedRulesHash: sha256Hex(`${tenantId}:${bridge.id}:rules:expected`),
+            expectedBlocklistHash: sha256Hex(`${tenantId}:${bridge.id}:blocklist:expected`),
+            actualConfigHash: sha256Hex(`${tenantId}:${bridge.id}:cfg:expected`),
+            actualRulesHash: sha256Hex(`${tenantId}:${bridge.id}:rules:expected`),
+            actualBlocklistHash: sha256Hex(`${tenantId}:${bridge.id}:blocklist:expected`),
+            lastSyncAttempt: new Date(now - rng.int(60_000, 600_000)),
+            lastSyncSuccess: new Date(now - rng.int(60_000, 600_000)),
+            syncErrors: [],
+          },
+        });
 
-      sensors.push(BRIDGE_SENSOR_ID);
+        sensors.push(bridge.id);
+      }
     }
 
     for (let s = 0; s < opts.sensorsPerTenant; s++) {
