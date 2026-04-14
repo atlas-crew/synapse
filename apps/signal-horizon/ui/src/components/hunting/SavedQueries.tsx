@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Clock, Play, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { SavedQuery } from '../../hooks/useHunt';
-import { colors, SectionHeader, Spinner, Stack } from '@/ui';
+import { colors, Panel, SectionHeader, Spinner, Stack } from '@/ui';
 
 interface SavedQueriesProps {
   queries: SavedQuery[];
@@ -64,8 +64,8 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
 
   if (queries.length === 0) {
     return (
-      <div className="card">
-        <div className="card-header">
+      <Panel tone="default">
+        <Panel.Header>
           <SectionHeader
             title="Saved Queries"
             size="h4"
@@ -73,18 +73,18 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
             style={{ marginBottom: 0 }}
             titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
           />
-        </div>
-        <div className="card-body p-6 text-center text-ink-muted">
+        </Panel.Header>
+        <Panel.Body className="text-center text-ink-muted">
           <p className="text-sm">No saved queries yet</p>
           <p className="text-xs mt-1">Save a query to run it later</p>
-        </div>
-      </div>
+        </Panel.Body>
+      </Panel>
     );
   }
 
   return (
-    <div className="card">
-      <div className="card-header">
+    <Panel tone="default">
+      <Panel.Header>
         <SectionHeader
           title="Saved Queries"
           size="h4"
@@ -93,8 +93,8 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
           titleStyle={{ fontSize: '16px', lineHeight: '24px', fontWeight: 500 }}
           actions={<span className="text-xs text-ink-muted">{queries.length} saved</span>}
         />
-      </div>
-      <div className="card-body space-y-2">
+      </Panel.Header>
+      <Panel.Body className="space-y-2">
         {queries.map((query) => (
           <div
             key={query.id}
@@ -179,7 +179,7 @@ export function SavedQueries({ queries, onRun, onDelete, isLoading }: SavedQueri
             )}
           </div>
         ))}
-      </div>
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }

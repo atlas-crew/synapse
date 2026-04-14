@@ -192,6 +192,35 @@ control of layout anyway.
   that the original vocabulary didn't cover).
 - `components/AdminSettingsSkeleton.tsx` — 2 loading-state panels
   (`info` + `destructive`) that duplicated the inline pattern.
+- **Hunting section sweep (10 components)** — migrated every
+  hunting panel that had an ad-hoc card wrapper:
+  - Pattern A (`<div className="border border-border-subtle
+    bg-surface-card">`): **BehavioralAnomaliesPanel**,
+    **ClickHouseOpsPanel**, **FleetIntelligencePanel**,
+    **LowAndSlowPanel**, **RecentRequestsPanel**,
+    **SigmaLeadsPanel**, **SigmaRulesPanel**. All converted to
+    `<Panel tone="default" padding="none" spacing="none" as="div">`,
+    preserving the existing inner layouts unchanged. Each gains the
+    Panel shadow and the 4px neutral accent bar while keeping its
+    internal `p-4 border-b` header row — a deliberate "minimal
+    migration" that keeps the diff scriptable (a Python sweep
+    replaced all 7 wrappers atomically).
+  - Pattern B (`.card` / `card-header` / `card-body` split):
+    **SavedQueries** (full slot migration with empty-state +
+    populated-state panels), **HuntResultsTable** (three card
+    states: empty, loading, results with slotted header), and
+    **HuntQueryBuilder** (simple `.card` → Panel conversion).
+    These exercise the compound-slot API and prove that
+    Panel.Header / Panel.Body can absorb the `.card-header` /
+    `.card-body` patterns without functional regression.
+
+  **PanelPadding gained a `'none'` variant as part of this
+  sweep** — Pattern A components needed `<Panel padding="none">`
+  because they manage their own internal padding via a nested
+  `p-4 border-b` row, and the original `'sm' | 'md' | 'lg'` type
+  forced a non-zero padding class. The `'none'` variant is now
+  available on both `Panel` itself and `Panel.Body`, unifying the
+  type across the two slots.
 
 The AdminSettings migration was the regression test for Panel's
 defaults: since AdminSettings was the canonical source the pattern

@@ -72,7 +72,7 @@ export type PanelTone =
   | 'advanced'
   | 'system';
 
-export type PanelPadding = 'sm' | 'md' | 'lg';
+export type PanelPadding = 'none' | 'sm' | 'md' | 'lg';
 
 export type PanelSpacing = 'none' | 'sm' | 'md' | 'lg';
 
@@ -121,6 +121,7 @@ const toneAccentClass: Record<PanelTone, string> = {
 };
 
 const paddingClass: Record<PanelPadding, string> = {
+  none: '',
   sm: 'p-4',
   md: 'p-6',
   lg: 'p-8',
@@ -159,7 +160,7 @@ interface PanelBodyProps extends React.HTMLAttributes<HTMLDivElement> {
    * `none` when the body wraps a full-bleed child like a DataTable or
    * a list that manages its own padding.
    */
-  padding?: PanelPadding | 'none';
+  padding?: PanelPadding;
 }
 
 /**

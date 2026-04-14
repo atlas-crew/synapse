@@ -4,7 +4,7 @@ import { Clipboard, Clock, RefreshCw } from 'lucide-react';
 import type { RecentRequest } from '../../hooks/useHunt';
 import { formatIsoOrInvalid } from '../../utils';
 import { LoadingSpinner } from '../LoadingStates';
-import { Alert, SectionHeader, Stack } from '@/ui';
+import { Alert, Panel, SectionHeader, Stack } from '@/ui';
 
 interface RecentRequestsPanelProps {
   historicalEnabled: boolean;
@@ -64,7 +64,7 @@ export function RecentRequestsPanel({ historicalEnabled, getRecentRequests }: Re
   };
 
   return (
-    <div className="border border-border-subtle bg-surface-card">
+    <Panel tone="default" padding="none" spacing="none" as="div">
       <Stack
         direction="row"
         align="flex-start"
@@ -207,6 +207,6 @@ export function RecentRequestsPanel({ historicalEnabled, getRecentRequests }: Re
           )}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

@@ -8,7 +8,7 @@ import { Download, ChevronDown, ChevronRight, Database, Clock, ExternalLink, Ter
 import { clsx } from 'clsx';
 import type { SignalResult, HuntResult } from '../../hooks/useHunt';
 import { getCyberChefUrl, CyberChefRecipes } from '../../utils/cyberchef';
-import { Button, colors, SectionHeader, Spinner, Stack } from '@/ui';
+import { Button, colors, Panel, SectionHeader, Spinner, Stack } from '@/ui';
 
 interface HuntResultsTableProps {
   result: HuntResult | null;
@@ -109,25 +109,25 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
 
   if (!result && !isLoading) {
     return (
-      <div className="card">
-        <div className="p-8 text-center text-ink-muted">
+      <Panel tone="default" padding="lg">
+        <div className="text-center text-ink-muted">
           <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>Run a query to see results</p>
         </div>
-      </div>
+      </Panel>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="card">
-        <div className="p-8 text-center text-ink-muted">
+      <Panel tone="default" padding="lg">
+        <div className="text-center text-ink-muted">
           <div className="mx-auto mb-3 w-fit">
             <Spinner size={32} color={colors.blue} />
           </div>
           <p>Searching...</p>
         </div>
-      </div>
+      </Panel>
     );
   }
 
@@ -138,8 +138,8 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
   };
 
   return (
-    <div className="card">
-      <div className="card-header flex items-center justify-between">
+    <Panel tone="default">
+      <Panel.Header>
         <Stack direction="row" align="center" style={{ gap: '16px' }}>
           <SectionHeader
             title="Results"
@@ -172,8 +172,9 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
           <Download className="w-4 h-4 mr-1" />
           Export CSV
         </button>
-      </div>
+      </Panel.Header>
 
+      <Panel.Body padding="none">
       {signals.length === 0 ? (
         <div className="p-8 text-center text-ink-muted">
           <p>No signals found matching your query</p>
@@ -331,6 +332,7 @@ export function HuntResultsTable({ result, isLoading }: HuntResultsTableProps) {
           </table>
         </div>
       )}
-    </div>
+      </Panel.Body>
+    </Panel>
   );
 }

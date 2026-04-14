@@ -3,7 +3,7 @@ import { Gauge, RefreshCw, Settings2 } from 'lucide-react';
 import type { ClickHouseOpsSnapshot } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
 import { byOpGauge, formatMs, histogramSumCountByOp, queueDepthByOp } from './clickhouseOpsMetrics';
-import { Alert, SectionHeader, Stack } from '@/ui';
+import { Alert, Panel, SectionHeader, Stack } from '@/ui';
 
 interface ClickHouseOpsPanelProps {
   historicalEnabled: boolean;
@@ -96,7 +96,7 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
   }, [data]);
 
   return (
-    <div className="border border-border-subtle bg-surface-card">
+    <Panel tone="default" padding="none" spacing="none" as="div">
       <Stack
         direction="row"
         align="flex-start"
@@ -208,6 +208,6 @@ export function ClickHouseOpsPanel({ historicalEnabled, getClickHouseOpsSnapshot
           )}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

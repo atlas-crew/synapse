@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import type { TenantAnomaly, TenantBaseline } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
-import { SectionHeader, Stack } from '@/ui';
+import { Panel, SectionHeader, Stack } from '@/ui';
 
 type BaselinesMeta = {
   tenantId: string;
@@ -118,7 +118,7 @@ export function BehavioralAnomaliesPanel({
   }, [baselinesMeta, refreshBaselines, showBaselines]);
 
   return (
-    <div className="border border-border-subtle bg-surface-card">
+    <Panel tone="default" padding="none" spacing="none" as="div">
       <Stack
         direction="row"
         align="flex-start"
@@ -325,6 +325,6 @@ export function BehavioralAnomaliesPanel({
           </div>
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

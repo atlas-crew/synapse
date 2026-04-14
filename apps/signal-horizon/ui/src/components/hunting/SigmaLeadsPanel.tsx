@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FileSearch, RefreshCw } from 'lucide-react';
 import type { SigmaLead } from '../../hooks/useHunt';
 import { LoadingSpinner } from '../LoadingStates';
-import { SectionHeader, Stack } from '@/ui';
+import { Panel, SectionHeader, Stack } from '@/ui';
 
 interface SigmaLeadsPanelProps {
   historicalEnabled: boolean;
@@ -80,7 +80,7 @@ export function SigmaLeadsPanel({
   };
 
   return (
-    <div className="border border-border-subtle bg-surface-card">
+    <Panel tone="default" padding="none" spacing="none" as="div">
       <Stack
         direction="row"
         align="flex-start"
@@ -227,6 +227,6 @@ export function SigmaLeadsPanel({
           )}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }

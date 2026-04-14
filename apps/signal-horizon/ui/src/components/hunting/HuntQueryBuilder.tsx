@@ -9,7 +9,7 @@ import { clsx } from 'clsx';
 import { CodeEditor } from '../ctrlx/CodeEditor';
 import { SigmaImportModal } from './SigmaImportModal';
 import type { HuntQuery } from '../../hooks/useHunt';
-import { Stack } from '@/ui';
+import { Panel, Stack } from '@/ui';
 
 interface HuntQueryBuilderProps {
   onQuery: (query: HuntQuery) => void;
@@ -224,7 +224,7 @@ export function HuntQueryBuilder({
     anonFingerprint.trim();
 
   return (
-    <div className="card">
+    <Panel tone="default" padding="none" spacing="none">
       <div className="p-4 space-y-4">
         {/* Header with Mode Toggle */}
         <div className="flex items-center justify-between border-b border-border-subtle pb-4 mb-4">
@@ -494,6 +494,6 @@ export function HuntQueryBuilder({
           onSaveBackgroundHunt={onSaveSigmaBackgroundHunt}
         />
       )}
-    </div>
+    </Panel>
   );
 }
