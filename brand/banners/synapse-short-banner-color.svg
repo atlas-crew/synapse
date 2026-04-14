@@ -1,0 +1,745 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1240.2645"
+   height="372.00003"
+   viewBox="0 0 1240.2645 372.00003"
+   version="1.1"
+   id="svg79"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs6">
+    <style
+       id="style1">
+      @import url('https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&amp;display=swap');
+    </style>
+    <linearGradient
+       id="bg"
+       x1="0"
+       y1="0"
+       x2="0"
+       y2="905.09668"
+       gradientTransform="matrix(1.3657966,0,0,0.4048254,152.22414,135.20828)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#131c2e"
+         id="stop1" />
+      <stop
+         offset="100%"
+         stop-color="#0c1220"
+         id="stop2" />
+    </linearGradient>
+    <radialGradient
+       id="glow-violet"
+       cx="316.78384"
+       cy="407.29349"
+       r="452.54834"
+       gradientTransform="matrix(1.369145,0,0,0.40348655,148.13744,135.25593)"
+       fx="316.78384"
+       fy="407.29349"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#8B5CF6"
+         stop-opacity="0.06"
+         id="stop3" />
+      <stop
+         offset="100%"
+         stop-color="#8B5CF6"
+         stop-opacity="0"
+         id="stop4" />
+    </radialGradient>
+    <radialGradient
+       id="glow-blue"
+       cx="633.56769"
+       cy="543.05804"
+       r="362.03867"
+       gradientTransform="matrix(1.3667729,0,0,0.40348653,150.28436,137.40285)"
+       fx="633.56769"
+       fy="543.05804"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#1E90FF"
+         stop-opacity="0.04"
+         id="stop5" />
+      <stop
+         offset="100%"
+         stop-color="#1E90FF"
+         stop-opacity="0"
+         id="stop6" />
+    </radialGradient>
+  </defs>
+  <!-- Background -->
+  <!-- Grid -->
+  <!-- Large neural graph (left, faded) -->
+  <!-- Icon -->
+  <!-- Wordmark -->
+  <!-- Rule + tagline (violet rule) -->
+  <!-- Feature labels -->
+  <!-- Decorative neural spokes (bottom right) -->
+  <!-- Corner brackets -->
+  <g
+     id="g1"
+     transform="matrix(1,0,0,1.0125511,-148.13745,-136.90529)">
+    <rect
+       width="1236.1779"
+       height="366.40613"
+       fill="url(#bg)"
+       id="rect6"
+       x="152.22414"
+       y="135.20828"
+       style="display:inline;fill:url(#bg);stroke-width:0.743579" />
+    <rect
+       width="1239.2085"
+       height="365.19434"
+       fill="url(#glow-violet)"
+       id="rect7"
+       x="148.13745"
+       y="135.25592"
+       style="display:inline;fill:url(#glow-violet);stroke-width:0.743257" />
+    <rect
+       width="1237.0616"
+       height="365.19431"
+       fill="url(#glow-blue)"
+       id="rect8"
+       x="150.28436"
+       y="137.40285"
+       style="display:inline;fill:url(#glow-blue);stroke-width:0.742613" />
+    <g
+       stroke="#8b5cf6"
+       stroke-width="0.5"
+       opacity="0.03"
+       id="g39"
+       transform="matrix(0.96310702,0,0,0.54042506,154.56897,156.72512)"
+       style="display:inline">
+      <line
+         x1="0"
+         y1="0"
+         x2="0"
+         y2="640"
+         id="line8" />
+      <line
+         x1="60"
+         y1="0"
+         x2="60"
+         y2="640"
+         id="line9" />
+      <line
+         x1="120"
+         y1="0"
+         x2="120"
+         y2="640"
+         id="line10" />
+      <line
+         x1="180"
+         y1="0"
+         x2="180"
+         y2="640"
+         id="line11" />
+      <line
+         x1="240"
+         y1="0"
+         x2="240"
+         y2="640"
+         id="line12" />
+      <line
+         x1="300"
+         y1="0"
+         x2="300"
+         y2="640"
+         id="line13" />
+      <line
+         x1="360"
+         y1="0"
+         x2="360"
+         y2="640"
+         id="line14" />
+      <line
+         x1="420"
+         y1="0"
+         x2="420"
+         y2="640"
+         id="line15" />
+      <line
+         x1="480"
+         y1="0"
+         x2="480"
+         y2="640"
+         id="line16" />
+      <line
+         x1="540"
+         y1="0"
+         x2="540"
+         y2="640"
+         id="line17" />
+      <line
+         x1="600"
+         y1="0"
+         x2="600"
+         y2="640"
+         id="line18" />
+      <line
+         x1="660"
+         y1="0"
+         x2="660"
+         y2="640"
+         id="line19" />
+      <line
+         x1="720"
+         y1="0"
+         x2="720"
+         y2="640"
+         id="line20" />
+      <line
+         x1="780"
+         y1="0"
+         x2="780"
+         y2="640"
+         id="line21" />
+      <line
+         x1="840"
+         y1="0"
+         x2="840"
+         y2="640"
+         id="line22" />
+      <line
+         x1="900"
+         y1="0"
+         x2="900"
+         y2="640"
+         id="line23" />
+      <line
+         x1="960"
+         y1="0"
+         x2="960"
+         y2="640"
+         id="line24" />
+      <line
+         x1="1020"
+         y1="0"
+         x2="1020"
+         y2="640"
+         id="line25" />
+      <line
+         x1="1080"
+         y1="0"
+         x2="1080"
+         y2="640"
+         id="line26" />
+      <line
+         x1="1140"
+         y1="0"
+         x2="1140"
+         y2="640"
+         id="line27" />
+      <line
+         x1="1200"
+         y1="0"
+         x2="1200"
+         y2="640"
+         id="line28" />
+      <line
+         x1="1260"
+         y1="0"
+         x2="1260"
+         y2="640"
+         id="line29" />
+      <line
+         x1="0"
+         y1="60"
+         x2="1280"
+         y2="60"
+         id="line30" />
+      <line
+         x1="0"
+         y1="120"
+         x2="1280"
+         y2="120"
+         id="line31" />
+      <line
+         x1="0"
+         y1="180"
+         x2="1280"
+         y2="180"
+         id="line32" />
+      <line
+         x1="0"
+         y1="240"
+         x2="1280"
+         y2="240"
+         id="line33" />
+      <line
+         x1="0"
+         y1="300"
+         x2="1280"
+         y2="300"
+         id="line34" />
+      <line
+         x1="0"
+         y1="360"
+         x2="1280"
+         y2="360"
+         id="line35" />
+      <line
+         x1="0"
+         y1="420"
+         x2="1280"
+         y2="420"
+         id="line36" />
+      <line
+         x1="0"
+         y1="480"
+         x2="1280"
+         y2="480"
+         id="line37" />
+      <line
+         x1="0"
+         y1="540"
+         x2="1280"
+         y2="540"
+         id="line38" />
+      <line
+         x1="0"
+         y1="600"
+         x2="1280"
+         y2="600"
+         id="line39" />
+    </g>
+    <g
+       transform="matrix(3.2,0,0,3.2,996.17339,140.08711)"
+       opacity="0.1"
+       id="g52">
+      <line
+         x1="55"
+         y1="55"
+         x2="28"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line40" />
+      <line
+         x1="55"
+         y1="55"
+         x2="82"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line41" />
+      <line
+         x1="55"
+         y1="55"
+         x2="90"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line42" />
+      <line
+         x1="55"
+         y1="55"
+         x2="26"
+         y2="76"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line43" />
+      <line
+         x1="55"
+         y1="55"
+         x2="78"
+         y2="86"
+         stroke="#8b5cf6"
+         stroke-width="3.5"
+         stroke-linecap="square"
+         id="line44" />
+      <line
+         x1="28"
+         y1="24"
+         x2="82"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.3"
+         id="line45" />
+      <line
+         x1="82"
+         y1="24"
+         x2="90"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.3"
+         id="line46" />
+      <line
+         x1="26"
+         y1="76"
+         x2="78"
+         y2="86"
+         stroke="#8b5cf6"
+         stroke-width="2"
+         stroke-linecap="square"
+         opacity="0.35"
+         id="line47" />
+      <circle
+         cx="28"
+         cy="24"
+         r="4.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle47" />
+      <circle
+         cx="82"
+         cy="24"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle48" />
+      <circle
+         cx="90"
+         cy="50"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle49" />
+      <circle
+         cx="26"
+         cy="76"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle50" />
+      <circle
+         cx="78"
+         cy="86"
+         r="5.5"
+         fill="#8b5cf6"
+         id="circle51" />
+      <circle
+         cx="55"
+         cy="55"
+         r="7"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="3"
+         id="circle52" />
+    </g>
+    <g
+       transform="translate(434,222)"
+       id="g68">
+      <rect
+         width="110"
+         height="110"
+         fill="#0c1220"
+         id="rect52"
+         x="0"
+         y="0" />
+      <line
+         x1="55"
+         y1="55"
+         x2="28"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line52" />
+      <line
+         x1="55"
+         y1="55"
+         x2="82"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line53" />
+      <line
+         x1="55"
+         y1="55"
+         x2="90"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line54" />
+      <line
+         x1="55"
+         y1="55"
+         x2="26"
+         y2="76"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line55" />
+      <line
+         x1="55"
+         y1="55"
+         x2="78"
+         y2="86"
+         stroke="#8b5cf6"
+         stroke-width="3.5"
+         stroke-linecap="square"
+         id="line56" />
+      <line
+         x1="28"
+         y1="24"
+         x2="82"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.3"
+         id="line57" />
+      <line
+         x1="82"
+         y1="24"
+         x2="90"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.3"
+         id="line58"
+         style="fill:#000000;fill-opacity:1" />
+      <line
+         x1="26"
+         y1="76"
+         x2="78"
+         y2="86"
+         stroke="#8b5cf6"
+         stroke-width="2"
+         stroke-linecap="square"
+         opacity="0.35"
+         id="line59" />
+      <circle
+         cx="28"
+         cy="24"
+         r="4.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle59" />
+      <circle
+         cx="82"
+         cy="24"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle60" />
+      <circle
+         cx="90"
+         cy="50"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle61" />
+      <circle
+         cx="26"
+         cy="76"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle62" />
+      <circle
+         cx="78"
+         cy="86"
+         r="5.5"
+         fill="#8b5cf6"
+         id="circle63" />
+      <circle
+         cx="55"
+         cy="55"
+         r="7"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="3"
+         id="circle64" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g67">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline64" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline65" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline66" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline67" />
+      </g>
+    </g>
+    <line
+       x1="570"
+       y1="324"
+       x2="600"
+       y2="324"
+       stroke="#4c1d95"
+       stroke-width="1"
+       opacity="0.6"
+       id="line68" />
+    <text
+       x="613.96918"
+       y="328.73846"
+       font-family="'Recursive', monospace"
+       font-size="13px"
+       font-weight="500"
+       fill="#5a6f8a"
+       letter-spacing="3.23076"
+       id="text69"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.5755px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';letter-spacing:2.48446px;fill:#5a6f8a;fill-opacity:1;stroke-width:1.07691">DETECT. DECIDE. FIRE.</text>
+    <g
+       transform="translate(570,380)"
+       id="g71">
+      <text
+         x="0"
+         y="0"
+         font-family="Recursive, monospace"
+         font-size="11px"
+         font-weight="500"
+         fill="#5a6f8a"
+         letter-spacing="1"
+         id="text70"
+         style="font-size:11.9254px"><tspan
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11.9254px;font-family:'Rec Mono Semicasual';-inkscape-font-specification:'Rec Mono Semicasual'"
+           id="tspan80">450μs detection · 72K RPS · 500+ bot signatures</tspan></text>
+      <text
+         x="0"
+         y="22"
+         font-family="Recursive, monospace"
+         font-size="11px"
+         font-weight="500"
+         fill="#5a6f8a"
+         letter-spacing="1"
+         id="text71"
+         style="font-size:11.9254px"><tspan
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11.9254px;font-family:'Rec Mono Semicasual';-inkscape-font-specification:'Rec Mono Semicasual'"
+           id="tspan81">22+ DLP patterns · 13 anomaly types · 8 campaign detectors</tspan></text>
+      <text
+         x="101.73196"
+         y="82.42543"
+         font-family="Recursive, monospace"
+         font-size="11px"
+         font-weight="500"
+         fill="#5a6f8a"
+         letter-spacing="1"
+         id="text71-7"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11.9254px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';letter-spacing:2.98135px;opacity:0.568928"><tspan
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:11.9254px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';letter-spacing:2.98135px"
+           id="tspan81-4">atlascrew.dev/synapse</tspan></text>
+    </g>
+    <g
+       opacity="0.05"
+       id="g76"
+       transform="matrix(0.8171311,0,0,0.90286945,-581.59211,-118.52487)">
+      <line
+         x1="1080"
+         y1="460"
+         x2="980"
+         y2="380"
+         stroke="#1e90ff"
+         stroke-width="3"
+         stroke-linecap="square"
+         id="line71" />
+      <line
+         x1="1080"
+         y1="460"
+         x2="1200"
+         y2="380"
+         stroke="#1e90ff"
+         stroke-width="3"
+         stroke-linecap="square"
+         id="line72" />
+      <line
+         x1="1080"
+         y1="460"
+         x2="1220"
+         y2="500"
+         stroke="#1e90ff"
+         stroke-width="3"
+         stroke-linecap="square"
+         id="line73" />
+      <line
+         x1="1080"
+         y1="460"
+         x2="1000"
+         y2="560"
+         stroke="#1e90ff"
+         stroke-width="3"
+         stroke-linecap="square"
+         id="line74" />
+      <line
+         x1="1080"
+         y1="460"
+         x2="1180"
+         y2="580"
+         stroke="#8b5cf6"
+         stroke-width="4"
+         stroke-linecap="square"
+         id="line75" />
+      <circle
+         cx="1080"
+         cy="460"
+         r="10"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="3"
+         id="circle75" />
+      <circle
+         cx="1180"
+         cy="580"
+         r="8"
+         fill="#8b5cf6"
+         id="circle76" />
+    </g>
+    <g
+       stroke="#5a6f8a"
+       stroke-width="2"
+       fill="none"
+       opacity="0.15"
+       id="g79"
+       transform="matrix(0.95718407,0,0,0.49765853,161.87206,167.70741)">
+      <polyline
+         points="24,56 24,24 56,24"
+         id="polyline76" />
+      <polyline
+         points="1224,24 1256,24 1256,56"
+         id="polyline77" />
+      <polyline
+         points="1256,584 1256,616 1224,616"
+         id="polyline78" />
+      <polyline
+         points="56,616 24,616 24,584"
+         id="polyline79" />
+    </g>
+    <text
+       x="566.49426"
+       y="298.20728"
+       font-family="Recursive, monospace"
+       font-size="63.6021px"
+       font-weight="700"
+       fill="#8b5cf6"
+       letter-spacing="2"
+       id="text68"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold';letter-spacing:2.98135px;stroke-width:0.993783"
+       transform="scale(1.006256,0.99378291)"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold';letter-spacing:2.98135px;stroke-width:0.993783"
+         id="tspan79">SYNAPSE</tspan></text>
+  </g>
+</svg>

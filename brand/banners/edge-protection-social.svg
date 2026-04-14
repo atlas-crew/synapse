@@ -23,11 +23,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.54137468"
-     inkscape:cx="570.76921"
-     inkscape:cy="323.25117"
-     inkscape:window-width="1213"
-     inkscape:window-height="615"
+     inkscape:zoom="0.43393526"
+     inkscape:cx="493.16112"
+     inkscape:cy="326.08551"
+     inkscape:window-width="1509"
+     inkscape:window-height="694"
      inkscape:window-x="0"
      inkscape:window-y="33"
      inkscape:window-maximized="0"
@@ -96,7 +96,8 @@
      fill="#f97316"
      opacity="0.025"
      id="ellipse4"
-     style="display:inline" />
+     style="display:inline"
+     inkscape:label="Orange Dot" />
   <ellipse
      cx="900"
      cy="400"
@@ -104,14 +105,16 @@
      ry="250"
      fill="#8B5CF6"
      opacity="0.02"
-     id="ellipse5" />
+     id="ellipse5"
+     inkscape:label="Purple dot" />
   <!-- Corner brackets -->
   <g
      stroke="#5a6f8a"
      stroke-width="1.5"
      fill="none"
      opacity="0.15"
-     id="g8">
+     id="g8"
+     inkscape:label="Frame">
     <polyline
        points="40,72 40,40 72,40"
        id="polyline5" />
@@ -126,473 +129,492 @@
        id="polyline8" />
   </g>
   <!-- Horizon icon -->
-  <g
-     transform="matrix(0.72727273,0,0,0.72727273,284,203.77484)"
-     id="g47"
-     style="display:inline">
-    <rect
-       width="110"
-       height="110"
-       fill="#0c1220"
-       id="rect38"
-       x="0"
-       y="0"
-       style="display:none" />
-    <line
-       x1="18"
-       y1="50"
-       x2="92"
-       y2="50"
-       stroke="#1e90ff"
-       stroke-width="1.5"
-       stroke-linecap="square"
-       opacity="0.25"
-       id="line39" />
-    <path
-       d="m 20,50 a 35,32 0 0 1 70,0"
-       fill="none"
-       stroke="#f97316"
-       stroke-width="5"
-       stroke-linecap="square"
-       id="path39" />
-    <path
-       d="m 34,50 a 21,19 0 0 1 42,0"
-       fill="none"
-       stroke="#f97316"
-       stroke-width="2.5"
-       stroke-linecap="square"
-       opacity="0.45"
-       id="path40" />
-    <circle
-       cx="55"
-       cy="50"
-       r="4.5"
-       fill="#f97316"
-       id="circle40" />
-    <line
-       x1="55"
-       y1="55"
-       x2="26"
-       y2="94"
-       stroke="#1e90ff"
-       stroke-width="3.5"
-       stroke-linecap="square"
-       id="line40" />
-    <line
-       x1="55"
-       y1="55"
-       x2="84"
-       y2="94"
-       stroke="#1e90ff"
-       stroke-width="3.5"
-       stroke-linecap="square"
-       id="line41" />
-    <line
-       x1="55"
-       y1="55"
-       x2="18"
-       y2="82"
-       stroke="#f97316"
-       stroke-width="2"
-       stroke-linecap="square"
-       opacity="0.45"
-       id="line42" />
-    <line
-       x1="55"
-       y1="55"
-       x2="92"
-       y2="82"
-       stroke="#f97316"
-       stroke-width="2"
-       stroke-linecap="square"
-       opacity="0.45"
-       id="line43" />
-    <g
-       stroke="#5a6f8a"
-       stroke-width="1.5"
-       fill="none"
-       opacity="0.3"
-       id="g46">
-      <polyline
-         points="8,20 8,8 20,8"
-         id="polyline43" />
-      <polyline
-         points="90,8 102,8 102,20"
-         id="polyline44" />
-      <polyline
-         points="102,90 102,102 90,102"
-         id="polyline45" />
-      <polyline
-         points="20,102 8,102 8,90"
-         id="polyline46" />
-    </g>
-  </g>
   <!-- HORIZON wordmark -->
-  <text
-     x="380"
-     y="258"
-     font-family="monospace"
-     font-size="56"
-     font-weight="700"
-     fill="#F97316"
-     letter-spacing="3"
-     id="text12"
-     style="-inkscape-font-specification:'Recursive Sans Linear Static Bold';font-family:'Recursive Sans Linear Static';font-weight:bold;font-style:normal;font-stretch:normal;font-variant:normal">HORIZON</text>
-  <line
-     x1="380"
-     y1="278"
-     x2="416"
-     y2="278"
-     stroke="#2a3f5c"
-     stroke-width="1"
-     id="line13" />
-  <text
-     x="424"
-     y="283"
-     font-family="monospace"
-     font-size="12"
-     font-weight="500"
-     fill="#5a6f8a"
-     letter-spacing="3"
-     id="text13"
-     style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">SEE FURTHER. ACT FASTER.</text>
-  <!-- Divider -->
-  <line
-     x1="640"
-     y1="318"
-     x2="640"
-     y2="338"
-     stroke="#1e2d44"
-     stroke-width="1"
-     id="line14" />
-  <!-- Synapse icon -->
   <g
-     transform="matrix(0.72727273,0,0,0.72727273,284,310.44969)"
-     id="g67"
-     style="display:inline">
-    <rect
-       width="110"
-       height="110"
-       fill="#0c1220"
-       id="rect51"
-       x="0"
-       y="0"
-       style="display:inline" />
-    <line
-       x1="55"
-       y1="55"
-       x2="28"
-       y2="24"
-       stroke="#1e90ff"
-       stroke-width="2.5"
-       stroke-linecap="square"
-       id="line51" />
-    <line
-       x1="55"
-       y1="55"
-       x2="82"
-       y2="24"
-       stroke="#1e90ff"
-       stroke-width="2.5"
-       stroke-linecap="square"
-       id="line52" />
-    <line
-       x1="55"
-       y1="55"
-       x2="90"
-       y2="50"
-       stroke="#1e90ff"
-       stroke-width="2.5"
-       stroke-linecap="square"
-       id="line53" />
-    <line
-       x1="55"
-       y1="55"
-       x2="26"
-       y2="76"
-       stroke="#1e90ff"
-       stroke-width="2.5"
-       stroke-linecap="square"
-       id="line54" />
-    <line
-       x1="55"
-       y1="55"
-       x2="78"
-       y2="86"
-       stroke="#8b5cf6"
-       stroke-width="3.5"
-       stroke-linecap="square"
-       id="line55" />
-    <line
-       x1="28"
-       y1="24"
-       x2="82"
-       y2="24"
-       stroke="#1e90ff"
-       stroke-width="1.5"
-       stroke-linecap="square"
-       opacity="0.3"
-       id="line56" />
-    <line
-       x1="82"
-       y1="24"
-       x2="90"
-       y2="50"
-       stroke="#1e90ff"
-       stroke-width="1.5"
-       stroke-linecap="square"
-       opacity="0.3"
-       id="line57" />
-    <line
-       x1="26"
-       y1="76"
-       x2="78"
-       y2="86"
-       stroke="#8b5cf6"
-       stroke-width="2"
-       stroke-linecap="square"
-       opacity="0.35"
-       id="line58" />
-    <circle
-       cx="28"
-       cy="24"
-       r="4.5"
-       fill="none"
-       stroke="#1e90ff"
-       stroke-width="2"
-       id="circle58" />
-    <circle
-       cx="82"
-       cy="24"
-       r="3.5"
-       fill="none"
-       stroke="#1e90ff"
-       stroke-width="2"
-       id="circle59" />
-    <circle
-       cx="90"
-       cy="50"
-       r="3.5"
-       fill="none"
-       stroke="#1e90ff"
-       stroke-width="2"
-       id="circle60" />
-    <circle
-       cx="26"
-       cy="76"
-       r="3.5"
-       fill="none"
-       stroke="#1e90ff"
-       stroke-width="2"
-       id="circle61" />
-    <circle
-       cx="78"
-       cy="86"
-       r="5.5"
-       fill="#8b5cf6"
-       id="circle62" />
-    <circle
-       cx="55"
-       cy="55"
-       r="7"
-       fill="none"
-       stroke="#1e90ff"
-       stroke-width="3"
-       id="circle63" />
+     id="g2"
+     inkscape:label="Horizon"
+     transform="translate(0,110.00043)">
     <g
-       stroke="#5a6f8a"
-       stroke-width="1.5"
-       fill="none"
-       opacity="0.3"
-       id="g66"
+       transform="matrix(0.72727273,0,0,0.72727273,284,203.77484)"
+       id="g47"
        style="display:inline">
-      <polyline
-         points="8,20 8,8 20,8"
-         id="polyline63" />
-      <polyline
-         points="90,8 102,8 102,20"
-         id="polyline64" />
-      <polyline
-         points="102,90 102,102 90,102"
-         id="polyline65" />
-      <polyline
-         points="20,102 8,102 8,90"
-         id="polyline66" />
+      <rect
+         width="110"
+         height="110"
+         fill="#0c1220"
+         id="rect38"
+         x="0"
+         y="0"
+         style="display:none" />
+      <line
+         x1="18"
+         y1="50"
+         x2="92"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.25"
+         id="line39" />
+      <path
+         d="m 20,50 a 35,32 0 0 1 70,0"
+         fill="none"
+         stroke="#f97316"
+         stroke-width="5"
+         stroke-linecap="square"
+         id="path39" />
+      <path
+         d="m 34,50 a 21,19 0 0 1 42,0"
+         fill="none"
+         stroke="#f97316"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         opacity="0.45"
+         id="path40" />
+      <circle
+         cx="55"
+         cy="50"
+         r="4.5"
+         fill="#f97316"
+         id="circle40" />
+      <line
+         x1="55"
+         y1="55"
+         x2="26"
+         y2="94"
+         stroke="#1e90ff"
+         stroke-width="3.5"
+         stroke-linecap="square"
+         id="line40" />
+      <line
+         x1="55"
+         y1="55"
+         x2="84"
+         y2="94"
+         stroke="#1e90ff"
+         stroke-width="3.5"
+         stroke-linecap="square"
+         id="line41" />
+      <line
+         x1="55"
+         y1="55"
+         x2="18"
+         y2="82"
+         stroke="#f97316"
+         stroke-width="2"
+         stroke-linecap="square"
+         opacity="0.45"
+         id="line42" />
+      <line
+         x1="55"
+         y1="55"
+         x2="92"
+         y2="82"
+         stroke="#f97316"
+         stroke-width="2"
+         stroke-linecap="square"
+         opacity="0.45"
+         id="line43" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g46">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline43" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline44" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline45" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline46" />
+      </g>
     </g>
+    <text
+       x="380"
+       y="258"
+       font-family="monospace"
+       font-size="56px"
+       font-weight="700"
+       fill="#f97316"
+       letter-spacing="3"
+       id="text12"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold'"
+       inkscape:label="Wordmark">HORIZON</text>
+    <line
+       x1="380"
+       y1="278"
+       x2="416"
+       y2="278"
+       stroke="#2a3f5c"
+       stroke-width="1"
+       id="line13" />
+    <text
+       x="424"
+       y="283"
+       font-family="monospace"
+       font-size="12px"
+       font-weight="500"
+       fill="#5a6f8a"
+       letter-spacing="3"
+       id="text13"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold'"
+       inkscape:label="Tagline">SEE FURTHER. ACT FASTER.</text>
   </g>
+  <!-- Divider -->
+  <!-- Synapse icon -->
   <!-- SYNAPSE wordmark -->
-  <text
-     x="380"
-     y="370"
-     font-family="monospace"
-     font-size="56"
-     font-weight="700"
-     fill="#8B5CF6"
-     letter-spacing="3"
-     id="text24"
-     style="-inkscape-font-specification:'Recursive Sans Linear Static Bold';font-family:'Recursive Sans Linear Static';font-weight:bold;font-style:normal;font-stretch:normal;font-variant:normal">SYNAPSE</text>
-  <line
-     x1="380"
-     y1="390"
-     x2="416"
-     y2="390"
-     stroke="#4C1D95"
-     stroke-width="1"
-     opacity="0.6"
-     id="line24" />
-  <text
-     x="424"
-     y="395"
-     font-family="monospace"
-     font-size="12px"
-     font-weight="500"
-     fill="#5a6f8a"
-     letter-spacing="3"
-     id="text25"
-     style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DETECT. DECIDE. FIRE.</text>
+  <g
+     id="g1"
+     inkscape:label="Synapse"
+     transform="translate(0,-108.09969)">
+    <g
+       transform="matrix(0.72727273,0,0,0.72727273,284,310.44969)"
+       id="g67"
+       style="display:inline"
+       inkscape:label="Logo">
+      <rect
+         width="110"
+         height="110"
+         fill="#0c1220"
+         id="rect51"
+         x="0"
+         y="0"
+         style="display:inline" />
+      <line
+         x1="55"
+         y1="55"
+         x2="28"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line51" />
+      <line
+         x1="55"
+         y1="55"
+         x2="82"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line52" />
+      <line
+         x1="55"
+         y1="55"
+         x2="90"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line53" />
+      <line
+         x1="55"
+         y1="55"
+         x2="26"
+         y2="76"
+         stroke="#1e90ff"
+         stroke-width="2.5"
+         stroke-linecap="square"
+         id="line54" />
+      <line
+         x1="55"
+         y1="55"
+         x2="78"
+         y2="86"
+         stroke="#8b5cf6"
+         stroke-width="3.5"
+         stroke-linecap="square"
+         id="line55" />
+      <line
+         x1="28"
+         y1="24"
+         x2="82"
+         y2="24"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.3"
+         id="line56" />
+      <line
+         x1="82"
+         y1="24"
+         x2="90"
+         y2="50"
+         stroke="#1e90ff"
+         stroke-width="1.5"
+         stroke-linecap="square"
+         opacity="0.3"
+         id="line57" />
+      <line
+         x1="26"
+         y1="76"
+         x2="78"
+         y2="86"
+         stroke="#8b5cf6"
+         stroke-width="2"
+         stroke-linecap="square"
+         opacity="0.35"
+         id="line58" />
+      <circle
+         cx="28"
+         cy="24"
+         r="4.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle58" />
+      <circle
+         cx="82"
+         cy="24"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle59" />
+      <circle
+         cx="90"
+         cy="50"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle60" />
+      <circle
+         cx="26"
+         cy="76"
+         r="3.5"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="2"
+         id="circle61" />
+      <circle
+         cx="78"
+         cy="86"
+         r="5.5"
+         fill="#8b5cf6"
+         id="circle62" />
+      <circle
+         cx="55"
+         cy="55"
+         r="7"
+         fill="none"
+         stroke="#1e90ff"
+         stroke-width="3"
+         id="circle63" />
+      <g
+         stroke="#5a6f8a"
+         stroke-width="1.5"
+         fill="none"
+         opacity="0.3"
+         id="g66"
+         style="display:inline">
+        <polyline
+           points="8,20 8,8 20,8"
+           id="polyline63" />
+        <polyline
+           points="90,8 102,8 102,20"
+           id="polyline64" />
+        <polyline
+           points="102,90 102,102 90,102"
+           id="polyline65" />
+        <polyline
+           points="20,102 8,102 8,90"
+           id="polyline66" />
+      </g>
+    </g>
+    <text
+       x="380"
+       y="370"
+       font-family="monospace"
+       font-size="56px"
+       font-weight="700"
+       fill="#8b5cf6"
+       letter-spacing="3"
+       id="text24"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold'"
+       inkscape:label="Wordmark">SYNAPSE</text>
+    <line
+       x1="380"
+       y1="390"
+       x2="416"
+       y2="390"
+       stroke="#4c1d95"
+       stroke-width="1"
+       opacity="0.6"
+       id="line24" />
+    <text
+       x="424"
+       y="395"
+       font-family="monospace"
+       font-size="12px"
+       font-weight="500"
+       fill="#5a6f8a"
+       letter-spacing="3"
+       id="text25"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold'"
+       inkscape:label="Tagline">DETECT. DECIDE. FIRE.</text>
+  </g>
   <!-- Subtitle -->
-  <text
-     x="640"
-     y="465"
-     font-family="monospace"
-     font-size="14"
-     font-weight="400"
-     fill="#5a6f8a"
-     letter-spacing="2"
-     text-anchor="middle"
-     id="text26"
-     style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">EMBEDDED INTELLIGENCE FOR API SECURITY &amp; APPLICATION DEFENSE</text>
   <!-- Stats -->
   <g
-     transform="translate(0, 510)"
-     text-anchor="middle"
-     id="g36">
-    <text
-       x="320"
-       y="0"
-       font-family="monospace"
-       font-size="22"
-       fill="#F97316"
-       letter-spacing="1"
-       id="text27"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">&lt;1ms</text>
-    <text
-       x="320"
-       y="18"
-       font-family="monospace"
-       font-size="9"
-       fill="#5a6f8a"
-       letter-spacing="2"
-       id="text28"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DETECTION</text>
-    <text
-       x="480"
-       y="0"
-       font-family="monospace"
-       font-size="22"
-       fill="#1E90FF"
-       letter-spacing="1"
-       id="text29"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">15MB</text>
-    <text
-       x="480"
-       y="18"
-       font-family="monospace"
-       font-size="9"
-       fill="#5a6f8a"
-       letter-spacing="2"
-       id="text30"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">BINARY</text>
+     id="g4"
+     inkscape:label="Metrics">
     <text
        x="640"
-       y="0"
+       y="465"
        font-family="monospace"
-       font-size="22"
-       fill="#8B5CF6"
-       letter-spacing="1"
-       id="text31"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">500+</text>
-    <text
-       x="640"
-       y="18"
-       font-family="monospace"
-       font-size="9"
+       font-size="14"
+       font-weight="400"
        fill="#5a6f8a"
        letter-spacing="2"
-       id="text32"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">BOT SIGS</text>
-    <text
-       x="800"
-       y="0"
-       font-family="monospace"
-       font-size="22"
-       fill="#10B981"
-       letter-spacing="1"
-       id="text33"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">8+</text>
-    <text
-       x="800"
-       y="18"
-       font-family="monospace"
-       font-size="9"
-       fill="#5a6f8a"
-       letter-spacing="2"
-       id="text34"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DETECTORS</text>
-    <text
-       x="960"
-       y="0"
-       font-family="monospace"
-       font-size="22"
-       fill="#e8ecf4"
-       letter-spacing="1"
-       id="text35"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">22+</text>
-    <text
-       x="960"
-       y="18"
-       font-family="monospace"
-       font-size="9"
-       fill="#5a6f8a"
-       letter-spacing="2"
-       id="text36"
-       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DLP PATTERNS</text>
+       text-anchor="middle"
+       id="text26"
+       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal"
+       inkscape:label="Description">EMBEDDED INTELLIGENCE FOR API SECURITY &amp; APPLICATION DEFENSE</text>
+    <g
+       transform="translate(0, 510)"
+       text-anchor="middle"
+       id="g36"
+       inkscape:label="Metrics">
+      <text
+         x="320"
+         y="0"
+         font-family="monospace"
+         font-size="22"
+         fill="#F97316"
+         letter-spacing="1"
+         id="text27"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">&lt;1ms</text>
+      <text
+         x="320"
+         y="18"
+         font-family="monospace"
+         font-size="9"
+         fill="#5a6f8a"
+         letter-spacing="2"
+         id="text28"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DETECTION</text>
+      <text
+         x="480"
+         y="0"
+         font-family="monospace"
+         font-size="22"
+         fill="#1E90FF"
+         letter-spacing="1"
+         id="text29"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">15MB</text>
+      <text
+         x="480"
+         y="18"
+         font-family="monospace"
+         font-size="9"
+         fill="#5a6f8a"
+         letter-spacing="2"
+         id="text30"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">BINARY</text>
+      <text
+         x="640"
+         y="0"
+         font-family="monospace"
+         font-size="22"
+         fill="#8B5CF6"
+         letter-spacing="1"
+         id="text31"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">500+</text>
+      <text
+         x="640"
+         y="18"
+         font-family="monospace"
+         font-size="9"
+         fill="#5a6f8a"
+         letter-spacing="2"
+         id="text32"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">BOT SIGS</text>
+      <text
+         x="800"
+         y="0"
+         font-family="monospace"
+         font-size="22"
+         fill="#10B981"
+         letter-spacing="1"
+         id="text33"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">8+</text>
+      <text
+         x="800"
+         y="18"
+         font-family="monospace"
+         font-size="9"
+         fill="#5a6f8a"
+         letter-spacing="2"
+         id="text34"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DETECTORS</text>
+      <text
+         x="960"
+         y="0"
+         font-family="monospace"
+         font-size="22"
+         fill="#e8ecf4"
+         letter-spacing="1"
+         id="text35"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-family:'Recursive Sans Linear Static';font-weight:500;font-style:normal;font-stretch:normal;font-variant:normal">22+</text>
+      <text
+         x="960"
+         y="18"
+         font-family="monospace"
+         font-size="9"
+         fill="#5a6f8a"
+         letter-spacing="2"
+         id="text36"
+         style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">DLP PATTERNS</text>
+    </g>
   </g>
   <!-- Atlas Crew footer -->
-  <line
-     x1="580"
-     y1="580"
-     x2="596"
-     y2="580"
-     stroke="#2a3f5c"
-     stroke-width="1"
-     id="line36" />
-  <text
-     x="640"
-     y="584"
-     font-family="monospace"
-     font-size="10"
-     fill="#5a6f8a"
-     letter-spacing="2.5"
-     text-anchor="middle"
-     id="text37"
-     style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal">ATLAS CREW</text>
-  <line
-     x1="684"
-     y1="580"
-     x2="700"
-     y2="580"
-     stroke="#2a3f5c"
-     stroke-width="1"
-     id="line37" />
-  <text
-     xml:space="preserve"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.6667px;line-height:0px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';letter-spacing:2.12px;word-spacing:0.01px;writing-mode:lr-tb;direction:ltr;opacity:0.655352;fill:#c2c2c2;fill-opacity:0.66065"
-     x="554.79773"
-     y="609.46674"
-     id="text38"><tspan
-       sodipodi:role="line"
-       id="tspan37"
+  <g
+     id="g3"
+     inkscape:label="Footer">
+    <line
+       x1="580"
+       y1="580"
+       x2="596"
+       y2="580"
+       stroke="#2a3f5c"
+       stroke-width="1"
+       id="line36" />
+    <text
+       x="640"
+       y="584"
+       font-family="monospace"
+       font-size="10"
+       fill="#5a6f8a"
+       letter-spacing="2.5"
+       text-anchor="middle"
+       id="text37"
+       style="-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';font-family:'Recursive Sans Linear Static';font-weight:600;font-style:normal;font-stretch:normal;font-variant:normal"
+       inkscape:label="Company">ATLAS CREW</text>
+    <line
+       x1="684"
+       y1="580"
+       x2="700"
+       y2="580"
+       stroke="#2a3f5c"
+       stroke-width="1"
+       id="line37" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.6667px;line-height:0px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';letter-spacing:2.12px;word-spacing:0.01px;writing-mode:lr-tb;direction:ltr;opacity:0.655352;fill:#c2c2c2;fill-opacity:0.66065"
        x="554.79773"
-       y="609.46674">atlascrew.dev/synapse</tspan></text>
+       y="609.46674"
+       id="text38"
+       inkscape:label="URL"><tspan
+         sodipodi:role="line"
+         id="tspan37"
+         x="554.79773"
+         y="609.46674">atlascrew.dev/synapse</tspan></text>
+  </g>
 </svg>

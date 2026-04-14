@@ -23,11 +23,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.56668506"
-     inkscape:cx="511.74809"
-     inkscape:cy="88.232429"
-     inkscape:window-width="1213"
-     inkscape:window-height="615"
+     inkscape:zoom="0.93427591"
+     inkscape:cx="361.7775"
+     inkscape:cy="177.14253"
+     inkscape:window-width="1509"
+     inkscape:window-height="694"
      inkscape:window-x="0"
      inkscape:window-y="33"
      inkscape:window-maximized="0"
@@ -65,7 +65,7 @@
   </g>
   <!-- HORIZON -->
   <g
-     transform="translate(40,20)"
+     transform="translate(479.75,20)"
      id="g12">
     <svg
        width="80"
@@ -180,7 +180,7 @@
        letter-spacing="0.15em"
        fill="#1e90ff"
        id="text12"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">See Further. Act Faster.</text>
+       style="font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Medium';font-size:12px">See Further. Act Faster.</text>
   </g>
   <!-- Divider -->
   <line
@@ -193,7 +193,7 @@
      id="line12" />
   <!-- SYNAPSE -->
   <g
-     transform="translate(480,20)"
+     transform="translate(40.4,20)"
      id="g29">
     <svg
        width="80"
@@ -350,13 +350,13 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">Synapse</text>
     <text
        x="96"
-       y="60"
+       y="61.100014"
        font-family="Recursive, monospace"
        font-weight="500"
        font-size="10px"
        letter-spacing="0.15em"
        fill="#8b5cf6"
        id="text29"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'">Detect. Decide. Fire.</text>
+       style="font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;font-size:12px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Medium'">Detect. Decide. Fire.</text>
   </g>
 </svg>

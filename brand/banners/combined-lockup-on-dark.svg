@@ -23,11 +23,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.54764746"
-     inkscape:cx="454.67206"
-     inkscape:cy="-25.563891"
-     inkscape:window-width="1213"
-     inkscape:window-height="615"
+     inkscape:zoom="0.58401836"
+     inkscape:cx="364.71456"
+     inkscape:cy="-55.648936"
+     inkscape:window-width="1509"
+     inkscape:window-height="694"
      inkscape:window-x="0"
      inkscape:window-y="33"
      inkscape:window-maximized="0"
@@ -45,13 +45,15 @@
      fill="#0c1220"
      id="rect1"
      x="0"
-     y="0" />
+     y="0"
+     inkscape:label="BG" />
   <g
      stroke="#5a6f8a"
      stroke-width="1.5"
      fill="none"
      opacity="0.2"
-     id="g4">
+     id="g4"
+     inkscape:label="Frame">
     <polyline
        points="8,20 8,8 20,8"
        id="polyline1" />
@@ -67,14 +69,37 @@
   </g>
   <!-- HORIZON -->
   <g
-     transform="translate(40,20)"
-     id="g12">
-    <svg
-       width="80"
-       height="80"
-       viewBox="0 0 110 110"
-       version="1.1"
-       id="svg11">
+     transform="translate(499.75,20)"
+     id="g12"
+     inkscape:label="Horizon">
+    <text
+       x="96"
+       y="42"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="32px"
+       letter-spacing="0.2em"
+       fill="#f97316"
+       id="text11"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold';letter-spacing:3.94px"
+       inkscape:label="Wordmark">HORIZON</text>
+    <text
+       x="96"
+       y="62"
+       font-family="Recursive, monospace"
+       font-weight="500"
+       font-size="10px"
+       letter-spacing="0.15em"
+       fill="#5a6f8a"
+       id="text12"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:10.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';letter-spacing:2.23px"
+       inkscape:label="Tagline"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:10.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';letter-spacing:2.23px"
+         id="tspan29">SEE FURTHER. ACT FASTER.</tspan></text>
+    <g
+       id="g1"
+       inkscape:label="Logo"
+       transform="scale(0.72727273)">
       <line
          x1="18"
          y1="50"
@@ -163,29 +188,7 @@
            points="20,102 8,102 8,90"
            id="polyline11" />
       </g>
-    </svg>
-    <text
-       x="96"
-       y="42"
-       font-family="Recursive, monospace"
-       font-weight="400"
-       font-size="32px"
-       letter-spacing="0.2em"
-       fill="#f97316"
-       id="text11"
-       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold';letter-spacing:3.94px">HORIZON</text>
-    <text
-       x="96"
-       y="62"
-       font-family="Recursive, monospace"
-       font-weight="500"
-       font-size="10px"
-       letter-spacing="0.15em"
-       fill="#5a6f8a"
-       id="text12"
-       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';letter-spacing:3.94px"><tspan
-         style="font-style:italic;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold Italic'"
-         id="tspan29">SEE FURTHER. ACT FASTER.</tspan></text>
+    </g>
   </g>
   <!-- Divider -->
   <line
@@ -195,17 +198,41 @@
      y2="96"
      stroke="#1e2d44"
      stroke-width="1"
-     id="line12" />
+     id="line12"
+     inkscape:label="Divider" />
   <!-- SYNAPSE -->
   <g
-     transform="translate(500,20)"
-     id="g29">
-    <svg
-       width="80"
-       height="80"
-       viewBox="0 0 110 110"
-       version="1.1"
-       id="svg28">
+     transform="translate(41.3,20)"
+     id="g29"
+     inkscape:label="Synapse">
+    <text
+       x="96"
+       y="42"
+       font-family="Recursive, monospace"
+       font-weight="400"
+       font-size="32px"
+       letter-spacing="0.2em"
+       fill="#a78bfa"
+       id="text28"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold';letter-spacing:3.94px"
+       inkscape:label="Wordmark">SYNAPSE</text>
+    <text
+       x="96"
+       y="62"
+       font-family="Recursive, monospace"
+       font-weight="500"
+       font-size="10px"
+       letter-spacing="0.15em"
+       fill="#5a6f8a"
+       id="text29"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:10.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';letter-spacing:2.24px"
+       inkscape:label="Tagline"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:10.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';letter-spacing:2.24px"
+         id="tspan32">DETECT. DECIDE. FIRE.</tspan></text>
+    <g
+       id="g2"
+       inkscape:label="Logo"
+       transform="scale(0.72727273)">
       <line
          x1="55"
          y1="55"
@@ -343,28 +370,6 @@
            points="20,102 8,102 8,90"
            id="polyline28" />
       </g>
-    </svg>
-    <text
-       x="96"
-       y="42"
-       font-family="Recursive, monospace"
-       font-weight="400"
-       font-size="32px"
-       letter-spacing="0.2em"
-       fill="#a78bfa"
-       id="text28"
-       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Bold';letter-spacing:3.94px">SYNAPSE</text>
-    <text
-       x="96"
-       y="62"
-       font-family="Recursive, monospace"
-       font-weight="500"
-       font-size="10px"
-       letter-spacing="0.15em"
-       fill="#5a6f8a"
-       id="text29"
-       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold';letter-spacing:3.94px"><tspan
-         style="font-style:italic;font-variant:normal;font-weight:600;font-stretch:normal;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Semi-Bold Italic'"
-         id="tspan32">DETECT. DECIDE. FIRE.</tspan></text>
+    </g>
   </g>
 </svg>

@@ -23,11 +23,11 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="0.34662927"
-     inkscape:cx="637.56878"
-     inkscape:cy="288.49266"
-     inkscape:window-width="1213"
-     inkscape:window-height="615"
+     inkscape:zoom="0.66704844"
+     inkscape:cx="559.92935"
+     inkscape:cy="305.0753"
+     inkscape:window-width="1509"
+     inkscape:window-height="722"
      inkscape:window-x="0"
      inkscape:window-y="33"
      inkscape:window-maximized="0"
@@ -99,7 +99,7 @@
      fill="url(#glow-right)"
      id="rect8"
      style="display:inline;fill:#0e1524;fill-opacity:1"
-     x="1.7982957"
+     x="-2.9490235"
      y="-1.1248367" />
   <!-- Grid -->
   <g
@@ -107,7 +107,7 @@
      stroke-width="0.5"
      opacity="0.03"
      id="g37"
-     transform="translate(1.0128781e-8,5.6451807)"
+     transform="translate(-1.5824397,5.6451807)"
      style="display:inline">
     <line
        x1="0"
@@ -290,71 +290,104 @@
        y2="640"
        id="line37" />
   </g>
-  <text
-     x="514.26392"
-     y="589.98926"
-     font-family="'Recursive', monospace"
-     font-size="10"
-     font-weight="500"
-     fill="#5a6f8a"
-     letter-spacing="2.5"
-     id="text72-0"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';opacity:0.801508"><tspan
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static'"
-       id="tspan78-5">atlascrew.dev/synapse</tspan></text>
   <!-- Repo label -->
-  <text
-     x="640.224"
-     y="87.628716"
-     font-family="'Recursive', monospace"
-     font-size="12px"
-     font-weight="500"
-     fill="#5a6f8a"
-     letter-spacing="3"
-     text-anchor="middle"
-     id="text37"
-     style="font-style:italic;font-variant:normal;font-weight:600;font-stretch:normal;font-size:24px;font-family:'Recursive Sans Casual Static';-inkscape-font-specification:'Recursive Sans Casual Static Semi-Bold Italic'"><tspan
-       style="font-style:normal;font-variant:normal;font-weight:500;font-stretch:normal;font-size:24px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static Medium'"
-       id="tspan1">Edge Protection Platform</tspan></text>
   <!-- Center divider -->
-  <text
-     x="181.41466"
-     y="576.84991"
-     font-family="'Recursive', monospace"
-     font-size="10"
-     font-weight="500"
-     fill="#5a6f8a"
-     letter-spacing="2.57696"
-     id="text72"
-     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';stroke-width:1.03078"
-     transform="scale(1.0307839,0.97013545)"><tspan
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static';stroke-width:1.03078"
-       id="tspan78">Fleet Intelligence · Embedded Detection · Collective Defense · SecOps Hub</tspan></text>
-  <line
-     x1="634.72681"
-     y1="187.75206"
-     x2="634.72681"
-     y2="487.75204"
-     stroke="#1e2d44"
-     stroke-width="1"
-     id="line38" />
+  <g
+     id="g4"
+     transform="translate(-1.5258789e-5,-24.799949)">
+    <text
+       x="514.28796"
+       y="589.98926"
+       font-family="'Recursive', monospace"
+       font-size="10"
+       font-weight="500"
+       fill="#5a6f8a"
+       letter-spacing="2.5"
+       id="text72-0"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';opacity:0.801508"
+       inkscape:label="URL"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static'"
+         id="tspan78-5">atlascrew.dev/synapse</tspan></text>
+    <text
+       x="639.79199"
+       y="87.628716"
+       font-family="'Recursive', monospace"
+       font-size="12px"
+       font-weight="500"
+       fill="#5a6f8a"
+       letter-spacing="3"
+       text-anchor="middle"
+       id="text37"
+       style="font-style:italic;font-variant:normal;font-weight:600;font-stretch:normal;font-size:16px;font-family:'Recursive Sans Casual Static';-inkscape-font-specification:'Recursive Sans Casual Static Semi-Bold Italic';display:inline"
+       inkscape:label="Title"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:16px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static'"
+         id="tspan1">HIGH-PERFORMANCE EDGE DEFENSE</tspan></text>
+  </g>
   <!-- === LEFT: HORIZON === -->
   <!-- Horizon icon -->
   <!-- Horizon wordmark -->
   <!-- Horizon rule + tagline -->
   <!-- Horizon module labels -->
+  <!-- === RIGHT: SYNAPSE === -->
+  <!-- Synapse icon -->
+  <!-- Synapse wordmark -->
+  <!-- Synapse rule + tagline -->
+  <!-- Synapse stats -->
   <g
-     id="g15"
-     transform="translate(-2.6891358,-75.100005)">
+     id="g3"
+     transform="translate(-19.181874,1.6739655)">
     <g
-       id="g1"
-       transform="matrix(1.1871252,0,0,1.1871252,-34.31165,-41.916053)">
+       id="g15"
+       transform="translate(641.41324,-73.599975)"
+       inkscape:label="Horizon">
+      <text
+         x="325.26285"
+         y="539.03693"
+         font-family="'Recursive', monospace"
+         font-size="10"
+         font-weight="500"
+         fill="#5a6f8a"
+         letter-spacing="2.57696"
+         id="text72"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;stroke-width:1.03078"
+         transform="matrix(1.0307835,0,0,0.9701358,2e-6,-2e-7)"
+         inkscape:label="Metrics"><tspan
+           sodipodi:role="line"
+           id="tspan7"
+           x="325.26285"
+           y="539.03693"
+           style="stroke-width:1.03078"><tspan
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static';stroke-width:1.03078"
+             id="tspan78">Threat Hunting · Fleet Command</tspan></tspan><tspan
+           sodipodi:role="line"
+           id="tspan8"
+           x="326.55133"
+           y="557.3703"
+           style="stroke-width:1.03078"><tspan
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static';stroke-width:1.03078"
+             id="tspan9">Collective Defense · Real-time Analyticse</tspan></tspan></text>
       <g
-         id="g25"
-         transform="matrix(1.01465,0,0,1.01465,-5.8400081,-3.2815889)">
+         id="g11"
+         inkscape:label="Lockup">
+        <text
+           x="320"
+           y="390"
+           font-family="Recursive, monospace"
+           font-size="48px"
+           font-weight="700"
+           fill="#f97316"
+           letter-spacing="2"
+           text-anchor="middle"
+           id="text47"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'"
+           inkscape:label="Wordmark"
+           transform="matrix(1.2045166,0,0,1.2045166,-50.290478,-45.811706)"><tspan
+             style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'"
+             id="tspan75">HORIZON</tspan></text>
         <g
-           transform="translate(261.9,224)"
-           id="g47">
+           transform="matrix(1.2045166,0,0,1.2045166,265.17242,224)"
+           id="g47"
+           inkscape:label="Logo">
           <rect
              width="110"
              height="110"
@@ -451,155 +484,119 @@
                id="polyline46" />
           </g>
         </g>
-        <text
-           x="320"
-           y="390"
-           font-family="Recursive, monospace"
-           font-size="48px"
-           font-weight="700"
-           fill="#f97316"
-           letter-spacing="2"
+        <g
+           transform="matrix(1.1871252,0,0,1.1871252,336.52241,444.80528)"
            text-anchor="middle"
-           id="text47"
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'"><tspan
-             style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'"
-             id="tspan75">HORIZON</tspan></text>
-      </g>
-      <g
-         transform="translate(320,410)"
-         text-anchor="middle"
-         id="g48">
-        <line
-           x1="-15"
-           y1="0"
-           x2="15"
-           y2="0"
-           stroke="#2a3f5c"
-           stroke-width="1"
-           id="line47"
-           style="stroke:#5a6f8a;stroke-opacity:1" />
-        <text
-           x="0"
-           y="20"
-           font-family="'Recursive', monospace"
-           font-size="11"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="2.5"
-           id="text48"
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:16px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'">SEE FURTHER. ACT FASTER.</text>
+           id="g48"
+           inkscape:label="Tagline">
+          <line
+             x1="-15"
+             y1="0"
+             x2="15"
+             y2="0"
+             stroke="#2a3f5c"
+             stroke-width="1"
+             id="line47"
+             style="stroke:#5a6f8a;stroke-opacity:1" />
+          <text
+             x="0"
+             y="20"
+             font-family="'Recursive', monospace"
+             font-size="11"
+             font-weight="500"
+             fill="#5a6f8a"
+             letter-spacing="2.5"
+             id="text48"
+             style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:16px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'">SEE FURTHER. ACT FASTER.</text>
+        </g>
       </g>
     </g>
+    <line
+       x1="651.43842"
+       y1="128.76501"
+       x2="651.43842"
+       y2="507.88705"
+       stroke="#1e2d44"
+       stroke-width="1.12416"
+       id="line38"
+       inkscape:label="Divider" />
     <g
-       text-anchor="middle"
-       id="g51"
-       transform="matrix(1.2255533,0,0,1.2255533,-55.036686,-59.849202)"
-       style="display:inline">
+       id="g14"
+       transform="translate(-663.88897,-75.100005)"
+       inkscape:label="Synapse">
+      <text
+         x="968.35095"
+         y="540.58337"
+         font-family="'Recursive', monospace"
+         font-size="10"
+         font-weight="500"
+         fill="#5a6f8a"
+         letter-spacing="2.57696"
+         id="text72-9"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;stroke-width:1.03078"
+         transform="scale(1.0307839,0.97013542)"
+         inkscape:label="Metrics"><tspan
+           sodipodi:role="line"
+           id="tspan4"
+           x="968.35095"
+           y="540.58337"
+           style="stroke-width:1.03078"><tspan
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static';stroke-width:1.03078"
+             id="tspan78-57">&lt;1ms Detection · 25MB Footprint</tspan></tspan><tspan
+           sodipodi:role="line"
+           id="tspan5"
+           x="969.6394"
+           y="558.91675"
+           style="stroke-width:1.03078"><tspan
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.6667px;font-family:'Recursive Sans Linear Static';-inkscape-font-specification:'Recursive Sans Linear Static';stroke-width:1.03078"
+             id="tspan6">Rust · Pingora ·No External Depedencies</tspan></tspan></text>
       <g
-         id="g19">
+         id="g10"
+         inkscape:label="Lockup">
+        <g
+           id="g9"
+           inkscape:label="Tagline">
+          <text
+             x="848.49908"
+             y="467.93991"
+             font-family="'Recursive', monospace"
+             font-size="11"
+             font-weight="500"
+             fill="#5a6f8a"
+             letter-spacing="3.00346"
+             id="text68"
+             style="font-style:italic;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:19.2221px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold Italic';stroke-width:1.20138"
+             inkscape:label="Tagline"><tspan
+               style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold';fill:#5a6f8a;fill-opacity:1;stroke-width:1.20138"
+               id="tspan76">DETECT. DECIDE. FIRE.</tspan></text>
+          <line
+             x1="-16.408005"
+             y1="1.6172842"
+             x2="13.591995"
+             y2="1.6172842"
+             stroke="#4c1d95"
+             stroke-width="1"
+             opacity="0.6"
+             id="line67"
+             style="stroke:#5a6f8a;stroke-opacity:1"
+             transform="matrix(1.2013834,0,0,1.2013834,999.63289,442.75771)" />
+        </g>
         <text
-           x="220"
-           y="478"
+           x="997.91254"
+           y="423.81122"
            font-family="'Recursive', monospace"
-           font-size="10"
-           font-weight="600"
+           font-size="57.7767px"
+           font-weight="700"
            fill="#8b5cf6"
            letter-spacing="2"
-           id="text49"
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'">SYNAPSE</text>
-        <text
-           x="219.87332"
-           y="495.99564"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-8-8-90-3"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             x="220.37332"
-             y="495.99564"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#5a6f8a;fill-opacity:1"
-             id="tspan17">Intel</tspan></text>
-      </g>
-      <g
-         id="g20"
-         transform="translate(-0.13894435)">
-        <text
-           x="320"
-           y="478"
-           font-family="'Recursive', monospace"
-           font-size="10"
-           font-weight="600"
-           fill="#f97316"
-           letter-spacing="2"
-           id="text50"
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'"><tspan
-             style="fill:#1e90ff;fill-opacity:1"
-             id="tspan2">BRIDGE</tspan></text>
-        <text
-           x="320.01334"
-           y="496.47565"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-8-8-90-6"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             x="320.51334"
-             y="496.47565"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#5a6f8a;fill-opacity:1"
-             id="tspan19">Fleet</tspan></text>
-      </g>
-      <g
-         id="g21">
-        <text
-           x="425.56876"
-           y="478"
-           font-family="'Recursive', monospace"
-           font-size="10"
-           font-weight="600"
-           fill="#f97316"
-           letter-spacing="2"
-           id="text51"
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:13.3333px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold';display:inline">BEAM</text>
-        <text
-           x="425.53543"
-           y="496.64899"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-8-8-90"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             x="426.03543"
-             y="496.64899"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#5a6f8a;fill-opacity:1"
-             id="tspan18"><tspan
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static'"
-   id="tspan21">Analytic</tspan>s</tspan></text>
-      </g>
-    </g>
-  </g>
-  <!-- === RIGHT: SYNAPSE === -->
-  <!-- Synapse icon -->
-  <!-- Synapse wordmark -->
-  <!-- Synapse rule + tagline -->
-  <!-- Synapse stats -->
-  <g
-     id="g14"
-     transform="translate(-38.188748,-75.100005)">
-    <g
-       id="g2"
-       transform="matrix(1.2013834,0,0,1.2013834,-168.36324,-45.109868)">
-      <g
-         id="g26"
-         transform="matrix(1.0019132,0,0,1.0019132,-3.2687095,-0.42855325)">
+           text-anchor="middle"
+           id="text67"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold';stroke-width:1.20368"
+           inkscape:label="Wordmark">SYNAPSE</text>
         <g
-           transform="translate(905,224)"
-           id="g67">
+           transform="matrix(1.2036819,0,0,1.2036819,931.70996,224.00001)"
+           id="g67"
+           inkscape:label="Logo">
           <rect
              width="110"
              height="110"
@@ -748,149 +745,6 @@
                id="polyline66" />
           </g>
         </g>
-        <text
-           x="960"
-           y="390"
-           font-family="'Recursive', monospace"
-           font-size="48px"
-           font-weight="700"
-           fill="#8b5cf6"
-           letter-spacing="2"
-           text-anchor="middle"
-           id="text67"
-           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold'">SYNAPSE</text>
-      </g>
-      <g
-         transform="translate(960,406.08817)"
-         text-anchor="middle"
-         id="g68">
-        <line
-           x1="-16.408005"
-           y1="1.6172842"
-           x2="13.591995"
-           y2="1.6172842"
-           stroke="#4c1d95"
-           stroke-width="1"
-           opacity="0.6"
-           id="line67"
-           style="stroke:#5a6f8a;stroke-opacity:1" />
-        <text
-           x="0"
-           y="20.96101"
-           font-family="'Recursive', monospace"
-           font-size="11"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="2.5"
-           id="text68"
-           style="font-style:italic;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:16px;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold Italic'"><tspan
-             style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:'Rec Mono Linear';-inkscape-font-specification:'Rec Mono Linear Bold';fill:#5a6f8a;fill-opacity:1"
-             id="tspan76">DETECT. DECIDE. FIRE.</tspan></text>
-      </g>
-    </g>
-    <g
-       id="g13"
-       transform="matrix(1.2217146,0,0,1.2217146,-203.44152,-42.901867)">
-      <g
-         text-anchor="middle"
-         id="g71"
-         transform="translate(-117.84168,-10.132916)">
-        <text
-           x="991.63489"
-           y="476.00882"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             id="tspan5"
-             x="992.13489"
-             y="476.00882"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#1e90ff;fill-opacity:1">&lt;1ms</tspan></text>
-        <text
-           x="992.43488"
-           y="495.78217"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-8"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             id="tspan9"
-             x="992.43488"
-             y="495.78217"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static'">Detection</tspan><tspan
-             id="tspan10"
-             x="992.43488"
-             y="512.44879"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#5a6f8a;fill-opacity:1" /></text>
-      </g>
-      <g
-         text-anchor="middle"
-         id="g71-7"
-         transform="translate(48.396168,-9.99958)">
-        <text
-           x="930.97235"
-           y="476.00882"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-5"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#1e90ff;fill-opacity:1"
-             id="tspan79-1">25MB</tspan></text>
-        <text
-           x="931.05237"
-           y="495.64883"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-8-8"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             x="931.55237"
-             y="495.64883"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#5a6f8a;fill-opacity:1"
-             id="tspan12"><tspan
-   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static'"
-   id="tspan23">Binar</tspan>y</tspan></text>
-      </g>
-      <g
-         text-anchor="middle"
-         id="g71-7-1"
-         transform="translate(147.26424,-9.1862377)">
-        <text
-           x="929.54633"
-           y="495.98795"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-8-8-9"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';text-align:center;text-anchor:middle;display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             x="930.04633"
-             y="495.98795"
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#5a6f8a;fill-opacity:1"
-             id="tspan13">R-Proxy</tspan></text>
-        <text
-           x="928.79297"
-           y="476.00882"
-           font-family="Recursive, monospace"
-           font-size="10px"
-           font-weight="500"
-           fill="#5a6f8a"
-           letter-spacing="1"
-           id="text69-5-5"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:13.3333px;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';display:inline;fill:#5a6f8a;fill-opacity:1"><tspan
-             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:'Recursive Mono Linear Static';-inkscape-font-specification:'Recursive Mono Linear Static';fill:#1e90ff;fill-opacity:1"
-             id="tspan79-1-9">Pingora</tspan></text>
       </g>
     </g>
   </g>
@@ -903,7 +757,7 @@
      opacity="0.15"
      id="g75"
      style="opacity:0.44664"
-     transform="translate(-2.6891358)">
+     inkscape:label="Frame">
     <polyline
        points="24,56 24,24 56,24"
        id="polyline72" />
