@@ -1725,12 +1725,30 @@ async fn restart_handler() -> impl IntoResponse {
 
 /// GET /sites - List configured sites
 async fn sites_handler(State(state): State<AdminState>) -> impl IntoResponse {
-    // Demo mode: return pre-populated sample data
-    if is_demo_mode() {
-        return (StatusCode::OK, Json(demo_sites())).into_response();
-    }
-
+    // NOTE: demo mode used to short-circuit here with hardcoded JSON. The
+    // simulator (src/simulator.rs) now populates real managers from
+    // procedural traffic, so the regular handler path serves live data
+    // even in demo mode. The demo_sites() helper is retained for sites
+    // because the simulator does not yet generate site config; if the
+    // configured sites list is empty AND demo mode is on, fall back to
+    // the canned shape so dashboards aren't blank.
     let response = state.handler.handle_list_sites();
+    if is_demo_mode() {
+        // Inspect the raw JSON to decide whether to fall back. handle_list_sites
+        // returns an ApiResponse wrapping a serializable. Cheap heuristic:
+        // serialize, count sites array length, fall back if zero.
+        if let Ok(value) = serde_json::to_value(&response) {
+            let empty = value
+                .get("data")
+                .and_then(|d| d.get("sites"))
+                .and_then(|s| s.as_array())
+                .map(|a| a.is_empty())
+                .unwrap_or(true);
+            if empty {
+                return (StatusCode::OK, Json(demo_sites())).into_response();
+            }
+        }
+    }
     wrap_response(response)
 }
 
@@ -2112,11 +2130,11 @@ async fn sensor_header_profiles_handler() -> impl IntoResponse {
 /// GET /_sensor/status - Dashboard status endpoint
 /// Returns a format compatible with the dashboard's expected response.
 async fn sensor_status_handler(State(state): State<AdminState>) -> impl IntoResponse {
-    // Demo mode: return pre-populated sample data
-    if is_demo_mode() {
-        return (StatusCode::OK, Json(demo_status()));
-    }
-
+    // NOTE: demo mode no longer short-circuits — the simulator populates
+    // real WAF stats via DetectionEngine::analyze_with_signals so the
+    // regular handler path serves live numbers. demo_status() retained
+    // for a hard fallback if state somehow goes empty mid-demo (see
+    // sites_handler for the same pattern).
     let health = state.handler.handle_health();
     let stats = state.handler.handle_stats();
     let waf = state.handler.handle_waf_stats();
@@ -2196,13 +2214,18 @@ async fn sensor_entities_handler(
     Query(params): Query<EntitiesQuery>,
     State(state): State<AdminState>,
 ) -> impl IntoResponse {
-    // Demo mode: return pre-populated sample data
-    if is_demo_mode() {
+    let limit = params.limit.unwrap_or(100);
+    let entities = state.handler.handle_list_entities(limit);
+
+    // NOTE: demo mode used to short-circuit here. The simulator now
+    // populates EntityManager via touch_entity_with_fingerprint and
+    // apply_external_risk, so the regular handler returns live data.
+    // Fall back to demo_entities() only if the manager is empty AND
+    // demo mode is on (e.g. simulator hasn't ticked yet on first poll).
+    if is_demo_mode() && entities.is_empty() {
         return (StatusCode::OK, Json(demo_entities()));
     }
 
-    let limit = params.limit.unwrap_or(100);
-    let entities = state.handler.handle_list_entities(limit);
     (
         StatusCode::OK,
         Json(serde_json::json!({ "entities": entities })),
@@ -2889,11 +2912,9 @@ async fn sensor_anomalies_handler(State(state): State<AdminState>) -> impl IntoR
 
 /// GET /_sensor/campaigns - Returns active threat campaigns
 async fn sensor_campaigns_handler(State(state): State<AdminState>) -> impl IntoResponse {
-    // Demo mode: return pre-populated sample data
-    if is_demo_mode() {
-        return (StatusCode::OK, Json(demo_campaigns()));
-    }
-
+    // NOTE: demo mode no longer short-circuits — the simulator drives
+    // CampaignManager via register_fingerprints. demo_campaigns() retained
+    // as a fallback for first-poll-before-tick scenarios.
     let campaigns = match state.handler.campaign_manager() {
         Some(manager) => manager
             .get_campaigns()
@@ -2918,6 +2939,11 @@ async fn sensor_campaigns_handler(State(state): State<AdminState>) -> impl IntoR
             .collect::<Vec<_>>(),
         None => vec![],
     };
+
+    // Fall back to canned demo campaigns if the real manager is empty.
+    if is_demo_mode() && campaigns.is_empty() {
+        return (StatusCode::OK, Json(demo_campaigns()));
+    }
 
     (
         StatusCode::OK,

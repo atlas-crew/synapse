@@ -20,6 +20,11 @@
 //!                     └─────────────────┘
 //! ```
 
+// Submodules of the bin crate (see also lib.rs for the library half).
+// `simulator` lives here rather than in the lib because it depends on
+// `DetectionEngine` which is bin-local.
+mod simulator;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::header::{HeaderName, HeaderValue, AUTHORIZATION, COOKIE, USER_AGENT};
@@ -6303,6 +6308,38 @@ fn main() {
              is corrupted, empty, or a runtime reload failed silently. Do not run a \
              WAF proxy with zero rules."
         );
+    }
+
+    // Demo simulator: when --demo is set, kick off the procedural traffic
+    // generator that populates the real EntityManager / CampaignManager /
+    // BlockLog from synthetic attacker archetypes. The admin endpoints
+    // horizon polls then serve live-looking data without needing a real
+    // network sensor in front of the proxy. See src/simulator.rs.
+    //
+    // The simulator runs in a tokio task on the same runtime as the admin
+    // server. It does NOT touch the production filter chain — it calls
+    // DetectionEngine::analyze_with_signals directly and mirrors the
+    // post-analyze state updates request_filter normally does.
+    if demo_mode {
+        let sim_loop = simulator::SimulatorLoop::new(
+            Arc::clone(&shared_entity_manager),
+            Arc::clone(&campaign_manager),
+            Arc::clone(&shared_block_log),
+            health_checker.waf_stats(),
+        );
+        // Spawn on the existing tokio runtime that admin_server runs on.
+        // The handle is intentionally dropped — the loop runs forever or
+        // until the process exits. Pingora's shutdown will tear down the
+        // tokio runtime which terminates the loop.
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("simulator tokio runtime");
+            rt.block_on(async move {
+                let _handle = sim_loop.start();
+                // Keep the runtime alive for the lifetime of the process.
+                std::future::pending::<()>().await;
+            });
+        });
+        info!("Demo simulator started (background traffic generator)");
     }
 
     // Launch TUI if requested, otherwise run server normally
