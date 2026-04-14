@@ -6012,6 +6012,74 @@ fn main() {
         },
     );
 
+    // Wake up the dormant HorizonManager wiring (was: `horizon_manager: None
+    // // not yet initialized in main`). When config.horizon.enabled is true,
+    // construct the manager on a dedicated thread+runtime so its WebSocket
+    // background tasks have a long-lived tokio runtime to live on, then pass
+    // the resulting Arc back to main via a oneshot channel.
+    //
+    // This is the production path: real synapse sensors push ThreatSignals
+    // through this client to horizon's /ws/sensors gateway, which writes
+    // them to Prisma/PostgreSQL, which is what powers the dashboard's
+    // per-actor / per-campaign / per-IP panels. Until this wiring landed,
+    // the manager existed as a 1600-line library but was never instantiated,
+    // and request_filter's `if let Some(ref horizon) = self.horizon_manager`
+    // branch at line ~2022 was unreachable in production.
+    //
+    // The simulator (src/simulator.rs) gets the same Arc via SimulatorLoop
+    // so its synthetic traffic flows through the exact same emit path real
+    // sensors use.
+    let shared_horizon_manager: Option<Arc<HorizonManager>> = if config.horizon.enabled {
+        use std::sync::mpsc::sync_channel;
+        let (tx, rx) = sync_channel::<Option<Arc<HorizonManager>>>(1);
+        let horizon_config = config.horizon.clone();
+        std::thread::Builder::new()
+            .name("horizon-runtime".into())
+            .spawn(move || {
+                let rt = match tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(2)
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        error!("Failed to create horizon tokio runtime: {}", e);
+                        let _ = tx.send(None);
+                        return;
+                    }
+                };
+                rt.block_on(async move {
+                    match HorizonManager::new(horizon_config).await {
+                        Ok(manager) => {
+                            let manager = Arc::new(manager);
+                            // Start kicks off the background reconnect loop.
+                            // It returns Ok quickly even if the hub is
+                            // unreachable — the client will retry forever.
+                            if let Err(e) = manager.start().await {
+                                error!("HorizonManager start failed: {}", e);
+                                let _ = tx.send(None);
+                                return;
+                            }
+                            info!("HorizonManager started, pushing signals to hub");
+                            let _ = tx.send(Some(Arc::clone(&manager)));
+                            // Park the runtime forever so the websocket
+                            // background tasks the client spawned stay alive.
+                            std::future::pending::<()>().await;
+                        }
+                        Err(e) => {
+                            error!("HorizonManager construction failed: {}", e);
+                            let _ = tx.send(None);
+                        }
+                    }
+                });
+            })
+            .expect("spawn horizon-runtime thread");
+        rx.recv().ok().flatten()
+    } else {
+        info!("HorizonManager disabled (config.horizon.enabled=false)");
+        None
+    };
+
     // Register WAF evaluation callback for dry-run testing (Phase 2: Lab View)
     register_evaluate_callback(|method, uri, headers, body, client_ip| {
         let header_snapshots: Vec<HeaderSnapshot> = headers
@@ -6129,7 +6197,7 @@ fn main() {
             session_manager: Arc::clone(&shared_session_manager),
             shadow_mirror_manager,
             crawler_detector: Arc::clone(&shared_crawler_detector),
-            horizon_manager: None, // HorizonManager not yet initialized in main
+            horizon_manager: shared_horizon_manager.clone(),
             trends_manager: Arc::clone(&shared_trends_manager),
             signal_manager: Arc::clone(&shared_signal_manager),
             progression_manager: Arc::clone(&progression_manager),
@@ -6162,7 +6230,7 @@ fn main() {
             session_manager: Arc::clone(&shared_session_manager),
             shadow_mirror_manager: None,
             crawler_detector: Arc::clone(&shared_crawler_detector),
-            horizon_manager: None, // HorizonManager not yet initialized in main
+            horizon_manager: shared_horizon_manager.clone(),
             trends_manager: Arc::clone(&shared_trends_manager),
             signal_manager: Arc::clone(&shared_signal_manager),
             progression_manager: Arc::clone(&progression_manager),
@@ -6326,6 +6394,7 @@ fn main() {
             Arc::clone(&campaign_manager),
             Arc::clone(&shared_block_log),
             health_checker.waf_stats(),
+            shared_horizon_manager.clone(),
         );
         // Spawn on the existing tokio runtime that admin_server runs on.
         // The handle is intentionally dropped — the loop runs forever or

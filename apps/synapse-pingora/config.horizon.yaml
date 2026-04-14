@@ -57,9 +57,18 @@ telemetry:
 horizon:
   enabled: true
   hub_url: "ws://localhost:3100/ws/sensors"
-  api_key: "sk-acme-dev-12345"
-  sensor_id: "sensor-acme-1"
-  sensor_name: "acme-sensor-prod-1"
+  # Matches the BRIDGE_SENSOR_* constants in
+  # apps/signal-horizon/api/prisma/seed/seed-postgres.ts so the dev seed
+  # creates the corresponding Sensor + SensorApiKey rows. If you wipe the
+  # horizon DB, run `pnpm --filter @atlascrew/signal-horizon-api db:seed`
+  # to recreate them or this auth will fail.
+  api_key: "sk-sensor-bridge-dev"
+  sensor_id: "synapse-waf-1"
+  # MUST match BRIDGE_SENSOR_NAME in seed-postgres.ts. The sensor gateway
+  # at sensor-gateway.ts:727 looks up the existing Sensor row by
+  # (tenantId, name), not by id. If this string drifts from the seed,
+  # auth bounces with "New sensors must use a registration token".
+  sensor_name: "Synapse WAF"
   version: "1.0.0"
   reconnect_delay_ms: 5000
   max_reconnect_attempts: 0

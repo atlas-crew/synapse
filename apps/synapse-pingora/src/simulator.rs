@@ -56,6 +56,7 @@ use synapse_pingora::correlation::CampaignManager;
 use synapse_pingora::entity::EntityManager;
 use synapse_pingora::fingerprint::{generate_ja4h, ClientFingerprint, HttpHeaders};
 use synapse_pingora::health::WafStats;
+use synapse_pingora::horizon::{HorizonManager, Severity, SignalType, ThreatSignal};
 use tokio::task::JoinHandle;
 use tracing::{debug, info};
 
@@ -287,6 +288,12 @@ pub struct SimulatorLoop {
     campaign_manager: Arc<CampaignManager>,
     block_log: Arc<BlockLog>,
     waf_stats: Arc<WafStats>,
+    /// Optional horizon WebSocket client. When present, every blocked
+    /// request mirrors the production `request_filter` ThreatSignal emit
+    /// so synthetic traffic flows through the same /ws/sensors gateway
+    /// real sensors use, ending up in horizon's Prisma store and the
+    /// dashboards' per-actor / per-campaign panels.
+    horizon_manager: Option<Arc<HorizonManager>>,
     /// Tick interval. Default 200ms = 5 ticks/sec.
     tick_interval: Duration,
     /// How many synthetic requests to generate per tick. Multiplied across
@@ -300,6 +307,7 @@ impl SimulatorLoop {
         campaign_manager: Arc<CampaignManager>,
         block_log: Arc<BlockLog>,
         waf_stats: Arc<WafStats>,
+        horizon_manager: Option<Arc<HorizonManager>>,
     ) -> Self {
         Self {
             archetypes: vec![
@@ -310,6 +318,7 @@ impl SimulatorLoop {
             campaign_manager,
             block_log,
             waf_stats,
+            horizon_manager,
             tick_interval: Duration::from_millis(200),
             requests_per_tick: 4,
         }
@@ -465,6 +474,53 @@ impl SimulatorLoop {
                 "simulator BLOCK: {} {} from {} (risk={}, rules={:?})",
                 req.method, req.uri, req.source_ip, result.risk_score, result.matched_rules
             );
+        }
+
+        // Mirror request_filter's ThreatSignal emission (main.rs:2022-2050)
+        // so simulated traffic shows up in horizon's per-actor / per-campaign
+        // dashboards via the same /ws/sensors path real sensors use.
+        //
+        // Emit on EVERY analyze (not just blocks) because horizon's actor
+        // service correlates signals across requests, not just blocks. A
+        // credential-stuffer pattern is interesting BEFORE any individual
+        // request blocks because the signal is the cluster of failed
+        // logins, not the single 403.
+        if let Some(ref horizon) = self.horizon_manager {
+            let severity = if result.risk_score >= 80 {
+                Severity::Critical
+            } else if result.risk_score >= 60 {
+                Severity::High
+            } else if result.risk_score >= 40 {
+                Severity::Medium
+            } else {
+                Severity::Low
+            };
+
+            let mut signal = ThreatSignal::new(SignalType::IpThreat, severity)
+                .with_source_ip(&req.source_ip)
+                .with_confidence(result.risk_score as f64 / 100.0);
+
+            if let Some(ja4) = fingerprint.as_ref().and_then(|fp| fp.ja4.as_ref()) {
+                signal = signal.with_fingerprint(&ja4.raw);
+            }
+
+            let rule_ids: Vec<String> = result
+                .matched_rules
+                .iter()
+                .map(|r| format!("rule_{}", r))
+                .collect();
+            if !rule_ids.is_empty() {
+                signal = signal.with_metadata(serde_json::json!({
+                    "rule_ids": rule_ids,
+                    "source": "simulator",
+                }));
+            } else {
+                signal = signal.with_metadata(serde_json::json!({
+                    "source": "simulator",
+                }));
+            }
+
+            horizon.report_signal(signal);
         }
     }
 }
