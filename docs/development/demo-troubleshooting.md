@@ -9,6 +9,83 @@ you're seeing.
 
 ---
 
+## Apparatus fails to start with `EADDRINUSE` on port 9000 or 6379
+
+**Symptom.** The `apparatus` tmux window shows something like:
+```
+Error: listen EADDRINUSE: address already in use 127.0.0.1:9000
+  code: 'EADDRINUSE',
+  errno: -48,
+  syscall: 'listen',
+  address: '127.0.0.1',
+  port: 9000
+}
+```
+
+**Root cause.** Apparatus is a vulnerable-target simulator that spins up
+multiple protocol servers (HTTP/1, HTTP/2, TCP echo, UDP echo, gRPC,
+Bad SSL, MQTT, ICAP, Redis mock, SMTP sink, Syslog). Some of its
+default ports collide with common local services:
+
+- **Port 9000** is Apparatus's `PORT_TCP` (L4 TCP echo server).
+  ClickHouse uses 9000 as its native TCP protocol port and will be
+  holding it if you have ClickHouse running locally.
+- **Port 6379** is Apparatus's `PORT_REDIS` (a fake Redis-protocol
+  server for demos). Your local Redis server will be holding that.
+
+**Fix.** The `just demo-apparatus` recipe already overrides these:
+```bash
+PORT_TCP=9100 PORT_REDIS=16379 pnpm --filter @atlascrew/apparatus dev
+```
+
+If you hit a different port conflict (e.g. your machine is running
+another MQTT broker on 1883 or a Syslog daemon on 5514), override
+the corresponding `PORT_*` env var in the recipe at
+`justfile:demo-apparatus`. The full list of configurable ports is in
+`../Apparatus/apps/apparatus/src/config.ts`.
+
+---
+
+## Horizon dashboards say "Apparatus integration disabled"
+
+**Symptom.** Horizon API logs show:
+```
+INFO: Apparatus integration disabled (APPARATUS_URL not set)
+INFO: Apparatus routes mounted at /api/v1/apparatus
+```
+And the Active Defense dashboards (Breach Drills, Red Team Scanner,
+Supply Chain, Autopilot, JWT Testing) are empty even with Apparatus
+running.
+
+**Root cause.** Horizon's SSE bridge only initializes if
+`APPARATUS_URL` is set in `apps/signal-horizon/api/.env` at Node
+startup time. The `.env.example` has it commented out by default.
+
+**Fix.**
+```bash
+echo 'APPARATUS_URL=http://127.0.0.1:8090' >> apps/signal-horizon/api/.env
+```
+Then **fully restart** the Horizon API — a tsx-watch child-restart is
+not enough because the Node process reads `.env` only at true startup.
+The easiest way to force a real restart is:
+```bash
+# Find and kill the tsx watcher and its child
+pkill -9 -f "tsx.*watch src/index.ts"
+pkill -9 -f "node.*signal-horizon-api/src"
+# Relaunch in its tmux window
+tmux send-keys -t edge-protection:signal-horizon-api 'cd apps/signal-horizon/api && pnpm dev' Enter
+```
+
+When the bridge is working you'll see:
+```
+INFO: Apparatus integration initialized
+INFO: Apparatus SSE bridge initialized
+INFO: Connecting to Apparatus SSE
+INFO: Connected to Apparatus SSE stream
+```
+
+---
+
 ## Synapse WAF disappears after ~30-60 minutes with no crash log
 
 **Symptom.** The WAF was running happily, the dashboard was populated,

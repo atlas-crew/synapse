@@ -70,9 +70,15 @@ pnpm --filter @atlascrew/signal-horizon-api db:migrate
 #    connects as, plus demo campaigns, threats, and actors.
 pnpm --filter @atlascrew/signal-horizon-api db:seed
 
-# 4. Start the full demo stack (builds a release Synapse binary on
-#    first run, then launches Horizon API + UI + Synapse WAF in demo
-#    mode across three tmux windows)
+# 4. Enable the Apparatus SSE bridge in horizon's .env so the Active
+#    Defense dashboards receive drill / red team / supply chain events.
+#    (Skip this if you don't have the Apparatus repo cloned as a
+#    sibling directory — the demo still works without it.)
+echo 'APPARATUS_URL=http://127.0.0.1:8090' >> apps/signal-horizon/api/.env
+
+# 5. Start the full demo stack (builds a release Synapse binary on
+#    first run, then launches Horizon API + UI + Synapse WAF +
+#    Apparatus across four tmux windows)
 just demo
 ```
 
@@ -114,6 +120,7 @@ Demo mode ties three processes together:
 | Horizon API | `signal-horizon-api` | 3100 | REST + WebSocket gateways, Postgres ingestion |
 | Horizon UI | `signal-horizon-ui` | 5180 | Dashboard (Vite dev server) |
 | Synapse WAF | `synapse-pingora` | 6190 / 6191 | Real detection engine + `--demo` traffic generator |
+| Apparatus | `apparatus` | 8090 / 8443 | Active Defense backend (drills, red team, supply chain) |
 
 All three live inside a shared tmux session (default name
 `edge-protection`). Attach with `just dev-shell` to see all three

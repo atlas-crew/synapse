@@ -165,16 +165,19 @@ demo-synapse: _dev-init _demo-build-waf
         echo "$name: started in --demo mode (release build)"
     fi
 
-# Start the full demo stack: Horizon API + UI + Synapse WAF in --demo mode
-demo: dev-horizon-api dev-horizon-ui demo-synapse
+# Start the full demo stack: Horizon API + UI + Synapse WAF + Apparatus
+demo: dev-horizon-api dev-horizon-ui demo-synapse demo-apparatus
     @echo ""
     @echo "Demo stack running in tmux session '{{_dev_session}}':"
     @echo "  Signal Horizon API → http://localhost:3100"
     @echo "  Signal Horizon UI  → http://localhost:5180  ← open this in your browser"
     @echo "  Synapse WAF (demo) → :6190 proxy / :6191 admin"
+    @echo "  Apparatus          → :8090 HTTP1 / :8443 HTTP2  (Active Defense backend)"
     @echo ""
-    @echo "The Synapse WAF is generating synthetic attacker traffic from"
-    @echo "RFC 5737 reserved ranges (198.51.100.x and 203.0.113.99). See"
+    @echo "Two traffic sources are active:"
+    @echo "  - synapse-waf --demo: in-process procedural simulator driving the WAF engine"
+    @echo "  - apparatus attack-sim / drills / redteam: populates Active Defense pages"
+    @echo "Both flow through to Horizon dashboards via different paths. See"
     @echo "docs/development/demo-simulator.md for the full architecture."
     @echo ""
     @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop"
@@ -241,8 +244,52 @@ demo-synapse-3: _dev-init _demo-build-waf
         echo "$name: started in --demo mode"
     fi
 
-# Start the fleet demo: Horizon + three Synapse WAF instances
-demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-synapse-3
+# Start Apparatus dev server in its own tmux window. Apparatus lives in a
+# sibling repo (../Apparatus) and publishes @atlascrew/apparatus-lib via
+# pnpm link, which is how horizon-api consumes its types. The SSE bridge
+# opens a stream from APPARATUS_URL/sse (default http://127.0.0.1:8090)
+# and feeds events through horizon's aggregator, lighting up the Active
+# Defense dashboards (Breach Drills, Red Team Scanner, Supply Chain, etc).
+#
+# Path is hardcoded to ../Apparatus because it's a sibling checkout.
+# If your Apparatus clone is elsewhere, override with:
+#   APPARATUS_PATH=/path/to/Apparatus just demo-apparatus
+_apparatus_path := env_var_or_default("APPARATUS_PATH", justfile_directory() + "/../Apparatus")
+
+# Start Apparatus (sibling repo) in its own tmux window — lights up Active Defense pages
+demo-apparatus: _dev-init
+    #!/usr/bin/env bash
+    set -euo pipefail
+    session="{{_dev_session}}"; name="apparatus"
+    apparatus_path="{{_apparatus_path}}"
+    if [ ! -d "$apparatus_path/apps/apparatus" ]; then
+        echo "demo-apparatus: Apparatus repo not found at $apparatus_path" >&2
+        echo "Set APPARATUS_PATH env var to point at your clone, or clone the repo as a sibling of this one." >&2
+        exit 1
+    fi
+    # Port overrides for local dev collisions:
+    #   PORT_TCP 9000 → 9100  (ClickHouse natively owns 9000)
+    #   PORT_REDIS 6379 → 16379 (local Redis owns 6379; Apparatus spins its
+    #                            own fake Redis-protocol server for demos)
+    # HTTP/1, HTTP/2, gRPC, SMTP, ICAP, Syslog, MQTT, BadSSL all default-safe.
+    cmd="cd '$apparatus_path' && PORT_TCP=9100 PORT_REDIS=16379 pnpm --filter @atlascrew/apparatus dev"
+    if tmux list-windows -t "$session" -F '#W' 2>/dev/null | grep -qx "$name"; then
+        current=$(tmux list-windows -t "$session" -F '#W #{pane_current_command}' | awk -v n="$name" '$1 == n { print $2; exit }')
+        case "$current" in
+            zsh|bash|fish|sh)
+                tmux send-keys -t "$session:$name" "$cmd" Enter
+                echo "$name: restarted in existing window" ;;
+            *)
+                echo "$name: already running ($current)" ;;
+        esac
+    else
+        tmux new-window -d -t "$session" -n "$name"
+        tmux send-keys -t "$session:$name" "$cmd" Enter
+        echo "$name: started (ports 8090 HTTP1 / 8443 HTTP2)"
+    fi
+
+# Start the fleet demo: Horizon + three Synapse WAF instances + Apparatus
+demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-synapse-3 demo-apparatus
     @echo ""
     @echo "Fleet demo running in tmux session '{{_dev_session}}':"
     @echo "  Signal Horizon API → http://localhost:3100"
@@ -250,10 +297,13 @@ demo-fleet: dev-horizon-api dev-horizon-ui demo-synapse demo-synapse-2 demo-syna
     @echo "  Synapse WAF #1     → :6190 / :6191  (sensor_id synapse-waf-1)"
     @echo "  Synapse WAF #2     → :6290 / :6291  (sensor_id synapse-waf-2)"
     @echo "  Synapse WAF #3     → :6390 / :6391  (sensor_id synapse-waf-3)"
+    @echo "  Apparatus          → :8090 HTTP1 / :8443 HTTP2  (Active Defense backend)"
     @echo ""
     @echo "Navigate to Fleet Overview in the dashboard to see all three sensors."
     @echo "Each sensor runs its own procedural simulator against the same engine"
-    @echo "so signals appear tagged per-sensor in horizon's ingestion."
+    @echo "so signals appear tagged per-sensor in horizon's ingestion. Active"
+    @echo "Defense pages (Breach Drills, Red Team Scanner, Supply Chain) light"
+    @echo "up from Apparatus via the SSE bridge configured in horizon/.env."
     @echo ""
     @echo "Attach: just dev-shell   ·  Status: just dev-status   ·  Stop: just dev-stop-fleet"
 
