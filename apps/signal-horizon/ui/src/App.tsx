@@ -76,6 +76,9 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useHorizonStore } from './stores/horizonStore';
 import { Stack } from '@/ui';
 
+// Threat Intelligence: observational / read-side views. These are the
+// panels an analyst opens first thing in the morning to see what real
+// attackers are actually doing.
 const primaryNavItems = [
   { path: '/', icon: LayoutDashboard, label: 'Threat Overview' },
   { path: '/live-map', icon: Globe, label: 'Live Threat Map' },
@@ -88,6 +91,15 @@ const primaryNavItems = [
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/auth-coverage', icon: Shield, label: 'Auth Coverage' },
   { path: '/warroom', icon: Users, label: 'War Room' },
+];
+
+// Active Defense: write-side / Apparatus-backed views. These are the
+// panels where an operator *shapes* the system — proactively testing,
+// simulating, or exercising defenses. Separated from Threat Intelligence
+// because the mental model is different (you do things to the system
+// here, you watch the system there) and because Apparatus is a
+// coherent sub-product with its own backend.
+const activeDefenseNavItems = [
   { path: '/drills', icon: Shield, label: 'Breach Drills' },
   { path: '/autopilot', icon: Cpu, label: 'Autopilot' },
   { path: '/supply-chain', icon: GitBranch, label: 'Supply Chain' },
@@ -534,6 +546,7 @@ function App() {
             {renderCollapsibleSection('threat', 'Threat Intelligence', primaryNavItems, 'bg-ac-magenta')}
             {renderCollapsibleSection('sensor', 'Sensor Console', beamNavItems, 'bg-ac-sky')}
             {renderCollapsibleSection('fleet', 'Fleet Operations', isDemo ? fleetNavItems.filter((i) => !DEMO_HIDDEN_PATHS.has(i.path)) : fleetNavItems, 'bg-ac-green')}
+            {renderCollapsibleSection('active-defense', 'Active Defense', activeDefenseNavItems, 'bg-ac-orange')}
 
             {!sidebarCollapsed && !isDemo && (
               <div className="sidebar-nav-section">
