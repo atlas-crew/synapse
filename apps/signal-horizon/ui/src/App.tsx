@@ -32,7 +32,7 @@ import {
 import { clsx } from 'clsx';
 
 import signalHorizonLogoDark from './assets/brand/signal-logo-dark.svg';
-import horizonSidebarLockup from './assets/brand/horizon-sidebar-compact-dark.svg';
+import synapseSidebarLockup from './assets/brand/synapse-sidebar-lockup.svg';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConnectionBanner, LoadingSpinner } from './components/LoadingStates';
 import { ToastProvider } from './components/ui/Toast';
@@ -536,8 +536,8 @@ function App() {
               />
             ) : (
               <img
-                src={horizonSidebarLockup}
-                alt="Signal Horizon — See Further. Act Faster."
+                src={synapseSidebarLockup}
+                alt="Synapse Fleet"
                 className="w-full max-w-[200px] h-auto"
               />
             )}
