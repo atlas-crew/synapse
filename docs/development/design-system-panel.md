@@ -431,18 +431,8 @@ Shipped in order:
 
 ## Next steps
 
-With OverviewPage fully migrated, the remaining Panel work is
-janitorial rather than feature work:
-
-1. **Deprecate `.card`**: mark the legacy `.card` class in
-   `src/index.css` as deprecated with a comment. Count remaining
-   grep hits; when usage drops below ~5 files, delete the CSS.
-2. **Deprecate `colors.navy` direct imports** on pages that have
-   migrated to `variant="hero"` — the navy background is now
-   owned by Panel, so pages importing `colors.navy` just to color
-   their own divs are a leak. Sweep as a follow-up.
-3. **Second hero candidate audit**: if a second page wants hero
-   treatment, verify the variant is still the right scope. If a
-   hero starts needing its own tone variants (e.g. a red hero
-   for incident mode), re-evaluate whether hero should split into
-   `tone`-aware sub-variants.
+The `.card` CSS family has been fully removed (commit 3ef5a81) and a
+CI guard (`lint:css-classes`) prevents reintroduction. MetricCard has
+been unified into a single canonical component in `@/ui` (commit
+97cf1de). The remaining open threads are tracked in
+[docs/development/plans/ui-brand-backlog.md](plans/ui-brand-backlog.md).

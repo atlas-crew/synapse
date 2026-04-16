@@ -46,6 +46,11 @@ notes that are not part of the product documentation.
   `<Panel>` component reference: semantic tones, padding/spacing tokens,
   migration guide, and the deferred work needed for full card-convention
   cleanup (slotted headers, tactical variant, `.card` CSS deprecation).
+- [docs/development/plans/ui-brand-backlog.md](./development/plans/ui-brand-backlog.md) —
+  Prioritised backlog of UI/brand work: Synapse admin console overhaul,
+  Horizon typography harmonisation, form control audit, visual regression
+  tests, bundle splitting, and other open threads from the design system
+  overhaul.
 - `docs/dockerhub-horizon.md`, `docs/dockerhub-synapse-waf.md` — Docker
   Hub registry publishing notes.
 
