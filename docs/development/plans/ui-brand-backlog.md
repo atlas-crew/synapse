@@ -3,31 +3,37 @@
 Open threads from the design system overhaul and analytics page review.
 Each item is self-contained and can be picked up independently.
 
+## Brand Consolidation Decision (2026-04-16)
+
+Consolidating from two product brands (Synapse WAF sensor + Signal
+Horizon dashboard) to **one unified brand: Synapse**.
+
+- Phase 1: Admin console palette resync (**done** — see below)
+- Phase 2: Horizon UI sidebar rebrand → "Synapse" / "Synapse Dashboard"
+- Phase 3: Mechanical rename (npm packages, Docker images, directory
+  names, docs)
+
+The blue/cyan palette (`#1E90FF` / `#06B6D4` / `#0B4F8A`) is the
+canonical Synapse palette. Orange is legacy — drop it from accent
+tokens as the rebrand progresses.
+
 ## Synapse Admin Console Overhaul
 
 The sensor admin console at `apps/synapse-pingora/assets/admin_console.html`
 is a single-file embedded HTML page served at `/console` from the admin
-port. It's functional but visually drifted from the Horizon design system.
-The file is `include_str!`-ed into the binary, so the single-file
-constraint is load-bearing — no npm, no framework, no external bundles.
+port. It's functional but visually drifted from the dashboard. The file
+is `include_str!`-ed into the binary, so the single-file constraint is
+load-bearing — no npm, no framework, no external bundles.
 
-### Tier 1 — Brand resync (~80 lines CSS, biggest visual win)
+### Tier 1 — Brand resync ✅ DONE
 
-- **Color variables are off-brand.** The CSS `:root` declares `--blue:
-  #0057b7` and `--magenta: #d62598` (the *previous* brand palette).
-  Horizon's current tokens are `#1E90FF` (ac-blue), `#0B4F8A` (ac-navy),
-  `#8B5CF6` (ac-magenta/arc-violet). Resync the ~10 CSS variables to
-  the `colors.ts` token file values.
-- **Mono font is declared but never imported.** `--mono` references
-  `IBM Plex Mono` but the `<link>` only loads Rubik. Fix: either add the
-  import or change the variable to `ui-monospace, SFMono-Regular, Menlo,
-  monospace` (honest fallback).
-- **Stat cards are the wrong shape.** Centered text-align, large mono
-  number, small label below. Horizon's `StatCard` is left-aligned with
-  label above value. Restyle `.stat` to match (~15 lines).
-- **No section accent.** Every `.card` is flat gray. Add a `.card.tone-*`
-  modifier (4px colored top border) matching Panel's tone vocabulary.
-  Apply to Actions panel (warning for Reload, destructive for Restart).
+All CSS variables resynced to canonical `tokens.ts` values. Stat cards
+restyled to left-aligned label-above-value. Tone accent classes added
+and applied to 6 cards (operations=warning, config/detection/ratelimit/
+tls=info, active-config=system). Mono font fallback fixed (dropped
+IBM Plex Mono, uses system mono stack). Button/tag/toast/output colors
+all updated. Status dot enlarged with glow. Toast moved to top-right.
+Nav section labels and active state contrast improved.
 
 ### Tier 2 — Functional polish
 
@@ -131,14 +137,16 @@ deck.gl (only used on one page), Wardley map.
 
 ## Prioritised order
 
-| Priority | Item | Effort | Impact |
-|----------|------|--------|--------|
-| 1 | Synapse admin console brand resync (Tier 1) | ~2h | High — eliminates "two different products" perception |
-| 2 | Synapse admin console functional polish (Tier 2) | ~2h | Medium — makes console feel maintained |
-| 3 | Typography harmonisation pass | ~3h | Medium — subtle consistency win across ~50 files |
-| 4 | Form control consistency audit + sweep | ~2h | Medium — reduces hand-rolled form elements |
-| 5 | `colors.navy` token leak sweep | ~30min | Low — one file, small visual impact |
-| 6 | Visual regression tests | ~4h | High long-term — prevents all future CSS regressions |
-| 7 | Bundle splitting | ~3h | Medium — build warning + load time improvement |
-| 8 | GeoTrafficMap d3-geo swap | ~3h | Low — only matters for bundle size |
-| 9 | Synapse admin console stat trends (Tier 3) | ~2h | Low — informational polish |
+| Priority | Item | Effort | Impact | Status |
+|----------|------|--------|--------|--------|
+| ~~1~~ | ~~Synapse admin console brand resync (Tier 1)~~ | ~~2h~~ | ~~High~~ | **Done** |
+| 2 | Horizon UI sidebar rebrand → "Synapse" (Phase 2) | ~2h | High — unifies the product identity |
+| 3 | Synapse admin console functional polish (Tier 2) | ~2h | Medium — makes console feel maintained |
+| 4 | Typography harmonisation pass | ~3h | Medium — subtle consistency win across ~50 files |
+| 5 | Form control consistency audit + sweep | ~2h | Medium — reduces hand-rolled form elements |
+| 6 | `colors.navy` token leak sweep | ~30min | Low — one file, small visual impact |
+| 7 | Visual regression tests | ~4h | High long-term — prevents all future CSS regressions |
+| 8 | Bundle splitting | ~3h | Medium — build warning + load time improvement |
+| 9 | GeoTrafficMap d3-geo swap | ~3h | Low — only matters for bundle size |
+| 10 | Synapse admin console stat trends (Tier 3) | ~2h | Low — informational polish |
+| 11 | Mechanical rename (npm/Docker/dirs) (Phase 3) | ~4h | Medium — finalises the brand consolidation |

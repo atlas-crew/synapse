@@ -7,27 +7,29 @@
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --navy: #001e62;
-        --blue: #0057b7;
-        --sky: #529eec;
-        --magenta: #d62598;
-        --green: #00b140;
-        --orange: #e35205;
-        --red: #ef3340;
-        --bg: #09090b;
-        --surface: #121212;
-        --surface-subtle: #18181b;
-        --border: rgba(244,244,245,0.1);
-        --border-focus: rgba(82,158,236,0.5);
-        --ink: #f4f4f5;
-        --ink-secondary: #a1a1aa;
-        --ink-muted: #71717a;
-        --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+        /* Synapse brand palette — synced from @/ui tokens/tokens.ts.
+           If you change these, update the canonical token file too. */
+        --navy: #0B4F8A;
+        --blue: #1E90FF;
+        --sky: #06B6D4;
+        --magenta: #8B5CF6;  /* Arc Violet */
+        --green: #10B981;
+        --orange: #F59E0B;
+        --red: #EF4444;
+        --bg: #0C1220;
+        --surface: #101828;
+        --surface-subtle: #131C2E;
+        --border: #1E2D44;
+        --border-focus: rgba(30,144,255,0.5);
+        --ink: #E8ECF4;
+        --ink-secondary: #8899B0;
+        --ink-muted: #5A6F8A;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       * { box-sizing: border-box; margin: 0; border-radius: 0 !important; }
       body { font-family: 'Rubik', sans-serif; color: var(--ink); background: var(--bg); font-size: 14px; }
-      a { color: var(--sky); text-decoration: none; }
-      a:hover { color: #7cbaff; }
+      a { color: var(--blue); text-decoration: none; }
+      a:hover { color: #7EC8FF; }
 
       /* Layout */
       .shell { display: flex; min-height: 100vh; }
@@ -41,18 +43,18 @@
       .sidebar-brand .sub { font-size: 10px; color: var(--ink-muted); margin-top: 4px; letter-spacing: 0.06em; }
       .sidebar nav { padding: 12px 0; flex: 1; overflow-y: auto; }
       .nav-section { padding: 0 16px; margin-bottom: 16px; }
-      .nav-section-label { font-size: 10px; font-weight: 700; color: var(--ink-muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+      .nav-section-label { font-size: 10px; font-weight: 700; color: var(--ink-secondary); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
       .nav-item {
         display: block; padding: 7px 12px; font-size: 13px; color: var(--ink-secondary);
         cursor: pointer; border: none; background: none; width: 100%; text-align: left;
         font-family: 'Rubik', sans-serif; transition: color 0.15s, background 0.15s;
       }
       .nav-item:hover { color: var(--ink); background: var(--surface-subtle); }
-      .nav-item.active { color: var(--sky); background: rgba(82,158,236,0.08); border-left: 2px solid var(--sky); margin-left: -2px; }
+      .nav-item.active { color: var(--blue); background: rgba(30,144,255,0.1); border-left: 2px solid var(--blue); margin-left: -2px; }
       .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
-      .status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; }
-      .status-dot.ok { background: var(--green); }
-      .status-dot.err { background: var(--red); }
+      .status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; }
+      .status-dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+      .status-dot.err { background: var(--red); box-shadow: 0 0 8px var(--red); }
 
       .content { flex: 1; padding: 24px 32px; overflow-y: auto; }
 
@@ -68,10 +70,22 @@
       .card-title { font-size: 11px; font-weight: 600; color: var(--ink-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
       .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 
-      /* Stat cards */
-      .stat { text-align: center; padding: 20px 16px; }
+      /* Stat cards — left-aligned, label-above-value (matches Synapse Dashboard) */
+      .stat { padding: 20px 16px; }
+      .stat-label { font-size: 12px; font-weight: 500; color: var(--ink-secondary); margin-bottom: 8px; }
       .stat-value { font-size: 28px; font-weight: 300; font-family: var(--mono); }
-      .stat-label { font-size: 11px; color: var(--ink-muted); margin-top: 4px; letter-spacing: 0.06em; }
+      .stat-trend { font-size: 12px; font-weight: 500; margin-top: 6px; }
+      .stat-trend.up { color: var(--green); }
+      .stat-trend.down { color: var(--red); }
+      .stat-trend.neutral { color: var(--ink-muted); }
+
+      /* Tone accents — 4px colored top border matching Panel tone vocabulary */
+      .tone-info { border-top: 4px solid var(--blue); }
+      .tone-success { border-top: 4px solid var(--green); }
+      .tone-warning { border-top: 4px solid var(--orange); }
+      .tone-destructive { border-top: 4px solid var(--red); }
+      .tone-advanced { border-top: 4px solid var(--magenta); }
+      .tone-system { border-top: 4px solid var(--ink-muted); }
 
       /* Buttons */
       .btn {
@@ -80,13 +94,13 @@
         color: var(--ink); font-family: 'Rubik', sans-serif; font-size: 12px; font-weight: 500;
         cursor: pointer; transition: all 0.15s;
       }
-      .btn:hover { border-color: var(--sky); color: var(--sky); }
+      .btn:hover { border-color: var(--blue); color: var(--blue); }
       .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-      .btn.primary { border-color: rgba(0,87,183,0.5); color: var(--sky); }
-      .btn.primary:hover { background: rgba(0,87,183,0.1); }
-      .btn.danger { border-color: rgba(214,37,152,0.5); color: var(--magenta); }
-      .btn.danger:hover { background: rgba(214,37,152,0.08); }
-      .btn.success { border-color: rgba(0,177,64,0.4); color: var(--green); }
+      .btn.primary { border-color: rgba(30,144,255,0.4); color: var(--blue); }
+      .btn.primary:hover { background: rgba(30,144,255,0.1); }
+      .btn.danger { border-color: rgba(239,68,68,0.4); color: var(--red); }
+      .btn.danger:hover { background: rgba(239,68,68,0.08); }
+      .btn.success { border-color: rgba(16,185,129,0.4); color: var(--green); }
       .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
       /* Forms */
@@ -100,7 +114,7 @@
       .field textarea { min-height: 80px; resize: vertical; }
       .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
-      .toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--sky); }
+      .toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); }
 
       /* Output */
       pre.output {
@@ -108,8 +122,8 @@
         color: #a1a1aa; font-family: var(--mono); font-size: 11px; line-height: 1.5;
         overflow: auto; max-height: 300px; white-space: pre-wrap; word-break: break-all;
       }
-      pre.output.ok { border-color: rgba(0,177,64,0.3); }
-      pre.output.err { border-color: rgba(239,51,64,0.3); }
+      pre.output.ok { border-color: rgba(16,185,129,0.3); }
+      pre.output.err { border-color: rgba(239,68,68,0.3); }
 
       /* Table */
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -118,21 +132,21 @@
       tr:hover td { background: var(--surface-subtle); }
       .mono { font-family: var(--mono); font-size: 12px; }
       .tag { display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: 600; border: 1px solid; }
-      .tag-green { color: var(--green); border-color: rgba(0,177,64,0.3); }
-      .tag-red { color: var(--red); border-color: rgba(239,51,64,0.3); }
-      .tag-blue { color: var(--sky); border-color: rgba(82,158,236,0.3); }
-      .tag-orange { color: var(--orange); border-color: rgba(227,82,5,0.3); }
+      .tag-green { color: var(--green); border-color: rgba(16,185,129,0.3); }
+      .tag-red { color: var(--red); border-color: rgba(239,68,68,0.3); }
+      .tag-blue { color: var(--blue); border-color: rgba(30,144,255,0.3); }
+      .tag-orange { color: var(--orange); border-color: rgba(245,158,11,0.3); }
 
       /* Toast */
       .toast {
-        position: fixed; bottom: 20px; right: 20px; padding: 10px 16px;
+        position: fixed; top: 20px; right: 20px; padding: 10px 16px;
         background: var(--surface); border: 1px solid var(--border);
         font-size: 12px; color: var(--ink); z-index: 100;
-        transform: translateY(80px); opacity: 0; transition: all 0.3s;
+        transform: translateY(-80px); opacity: 0; transition: all 0.3s;
       }
       .toast.show { transform: translateY(0); opacity: 1; }
-      .toast.ok { border-color: rgba(0,177,64,0.4); color: var(--green); }
-      .toast.err { border-color: rgba(239,51,64,0.4); color: var(--red); }
+      .toast.ok { border-color: rgba(16,185,129,0.4); color: var(--green); }
+      .toast.err { border-color: rgba(239,68,68,0.4); color: var(--red); }
 
       /* Responsive */
       @media (max-width: 768px) {
@@ -188,7 +202,7 @@
             <p>Sensor health and key metrics</p>
           </div>
           <div class="card-grid" id="stats-grid"></div>
-          <div class="card" style="margin-top:8px">
+          <div class="card tone-system" style="margin-top:8px">
             <div class="card-title">Active Configuration</div>
             <pre class="output" id="config-out" style="max-height:400px">Loading...</pre>
           </div>
@@ -213,7 +227,7 @@
             <h2>Detection Settings</h2>
             <p>WAF detection categories, action mode, and thresholds</p>
           </div>
-          <div class="card" id="detection-card">
+          <div class="card tone-info" id="detection-card">
             <div id="detection-form"></div>
             <div class="btn-row" style="margin-top:16px">
               <button class="btn primary" id="detection-save">Save &amp; Reload</button>
@@ -227,7 +241,7 @@
             <h2>Rate Limiting</h2>
             <p>Global rate limit settings</p>
           </div>
-          <div class="card" id="ratelimit-card">
+          <div class="card tone-info" id="ratelimit-card">
             <div id="ratelimit-form"></div>
             <div class="btn-row" style="margin-top:16px">
               <button class="btn primary" id="ratelimit-save">Save &amp; Reload</button>
@@ -265,7 +279,7 @@
             <h2>TLS Configuration</h2>
             <p>Certificate and protocol settings</p>
           </div>
-          <div class="card" id="tls-card">
+          <div class="card tone-info" id="tls-card">
             <div id="tls-form"></div>
             <div class="btn-row" style="margin-top:16px">
               <button class="btn primary" id="tls-save">Save &amp; Reload</button>
@@ -288,7 +302,7 @@
             <h2>Admin Actions</h2>
             <p>Operational controls for the sensor</p>
           </div>
-          <div class="card">
+          <div class="card tone-warning">
             <div class="card-title">Operations</div>
             <div class="btn-row">
               <button class="btn primary" data-action="POST:/reload">Reload Config</button>
@@ -297,7 +311,7 @@
             </div>
             <pre class="output" id="action-out" style="margin-top:12px">{}</pre>
           </div>
-          <div class="card">
+          <div class="card tone-info">
             <div class="card-title">Config Import / Export</div>
             <div class="btn-row">
               <button class="btn" data-action="GET:/_sensor/config/export">Export Config</button>
@@ -379,7 +393,7 @@
 
     function statCard(label, value, color) {
       const c = color || 'var(--ink)';
-      return `<div class="card stat"><div class="stat-value" style="color:${c}">${value}</div><div class="stat-label">${label}</div></div>`;
+      return `<div class="card stat"><div class="stat-label">${label}</div><div class="stat-value" style="color:${c}">${value}</div></div>`;
     }
 
     function buildField(key, value, parentKey) {
