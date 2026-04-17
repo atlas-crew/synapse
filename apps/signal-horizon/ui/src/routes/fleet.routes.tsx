@@ -7,7 +7,6 @@ import { FleetUpdatesPage } from '../pages/fleet/FleetUpdatesPage';
 import { RuleDistributionPage } from '../pages/fleet/RuleDistributionPage';
 import { SensorDetailPage } from '../pages/fleet/SensorDetailPage';
 import { SensorConfigPage } from '../pages/fleet/SensorConfigPage';
-import { DlpDashboardPage } from '../pages/fleet/DlpDashboardPage';
 import { ConfigManagerPage } from '../pages/fleet/ConfigManagerPage';
 import { ConnectivityPage } from '../pages/fleet/ConnectivityPage';
 import { SensorKeysPage } from '../pages/fleet/SensorKeysPage';
@@ -48,16 +47,6 @@ export const fleetRoutes: RouteObject[] = [
       <FleetErrorBoundary level="page" title="Fleet Sites Error">
         <FleetPageWrapper>
           <FleetSitesPage />
-        </FleetPageWrapper>
-      </FleetErrorBoundary>
-    ),
-  },
-  {
-    path: '/fleet/dlp',
-    element: (
-      <FleetErrorBoundary level="page" title="DLP Dashboard Error">
-        <FleetPageWrapper>
-          <DlpDashboardPage />
         </FleetPageWrapper>
       </FleetErrorBoundary>
     ),

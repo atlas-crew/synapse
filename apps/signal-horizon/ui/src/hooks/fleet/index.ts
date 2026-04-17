@@ -57,6 +57,12 @@ export { useBlocklist } from './useBlocklist';
 export { useOnboarding } from './useOnboarding';
 export { useConnectivity } from './useConnectivity';
 export { useFleetSites, type FleetSite } from './useFleetSites';
+export {
+  useFleetDlp,
+  type FleetDlpStats,
+  type FleetDlpViolation,
+  type FleetDlpData,
+} from './useFleetDlp';
 export type {
   TimeRange,
   SessionSearchQuery,

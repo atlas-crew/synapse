@@ -26,6 +26,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Layers,
+  FileSearch,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -55,6 +56,7 @@ import RequestTimelinePage from './pages/hunting/RequestTimelinePage';
 import CampaignTimelinePage from './pages/hunting/CampaignTimelinePage';
 import IntelPage from './pages/IntelPage';
 import ApiIntelligencePage from './pages/ApiIntelligencePage';
+import { DlpDashboardPage } from './pages/DlpDashboardPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import DesignLabPage from './pages/DesignLabPage';
 import DesignSystemPage from './pages/DesignSystemPage';
@@ -81,6 +83,7 @@ const primaryNavItems = [
   { path: '/intel', icon: BarChart3, label: 'Global Intel' },
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/auth-coverage', icon: Shield, label: 'Auth Coverage' },
+  { path: '/dlp', icon: FileSearch, label: 'Data Loss Prevention' },
   { path: '/warroom', icon: Users, label: 'War Room' },
 ];
 
@@ -92,7 +95,6 @@ const fleetNavItems = [
   { path: '/fleet', icon: Server, label: 'Fleet Overview' },
   { path: '/fleet/sites', icon: Layers, label: 'Sites' },
   { path: '/fleet/config', icon: Settings, label: 'Fleet Configuration' },
-  { path: '/fleet/dlp', icon: Shield, label: 'DLP Dashboard' },
   { path: '/fleet/forecast', icon: BarChart3, label: 'Capacity Forecast' },
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
@@ -646,6 +648,7 @@ function App() {
                 <Route path="/intel" element={<SignalHorizonPageWrapper><IntelPage /></SignalHorizonPageWrapper>} />
                 <Route path="/api-intelligence" element={<SignalHorizonPageWrapper><ApiIntelligencePage /></SignalHorizonPageWrapper>} />
                 <Route path="/auth-coverage" element={<Suspense fallback={<LoadingSpinner message="Loading auth coverage map..." size="lg" />}><SignalHorizonPageWrapper><AuthCoverageMap /></SignalHorizonPageWrapper></Suspense>} />
+                <Route path="/dlp" element={<SignalHorizonPageWrapper><DlpDashboardPage /></SignalHorizonPageWrapper>} />
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support/:docId?" element={<SupportPage />} />
                 <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />

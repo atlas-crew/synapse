@@ -1,26 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
 import { Shield, AlertTriangle, FileSearch, Search, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useDemoMode } from '../../stores/demoModeStore';
-import { getDemoData } from '../../lib/demoData';
-import { apiFetch } from '../../lib/api';
+import { useDemoMode } from '../stores/demoModeStore';
+import { useFleetDlp } from '../hooks/fleet';
 import { Button, MetricCard, Panel, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
 
-interface DlpStats {
-  totalScans: number;
-  totalMatches: number;
-  patternCount: number;
-}
-
-interface DlpViolation {
-  timestamp: number;
-  pattern_name: string;
-  data_type: string;
-  severity: string;
-  masked_value: string;
-  client_ip?: string;
-  path: string;
-}
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
 const CARD_HEADER_TITLE_STYLE = {
   fontSize: '18px',
@@ -29,46 +12,11 @@ const CARD_HEADER_TITLE_STYLE = {
   color: 'var(--text-primary)',
 };
 
-async function fetchDlpStats(): Promise<DlpStats> {
-  const sensorId = 'synapse-waf-1';
-  return apiFetch<DlpStats>(`/synapse/${sensorId}/proxy/_sensor/dlp/stats`);
-}
-
-async function fetchDlpViolations(): Promise<{ violations: DlpViolation[] }> {
-  const sensorId = 'synapse-waf-1';
-  return apiFetch<{ violations: DlpViolation[] }>(
-    `/synapse/${sensorId}/proxy/_sensor/dlp/violations`,
-  );
-}
-
 export function DlpDashboardPage() {
-  const { isEnabled: isDemoMode, scenario } = useDemoMode();
-
-  const { data: stats } = useQuery({
-    queryKey: ['fleet', 'dlp', 'stats', isDemoMode ? scenario : 'live'],
-    queryFn: () => {
-      if (isDemoMode) {
-        const demoData = getDemoData(scenario);
-        return demoData.fleet.dlp.stats;
-      }
-      return fetchDlpStats();
-    },
-    refetchInterval: isDemoMode ? false : 10000,
-  });
-
-  const { data: violationsData, isLoading: violationsLoading } = useQuery({
-    queryKey: ['fleet', 'dlp', 'violations', isDemoMode ? scenario : 'live'],
-    queryFn: () => {
-      if (isDemoMode) {
-        const demoData = getDemoData(scenario);
-        return { violations: demoData.fleet.dlp.violations };
-      }
-      return fetchDlpViolations();
-    },
-    refetchInterval: isDemoMode ? false : 5000,
-  });
-
-  const violations = violationsData?.violations || [];
+  const { isEnabled: isDemoMode } = useDemoMode();
+  const { data, isLoading: violationsLoading } = useFleetDlp();
+  const stats = data?.stats;
+  const violations = data?.violations ?? [];
 
   return (
     <div className="p-6 space-y-6 min-h-screen bg-surface-base">
@@ -146,6 +94,7 @@ export function DlpDashboardPage() {
             <thead>
               <tr className="bg-surface-subtle/50 text-[10px] uppercase tracking-wider text-ink-muted font-bold border-b border-border-subtle">
                 <th className="px-6 py-3">Timestamp</th>
+                <th className="px-6 py-3">Sensor</th>
                 <th className="px-6 py-3">Pattern</th>
                 <th className="px-6 py-3">Type</th>
                 <th className="px-6 py-3">Severity</th>
@@ -157,21 +106,27 @@ export function DlpDashboardPage() {
             <tbody className="divide-y divide-border-subtle">
               {violationsLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-20 text-ink-muted">
+                  <td colSpan={8} className="text-center py-20 text-ink-muted">
                     <div className="animate-pulse">Loading real-time violations...</div>
                   </td>
                 </tr>
               ) : violations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-20 text-ink-muted italic">
+                  <td colSpan={8} className="text-center py-20 text-ink-muted italic">
                     No sensitive data leaks detected in the last hour. Fleet is secure.
                   </td>
                 </tr>
               ) : (
                 violations.map((v, idx) => (
-                  <tr key={idx} className="hover:bg-ac-blue/5 transition-colors group">
+                  <tr key={`${v.sensorId}-${idx}`} className="hover:bg-ac-blue/5 transition-colors group">
                     <td className="px-6 py-4 text-xs text-ink-muted font-mono">
                       {new Date(v.timestamp).toLocaleTimeString()}
+                    </td>
+                    <td
+                      className="px-6 py-4 text-xs text-ink-secondary font-mono truncate max-w-[140px]"
+                      title={`${v.sensorName} (${v.sensorId})`}
+                    >
+                      {v.sensorName}
                     </td>
                     <td className="px-6 py-4 font-medium text-ink-primary">{v.pattern_name}</td>
                     <td className="px-6 py-4">

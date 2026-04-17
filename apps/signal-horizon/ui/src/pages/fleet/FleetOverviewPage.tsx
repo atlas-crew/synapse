@@ -249,7 +249,7 @@ export function FleetOverviewPage() {
             icon={Shield}
             title="DLP Management"
             description="Monitor sensitive data leaks"
-            onClick={() => navigate('/fleet/dlp')}
+            onClick={() => navigate('/dlp')}
             accentColorVar="--ac-green"
           />
           <QuickAction
