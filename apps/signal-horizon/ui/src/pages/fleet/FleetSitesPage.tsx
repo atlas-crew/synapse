@@ -37,6 +37,7 @@ import {
 } from '@/ui';
 import { useSensors, useFleetSites, type FleetSite } from '../../hooks/fleet';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { FleetSiteDrawer } from '../../components/fleet/FleetSiteDrawer';
 
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
 
@@ -52,6 +53,11 @@ export default function FleetSitesPage() {
   // comment), so this is a non-problem until both trigger together.
   const [search, setSearch] = useState('');
   const [sensorFilter, setSensorFilter] = useState<string>('');
+
+  // Selected site for the edit drawer. Setting to null closes it.
+  // The drawer handles its own invalidation on save/delete, so this
+  // page doesn't need to explicitly refetch.
+  const [selectedSite, setSelectedSite] = useState<FleetSite | null>(null);
 
   const filteredSites = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -215,6 +221,7 @@ export default function FleetSitesPage() {
           ) : (
             <DataTable
               card={false}
+              onRowClick={(row) => setSelectedSite(row)}
               columns={[
                 {
                   key: 'hostname',
@@ -291,6 +298,14 @@ export default function FleetSitesPage() {
           )}
         </Panel.Body>
       </Panel>
+
+      {/* Edit / delete drawer. Stays mounted so it can animate in/out
+          smoothly; the drawer component handles its own open state
+          via the `site` prop (null = closed). */}
+      <FleetSiteDrawer
+        site={selectedSite}
+        onClose={() => setSelectedSite(null)}
+      />
     </div>
   );
 }
