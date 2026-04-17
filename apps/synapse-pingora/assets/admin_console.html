@@ -38,7 +38,9 @@
         border-right: 1px solid var(--border); padding: 20px 0;
         display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
       }
-      .sidebar-brand { padding: 0 16px 20px; border-bottom: 1px solid var(--border); }
+      .sidebar-brand { padding: 0 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+      .sidebar-brand-mark { flex-shrink: 0; width: 36px; height: 36px; }
+      .sidebar-brand-text { min-width: 0; }
       .sidebar-brand h1 { font-size: 15px; font-weight: 500; color: var(--ink); letter-spacing: 0.02em; }
       .sidebar-brand .sub { font-size: 10px; color: var(--ink-muted); margin-top: 4px; letter-spacing: 0.06em; }
       .sidebar nav { padding: 12px 0; flex: 1; overflow-y: auto; }
@@ -151,7 +153,8 @@
       /* Responsive */
       @media (max-width: 768px) {
         .sidebar { width: 56px; overflow: hidden; }
-        .sidebar-brand h1, .sidebar-brand .sub, .nav-section-label, .nav-item span { display: none; }
+        .sidebar-brand-text, .nav-section-label, .nav-item span { display: none; }
+        .sidebar-brand { justify-content: center; padding: 0 0 16px; }
         .content { padding: 16px; }
         .card-grid { grid-template-columns: 1fr; }
         .field-row { grid-template-columns: 1fr; }
@@ -163,8 +166,34 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-brand">
-          <h1>Synapse Console</h1>
-          <div class="sub">Admin &middot; <span id="admin-port"></span></div>
+          <!-- Signal Horizon brand mark — visually links the sensor's
+               embedded admin console to its parent Synapse Dashboard
+               platform. Inlined from
+               apps/signal-horizon/ui/src/assets/brand/signal-logo-dark.svg
+               (kept in sync manually). Inline rather than <img src=>
+               because the admin console is a single-file embedded HTML
+               page with no external asset routes. -->
+          <svg class="sidebar-brand-mark" viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg" aria-label="Signal Horizon" role="img">
+            <rect width="110" height="110" fill="#0c1220"/>
+            <line x1="18" y1="50" x2="92" y2="50" stroke="#1E90FF" stroke-width="1.5" stroke-linecap="square" opacity="0.25"/>
+            <path d="M20,50 A35,32 0 0 1 90,50" fill="none" stroke="#F97316" stroke-width="5" stroke-linecap="square"/>
+            <path d="M34,50 A21,19 0 0 1 76,50" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="square" opacity="0.45"/>
+            <circle cx="55" cy="50" r="4.5" fill="#F97316"/>
+            <line x1="55" y1="55" x2="26" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/>
+            <line x1="55" y1="55" x2="84" y2="94" stroke="#1E90FF" stroke-width="3.5" stroke-linecap="square"/>
+            <line x1="55" y1="55" x2="18" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/>
+            <line x1="55" y1="55" x2="92" y2="82" stroke="#F97316" stroke-width="2" stroke-linecap="square" opacity="0.45"/>
+            <g stroke="#5a6f8a" stroke-width="1.5" fill="none" opacity="0.3">
+              <polyline points="8,20 8,8 20,8"/>
+              <polyline points="90,8 102,8 102,20"/>
+              <polyline points="102,90 102,102 90,102"/>
+              <polyline points="20,102 8,102 8,90"/>
+            </g>
+          </svg>
+          <div class="sidebar-brand-text">
+            <h1>Synapse Console</h1>
+            <div class="sub">Admin &middot; <span id="admin-port"></span></div>
+          </div>
         </div>
         <nav>
           <div class="nav-section">
