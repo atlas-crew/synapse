@@ -28,6 +28,7 @@ import {
   Cpu,
   GitBranch,
   Crosshair,
+  Layers,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -114,6 +115,7 @@ const supportNavItems = [
 
 const fleetNavItems = [
   { path: '/fleet', icon: Server, label: 'Fleet Overview' },
+  { path: '/fleet/sites', icon: Layers, label: 'Sites' },
   { path: '/fleet/config', icon: Settings, label: 'Fleet Configuration' },
   { path: '/fleet/dlp', icon: Shield, label: 'DLP Dashboard' },
   { path: '/dlp-scanner', icon: Shield, label: 'DLP Scanner' },

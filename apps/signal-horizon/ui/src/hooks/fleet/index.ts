@@ -56,6 +56,7 @@ export { usePlaybooks } from './usePlaybooks';
 export { useBlocklist } from './useBlocklist';
 export { useOnboarding } from './useOnboarding';
 export { useConnectivity } from './useConnectivity';
+export { useFleetSites, type FleetSite } from './useFleetSites';
 export type {
   TimeRange,
   SessionSearchQuery,

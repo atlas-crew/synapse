@@ -14,6 +14,7 @@ import { SensorKeysPage } from '../pages/fleet/SensorKeysPage';
 import { OnboardingPage } from '../pages/fleet/OnboardingPage';
 import { ReleasesPage } from '../pages/fleet/ReleasesPage';
 import BandwidthDashboardPage from '../pages/fleet/BandwidthDashboardPage';
+import FleetSitesPage from '../pages/fleet/FleetSitesPage';
 
 /**
  * Fleet Management Routes
@@ -37,6 +38,16 @@ export const fleetRoutes: RouteObject[] = [
       <FleetErrorBoundary level="page" title="Fleet Health Error">
         <FleetPageWrapper>
           <FleetHealthPage />
+        </FleetPageWrapper>
+      </FleetErrorBoundary>
+    ),
+  },
+  {
+    path: '/fleet/sites',
+    element: (
+      <FleetErrorBoundary level="page" title="Fleet Sites Error">
+        <FleetPageWrapper>
+          <FleetSitesPage />
         </FleetPageWrapper>
       </FleetErrorBoundary>
     ),

@@ -432,6 +432,11 @@ const ALLOWED_PATH_PREFIXES = [
   '/_sensor/trends',
   '/api/profiles',
   '/api/profiles/',
+  // Multi-site admin API. Covers list (GET /sites), detail
+  // (GET/PUT/DELETE /sites/:hostname), and per-site sub-resources
+  // (PUT /sites/:hostname/waf, /rate-limit, /access-list, /shadow).
+  // Needed for the fleet-wide Sites page in the Synapse Fleet UI.
+  '/sites',
 ] as const;
 
 /** Sensor ID format validation */
