@@ -103,10 +103,12 @@ const primaryNavItems = [
 // coherent sub-product with its own backend.
 const activeDefenseNavItems = [
   { path: '/drills', icon: Shield, label: 'Breach Drills' },
+  { path: '/scenarios', icon: Activity, label: 'Scenarios' },
   { path: '/autopilot', icon: Cpu, label: 'Autopilot' },
   { path: '/supply-chain', icon: GitBranch, label: 'Supply Chain' },
   { path: '/jwt-testing', icon: Key, label: 'JWT Testing' },
   { path: '/redteam', icon: Crosshair, label: 'Red Team Scanner' },
+  { path: '/dlp-scanner', icon: Shield, label: 'DLP Scanner' },
 ];
 
 const supportNavItems = [
@@ -118,11 +120,9 @@ const fleetNavItems = [
   { path: '/fleet/sites', icon: Layers, label: 'Sites' },
   { path: '/fleet/config', icon: Settings, label: 'Fleet Configuration' },
   { path: '/fleet/dlp', icon: Shield, label: 'DLP Dashboard' },
-  { path: '/dlp-scanner', icon: Shield, label: 'DLP Scanner' },
   { path: '/fleet/forecast', icon: BarChart3, label: 'Capacity Forecast' },
   { path: '/fleet/health', icon: Activity, label: 'Fleet Health' },
   { path: '/fleet/updates', icon: Package, label: 'Fleet Updates' },
-  { path: '/scenarios', icon: Activity, label: 'Scenarios' },
   { path: '/fleet/rules', icon: Shield, label: 'Rule Distribution' },
   { path: '/fleet/connectivity', icon: Wifi, label: 'Connectivity' },
   { path: '/fleet/keys', icon: Key, label: 'API Keys' },

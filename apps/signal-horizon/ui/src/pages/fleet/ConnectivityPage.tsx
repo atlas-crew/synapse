@@ -16,10 +16,6 @@ import {
   Globe,
   Lock,
   Route,
-  Server,
-  Radio,
-  Database,
-  Mail,
   CheckCircle,
   XCircle,
   AlertTriangle,
@@ -94,72 +90,6 @@ const connectivityTests: ConnectivityTest[] = [
     name: 'Traceroute',
     description: 'Map network path to endpoints',
     icon: Route,
-  },
-  {
-    id: 'http1',
-    name: 'HTTP/1 Echo',
-    description: 'GET /echo over HTTP/1.1 (Apparatus port 80)',
-    icon: Globe,
-  },
-  {
-    id: 'http2',
-    name: 'HTTP/2 Echo',
-    description: 'GET /echo over HTTP/2 TLS (Apparatus port 443)',
-    icon: Lock,
-  },
-  {
-    id: 'h2c',
-    name: 'H2C Echo',
-    description: 'GET /echo over HTTP/2 cleartext (Apparatus port 81)',
-    icon: Route,
-  },
-  {
-    id: 'tcp',
-    name: 'TCP Echo',
-    description: 'TCP echo round-trip (Apparatus port 9000)',
-    icon: Server,
-  },
-  {
-    id: 'udp',
-    name: 'UDP Echo',
-    description: 'UDP echo round-trip (Apparatus port 9001)',
-    icon: Radio,
-  },
-  {
-    id: 'grpc',
-    name: 'gRPC Probe',
-    description: 'HTTP/2 preface/settings probe (Apparatus port 50051)',
-    icon: Route,
-  },
-  {
-    id: 'mqtt',
-    name: 'MQTT Connect',
-    description: 'CONNECT/CONNACK handshake (Apparatus port 1883)',
-    icon: Radio,
-  },
-  {
-    id: 'redis',
-    name: 'Redis PING',
-    description: 'RESP PING/PONG (Apparatus port 6379)',
-    icon: Database,
-  },
-  {
-    id: 'smtp',
-    name: 'SMTP EHLO',
-    description: 'SMTP greeting + EHLO (Apparatus port 2525)',
-    icon: Mail,
-  },
-  {
-    id: 'icap',
-    name: 'ICAP OPTIONS',
-    description: 'ICAP OPTIONS probe (Apparatus port 1344)',
-    icon: Lock,
-  },
-  {
-    id: 'syslog',
-    name: 'Syslog Send',
-    description: 'UDP syslog send (Apparatus port 5140)',
-    icon: Activity,
   },
 ];
 
@@ -276,29 +206,11 @@ export function ConnectivityPage(): React.ReactElement {
       const host = targetHost.trim();
       if (!host) return undefined;
 
+      // Generic network probes only — ping/dns/tls/traceroute all
+      // target the host directly. The Apparatus-specific echo probes
+      // (http1/http2/h2c/tcp/udp/grpc/mqtt/redis/smtp/icap/syslog)
+      // were removed when Apparatus integration went read-only.
       switch (testId) {
-        case 'http1':
-          return `http://${host}:80/echo`;
-        case 'http2':
-          return `https://${host}:443/echo`;
-        case 'h2c':
-          return `http://${host}:81/echo`;
-        case 'tcp':
-          return `${host}:9000`;
-        case 'udp':
-          return `${host}:9001`;
-        case 'grpc':
-          return `${host}:50051`;
-        case 'mqtt':
-          return `${host}:1883`;
-        case 'redis':
-          return `${host}:6379`;
-        case 'smtp':
-          return `${host}:2525`;
-        case 'icap':
-          return `${host}:1344`;
-        case 'syslog':
-          return `${host}:5140`;
         case 'ping':
         case 'dns':
         case 'tls':
@@ -481,10 +393,6 @@ export function ConnectivityPage(): React.ReactElement {
               className="h-9 w-64 bg-surface-subtle border border-border-subtle px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
               placeholder="demo.site"
             />
-          </div>
-          <div className="text-xs text-ink-muted">
-            Apparatus ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt,
-            6379 redis, 2525 smtp, 1344 icap, 5140 syslog
           </div>
         </div>
         {/* Live region for screen reader announcements */}
