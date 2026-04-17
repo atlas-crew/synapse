@@ -10,11 +10,23 @@ via `curl`.
 src/config.rs`, enumerated every `.route(…)` in `admin_server.rs`, and
 compared to the panel list in `admin_console.html`.
 
-**TL;DR:** The admin API exposes ~40 distinct endpoints; the admin
-console surfaces ~15 of them. The biggest blind spots are per-site
-CRUD, access control / header manipulation editors, profiler tuning,
-and the entire observability stack (signals, actors, campaigns,
-anomalies, trends).
+**TL;DR:** The admin API exposes **89 distinct (method, path)
+endpoints** (GET:60, POST:13, PUT:13, DELETE:3) across 55 unique
+paths; the admin console surfaces ~15 of them. **Coverage is ~17%.**
+The biggest blind spots are per-site CRUD, access control / header
+manipulation editors, profiler tuning, and the entire observability
+stack (signals, actors, campaigns, anomalies, trends).
+
+**Endpoint breakdown by prefix:**
+- `/_sensor/*` — 63 endpoints (bulk of the admin API: signals, actors,
+  campaigns, config modules, diagnostics, rules, profiler, etc.)
+- `/sites/*` — 9 endpoints (per-site CRUD + WAF/rate-limit/access-list/
+  shadow subroutes — all invisible in the UI)
+- `/api/*` — 5 endpoints (profiler schemas + profiles)
+- `/console*` — 2 endpoints (the HTML console + sidebar lockup SVG)
+- `/config` — 2 endpoints (global config GET + POST)
+- Root singletons — 8 endpoints (`/`, `/health`, `/waf/stats`,
+  `/restart`, `/metrics`, `/test`, `/stats`, `/reload`)
 
 ---
 
