@@ -180,7 +180,12 @@
           </div>
           <div class="nav-section">
             <div class="nav-section-label">Configure</div>
-            <button class="nav-item" data-panel="detection">Detection</button>
+            <!-- Detection panel removed: its POST to /config with a
+                 `detection:` block was never persisted (ConfigFile has
+                 no detection field) and always returned 422 or 500.
+                 Real WAF tuning lives at server.waf_enabled /
+                 server.waf_threshold / per-site waf.rule_overrides —
+                 use the Synapse Dashboard or the Raw API panel. -->
             <button class="nav-item" data-panel="rate-limit">Rate Limiting</button>
             <button class="nav-item" data-panel="sites">Sites</button>
             <button class="nav-item" data-panel="tls">TLS</button>
@@ -227,19 +232,7 @@
           </div>
         </div>
 
-        <!-- Detection Panel -->
-        <div class="panel" id="panel-detection">
-          <div class="panel-header">
-            <h2>Detection Settings</h2>
-            <p>WAF detection categories, action mode, and thresholds</p>
-          </div>
-          <div class="card tone-info" id="detection-card">
-            <div id="detection-form"></div>
-            <div class="btn-row" style="margin-top:16px">
-              <button class="btn primary" id="detection-save">Save &amp; Reload</button>
-            </div>
-          </div>
-        </div>
+        <!-- Detection Panel removed — see sidebar nav comment for why. -->
 
         <!-- Rate Limiting Panel -->
         <div class="panel" id="panel-rate-limit">
@@ -489,32 +482,10 @@
       }
     }
 
-    /* ── Detection Config ────────────────────────────────── */
-    async function loadDetection() {
-      try {
-        const cfg = await api('/config');
-        const d = cfg.detection || cfg.data?.detection || {};
-        const form = $('#detection-form');
-        form.innerHTML = [
-          buildField('sqli', d.sqli ?? true, 'detection'),
-          buildField('xss', d.xss ?? true, 'detection'),
-          buildField('path_traversal', d.path_traversal ?? true, 'detection'),
-          buildField('command_injection', d.command_injection ?? true, 'detection'),
-          `<div class="field"><label>Action</label><select data-key="detection.action"><option ${d.action==='block'?'selected':''}>block</option><option ${d.action==='log'?'selected':''}>log</option><option ${d.action==='challenge'?'selected':''}>challenge</option></select></div>`,
-          buildField('block_status', d.block_status ?? 403, 'detection'),
-        ].join('');
-      } catch (e) {
-        toast('Failed to load detection config', 'err');
-      }
-    }
-    $('#detection-save').addEventListener('click', async () => {
-      try {
-        const fields = collectFields($('#detection-card'));
-        await api('/config', 'POST', fields);
-        await api('/reload', 'POST');
-        toast('Detection config saved and reloaded');
-      } catch (e) { toast('Save failed: ' + pretty(e.data || e), 'err'); }
-    });
+    /* Detection panel removed — POST /config with a `detection:` block
+       was never persisted (no `detection` field on ConfigFile) and
+       always returned 422/500. Real WAF tuning: server.waf_enabled,
+       server.waf_threshold, per-site waf.rule_overrides. */
 
     /* ── Rate Limiting Config ────────────────────────────── */
     async function loadRateLimit() {
@@ -611,6 +582,9 @@
       { key: 'crawler', label: 'Crawler Detection', path: '/_sensor/config/crawler' },
       { key: 'entity', label: 'Entity Tracking', path: '/_sensor/config/entity' },
       { key: 'integrations', label: 'Integrations', path: '/_sensor/config/integrations' },
+      { key: 'block_page', label: 'Block Page', path: '/_sensor/config/block-page' },
+      { key: 'travel', label: 'Impossible Travel', path: '/_sensor/config/travel' },
+      { key: 'kernel', label: 'Kernel Parameters', path: '/_sensor/config/kernel' },
     ];
 
     async function loadModules() {
@@ -627,10 +601,20 @@
           const cfg = data.data || data;
           const form = card.querySelector(`#mod-${mod.key}-form`);
           if (typeof cfg === 'object' && cfg !== null) {
-            form.innerHTML = Object.entries(cfg)
-              .filter(([, v]) => typeof v !== 'object')
-              .map(([k, v]) => buildField(k, v, mod.key))
-              .join('');
+            // Preserve the full config on the card so nested fields
+            // (e.g. DLP `patterns`, Integration endpoint lists) survive
+            // a save round-trip. Previously the save path dropped them
+            // entirely, corrupting operator data on every click.
+            card.dataset.fullConfig = JSON.stringify(cfg);
+            const scalarEntries = Object.entries(cfg).filter(([, v]) => typeof v !== 'object');
+            const nestedKeys = Object.entries(cfg)
+              .filter(([, v]) => typeof v === 'object' && v !== null)
+              .map(([k]) => k);
+            form.innerHTML =
+              scalarEntries.map(([k, v]) => buildField(k, v, mod.key)).join('') +
+              (nestedKeys.length
+                ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:8px">Nested fields preserved on save but not editable here: ${nestedKeys.join(', ')}. Use the Raw API panel or the Synapse Dashboard to edit these.</div>`
+                : '');
           } else {
             form.innerHTML = `<pre class="output">${pretty(cfg)}</pre>`;
           }
@@ -642,8 +626,18 @@
         btn.addEventListener('click', async () => {
           const key = btn.dataset.mod;
           const path = btn.dataset.path;
-          const fields = collectFields(btn.closest('.card'));
-          const payload = fields[key] || fields;
+          const card = btn.closest('.card');
+          const editedScalars = collectFields(card);
+          const scalars = editedScalars[key] || editedScalars;
+          // Merge edited scalars back into the full stored config so
+          // nested fields round-trip intact. Without this, a PUT of
+          // just the scalars wipes out arrays/objects the backend
+          // expects to preserve.
+          let payload = scalars;
+          try {
+            const fullConfig = JSON.parse(card.dataset.fullConfig || '{}');
+            payload = { ...fullConfig, ...scalars };
+          } catch { /* no stored full config — send scalars as-is */ }
           try {
             await api(path, 'PUT', payload);
             toast(`${key} config saved`);
@@ -687,7 +681,6 @@
     $('#admin-port').textContent = location.host;
     loadOverview();
     loadWafStats();
-    loadDetection();
     loadRateLimit();
     loadSites();
     loadTls();
