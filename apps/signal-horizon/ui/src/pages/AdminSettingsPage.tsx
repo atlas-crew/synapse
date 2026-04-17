@@ -23,14 +23,12 @@ import {
   Zap,
   Ban,
   Activity,
-  Target,
   Network,
   Copy,
   X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useTenantSettings, SharingPreference } from '../hooks/useTenantSettings';
-import { useApparatusStatus } from '../hooks/useApparatusStatus';
 import { usePolicies, type PolicyTemplate } from '../hooks/fleet/usePolicies';
 import { useHubConfig, type HubConfig } from '../hooks/useHubConfig';
 import {
@@ -50,7 +48,7 @@ import { Button, MetricCard, Panel, SectionHeader, Spinner, Stack, Tabs, colors,
 
 const AdminSettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
-    'tenant' | 'policies' | 'automation' | 'fleet' | 'synapse' | 'apparatus' | 'system'
+    'tenant' | 'policies' | 'automation' | 'fleet' | 'synapse' | 'system'
   >('tenant');
 
   const {
@@ -100,7 +98,6 @@ const AdminSettingsPage: React.FC = () => {
     refreshStatus: refreshConnectivityStatus,
   } = useConnectivity();
 
-  const { status: apparatusStatus } = useApparatusStatus();
 
   // Toast & ConfirmDialog state
   const { toast } = useToast();
@@ -150,11 +147,6 @@ const AdminSettingsPage: React.FC = () => {
     severity: 'standard',
     configText: '{\n  \n}\n',
     isDefault: false,
-  });
-
-  // Local-only Apparatus UI toggles (backend wiring TBD)
-  const [apparatusFlags, setApparatusFlags] = useState({
-    deceptiveEndpoints: true,
   });
 
   // Sensor selection for diagnostics
@@ -451,7 +443,6 @@ const AdminSettingsPage: React.FC = () => {
     { id: 'automation', label: 'Automation & Rules', icon: Zap },
     { id: 'fleet', label: 'Fleet Control', icon: Server },
     { id: 'synapse', label: 'Synapse-Pingora', icon: Network },
-    { id: 'apparatus', label: 'Apparatus', icon: Target },
     { id: 'system', label: 'System & Environment', icon: Info },
   ] as const;
 
@@ -496,7 +487,6 @@ const AdminSettingsPage: React.FC = () => {
                   | 'automation'
                   | 'fleet'
                   | 'synapse'
-                  | 'apparatus'
                   | 'system',
               )
             }
@@ -1824,193 +1814,6 @@ const AdminSettingsPage: React.FC = () => {
                     </div>
                   )}
                 </Panel>
-              </div>
-            </ErrorBoundary>
-          )}
-
-          {activeTab === 'apparatus' && (
-            <ErrorBoundary>
-              <div
-                id="panel-apparatus"
-                className="space-y-8 animate-in fade-in duration-300 focus:outline-none"
-              >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Red Team Panel */}
-                  <Panel tone="destructive">
-                    <div className="flex items-center justify-between">
-                      <SectionHeader
-                        title="Red-Team Simulation"
-                        icon={<Target className="w-5 h-5 text-status-error" />}
-                        size="h2"
-                        style={{ marginBottom: 0 }}
-                        titleStyle={PAGE_TITLE_STYLE}
-                      />
-                    </div>
-                    <p className="text-xs text-ink-muted">
-                      Coordinate with the Apparatus cluster to generate controlled attack
-                      simulations for testing and training.
-                    </p>
-
-                    <div className="space-y-4">
-                      <div className="p-4 border border-border-subtle hover:border-status-error/50 transition-colors group cursor-pointer">
-                        <p className="text-sm font-bold text-ink-primary">Infrastructure Probing</p>
-                        <p className="text-xs text-ink-muted">
-                          Simulate mass scanning and fingerprinting against edge nodes.
-                        </p>
-                      </div>
-                      <div className="p-4 border border-border-subtle hover:border-status-error/50 transition-colors group cursor-pointer">
-                        <p className="text-sm font-bold text-ink-primary">Auth Burst Attack</p>
-                        <p className="text-xs text-ink-muted">
-                          Coordinate a distributed credential stuffing simulation.
-                        </p>
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="outlined"
-                      size="sm"
-                      fill
-                      style={{
-                        height: '48px',
-                        borderWidth: '2px',
-                        borderColor: colors.red,
-                        color: colors.red,
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.08em',
-                      }}
-                    >
-                      Initiate Apparatus Sync
-                    </Button>
-                  </Panel>
-
-                  {/* Active Defense Panel */}
-                  <Panel tone="success">
-                    <div className="flex items-center justify-between">
-                      <SectionHeader
-                        title="Active Defense (Apparatus)"
-                        icon={<Zap className="w-5 h-5 text-status-success" />}
-                        size="h2"
-                        style={{ marginBottom: 0 }}
-                        titleStyle={PAGE_TITLE_STYLE}
-                      />
-                    </div>
-                    <p className="text-xs text-ink-muted">
-                      Advanced deception and resilience controls managed via Apparatus integration.
-                    </p>
-
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between py-2 border-b border-border-subtle">
-                        <div>
-                          <p className="text-sm font-bold text-ink-primary">Chaos Engine</p>
-                          <p className="text-xs text-ink-muted">
-                            Randomized delay and error injection.
-                          </p>
-                        </div>
-                        <ToggleSwitch
-                          checked={!!hubConfig?.fleetCommands?.enableToggleChaos}
-                          onChange={(checked) =>
-                            handleConfigUpdate({
-                              fleetCommands: { enableToggleChaos: checked },
-                            } as Partial<HubConfig>)
-                          }
-                          label="Toggle Chaos Engine"
-                          size="sm"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between py-2 border-b border-border-subtle">
-                        <div>
-                          <p className="text-sm font-bold text-ink-primary">
-                            Moving Target Defense
-                          </p>
-                          <p className="text-xs text-ink-muted">
-                            Dynamic upstream address rotation.
-                          </p>
-                        </div>
-                        <ToggleSwitch
-                          checked={!!hubConfig?.fleetCommands?.enableToggleMtd}
-                          onChange={(checked) =>
-                            handleConfigUpdate({
-                              fleetCommands: { enableToggleMtd: checked },
-                            } as Partial<HubConfig>)
-                          }
-                          label="Toggle Moving Target Defense"
-                          size="sm"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between py-2 border-b border-border-subtle">
-                        <div>
-                          <p className="text-sm font-bold text-ink-primary">Deceptive Endpoints</p>
-                          <p className="text-xs text-ink-muted">
-                            Deploy honeypot URLs across the fleet.
-                          </p>
-                        </div>
-                        <ToggleSwitch
-                          checked={apparatusFlags.deceptiveEndpoints}
-                          onChange={(checked) =>
-                            setApparatusFlags((prev) => ({ ...prev, deceptiveEndpoints: checked }))
-                          }
-                          label="Toggle Deceptive Endpoints"
-                          size="sm"
-                        />
-                      </div>
-                    </div>
-                  </Panel>
-                </div>
-
-                <section className="bg-ac-card-dark p-8 text-white space-y-6">
-                  <Stack direction="row" align="center" justify="space-between">
-                    <h3 className="text-lg font-light uppercase tracking-wider text-ac-sky-blue">
-                      Apparatus Connection
-                    </h3>
-                    <Stack direction="row" align="center" gap="sm">
-                      <span className={clsx(
-                        'w-2 h-2',
-                        apparatusStatus.state === 'connected' ? 'bg-ac-green animate-pulse' :
-                        apparatusStatus.state === 'connecting' ? 'bg-ac-orange animate-pulse' :
-                        apparatusStatus.state === 'disabled' ? 'bg-white/20' :
-                        'bg-ac-red'
-                      )} />
-                      <span className="text-xs font-mono uppercase text-white/60">
-                        {apparatusStatus.state}
-                      </span>
-                    </Stack>
-                  </Stack>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                        URL
-                      </label>
-                      <div className="text-sm font-mono text-ac-sky-blue">
-                        {apparatusStatus.url ?? 'Not configured'}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                        Version
-                      </label>
-                      <div className="text-sm font-mono text-ac-sky-blue">
-                        {apparatusStatus.version ?? '—'}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-white/40 uppercase tracking-widest">
-                        Last Health Check
-                      </label>
-                      <div className="text-sm font-mono text-ac-sky-blue">
-                        {apparatusStatus.lastHealthCheck
-                          ? new Date(apparatusStatus.lastHealthCheck).toLocaleTimeString()
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-                  {apparatusStatus.lastError && (
-                    <div className="px-4 py-3 border border-ac-red/30 bg-ac-red/10 text-sm text-ac-red font-mono">
-                      {apparatusStatus.lastError}
-                    </div>
-                  )}
-                </section>
               </div>
             </ErrorBoundary>
           )}

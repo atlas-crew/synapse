@@ -25,9 +25,6 @@ import {
   HelpCircle,
   PanelLeftClose,
   PanelLeftOpen,
-  Cpu,
-  GitBranch,
-  Crosshair,
   Layers,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -40,7 +37,6 @@ import { ToastProvider } from './components/ui/Toast';
 import { DemoModeControls } from './components/beam/DemoModeControls';
 import { DemoTourModal } from './components/feedback/DemoTourModal';
 import { useDemoLiveUpdates, useIsDemo, DEMO_HIDDEN_PATHS } from './stores/demoModeStore';
-import { useApparatusStatus } from './hooks/useApparatusStatus';
 import { SignalHorizonPageWrapper } from './components/signal/SignalHorizonPageWrapper';
 import { CommandPalette } from './components/ui/CommandPalette';
 import { ShortcutHelpModal } from './components/ui/ShortcutHelpModal';
@@ -62,13 +58,6 @@ import ApiIntelligencePage from './pages/ApiIntelligencePage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
 import DesignLabPage from './pages/DesignLabPage';
 import DesignSystemPage from './pages/DesignSystemPage';
-const BreachDrillsPage = lazy(() => import('./pages/BreachDrillsPage'));
-const AutopilotPage = lazy(() => import('./pages/AutopilotPage'));
-const ScenariosPage = lazy(() => import('./pages/ScenariosPage'));
-const SupplyChainPage = lazy(() => import('./pages/SupplyChainPage'));
-const JwtTestingPage = lazy(() => import('./pages/JwtTestingPage'));
-const RedTeamScannerPage = lazy(() => import('./pages/RedTeamScannerPage'));
-const DlpScannerPage = lazy(() => import('./pages/DlpScannerPage'));
 const AuthCoverageMap = lazy(() => import('./components/AuthCoverageMap/AuthCoverageMap.js'));
 import CapacityForecastPage from './pages/fleet/CapacityForecastPage';
 import { SupportPage } from './pages/SupportPage';
@@ -93,22 +82,6 @@ const primaryNavItems = [
   { path: '/api-intelligence', icon: Package, label: 'API Intelligence' },
   { path: '/auth-coverage', icon: Shield, label: 'Auth Coverage' },
   { path: '/warroom', icon: Users, label: 'War Room' },
-];
-
-// Active Defense: write-side / Apparatus-backed views. These are the
-// panels where an operator *shapes* the system — proactively testing,
-// simulating, or exercising defenses. Separated from Threat Intelligence
-// because the mental model is different (you do things to the system
-// here, you watch the system there) and because Apparatus is a
-// coherent sub-product with its own backend.
-const activeDefenseNavItems = [
-  { path: '/drills', icon: Shield, label: 'Breach Drills' },
-  { path: '/scenarios', icon: Activity, label: 'Scenarios' },
-  { path: '/autopilot', icon: Cpu, label: 'Autopilot' },
-  { path: '/supply-chain', icon: GitBranch, label: 'Supply Chain' },
-  { path: '/jwt-testing', icon: Key, label: 'JWT Testing' },
-  { path: '/redteam', icon: Crosshair, label: 'Red Team Scanner' },
-  { path: '/dlp-scanner', icon: Shield, label: 'DLP Scanner' },
 ];
 
 const supportNavItems = [
@@ -163,7 +136,6 @@ function App() {
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
   const isDemo = useIsDemo();
   useDemoLiveUpdates();
-  const { status: apparatusStatus } = useApparatusStatus();
   const [isTimeRangeOpen, setIsTimeRangeOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -436,19 +408,6 @@ function App() {
                   </span>
                 </Stack>
               </Link>
-              {/* Apparatus Connection Status */}
-              {apparatusStatus.state !== 'disabled' && (
-                <Link to="/settings/admin" className="hover:text-white transition-colors group">
-                  <Stack direction="row" align="center" gap="sm">
-                    <Target className={clsx('w-4 h-4', apparatusStatus.state === 'connected' ? 'text-ac-magenta' : 'text-white/40')} />
-                    <span className="text-xs text-white/70 font-mono transition-colors group-hover:text-white">
-                      <span className={clsx('font-semibold uppercase', apparatusStatus.state === 'connected' ? 'text-ac-magenta' : 'text-white/40')}>
-                        APT
-                      </span>
-                    </span>
-                  </Stack>
-                </Link>
-              )}
             </Stack>
           </Stack>
           <Stack direction="row" align="center" gap="sm">
@@ -549,7 +508,6 @@ function App() {
             {renderCollapsibleSection('threat', 'Threat Intelligence', primaryNavItems, 'bg-ac-magenta')}
             {renderCollapsibleSection('sensor', 'Sensor Console', beamNavItems, 'bg-ac-sky')}
             {renderCollapsibleSection('fleet', 'Fleet Operations', isDemo ? fleetNavItems.filter((i) => !DEMO_HIDDEN_PATHS.has(i.path)) : fleetNavItems, 'bg-ac-green')}
-            {renderCollapsibleSection('active-defense', 'Active Defense', activeDefenseNavItems, 'bg-ac-orange')}
 
             {!sidebarCollapsed && !isDemo && (
               <div className="sidebar-nav-section">
@@ -691,13 +649,6 @@ function App() {
                 <Route path="/fleet/forecast" element={<SignalHorizonPageWrapper><CapacityForecastPage /></SignalHorizonPageWrapper>} />
                 <Route path="/support/:docId?" element={<SupportPage />} />
                 <Route path="/settings/admin" element={<SignalHorizonPageWrapper><AdminSettingsPage /></SignalHorizonPageWrapper>} />
-                <Route path="/drills" element={<Suspense fallback={<LoadingSpinner message="Loading breach drills..." size="lg" />}><SignalHorizonPageWrapper><BreachDrillsPage /></SignalHorizonPageWrapper></Suspense>} />
-                <Route path="/autopilot" element={<Suspense fallback={<LoadingSpinner message="Loading autopilot..." size="lg" />}><SignalHorizonPageWrapper><AutopilotPage /></SignalHorizonPageWrapper></Suspense>} />
-                <Route path="/scenarios" element={<Suspense fallback={<LoadingSpinner message="Loading scenarios..." size="lg" />}><SignalHorizonPageWrapper><ScenariosPage /></SignalHorizonPageWrapper></Suspense>} />
-                <Route path="/supply-chain" element={<Suspense fallback={<LoadingSpinner message="Loading supply chain simulator..." size="lg" />}><SignalHorizonPageWrapper><SupplyChainPage /></SignalHorizonPageWrapper></Suspense>} />
-                <Route path="/jwt-testing" element={<Suspense fallback={<LoadingSpinner message="Loading JWT testing..." size="lg" />}><SignalHorizonPageWrapper><JwtTestingPage /></SignalHorizonPageWrapper></Suspense>} />
-                <Route path="/redteam" element={<Suspense fallback={<LoadingSpinner message="Loading red team scanner..." size="lg" />}><SignalHorizonPageWrapper><RedTeamScannerPage /></SignalHorizonPageWrapper></Suspense>} />
-                <Route path="/dlp-scanner" element={<Suspense fallback={<LoadingSpinner message="Loading DLP scanner..." size="lg" />}><SignalHorizonPageWrapper><DlpScannerPage /></SignalHorizonPageWrapper></Suspense>} />
                 <Route path="/design-lab" element={<DesignLabPage />} />
                 <Route path="/design-system" element={<SignalHorizonPageWrapper><DesignSystemPage /></SignalHorizonPageWrapper>} />
 
