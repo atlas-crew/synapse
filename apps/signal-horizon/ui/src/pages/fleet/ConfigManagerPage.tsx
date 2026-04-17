@@ -29,7 +29,6 @@ import {
   Input,
   Select,
   Tabs,
-  Grid,
   alpha,
   colors,
   CARD_HEADER_TITLE_STYLE,
@@ -192,12 +191,7 @@ export function ConfigManagerPage() {
   const [templateAdvancedConfig, setTemplateAdvancedConfig] =
     useState<AdvancedConfigData>(defaultAdvancedConfig);
 
-  // Pingora upstream preset: Apparatus echo
   const { data: sensors = [] } = useSensors();
-  const [echoHost, setEchoHost] = useState('demo.site');
-  const [echoPort, setEchoPort] = useState(80);
-  const [selectedEchoSensors, setSelectedEchoSensors] = useState<Set<string>>(new Set());
-  const echoSelectedIds = useMemo(() => Array.from(selectedEchoSensors), [selectedEchoSensors]);
 
   const {
     data: templates = [],
@@ -317,26 +311,6 @@ export function ConfigManagerPage() {
     },
     onError: (err: any) => {
       toast.error(err?.message || 'Failed to delete template');
-    },
-  });
-
-  const echoPresetMutation = useMutation({
-    mutationFn: async () => {
-      const host = echoHost.trim();
-      const port = Number(echoPort);
-      return apiFetch('/fleet/pingora/presets/apparatus-echo', {
-        method: 'POST',
-        body: { sensorIds: echoSelectedIds, host, port },
-      });
-    },
-    onSuccess: (data: any) => {
-      const ok = (data?.results || []).filter((r: any) => r?.ok).length;
-      const total = (data?.results || []).length;
-      toast.success(`Preset pushed: ${ok}/${total} sensors`);
-      queryClient.invalidateQueries({ queryKey: ['fleet', 'sensors'] });
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || 'Failed to push upstream preset');
     },
   });
 
@@ -649,168 +623,6 @@ export function ConfigManagerPage() {
             </Box>
           </Box>
         )}
-
-        {/* Pingora Presets */}
-        <Box bg="card" border="subtle">
-          <Box p="lg" border="bottom" borderColor="subtle">
-            <SectionHeader
-              title="Pingora Upstream Presets"
-              size="h4"
-              style={{ marginBottom: 0 }}
-              titleStyle={CARD_HEADER_TITLE_STYLE}
-            />
-            <Text variant="small" color="secondary" style={{ marginTop: '4px' }}>
-              Deploy upstream rewrites to existing sensor configs (pushes immediately).
-            </Text>
-          </Box>
-
-          <Box p="lg">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <Box style={{ gridColumn: 'span 1' }}>
-                <Stack gap="lg">
-                  <Box>
-                    <Text variant="label" color="secondary" style={{ marginBottom: '4px' }}>
-                      Apparatus Echo Target
-                    </Text>
-                    <Text variant="body" color="secondary">
-                      Local stack: <Text as="span" variant="code">just dev-waf-echo</Text> exposes{' '}
-                      <Text as="span" variant="code">demo.site</Text>.
-                    </Text>
-                  </Box>
-
-                  <Grid cols={2} gap="md">
-                    <Input
-                      label="Host"
-                      value={echoHost}
-                      onChange={(e) => setEchoHost(e.target.value)}
-                      size="sm"
-                      style={{ fontFamily: 'var(--font-mono)' }}
-                    />
-                    <Input
-                      label="Port"
-                      type="number"
-                      value={echoPort}
-                      onChange={(e) => setEchoPort(Number(e.target.value))}
-                      size="sm"
-                      style={{ fontFamily: 'var(--font-mono)' }}
-                    />
-                  </Grid>
-
-                  <Button
-                    disabled={isDemoMode || echoSelectedIds.length === 0 || echoPresetMutation.isPending}
-                    onClick={() => {
-                      const host = echoHost.trim();
-                      const port = Number(echoPort);
-                      if (!host) {
-                        toast.error('Host is required');
-                        return;
-                      }
-                      if (!Number.isFinite(port) || port < 1 || port > 65535) {
-                        toast.error('Port must be 1-65535');
-                        return;
-                      }
-                      echoPresetMutation.mutate();
-                    }}
-                    variant="outlined"
-                    style={{ 
-                      borderColor: colors.magenta, 
-                      color: colors.magenta,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.15em',
-                      fontWeight: 700
-                    }}
-                  >
-                    {echoPresetMutation.isPending
-                      ? 'Pushing...'
-                      : `Push To Selected (${echoSelectedIds.length})`}
-                  </Button>
-
-                  {isDemoMode && <Text variant="caption" color="secondary">Disabled in demo mode.</Text>}
-                </Stack>
-              </Box>
-
-              <Box style={{ gridColumn: 'span 2' }}>
-                <Box flex direction="row" align="center" justify="space-between" style={{ marginBottom: '12px' }}>
-                  <Text variant="label" color="secondary">Target Sensors</Text>
-                  <Stack direction="row" gap="sm">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedEchoSensors(new Set(sensors.map((s: any) => s.id)))}
-                    >
-                      Select All
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedEchoSensors(new Set())}
-                    >
-                      Clear
-                    </Button>
-                  </Stack>
-                </Box>
-
-                <Box border="subtle" bg="bg" style={{ maxHeight: '320px', overflow: 'auto' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
-                          <Text variant="label" color="secondary" noMargin>Select</Text>
-                        </th>
-                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
-                          <Text variant="label" color="secondary" noMargin>Sensor</Text>
-                        </th>
-                        <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
-                          <Text variant="label" color="secondary" noMargin>Status</Text>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sensors.map((sensor: any) => (
-                        <tr key={sensor.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '12px 16px' }}>
-                            <input
-                              type="checkbox"
-                              checked={selectedEchoSensors.has(sensor.id)}
-                              onChange={() => {
-                                setSelectedEchoSensors((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(sensor.id)) next.delete(sensor.id);
-                                  else next.add(sensor.id);
-                                  return next;
-                                });
-                              }}
-                              className="w-4 h-4"
-                              style={{ accentColor: 'var(--ac-blue)' }}
-                            />
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <Text variant="body" weight="medium" noMargin>{sensor.name}</Text>
-                            <Text variant="caption" color="secondary" noMargin style={{ fontFamily: 'var(--font-mono)' }}>
-                              {sensor.id}
-                            </Text>
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <Text variant="small" color="secondary" noMargin>
-                              {sensor.connectionState || 'UNKNOWN'}
-                            </Text>
-                          </td>
-                        </tr>
-                      ))}
-                      {sensors.length === 0 && (
-                        <tr>
-                          <td colSpan={3} style={{ padding: '32px', textAlign: 'center' }}>
-                            <Text variant="body" color="secondary" noMargin>No sensors available.</Text>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </Box>
-              </Box>
-            </div>
-          </Box>
-        </Box>
 
         {/* Templates */}
         <Box bg="card" border="subtle">

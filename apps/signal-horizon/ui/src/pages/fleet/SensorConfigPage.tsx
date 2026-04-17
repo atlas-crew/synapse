@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings, Code2, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { Breadcrumb, SectionHeader, Spinner, Stack, Panel, colors, PAGE_TITLE_STYLE } from '@/ui';
+import { Breadcrumb, SectionHeader, Spinner, Stack, colors, PAGE_TITLE_STYLE } from '@/ui';
 import { useToast } from '../../components/ui/Toast';
 import { CodeEditor } from '../../components/ctrlx/CodeEditor';
 import { ConfigPanelSkeleton, Skeleton } from '../../components/LoadingStates';
@@ -25,33 +25,6 @@ async function updateFullConfig(id: string, config: unknown) {
 
 type ViewMode = 'guided' | 'json';
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
-
-type UpstreamPresetResult = { json: string; sitesUpdated: number };
-
-function applyUpstreamPreset(rawJson: string, host: string, port: number): UpstreamPresetResult {
-  const parsed = JSON.parse(rawJson) as Record<string, unknown>;
-
-  const next = { ...parsed } as any;
-  const upstream = [{ host, port, weight: 1 }];
-
-  if (Array.isArray(next.sites) && next.sites.length > 0) {
-    let sitesUpdated = 0;
-    next.sites = next.sites.map((site: any) => {
-      if (!site || typeof site !== 'object') return site;
-      sitesUpdated++;
-      return { ...site, upstreams: upstream };
-    });
-    return { json: JSON.stringify(next, null, 2), sitesUpdated };
-  }
-
-  next.sites = [
-    {
-      hostname: 'demo.site',
-      upstreams: upstream,
-    },
-  ];
-  return { json: JSON.stringify(next, null, 2), sitesUpdated: 1 };
-}
 
 // Extract advanced config sections from full pingora config
 function extractAdvancedConfig(fullConfig: Record<string, unknown>): AdvancedConfigData {
@@ -93,8 +66,6 @@ export function SensorConfigPage() {
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfigData>(defaultAdvancedConfig);
   const [fullConfigRef, setFullConfigRef] = useState<Record<string, unknown>>({});
   const [isDirty, setIsDirty] = useState(false);
-  const [apparatusHost, setApparatusHost] = useState('demo.site');
-  const [apparatusPort, setApparatusPort] = useState<number>(80);
 
   const { data: sensor } = useQuery({
     queryKey: ['fleet', 'sensor', id],
@@ -285,83 +256,7 @@ export function SensorConfigPage() {
 	              </div>
 	            </div>
 
-              {/* POC: converted ad-hoc 'border border-border-subtle bg-surface-card p-4'
-                  wrapper to the new @/ui <Panel> component. tone="default" keeps the
-                  neutral accent; padding="sm" matches the existing p-4 feel; as="div"
-                  because this sits inside a larger form, not as a top-level page zone;
-                  spacing="none" because the internal layout uses flex not vertical rhythm. */}
-              <Panel
-                tone="default"
-                padding="sm"
-                spacing="none"
-                as="div"
-                className="flex items-start justify-between gap-4 flex-shrink-0"
-              >
-                <div className="space-y-1">
-                  <div className="text-xs font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                    Preset: Apparatus Echo Target (13 protocols)
-                  </div>
-                  <div className="text-xs text-ink-muted">
-                    Docker: `just dev-waf-echo` (target host `demo.site`). Default HTTP/1 upstream: `demo.site:80`.
-                  </div>
-                  <div className="text-[11px] font-mono text-ink-muted">
-                    Ports: 80 http1, 443 http2, 81 h2c, 9000 tcp, 9001 udp, 50051 grpc, 1883 mqtt, 1344 icap, 6379 redis,
-                    2525 smtp, 5140 syslog
-                  </div>
-                </div>
-
-                <div className="flex items-end gap-2">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                      Host
-                    </label>
-                    <input
-                      value={apparatusHost}
-                      onChange={(e) => setApparatusHost(e.target.value)}
-                      className="h-9 w-44 bg-surface-subtle border border-border-subtle px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-ink-secondary">
-                      Port
-                    </label>
-                    <input
-                      type="number"
-                      value={apparatusPort}
-                      onChange={(e) => setApparatusPort(Number(e.target.value))}
-                      className="h-9 w-24 bg-surface-subtle border border-border-subtle px-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                    />
-                  </div>
-                  <button
-                    onClick={() => {
-                      try {
-                        const host = apparatusHost.trim();
-                        if (!host) {
-                          toast.error('Host is required');
-                          return;
-                        }
-
-                        const port = Number(apparatusPort);
-                        if (!Number.isFinite(port) || port < 1 || port > 65535) {
-                          toast.error('Port must be 1-65535');
-                          return;
-                        }
-
-                        const res = applyUpstreamPreset(configJson, host, port);
-                        handleJsonChange(res.json);
-                        toast.success(`Updated upstreams for ${res.sitesUpdated} site(s)`);
-                      } catch (err) {
-                        toast.error(formatApiError(err, 'Failed to apply upstream preset'));
-                      }
-                    }}
-                    className="h-9 px-3 text-xs font-bold uppercase tracking-[0.2em] border-2 border-ac-magenta text-ac-magenta hover:bg-ac-magenta hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-ac-blue/50"
-                  >
-                    Apply Upstream
-                  </button>
-                </div>
-              </Panel>
-	
-	            <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
+              <div className="flex-1 min-h-0 border border-border-subtle overflow-hidden shadow-sm">
 	              <CodeEditor
 	                value={configJson}
                 onChange={handleJsonChange}

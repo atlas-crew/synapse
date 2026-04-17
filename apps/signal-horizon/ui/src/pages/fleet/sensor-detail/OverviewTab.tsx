@@ -25,12 +25,7 @@ interface OverviewTabProps {
 export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }: OverviewTabProps) {
   const meta = sensor.metadata || {};
   const { toast } = useToast();
-  const isApparatus =
-    typeof sensor?.name === 'string' &&
-    (sensor.name.toLowerCase().includes('apparatus') || sensor.name.toLowerCase().includes('cutlass'));
 
-  const [chaosDurationMs, setChaosDurationMs] = useState<number>(5000);
-  const [mtdPrefix, setMtdPrefix] = useState<string>('mtd');
   const [recentSignals, setRecentSignals] = useState<any[]>([]);
   const [signalsLoading, setSignalsLoading] = useState<boolean>(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -99,22 +94,6 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
       action: onRestartSensor,
     });
   };
-
-  const dispatchFleetCommand = useCallback(async (commandType: 'toggle_chaos' | 'toggle_mtd', payload: Record<string, unknown>) => {
-    try {
-      await apiFetch('/fleet/commands', {
-        method: 'POST',
-        body: {
-          commandType,
-          sensorIds: [sensor.id],
-          payload,
-        },
-      });
-      toast.success(`Command queued: ${commandType}`);
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
-  }, [sensor.id, toast]);
 
   return (
     <div className="space-y-6">
@@ -189,61 +168,6 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
       {/* Quick Actions */}
       <Panel tone="advanced" padding="md">
         <h3 className="text-lg font-semibold text-ink-primary mb-4">Quick Actions</h3>
-        {isApparatus && (
-          <div className="mb-4 border border-border-subtle bg-surface-inset p-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mb-3">
-              Apparatus Controls
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="apparatus-chaos-duration" className="text-[10px] font-bold uppercase tracking-widest text-ink-secondary">
-                  Chaos Duration (ms)
-                </label>
-                <input
-                  id="apparatus-chaos-duration"
-                  type="number"
-                  min={1000}
-                  max={60000}
-                  value={chaosDurationMs}
-                  onChange={(e) => setChaosDurationMs(Math.max(1000, Math.min(60000, Number(e.target.value) || 5000)))}
-                  className="w-full bg-surface-subtle border border-border-subtle p-2 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue/50"
-                />
-                <button
-                  onClick={() =>
-                    dispatchFleetCommand('toggle_chaos', { command: 'toggle_chaos', durationMs: chaosDurationMs })
-                  }
-                  className="w-full h-10 border-2 border-status-error text-status-error text-xs font-bold uppercase tracking-widest hover:bg-status-error hover:text-white transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                >
-                  Trigger Chaos Spike
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="apparatus-mtd-prefix" className="text-[10px] font-bold uppercase tracking-widest text-ink-secondary">
-                  MTD Prefix (empty disables)
-                </label>
-                <input
-                  id="apparatus-mtd-prefix"
-                  type="text"
-                  value={mtdPrefix}
-                  onChange={(e) => setMtdPrefix(e.target.value)}
-                  className="w-full bg-surface-subtle border border-border-subtle p-2 text-sm font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue/50"
-                />
-                <button
-                  onClick={() =>
-                    dispatchFleetCommand('toggle_mtd', { command: 'toggle_mtd', prefix: mtdPrefix })
-                  }
-                  className="w-full h-10 border-2 border-ac-blue text-ac-blue text-xs font-bold uppercase tracking-widest hover:bg-ac-blue hover:text-white transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ac-blue focus-visible:ring-offset-1"
-                >
-                  Apply MTD Prefix
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 text-[10px] text-ink-muted">
-              If commands fail with 409, enable `Toggle Chaos` / `Toggle MTD` in Admin Settings.
-            </div>
-          </div>
-        )}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <ActionButton icon={RotateCcw} label="Restart Services" onClick={handleRestartServices} />
           <ActionButton icon={Trash2} label="Clear Logs" onClick={handleClearLogs} />
