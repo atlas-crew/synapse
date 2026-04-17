@@ -277,3 +277,68 @@ decisions rather than discovery during implementation:
 *Generated 2026-04-17 as a pre-work audit for the Synapse admin
 console expansion. Supersedes the Tier 2/3 items in
 `docs/development/plans/ui-brand-backlog.md` for the admin console.*
+
+---
+
+## Addendum — Horizon Dashboard already covers the module configs
+
+Follow-up investigation after the initial audit revealed that Horizon's
+React codebase already has **fully-built editors** for most of the
+per-module config the admin console's Modules panel exposes. They live
+at `apps/signal-horizon/ui/src/components/fleet/pingora/`:
+
+- `WafConfig` — rendered in sensor-detail Pingora tab
+- `RateLimitConfig` — rendered in sensor-detail Pingora tab
+- `AccessControlConfig` — rendered in sensor-detail Pingora tab
+- `ServiceControls` — rendered in sensor-detail Pingora tab
+- `AdvancedConfigPanel` — composite editor bundling DLP / Block Page /
+  Crawler / Tarpit / Entity & Travel (previously rendered only on the
+  separate `SensorConfigPage` advanced surface)
+- `DlpConfig`, `BlockPageConfig`, `CrawlerConfig`, `TarpitConfig`,
+  `EntityConfig` — **fully built React editors with validation and
+  typed state, wired internally by `AdvancedConfigPanel` but unreachable
+  from the main `/fleet/sensors/:id/config` flow until wiring was added
+  in commit `<NEXT>`**
+
+### Action taken
+
+Wired `<AdvancedConfigPanel>` into the sensor-detail Pingora sub-tab
+below the existing WAF / RateLimit / AccessControl editors. One
+component wraps all five module configs in a sidebar-tabbed layout.
+State hydrates from `remotePingoraConfig.advanced` when the API
+returns it; falls back to `defaultAdvancedConfig` otherwise.
+
+### Impact on the audit conclusions
+
+The previous "build module config editors in the Synapse admin console"
+framing was wrong. Horizon has the editors — they just weren't wired
+into the main sensor config page. This shifts the admin console's
+strategic scope:
+
+- **Admin console = local recovery tool.** Minimum viable surface for
+  air-gapped / pre-tunnel / recovery-mode scenarios. Reload, restart,
+  test, health, import/export, raw API. Keep it small.
+- **Horizon = primary config workbench.** Owns the rich editors for
+  WAF, rate limit, access control, DLP, tarpit, crawler, entity,
+  travel, block page. Continues to grow as the operator's go-to.
+
+### Revised priorities
+
+The Section G priority table should be re-read with this in mind:
+
+| Original priority | Revised status |
+|---|---|
+| 1. Sites full CRUD + per-site tabs | Still valid; partially covered by sensor-detail Pingora tab (now with advanced config). Gap remaining: Sites *list* CRUD + headers editor + shadow mirror editor. |
+| 2. Observability panels (signals/actors/campaigns) | Dashboard already covers — admin console can skip. |
+| 3. Fix Modules panel nested-field data loss | Still valid for the admin console's existing Modules panel, but **lower priority now** because operators can use Horizon's richer editors. |
+| 4. Detection panel audit | Still valid — investigate where `detection` config actually lives. |
+| 5. Missing modules (block-page, travel, kernel) | Block Page + Travel now surfaced via Horizon's `AdvancedConfigPanel`. Admin console adding them is lower priority. Kernel is still admin-console-first (dangerous ops, local-recovery context). |
+| 6. Global server settings panel | Lower priority — Horizon's `SensorConfigPage` with `AdvancedConfigPanel` + its "Advanced JSON Editor" escape hatch already covers this in an operator-friendly way. |
+| 7. Logs viewer | Still valid. Dashboard has limited log surfacing today. |
+
+**New highest-priority item:** the Sites list on Horizon is still
+read-only. The components for editing site-level WAF / rate limit /
+access control EXIST (the Pingora tab uses them), but the Sites page
+itself doesn't edit sites — you can only view a site and then navigate
+to its sensor-detail page. A top-level Sites CRUD experience is the
+single biggest remaining gap.

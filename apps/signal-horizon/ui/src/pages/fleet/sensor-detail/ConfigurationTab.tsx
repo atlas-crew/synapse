@@ -15,6 +15,11 @@ import { RateLimitConfig, type RateLimitData } from '../../../components/fleet/p
 import { AccessControlConfig, type AccessControlData } from '../../../components/fleet/pingora/AccessControlConfig';
 import { ServiceControls } from '../../../components/fleet/pingora/ServiceControls';
 import {
+  AdvancedConfigPanel,
+  defaultAdvancedConfig,
+  type AdvancedConfigData,
+} from '../../../components/fleet/pingora/AdvancedConfigPanel';
+import {
   fetchKernelConfig,
   updateKernelConfig,
   fetchSystemConfig,
@@ -104,6 +109,14 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
     allow: [],
     deny: []
   });
+  // Advanced Pingora config: DLP / Block Page / Crawler / Tarpit /
+  // Entity / Travel. These components live under components/fleet/pingora/
+  // and used to be dead code — `AdvancedConfigPanel` ties them together
+  // in a sub-tabbed editor. Initial state is the module's published
+  // defaults; the useEffect below hydrates from remotePingoraConfig.advanced
+  // when the sensor returns it.
+  const [advancedConfig, setAdvancedConfig] =
+    useState<AdvancedConfigData>(defaultAdvancedConfig);
   const [kernelDraft, setKernelDraft] = useState<Record<string, string>>({});
   const [persistKernel, setPersistKernel] = useState(false);
   const lastPingoraHashRef = useRef<string | null>(null);
@@ -122,6 +135,16 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       setWafConfig(remotePingoraConfig.waf);
       setRateLimitConfig(remotePingoraConfig.rateLimit);
       setAccessConfig(remotePingoraConfig.accessControl);
+      // Hydrate advanced config from remote if present. Falls back to
+      // the module defaults if the API hasn't stored this block yet —
+      // keeps the UI editable even when the backend round-trip for
+      // advanced config isn't plumbed through.
+      if (remotePingoraConfig.advanced) {
+        setAdvancedConfig({
+          ...defaultAdvancedConfig,
+          ...remotePingoraConfig.advanced,
+        });
+      }
     }
   }, [remotePingoraConfig]);
 
@@ -195,6 +218,7 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
       waf: wafConfig,
       rateLimit: rateLimitConfig,
       accessControl: aclConfig,
+      advanced: advancedConfig,
     });
   };
 
@@ -334,6 +358,21 @@ export function ConfigurationTab({ sensor }: ConfigurationTabProps) {
                   <AccessControlConfig config={aclConfig} onChange={setAccessConfig} />
                 </Panel>
               </div>
+
+              {/* Advanced config — surfaces DLP / Block Page / Crawler /
+                  Tarpit / Entity & Travel editors that were built but
+                  previously unwired. AdvancedConfigPanel owns the
+                  sub-tab navigation; we provide state + persistence.
+                  Uses padding="none" so the panel's own sidebar layout
+                  can extend edge-to-edge. min-height keeps the left
+                  sidebar navigation readable when one tab has less
+                  content than the others. */}
+              <Panel tone="info" padding="none" spacing="none" style={{ minHeight: 520 }}>
+                <AdvancedConfigPanel
+                  config={advancedConfig}
+                  onChange={setAdvancedConfig}
+                />
+              </Panel>
             </>
           )}
         </div>
