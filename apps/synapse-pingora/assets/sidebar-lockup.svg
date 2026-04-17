@@ -12,13 +12,10 @@
     <style
        id="style1">@import url('https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&amp;display=swap');</style>
   </defs>
-  <rect
-     width="1200"
-     height="800"
-     fill="#080b12"
-     id="rect1"
-     x="-35.799999"
-     y="-479.63007" />
+  <!-- The authoring file had a 1200x800 fill="#080b12" background rect
+       here (id="rect1") for standalone preview. Removed so the lockup
+       renders with a transparent background and sits cleanly on any
+       host surface. -->
   <g
      id="g1"
      transform="translate(-59.999999,-107.99999)">
@@ -892,15 +889,9 @@
     <g
        transform="translate(785.65155,256.11148)"
        id="g101">
-      <rect
-         width="354.71045"
-         height="59.833599"
-         fill="#101828"
-         stroke="#1e2d44"
-         stroke-width="1.1664"
-         id="rect94"
-         x="0.083199672"
-         y="0.083199672" />
+      <!-- Removed rect94: 354x60 fill="#101828" stroke="#1e2d44" frame
+           that acted as a preview tile border in the authoring file.
+           Visible as a faint rectangle outline on the dark sidebar. -->
       <g
          id="g102-53"
          transform="matrix(0.5,0,0,0.5,-181.5,-34)">
