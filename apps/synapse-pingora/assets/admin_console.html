@@ -194,6 +194,7 @@
           <div class="nav-section">
             <div class="nav-section-label">Admin</div>
             <button class="nav-item" data-panel="actions">Actions</button>
+            <button class="nav-item" data-panel="logs">Logs</button>
             <button class="nav-item" data-panel="raw">Raw API</button>
           </div>
         </nav>
@@ -311,11 +312,56 @@
             <pre class="output" id="action-out" style="margin-top:12px">{}</pre>
           </div>
           <div class="card tone-info">
-            <div class="card-title">Config Import / Export</div>
+            <div class="card-title">Config Export</div>
             <div class="btn-row">
               <button class="btn" data-action="GET:/_sensor/config/export">Export Config</button>
             </div>
             <pre class="output" id="export-out" style="margin-top:12px"></pre>
+          </div>
+          <div class="card tone-warning">
+            <div class="card-title">Config Import</div>
+            <div class="field" style="margin-top:8px">
+              <label>YAML or JSON config body</label>
+              <textarea id="import-body" placeholder="Paste a config.yaml / config.json dump here. POSTs to /_sensor/config/import." style="min-height:140px;font-family:var(--mono);font-size:11px"></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn primary" id="import-submit">Import Config</button>
+            </div>
+            <pre class="output" id="import-out" style="margin-top:12px"></pre>
+          </div>
+        </div>
+
+        <!-- Logs Panel -->
+        <div class="panel" id="panel-logs">
+          <div class="panel-header">
+            <h2>Logs</h2>
+            <p>Recent sensor events — access audit + system log</p>
+          </div>
+          <div class="card tone-info">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px;flex-wrap:wrap">
+              <div class="btn-row">
+                <button class="btn logs-filter primary" data-source="">All</button>
+                <button class="btn logs-filter" data-source="access">Access</button>
+                <button class="btn logs-filter" data-source="system">System</button>
+              </div>
+              <button class="btn" id="logs-refresh">Refresh</button>
+            </div>
+            <div style="overflow-x:auto">
+              <table>
+                <caption class="sr-only">Recent sensor log entries</caption>
+                <thead>
+                  <tr>
+                    <th style="width:180px">Timestamp</th>
+                    <th style="width:70px">Level</th>
+                    <th style="width:80px">Source</th>
+                    <th>Message</th>
+                  </tr>
+                </thead>
+                <tbody id="logs-body">
+                  <tr><td colspan="4" style="color:var(--ink-muted)">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -663,6 +709,95 @@
       });
     });
 
+    /* ── Config Import ───────────────────────────────────── */
+    // The handler on the Rust side (config_import_handler) accepts the
+    // raw request body as a string and auto-detects YAML vs JSON, so
+    // we POST the textarea contents verbatim. Content-Type is left
+    // unset to preserve text-plain semantics; if the operator paste
+    // starts with `{` it's treated as JSON, otherwise as YAML.
+    $('#import-submit').addEventListener('click', async () => {
+      const body = $('#import-body').value;
+      if (!body.trim()) {
+        toast('Paste a config body first', 'err');
+        return;
+      }
+      const btn = $('#import-submit');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/_sensor/config/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body,
+        });
+        const text = await res.text();
+        let parsed;
+        try { parsed = JSON.parse(text); } catch { parsed = text; }
+        if (!res.ok) throw { status: res.status, data: parsed };
+        setOutput('#import-out', parsed, true);
+        toast('Config imported — run Reload to apply');
+      } catch (e) {
+        setOutput('#import-out', e.data || e.message || e, false);
+        toast('Import failed', 'err');
+      } finally { btn.disabled = false; }
+    });
+
+    /* ── Logs ─────────────────────────────────────────────── */
+    // Current source filter state. Empty string = all sources.
+    let currentLogSource = '';
+
+    // Human-friendly timestamp for the logs table. Full ISO would be
+    // noisy; just HH:MM:SS + relative-to-now is what operators scan.
+    function formatLogTs(iso) {
+      try {
+        const d = new Date(iso);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+      } catch { return iso; }
+    }
+
+    function logLevelTag(level) {
+      const lvl = String(level || 'info').toLowerCase();
+      const cls = lvl === 'error' ? 'tag-red'
+                : lvl === 'warn' || lvl === 'warning' ? 'tag-orange'
+                : lvl === 'debug' || lvl === 'trace' ? 'tag-blue'
+                : 'tag-green';
+      return `<span class="tag ${cls}">${lvl.toUpperCase()}</span>`;
+    }
+
+    async function loadLogs() {
+      const body = $('#logs-body');
+      body.innerHTML = '<tr><td colspan="4" style="color:var(--ink-muted)">Loading...</td></tr>';
+      const path = currentLogSource ? `/_sensor/logs/${currentLogSource}` : '/_sensor/logs';
+      try {
+        const res = await api(path);
+        const logs = res.data?.logs || res.logs || [];
+        if (logs.length === 0) {
+          body.innerHTML = '<tr><td colspan="4" style="color:var(--ink-muted)">No log entries.</td></tr>';
+          return;
+        }
+        body.innerHTML = logs.map(l => `<tr>
+          <td class="mono" style="font-size:11px">${formatLogTs(l.timestamp)}</td>
+          <td>${logLevelTag(l.level)}</td>
+          <td class="mono" style="font-size:11px">${l.source || '-'}</td>
+          <td class="mono" style="font-size:11px;word-break:break-word">${l.message || ''}</td>
+        </tr>`).join('');
+      } catch (e) {
+        body.innerHTML = `<tr><td colspan="4" style="color:var(--red)">${e.data?.message || e.message || 'Failed to load logs'}</td></tr>`;
+      }
+    }
+
+    $$('.logs-filter').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $$('.logs-filter').forEach(b => b.classList.remove('primary'));
+        btn.classList.add('primary');
+        currentLogSource = btn.dataset.source;
+        loadLogs();
+      });
+    });
+    $('#logs-refresh').addEventListener('click', loadLogs);
+
     /* ── Raw API ─────────────────────────────────────────── */
     $('#raw-send').addEventListener('click', async () => {
       const method = $('#raw-method').value;
@@ -685,6 +820,7 @@
     loadSites();
     loadTls();
     loadModules();
+    loadLogs();
     // Auto-refresh overview every 30s
     setInterval(loadOverview, 30000);
     </script>
