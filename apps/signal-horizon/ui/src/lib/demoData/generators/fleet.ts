@@ -249,6 +249,27 @@ export interface SyncStatus {
   syncPercentage: number;
 }
 
+/**
+ * A single multi-site entry for the /fleet/sites demo.
+ *
+ * Shape mirrors the UI's `FleetSite` output (hooks/fleet/useFleetSites)
+ * so the hook can short-circuit in demo mode without a transform.
+ * `raw` carries a Synapse-shaped payload that drives the edit drawer
+ * exactly as a real fetch would — editing a demo site round-trips
+ * through the same buildPayload() logic as a real one.
+ */
+export interface FleetSiteDemo {
+  sensorId: string;
+  sensorName: string;
+  hostname: string;
+  upstreams: string[];
+  tlsEnabled: boolean;
+  wafEnabled: boolean;
+  rateLimitRps?: number;
+  accessDefault?: string;
+  raw: Record<string, unknown>;
+}
+
 export interface FleetData {
   sensors: FleetSensor[];
   metrics: FleetMetrics;
@@ -259,6 +280,7 @@ export interface FleetData {
   onboarding: OnboardingData;
   apiKeys: ApiKeysData;
   dlp: DlpData;
+  sites: FleetSiteDemo[];
   campaignGraphs: Record<string, CampaignGraphData>;
   configTemplates: ConfigTemplate[];
   syncStatus: SyncStatus;
@@ -1225,6 +1247,147 @@ function generateSyncStatusData(sensors: FleetSensor[]): SyncStatus {
 // Main Export
 // ============================================================================
 
+// ============================================================================
+// Fleet Sites Generator
+// ============================================================================
+
+// A compact pool of realistic-looking hostnames. Each online sensor
+// gets a small rotating slice so the demo looks populated without
+// being overwhelming — ~2-4 sites per sensor gives a ~60-150 site
+// table for the standard ~40-50 sensor demo fleet.
+const SITE_HOSTNAME_PREFIXES = [
+  'api', 'auth', 'cdn', 'www', 'app', 'admin', 'status', 'ingest',
+  'metrics', 'docs', 'assets', 'ws',
+] as const;
+
+const SITE_HOSTNAME_DOMAINS = [
+  'synapse.demo',
+  'acme-api.io',
+  'edge.example.com',
+  'ingest.sample.com',
+] as const;
+
+// Upstream port pools by service type. Using real-world default ports
+// makes the data feel authentic to anyone who's deployed a service.
+const UPSTREAM_PORTS = {
+  http: [8080, 8081, 8082, 3000, 3100, 5000],
+  api: [4000, 4001, 5555, 6000, 6001, 7000],
+  tls: [443, 8443],
+} as const;
+
+function generateSitesData(
+  sensors: FleetSensor[],
+  scenario: DemoScenario,
+): FleetSiteDemo[] {
+  const sites: FleetSiteDemo[] = [];
+
+  // Only online/warning sensors serve sites — an offline sensor can't
+  // proxy anything. warning-state sensors are degraded but usually
+  // still serve their sites (just with elevated latency/error rates).
+  const eligibleSensors = sensors.filter((s) => s.status !== 'offline');
+
+  // Distribute hostname prefixes round-robin across sensors so the
+  // table has natural variety without duplicate hostnames on the
+  // same sensor.
+  let prefixIdx = 0;
+
+  for (const sensor of eligibleSensors) {
+    // Sites per sensor varies by scenario: high-threat fleets tend to
+    // be busier, quiet ones simpler. 1-4 sites per sensor feels right.
+    const perSensor =
+      scenario === 'high-threat' ? randomInRange(2, 4)
+      : scenario === 'quiet' ? randomInRange(1, 2)
+      : randomInRange(1, 3);
+
+    for (let i = 0; i < perSensor; i++) {
+      const prefix = SITE_HOSTNAME_PREFIXES[prefixIdx % SITE_HOSTNAME_PREFIXES.length];
+      const domain = SITE_HOSTNAME_DOMAINS[prefixIdx % SITE_HOSTNAME_DOMAINS.length];
+      prefixIdx++;
+      const hostname = `${prefix}.${domain}`;
+
+      // Upstreams: 1-2 backends in realistic host:port form. Load-
+      // balanced pairs are common enough (blue/green, a/b) to be
+      // worth showing in the demo.
+      const upstreamCount = Math.random() < 0.3 ? 2 : 1;
+      const portPool = prefix === 'api' || prefix === 'ingest'
+        ? UPSTREAM_PORTS.api
+        : UPSTREAM_PORTS.http;
+      const upstreams: string[] = [];
+      const upstreamObjects: Array<{ host: string; port: number }> = [];
+      for (let u = 0; u < upstreamCount; u++) {
+        const host = `10.${sensor.region.startsWith('us') ? 0 : 1}.${upstreamCount > 1 ? u : 0}.${50 + (prefixIdx % 200)}`;
+        const port = portPool[Math.floor(Math.random() * portPool.length)];
+        upstreams.push(`${host}:${port}`);
+        upstreamObjects.push({ host, port });
+      }
+
+      // Config distribution rules (matches real-world deployments):
+      //  - ~80% WAF enabled (default-on protection)
+      //  - ~40% have TLS configured (most production sites)
+      //  - ~30% have per-site rate limits set
+      //  - ~10% have access control (allow/deny CIDR rules)
+      const wafEnabled = Math.random() < 0.8;
+      const hasTls = Math.random() < 0.4;
+      const hasRateLimit = Math.random() < 0.3;
+      const hasAccessControl = Math.random() < 0.1;
+
+      const rateLimitRps = hasRateLimit
+        ? [100, 500, 1000, 2500, 5000, 10000][Math.floor(Math.random() * 6)]
+        : undefined;
+      const accessDefault = hasAccessControl
+        ? Math.random() < 0.7 ? 'allow' : 'deny'
+        : undefined;
+
+      // `raw` mirrors the Synapse /sites/:hostname response shape so
+      // the edit drawer's buildPayload() reads the same fields it
+      // would against a real sensor. Keeps the demo path faithful to
+      // the real API contract.
+      const raw: Record<string, unknown> = {
+        hostname,
+        upstreams: upstreamObjects,
+        tls: hasTls
+          ? {
+              cert_path: `/etc/synapse/certs/${hostname}.crt`,
+              key_path: `/etc/synapse/certs/${hostname}.key`,
+              min_version: '1.3',
+            }
+          : null,
+        waf: {
+          enabled: wafEnabled,
+          threshold: wafEnabled ? [50, 60, 70, 80][Math.floor(Math.random() * 4)] : null,
+          rule_overrides: {},
+        },
+        rate_limit: hasRateLimit
+          ? { enabled: true, rps: rateLimitRps, burst: null }
+          : null,
+        access_control: hasAccessControl
+          ? {
+              allow: accessDefault === 'deny' ? ['10.0.0.0/8', '192.168.0.0/16'] : [],
+              deny: accessDefault === 'allow' ? ['203.0.113.0/24'] : [],
+              default_action: accessDefault,
+            }
+          : null,
+        headers: null,
+        shadow_mirror: null,
+      };
+
+      sites.push({
+        sensorId: sensor.id,
+        sensorName: sensor.name,
+        hostname,
+        upstreams,
+        tlsEnabled: hasTls,
+        wafEnabled,
+        rateLimitRps,
+        accessDefault,
+        raw,
+      });
+    }
+  }
+
+  return sites;
+}
+
 export function generateFleetData(scenario: DemoScenario): FleetData {
   // Generate sensors first (used by other generators)
   const sensors = generateSensors(scenario);
@@ -1240,6 +1403,7 @@ export function generateFleetData(scenario: DemoScenario): FleetData {
   const onboarding = generateOnboardingData(scenario);
   const apiKeys = generateApiKeysData(sensors, scenario);
   const dlp = generateDlpData(scenario);
+  const sites = generateSitesData(sensors, scenario);
   const campaignGraphs = generateCampaignGraphsData(scenario);
   const configTemplates = generateConfigTemplatesData(scenario);
   const syncStatus = generateSyncStatusData(sensors);
@@ -1254,6 +1418,7 @@ export function generateFleetData(scenario: DemoScenario): FleetData {
     onboarding,
     apiKeys,
     dlp,
+    sites,
     campaignGraphs,
     configTemplates,
     syncStatus,

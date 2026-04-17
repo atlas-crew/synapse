@@ -37,6 +37,12 @@ import type { FleetSite } from '../../hooks/fleet';
 interface FleetSiteDrawerProps {
   site: FleetSite | null;
   onClose: () => void;
+  /**
+   * When true, disable save + delete and show a read-only banner.
+   * Used in demo mode where mutations would hit non-existent
+   * Synapse proxy endpoints and return cryptic errors.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -120,7 +126,7 @@ function buildPayload(raw: Record<string, unknown>, edits: Editable): Record<str
   };
 }
 
-export function FleetSiteDrawer({ site, onClose }: FleetSiteDrawerProps) {
+export function FleetSiteDrawer({ site, onClose, readOnly = false }: FleetSiteDrawerProps) {
   const queryClient = useQueryClient();
   const [edits, setEdits] = useState<Editable | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -337,6 +343,14 @@ export function FleetSiteDrawer({ site, onClose }: FleetSiteDrawerProps) {
               </Alert>
             )}
 
+            {readOnly && (
+              <Alert status="info">
+                <strong>Read-only (demo mode).</strong> Edits and deletes are
+                disabled while demo mode is active. The form is still interactive
+                so you can explore the UI — just nothing persists.
+              </Alert>
+            )}
+
             {/* Footer actions */}
             <Stack direction="row" justify="space-between" align="center" gap="md">
               <Button
@@ -344,20 +358,23 @@ export function FleetSiteDrawer({ site, onClose }: FleetSiteDrawerProps) {
                 size="sm"
                 icon={<Trash2 className="w-3.5 h-3.5" />}
                 onClick={() => setConfirmDelete(true)}
-                style={{ color: colors.red }}
+                disabled={readOnly}
+                title={readOnly ? 'Disabled in demo mode' : undefined}
+                style={{ color: readOnly ? colors.gray.mid : colors.red }}
               >
                 Delete site
               </Button>
               <Stack direction="row" gap="sm">
                 <Button variant="ghost" size="sm" onClick={onClose}>
-                  Cancel
+                  {readOnly ? 'Close' : 'Cancel'}
                 </Button>
                 <Button
                   variant="primary"
                   size="sm"
                   icon={<Save className="w-3.5 h-3.5" />}
                   onClick={handleSave}
-                  disabled={saveMutation.isPending}
+                  disabled={saveMutation.isPending || readOnly}
+                  title={readOnly ? 'Disabled in demo mode' : undefined}
                 >
                   {saveMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>

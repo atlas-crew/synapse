@@ -19,6 +19,7 @@
 import { useMemo, useState } from 'react';
 import { Globe, Shield, ShieldOff, RefreshCw, Search, Plus } from 'lucide-react';
 import {
+  Alert,
   Button,
   CARD_HEADER_TITLE_STYLE,
   DataTable,
@@ -36,6 +37,7 @@ import {
   colors,
 } from '@/ui';
 import { useSensors, useFleetSites, type FleetSite } from '../../hooks/fleet';
+import { useIsDemo } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { FleetSiteDrawer } from '../../components/fleet/FleetSiteDrawer';
 import { FleetSiteCreateDrawer } from '../../components/fleet/FleetSiteCreateDrawer';
@@ -47,6 +49,11 @@ export default function FleetSitesPage() {
 
   const { data: sensors = [] } = useSensors();
   const { data: sites = [], isLoading, isFetching, refetch } = useFleetSites();
+  // Write operations (create, edit save, delete) hit real Synapse
+  // proxy endpoints that don't exist for demo sensors. We disable
+  // those actions in demo mode and surface a banner explaining why,
+  // rather than letting operators see cryptic 502/404 toasts.
+  const isDemo = useIsDemo();
 
   // Filter state — client-side only for MVP. If the fleet grows past
   // a few hundred sites we'd want server-side pagination, but at that
@@ -127,12 +134,26 @@ export default function FleetSitesPage() {
             size="sm"
             icon={<Plus className="w-3.5 h-3.5" />}
             onClick={() => setCreateOpen(true)}
-            disabled={sensors.length === 0}
+            disabled={sensors.length === 0 || isDemo}
+            title={isDemo ? 'Disabled in demo mode' : undefined}
           >
             Create site
           </Button>
         </Stack>
       </Stack>
+
+      {/* Demo-mode notice. Sites, edits, and deletes hit real Synapse
+          proxy endpoints — demo sensors don't exist on the network
+          side, so write actions would return cryptic errors. Show a
+          banner so operators know the page is a read-only sample. */}
+      {isDemo && (
+        <Alert status="info">
+          <strong>Demo mode.</strong> Sites shown below are synthetic and safe to
+          browse — hostname filter, sensor filter, and row click (edit drawer) all
+          work. <em>Create, save, and delete are disabled</em> until a real fleet is
+          connected. Switch off demo mode to make changes against live sensors.
+        </Alert>
+      )}
 
       {/* KPI strip. Uses MetricCard rather than KpiStrip because we want
           individual border-l accents per card matching the Synapse icon
@@ -323,6 +344,7 @@ export default function FleetSitesPage() {
       <FleetSiteDrawer
         site={selectedSite}
         onClose={() => setSelectedSite(null)}
+        readOnly={isDemo}
       />
 
       {/* Create drawer. On success, the newly-created site is piped

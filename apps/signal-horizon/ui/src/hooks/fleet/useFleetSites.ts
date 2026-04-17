@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
 import type { SensorSummary } from '../../types/fleet';
 import { useDemoMode } from '../../stores/demoModeStore';
+import { getDemoData } from '../../lib/demoData';
 
 /**
  * A single site entry as seen from the fleet-wide sites page.
@@ -104,11 +105,21 @@ async function fetchSitesForSensor(sensor: SensorSummary): Promise<FleetSite[]> 
  * until a second caller justifies it.
  */
 export function useFleetSites() {
-  const { isEnabled: isDemoMode } = useDemoMode();
+  const { isEnabled: isDemoMode, scenario } = useDemoMode();
 
   return useQuery({
-    queryKey: ['fleet', 'sites', isDemoMode ? 'demo' : 'live'],
+    // scenario is part of the key so switching demo scenarios
+    // (normal/quiet/high-threat) re-fetches the right snapshot.
+    queryKey: ['fleet', 'sites', isDemoMode ? `demo:${scenario}` : 'live'],
     queryFn: async (): Promise<FleetSite[]> => {
+      if (isDemoMode) {
+        // Demo mode: use the static generated snapshot. The generator
+        // produces objects shaped exactly like FleetSite (including a
+        // realistic Synapse-style `raw` payload) so the edit drawer
+        // treats demo sites the same as real ones.
+        const demo = getDemoData(scenario);
+        return demo.fleet.sites as FleetSite[];
+      }
       const sensors = await fetchSensors();
       const perSensor = await Promise.all(sensors.map(fetchSitesForSensor));
       return perSensor.flat();
