@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { colors, fontFamily, fontWeight, spacing, transitions } from '../tokens/tokens';
 
 /**
@@ -29,6 +29,18 @@ export const Input: React.FC<InputProps> = ({
   label, error, helper, icon, suffix, multiline, rows = 3,
   size = 'md', fill, containerStyle, style, ...rest
 }) => {
+  const generatedId = useId();
+  const inputId = rest.id ?? generatedId;
+  const {
+    type: _type,
+    min: _min,
+    max: _max,
+    step: _step,
+    pattern: _pattern,
+    inputMode: _inputMode,
+    ...textareaRest
+  } = rest as React.InputHTMLAttributes<HTMLInputElement>;
+  const textareaProps = textareaRest as React.TextareaHTMLAttributes<HTMLTextAreaElement>;
   const s = inputSizes[size];
   const borderColor = error ? colors.red : `rgba(255,255,255,0.15)`;
   const focusBorderColor = error ? colors.red : colors.skyBlue;
@@ -63,7 +75,7 @@ export const Input: React.FC<InputProps> = ({
         <label style={{
           fontFamily, fontWeight: fontWeight.medium, fontSize: '12px',
           color: '#F0F4F8', display: 'block', marginBottom: spacing.xs,
-        }}>
+        }} htmlFor={inputId}>
           {label}
         </label>
       )}
@@ -79,12 +91,13 @@ export const Input: React.FC<InputProps> = ({
         )}
         {multiline ? (
           <textarea
+            id={inputId}
             rows={rows} style={inputStyle}
             onFocus={handleFocus as any} onBlur={handleBlur as any}
-            {...(rest as any)}
+            {...textareaProps}
           />
         ) : (
-          <input style={inputStyle} onFocus={handleFocus} onBlur={handleBlur} {...rest} />
+          <input id={inputId} style={inputStyle} onFocus={handleFocus} onBlur={handleBlur} {...rest} />
         )}
         {suffix && (
           <span style={{
@@ -131,6 +144,8 @@ export const Select: React.FC<SelectProps> = ({
   label, options, error, helper, placeholder,
   size = 'md', fill, containerStyle, style, ...rest
 }) => {
+  const generatedId = useId();
+  const selectId = rest.id ?? generatedId;
   const s = inputSizes[size];
   const borderColor = error ? colors.red : 'rgba(255,255,255,0.15)';
 
@@ -140,11 +155,12 @@ export const Select: React.FC<SelectProps> = ({
         <label style={{
           fontFamily, fontWeight: fontWeight.medium, fontSize: '12px',
           color: '#F0F4F8', display: 'block', marginBottom: spacing.xs,
-        }}>
+        }} htmlFor={selectId}>
           {label}
         </label>
       )}
       <select
+        id={selectId}
         style={{
           fontFamily, fontWeight: fontWeight.regular, fontSize: s.fontSize,
           padding: s.padding, height: s.height,
@@ -182,4 +198,3 @@ export const Select: React.FC<SelectProps> = ({
 };
 
 Select.displayName = 'Select';
-

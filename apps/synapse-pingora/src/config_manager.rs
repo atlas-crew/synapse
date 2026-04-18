@@ -197,6 +197,9 @@ pub enum ConfigManagerError {
 
     #[error("rule already exists: {0}")]
     RuleExists(String),
+
+    #[error("configuration changed since it was loaded")]
+    HashMismatch { expected: String, actual: String },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +222,14 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
+    fn stable_config_hash(config: &ConfigFile) -> String {
+        let payload = serde_json::to_vec(config).expect("ConfigFile must serialize for hashing");
+        let mut hasher = Sha256::new();
+        hasher.update(payload);
+        let digest = format!("{:x}", hasher.finalize());
+        digest.get(..16).unwrap_or(&digest).to_string()
+    }
+
     /// Creates a new ConfigManager with references to all runtime managers.
     pub fn new(
         config: Arc<RwLock<ConfigFile>>,
@@ -696,11 +707,7 @@ impl ConfigManager {
     /// Computes a stable hash of the current configuration for diagnostics.
     pub fn config_hash(&self) -> String {
         let config = self.config.read();
-        let payload = serde_json::to_vec(&*config).unwrap_or_default();
-        let mut hasher = Sha256::new();
-        hasher.update(payload);
-        let digest = format!("{:x}", hasher.finalize());
-        digest.get(..16).unwrap_or(&digest).to_string()
+        Self::stable_config_hash(&config)
     }
 
     /// Returns the current rules hash (or computes one if not cached).
@@ -719,6 +726,16 @@ impl ConfigManager {
     pub fn update_full_config(
         &self,
         new_config: ConfigFile,
+    ) -> Result<MutationResult, ConfigManagerError> {
+        self.update_full_config_if_match(new_config, None, true)
+    }
+
+    /// Updates the full configuration only if the current config hash still matches.
+    pub fn update_full_config_if_match(
+        &self,
+        mut new_config: ConfigFile,
+        expected_hash: Option<&str>,
+        preserve_admin_api_key: bool,
     ) -> Result<MutationResult, ConfigManagerError> {
         let mut result = MutationResult::new();
 
@@ -835,6 +852,30 @@ impl ConfigManager {
         {
             // 1. Update ConfigFile wrapper
             let mut config = self.config.write();
+            if let Some(expected_hash) = expected_hash {
+                let actual_hash = Self::stable_config_hash(&config);
+                if expected_hash != actual_hash {
+                    return Err(ConfigManagerError::HashMismatch {
+                        expected: expected_hash.to_string(),
+                        actual: actual_hash,
+                    });
+                }
+            }
+            if preserve_admin_api_key {
+                new_config.server.admin_api_key = config.server.admin_api_key.clone();
+            }
+            if new_config
+                .server
+                .admin_api_key
+                .as_ref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                return Err(ConfigManagerError::Validation(
+                    ValidationError::InvalidDomain(
+                        "server.admin_api_key cannot be blank".to_string(),
+                    ),
+                ));
+            }
             *config = new_config.clone();
 
             // 2. Update Sites list (convert SiteYamlConfig -> SiteConfig)

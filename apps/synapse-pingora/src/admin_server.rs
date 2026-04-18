@@ -654,7 +654,7 @@ use axum::{
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{Path, Query, Request, State},
-    http::{header, HeaderValue, Method, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post, put},
@@ -715,6 +715,9 @@ pub mod scopes {
 #[allow(dead_code)]
 mod error_codes {
     pub const BAD_REQUEST: &str = "BAD_REQUEST";
+    pub const CONFLICT: &str = "CONFLICT";
+    pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
+    pub const PRECONDITION_REQUIRED: &str = "PRECONDITION_REQUIRED";
     pub const VALIDATION_ERROR: &str = "VALIDATION_ERROR";
     pub const NOT_FOUND: &str = "NOT_FOUND";
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
@@ -797,6 +800,39 @@ fn validation_error(
     )
 }
 
+/// Create a conflict response (409).
+fn conflict_error(
+    public_message: &str,
+    internal_error: Option<&dyn std::fmt::Display>,
+) -> Response {
+    sanitized_error(
+        StatusCode::CONFLICT,
+        error_codes::CONFLICT,
+        public_message,
+        internal_error,
+    )
+}
+
+/// Create a precondition required response (428).
+fn precondition_required_error(public_message: &str) -> Response {
+    sanitized_error(
+        StatusCode::PRECONDITION_REQUIRED,
+        error_codes::PRECONDITION_REQUIRED,
+        public_message,
+        None,
+    )
+}
+
+/// Create a precondition failed response (412).
+fn precondition_failed_error(public_message: &str) -> Response {
+    sanitized_error(
+        StatusCode::PRECONDITION_FAILED,
+        error_codes::PRECONDITION_FAILED,
+        public_message,
+        None,
+    )
+}
+
 /// Create an internal server error response (500).
 fn internal_error(
     public_message: &str,
@@ -862,19 +898,197 @@ use crate::config_manager::{
     SiteWafRequest, StoredRule, UpdateSiteRequest,
 };
 
+#[derive(Debug, Default, serde::Deserialize)]
+struct ConfigUpdateIntent {
+    #[serde(default)]
+    server: Option<ServerUpdateIntent>,
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+struct ServerUpdateIntent {
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    admin_api_key: Option<Option<String>>,
+}
+
+enum IfMatchCondition {
+    Any,
+    Tags(Vec<String>),
+}
+
+fn deserialize_optional_field<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Ok(Some(<Option<T> as serde::Deserialize<'de>>::deserialize(
+        deserializer,
+    )?))
+}
+
 /// GET /config - Retrieve full configuration
 async fn config_handler(State(state): State<AdminState>) -> impl IntoResponse {
+    let config_hash = state
+        .handler
+        .config_manager()
+        .map(|config_manager| config_manager.config_hash());
     let response = state.handler.handle_get_config();
-    wrap_response(response)
+    let mut body = serde_json::to_value(&response).expect("Config response must serialize");
+
+    if let Some(server) = body
+        .get_mut("data")
+        .and_then(|data| data.get_mut("server"))
+        .and_then(|server| server.as_object_mut())
+    {
+        server.remove("admin_api_key");
+    }
+
+    let mut http_response = Json(body).into_response();
+
+    if let Some(config_hash) = config_hash {
+        let etag = format!("\"{config_hash}\"");
+        if let Ok(header_value) = HeaderValue::from_str(&etag) {
+            http_response
+                .headers_mut()
+                .insert(header::ETAG, header_value);
+        }
+    }
+
+    http_response
 }
 
 /// POST /config - Update full configuration (hot reload)
 async fn update_config_handler(
     State(state): State<AdminState>,
-    Json(config): Json<crate::config::ConfigFile>,
+    headers: HeaderMap,
+    Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let response = state.handler.handle_update_config(config);
-    wrap_response(response)
+    const CLEAR_ADMIN_API_KEY_HEADER: &str = "x-clear-admin-api-key";
+
+    let config_manager = state.handler.config_manager().cloned();
+    let current_hash = config_manager
+        .as_ref()
+        .map(|config_manager| config_manager.config_hash());
+    let if_match = match headers.get(header::IF_MATCH) {
+        Some(if_match) => match if_match.to_str() {
+            Ok(value) if value.trim() == "*" => IfMatchCondition::Any,
+            Ok(value) => {
+                let mut tags = Vec::new();
+                for token in value.split(',') {
+                    let token = token.trim();
+                    if token == "*" {
+                        return validation_error("If-Match '*' must appear alone", None);
+                    }
+                    if token.starts_with("W/") {
+                        return validation_error("Weak validators not allowed in If-Match", None);
+                    }
+                    let Some(tag) = token
+                        .strip_prefix('"')
+                        .and_then(|value| value.strip_suffix('"'))
+                    else {
+                        return validation_error("Invalid If-Match header", None);
+                    };
+                    if tag == "*" {
+                        return validation_error("If-Match '*' must appear alone", None);
+                    }
+                    tags.push(tag.to_string());
+                }
+                IfMatchCondition::Tags(tags)
+            }
+            Err(error) => return validation_error("Invalid If-Match header", Some(&error)),
+        },
+        None => return precondition_required_error("If-Match header is required for POST /config"),
+    };
+    let clear_admin_api_key = {
+        let mut values = headers.get_all(CLEAR_ADMIN_API_KEY_HEADER).iter();
+        match (values.next(), values.next()) {
+            (None, _) => false,
+            (Some(_), Some(_)) => {
+                return validation_error("Invalid X-Clear-Admin-Api-Key header", None)
+            }
+            (Some(value), None) => match value.to_str() {
+                Ok(value) if value.trim().eq_ignore_ascii_case("true") => true,
+                Ok(value) if value.trim().eq_ignore_ascii_case("false") => false,
+                Ok(_) => return validation_error("Invalid X-Clear-Admin-Api-Key header", None),
+                Err(error) => {
+                    return validation_error("Invalid X-Clear-Admin-Api-Key header", Some(&error))
+                }
+            },
+        }
+    };
+
+    if config_manager.is_none() {
+        return service_unavailable("ConfigManager");
+    }
+
+    let expected_hash = match (&if_match, current_hash.as_deref()) {
+        (IfMatchCondition::Any, Some(_)) => None,
+        (IfMatchCondition::Tags(tags), Some(actual_hash))
+            if tags.iter().any(|tag| tag == actual_hash) =>
+        {
+            Some(actual_hash.to_string())
+        }
+        (IfMatchCondition::Any, None) | (IfMatchCondition::Tags(_), None) => {
+            return service_unavailable("ConfigManager")
+        }
+        (IfMatchCondition::Tags(_), Some(_)) => {
+            return precondition_failed_error(
+                "Configuration changed since it was loaded. Refresh and try again.",
+            )
+        }
+    };
+
+    let intent = match serde_json::from_value::<ConfigUpdateIntent>(payload.clone()) {
+        Ok(intent) => intent,
+        Err(error) => return validation_error("Invalid configuration payload", Some(&error)),
+    };
+
+    let mut config = match serde_json::from_value::<crate::config::ConfigFile>(payload) {
+        Ok(config) => config,
+        Err(error) => return validation_error("Invalid configuration payload", Some(&error)),
+    };
+
+    if clear_admin_api_key
+        && matches!(
+            intent
+                .server
+                .as_ref()
+                .and_then(|server| server.admin_api_key.as_ref()),
+            Some(Some(_))
+        )
+    {
+        return validation_error(
+            "X-Clear-Admin-Api-Key conflicts with admin_api_key in payload",
+            None,
+        );
+    }
+
+    if clear_admin_api_key {
+        config.server.admin_api_key = None;
+    }
+
+    let preserve_admin_api_key = matches!(
+        intent.server.and_then(|server| server.admin_api_key),
+        None | Some(None)
+    ) && !clear_admin_api_key;
+
+    match config_manager {
+        Some(config_manager) => match config_manager.update_full_config_if_match(
+            config,
+            expected_hash.as_deref(),
+            preserve_admin_api_key,
+        ) {
+            Ok(result) => wrap_response(crate::api::ApiResponse::ok(result)),
+            Err(crate::config_manager::ConfigManagerError::HashMismatch { .. }) => {
+                precondition_failed_error(
+                    "Configuration changed since it was loaded. Refresh and try again.",
+                )
+            }
+            Err(error) => wrap_response(crate::api::ApiResponse::<
+                crate::config_manager::MutationResult,
+            >::err(error.to_string())),
+        },
+        None => wrap_response(state.handler.handle_update_config(config)),
+    }
 }
 
 /// Per-IP rate limiter type using governor
@@ -1937,8 +2151,6 @@ fn console_next_asset_from_path(path: &str) -> Option<(&'static str, &'static st
     }
 }
 
-
-
 /// GET /console-next - React-based admin console bootstrap.
 async fn admin_console_next_handler() -> impl IntoResponse {
     let body = if is_dev_mode() {
@@ -2006,10 +2218,9 @@ async fn admin_console_next_asset_handler(Path(path): Path<String>) -> impl Into
 
     let mut response = Response::new(body);
     *response.status_mut() = StatusCode::OK;
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static(content_type),
-    );
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
     response.headers_mut().insert(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
@@ -7336,14 +7547,20 @@ async fn config_kernel_put_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::access::AccessListManager;
+    use crate::config::{ConfigFile, GlobalConfig, RateLimitConfig};
+    use crate::config_manager::ConfigManager;
     use crate::horizon::{Severity, SignalType};
     use crate::intelligence::signal_manager::{SignalManager, SignalManagerConfig};
     use crate::intelligence::SignalQueryOptions;
+    use crate::ratelimit::RateLimitManager;
+    use crate::site_waf::SiteWafManager;
+    use crate::vhost::VhostMatcher;
     use axum::body::Body;
     use http::Request;
     use http_body_util::BodyExt;
     use once_cell::sync::Lazy;
-    use parking_lot::Mutex;
+    use parking_lot::{Mutex, RwLock};
     use std::num::NonZeroU32;
     use tempfile::tempdir;
     use tower::util::ServiceExt;
@@ -9162,6 +9379,102 @@ mod tests {
             .with_state(state)
     }
 
+    fn create_test_config_manager() -> Arc<ConfigManager> {
+        let config = Arc::new(RwLock::new(ConfigFile {
+            server: GlobalConfig {
+                http_addr: "0.0.0.0:80".to_string(),
+                https_addr: "0.0.0.0:443".to_string(),
+                admin_api_key: Some("persist-me".to_string()),
+                ..Default::default()
+            },
+            sites: Vec::new(),
+            rate_limit: RateLimitConfig::default(),
+            profiler: Default::default(),
+        }));
+
+        let sites = Arc::new(RwLock::new(Vec::new()));
+        let vhost = Arc::new(RwLock::new(VhostMatcher::new(vec![]).unwrap()));
+        let waf = Arc::new(RwLock::new(SiteWafManager::new()));
+        let rate_limiter = Arc::new(RwLock::new(RateLimitManager::new()));
+        let access_lists = Arc::new(RwLock::new(AccessListManager::new()));
+
+        Arc::new(ConfigManager::new(
+            config,
+            sites,
+            vhost,
+            waf,
+            rate_limiter,
+            access_lists,
+        ))
+    }
+
+    fn create_test_app_with_config(scopes: Vec<String>) -> Router {
+        create_test_app_with_config_and_manager(scopes).0
+    }
+
+    fn create_test_app_with_config_and_manager(
+        scopes: Vec<String>,
+    ) -> (Router, Arc<ConfigManager>) {
+        use governor::{Quota, RateLimiter};
+        use std::num::NonZeroU32;
+
+        let config_manager = create_test_config_manager();
+        let handler = Arc::new(
+            ApiHandler::builder()
+                .config_manager(config_manager.clone())
+                .build(),
+        );
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: "test-key".to_string(),
+            admin_auth_disabled: false,
+            admin_scopes: scopes,
+            signal_permissions: Arc::new(SignalPermissions::default()),
+            admin_rate_limiter,
+            public_rate_limiter,
+            report_rate_limiter,
+            auth_failure_limiter,
+        };
+
+        let read_routes = Router::new()
+            .route("/config", get(config_handler))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_read,
+            ))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ));
+
+        let write_routes = Router::new()
+            .route("/config", post(update_config_handler))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_admin_write,
+            ))
+            .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_admin,
+            ));
+
+        (
+            Router::new()
+                .merge(read_routes)
+                .merge(write_routes)
+                .layer(middleware::from_fn(security_headers))
+                .with_state(state),
+            config_manager,
+        )
+    }
+
     #[tokio::test]
     async fn test_console_requires_auth() {
         // Create app with admin:read scope
@@ -9355,13 +9668,438 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            response.headers().get(header::CONTENT_SECURITY_POLICY).unwrap(),
+            response
+                .headers()
+                .get(header::CONTENT_SECURITY_POLICY)
+                .unwrap(),
             ADMIN_CONSOLE_NEXT_CSP
         );
         assert_eq!(
-            response.headers().get(header::X_CONTENT_TYPE_OPTIONS).unwrap(),
+            response
+                .headers()
+                .get(header::X_CONTENT_TYPE_OPTIONS)
+                .unwrap(),
             "nosniff"
         );
+    }
+
+    #[tokio::test]
+    async fn test_config_get_sets_etag_and_masks_admin_key() {
+        let app = create_test_app_with_config(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/config")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(header::ETAG).is_some());
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["success"], serde_json::Value::Bool(true));
+        assert!(payload["data"]["server"]
+            .as_object()
+            .unwrap()
+            .get("admin_api_key")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn test_config_post_rejects_stale_if_match() {
+        let app = create_test_app_with_config(vec![scopes::ADMIN_WRITE.to_string()]);
+        let payload = serde_json::json!({
+            "server": {
+                "http_addr": "0.0.0.0:80",
+                "https_addr": "0.0.0.0:443",
+                "admin_api_key": null
+            },
+            "sites": [],
+            "rate_limit": {},
+            "profiler": {}
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", "\"stale-hash\"")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+    }
+
+    #[tokio::test]
+    async fn test_config_post_requires_if_match() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]["http_addr"] = serde_json::Value::String("127.0.0.1:8080".to_string());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PRECONDITION_REQUIRED);
+    }
+
+    #[tokio::test]
+    async fn test_config_post_accepts_if_match_wildcard() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]["http_addr"] = serde_json::Value::String("127.0.0.1:8081".to_string());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", "*")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            config_manager.get_full_config().server.http_addr,
+            "127.0.0.1:8081"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_post_rejects_weak_if_match_validator() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]["http_addr"] = serde_json::Value::String("127.0.0.1:8082".to_string());
+        let etag = format!("W/\"{}\"", config_manager.config_hash());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_config_post_rejects_blank_admin_api_key() {
+        let app = create_test_app_with_config(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/config")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let etag = get_response
+            .headers()
+            .get(header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let payload = serde_json::json!({
+            "server": {
+                "http_addr": "0.0.0.0:80",
+                "https_addr": "0.0.0.0:443",
+                "admin_api_key": "   "
+            },
+            "sites": [],
+            "rate_limit": {},
+            "profiler": {}
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_config_post_preserves_existing_admin_key_when_omitted() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]
+            .as_object_mut()
+            .unwrap()
+            .remove("admin_api_key");
+        let etag = format!("\"{}\"", config_manager.config_hash());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            config_manager
+                .get_full_config()
+                .server
+                .admin_api_key
+                .as_deref(),
+            Some("persist-me")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_post_preserves_existing_admin_key_when_null_without_clear_header() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]["admin_api_key"] = serde_json::Value::Null;
+        let etag = format!("\"{}\"", config_manager.config_hash());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            config_manager
+                .get_full_config()
+                .server
+                .admin_api_key
+                .as_deref(),
+            Some("persist-me")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_post_clears_admin_key_only_with_explicit_header() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]["admin_api_key"] = serde_json::Value::Null;
+        let etag = format!("\"{}\"", config_manager.config_hash());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .header("X-Clear-Admin-Api-Key", "true")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(config_manager.get_full_config().server.admin_api_key, None);
+    }
+
+    #[tokio::test]
+    async fn test_config_post_rejects_clear_header_with_admin_key_value() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let mut payload = serde_json::to_value(config_manager.get_full_config()).unwrap();
+        payload["server"]["admin_api_key"] = serde_json::Value::String("replace-me".to_string());
+        let etag = format!("\"{}\"", config_manager.config_hash());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .header("X-Clear-Admin-Api-Key", "true")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_config_post_roundtrip_from_get_keeps_existing_admin_key() {
+        let (app, config_manager) = create_test_app_with_config_and_manager(vec![
+            scopes::ADMIN_READ.to_string(),
+            scopes::ADMIN_WRITE.to_string(),
+        ]);
+
+        let get_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/config")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let etag = get_response
+            .headers()
+            .get(header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let body = get_response.into_body().collect().await.unwrap().to_bytes();
+        let mut payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        payload["data"]["server"]["http_addr"] =
+            serde_json::Value::String("127.0.0.1:8080".to_string());
+        let post_body = payload["data"].clone();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from(post_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            config_manager
+                .get_full_config()
+                .server
+                .admin_api_key
+                .as_deref(),
+            Some("persist-me")
+        );
+        assert_eq!(
+            config_manager.get_full_config().server.http_addr,
+            "127.0.0.1:8080"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_config_post_rejects_invalid_payload() {
+        let (app, config_manager) =
+            create_test_app_with_config_and_manager(vec![scopes::ADMIN_WRITE.to_string()]);
+        let etag = format!("\"{}\"", config_manager.config_hash());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/config")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", etag)
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::from("{\"server\":{}}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

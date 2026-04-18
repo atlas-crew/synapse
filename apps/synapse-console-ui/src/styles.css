@@ -94,6 +94,46 @@ a {
   justify-content: center;
 }
 
+.console-next-form {
+  width: 100%;
+}
+
+.console-next-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.console-next-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.console-next-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 16, 26, 0.72);
+}
+
+.console-next-toggle:focus-within {
+  border-color: rgba(104, 197, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(104, 197, 255, 0.25);
+}
+
+.console-next-toggle input {
+  margin-top: 2px;
+}
+
+.console-next-button-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 720px) {
   .console-next-shell {
     padding: 20px 16px 36px;
@@ -118,5 +158,8 @@ a {
   .console-next-actions {
     justify-content: flex-start;
   }
-}
 
+  .console-next-button-row {
+    flex-direction: column;
+  }
+}
