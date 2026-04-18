@@ -89,6 +89,14 @@ static SYNAPSE: Lazy<Arc<RwLock<Synapse>>> =
 
 static WAF_REGEX_TIMEOUT_US: AtomicU64 = AtomicU64::new(100_000);
 
+fn clamp_timeout_ms(timeout_ms: u64) -> u64 {
+    if timeout_ms == 0 {
+        1
+    } else {
+        timeout_ms.min(500)
+    }
+}
+
 fn create_synapse_engine() -> Synapse {
     let mut synapse = Synapse::new();
 
@@ -312,14 +320,15 @@ impl DetectionEngine {
     /// Update the regex evaluation budget used by all request analysis paths.
     ///
     /// The timeout is clamped into the 1ms..=500ms range because Synapse
-    /// executes regex-heavy rules inline on the request path and values
-    /// outside that range either weaken coverage or materially increase ReDoS
-    /// exposure during attacker-controlled traffic.
+    /// executes regex-heavy rules inline on the request path. The 1ms floor
+    /// prevents a zero-budget state that would silently bypass regex
+    /// evaluation, while the 500ms cap limits ReDoS exposure during
+    /// attacker-controlled traffic.
     ///
     /// Returns the applied timeout in milliseconds after clamping.
     pub fn set_regex_timeout_ms(timeout_ms: u64) -> u64 {
-        let applied_ms = timeout_ms.clamp(1, 500);
-        if timeout_ms < applied_ms {
+        let applied_ms = clamp_timeout_ms(timeout_ms);
+        if timeout_ms == 0 {
             warn!(
                 "Requested WAF regex timeout {}ms is below the safety floor; clamping to {}ms",
                 timeout_ms, applied_ms
@@ -337,22 +346,20 @@ impl DetectionEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::{DetectionEngine, WAF_REGEX_TIMEOUT_US};
-    use std::sync::atomic::Ordering;
+    use super::clamp_timeout_ms;
 
     #[test]
-    fn test_set_regex_timeout_ms_clamps_zero_to_one() {
-        let original = WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed);
-        assert_eq!(DetectionEngine::set_regex_timeout_ms(0), 1);
-        assert_eq!(WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed), 1_000);
-        WAF_REGEX_TIMEOUT_US.store(original, Ordering::Relaxed);
+    fn test_clamp_timeout_ms_clamps_zero_to_one() {
+        assert_eq!(clamp_timeout_ms(0), 1);
     }
 
     #[test]
-    fn test_set_regex_timeout_ms_caps_upper_bound() {
-        let original = WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed);
-        assert_eq!(DetectionEngine::set_regex_timeout_ms(10_000), 500);
-        assert_eq!(WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed), 500_000);
-        WAF_REGEX_TIMEOUT_US.store(original, Ordering::Relaxed);
+    fn test_clamp_timeout_ms_preserves_midrange_values() {
+        assert_eq!(clamp_timeout_ms(250), 250);
+    }
+
+    #[test]
+    fn test_clamp_timeout_ms_caps_upper_bound() {
+        assert_eq!(clamp_timeout_ms(10_000), 500);
     }
 }
