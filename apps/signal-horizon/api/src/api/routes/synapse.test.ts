@@ -448,4 +448,153 @@ describe('Synapse RBAC', () => {
       kernelConfigPayload.config
     );
   });
+
+  // ==========================================================================
+  // Fleet campaign routes (ADR-0002, rollup-backed)
+  // ==========================================================================
+
+  describe('Fleet campaign routes', () => {
+    const baseRow = {
+      id: 'camp-1',
+      tenantId: 'tenant-1',
+      name: 'Fleet Campaign abcd1234',
+      description: 'Cross-tenant attack detected affecting 3 tenants',
+      status: 'ACTIVE' as const,
+      severity: 'HIGH' as const,
+      confidence: 0.82,
+      isCrossTenant: true,
+      tenantsAffected: 3,
+      firstSeenAt: new Date('2026-04-17T10:00:00Z'),
+      lastActivityAt: new Date('2026-04-17T21:00:00Z'),
+      correlationSignals: {
+        fingerprintMatch: 0.9,
+        timingMatch: 0.7,
+        tenantCount: 3,
+        currentStage: 'credential_stuffing',
+      },
+      metadata: { anonFingerprint: 'abcd1234' },
+      _count: { threatLinks: 5 },
+    };
+
+    const buildPrisma = () => ({
+      campaign: {
+        findMany: vi.fn().mockResolvedValue([baseRow]),
+        findFirst: vi.fn().mockResolvedValue({
+          ...baseRow,
+          threatLinks: [
+            {
+              role: 'primary_actor',
+              threat: {
+                id: 'threat-1',
+                threatType: 'IP',
+                indicator: '203.0.113.7',
+                riskScore: 87,
+                hitCount: 42,
+                lastSeenAt: new Date('2026-04-17T20:55:00Z'),
+              },
+            },
+          ],
+        }),
+      },
+    });
+
+    it('GET /synapse/campaigns reads from Campaign table, maps status + severity', async () => {
+      const fakePrisma = buildPrisma();
+      const fleetApp = buildApp(['fleet:read'], {
+        prisma: fakePrisma as unknown as Parameters<typeof buildApp>[1] extends infer T
+          ? T extends { prisma?: infer P } ? P : never : never,
+      });
+
+      const res = await request(fleetApp).get('/synapse/campaigns').expect(200);
+
+      expect(res.body.campaigns).toHaveLength(1);
+      expect(res.body.campaigns[0]).toMatchObject({
+        campaignId: 'camp-1',
+        status: 'ACTIVE',
+        severity: 'HIGH',
+        confidence: 0.82,
+        actorCount: 5,
+        summary: 'Cross-tenant attack detected affecting 3 tenants',
+      });
+      expect(fakePrisma.campaign.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: 'tenant-1' }),
+        })
+      );
+    });
+
+    it('GET /synapse/campaigns?status=DETECTED translates to DB MONITORING', async () => {
+      const fakePrisma = buildPrisma();
+      const fleetApp = buildApp(['fleet:read'], {
+        prisma: fakePrisma as never,
+      });
+
+      await request(fleetApp).get('/synapse/campaigns?status=DETECTED').expect(200);
+
+      expect(fakePrisma.campaign.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 'tenant-1',
+            status: 'MONITORING',
+          }),
+        })
+      );
+    });
+
+    it('GET /synapse/campaigns/:id/actors projects Threats as actors', async () => {
+      const fakePrisma = buildPrisma();
+      const fleetApp = buildApp(['fleet:read'], { prisma: fakePrisma as never });
+
+      const res = await request(fleetApp)
+        .get('/synapse/campaigns/camp-1/actors')
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        campaignId: 'camp-1',
+        actors: [
+          expect.objectContaining({
+            actorId: '203.0.113.7',
+            riskScore: 87,
+            ips: ['203.0.113.7'],
+          }),
+        ],
+      });
+    });
+
+    it('GET /synapse/campaigns/:id/graph builds a 2-hop graph', async () => {
+      const fakePrisma = buildPrisma();
+      const fleetApp = buildApp(['fleet:read'], { prisma: fakePrisma as never });
+
+      const res = await request(fleetApp)
+        .get('/synapse/campaigns/camp-1/graph')
+        .expect(200);
+
+      expect(res.body.data.nodes).toHaveLength(2); // campaign + 1 threat
+      expect(res.body.data.nodes[0]).toMatchObject({ id: 'camp-1', type: 'campaign' });
+      expect(res.body.data.edges).toEqual([
+        expect.objectContaining({
+          source: 'camp-1',
+          target: 'threat-1',
+          type: 'primary_actor',
+        }),
+      ]);
+    });
+
+    it('returns 404 when campaign not found for tenant', async () => {
+      const fakePrisma = {
+        campaign: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
+      };
+      const fleetApp = buildApp(['fleet:read'], { prisma: fakePrisma as never });
+
+      await request(fleetApp).get('/synapse/campaigns/missing').expect(404);
+    });
+
+    it('returns 503 when prisma is not wired', async () => {
+      const fleetApp = buildApp(['fleet:read']);
+
+      await request(fleetApp).get('/synapse/campaigns').expect(503);
+    });
+  });
 });

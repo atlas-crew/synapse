@@ -756,6 +756,92 @@ export function createSynapseRoutes(
     return `${title} Campaign`;
   }
 
+  // DB CampaignStatus (ACTIVE | MONITORING | RESOLVED | FALSE_POSITIVE) is
+  // broader than the SOC UI's (ACTIVE | DETECTED | DORMANT | RESOLVED); map
+  // MONITORING -> DETECTED and FALSE_POSITIVE -> DORMANT so existing UI types
+  // don't need to change.
+  function mapDbCampaignStatus(
+    status: string
+  ): 'ACTIVE' | 'DETECTED' | 'DORMANT' | 'RESOLVED' {
+    switch (status) {
+      case 'ACTIVE':
+        return 'ACTIVE';
+      case 'MONITORING':
+        return 'DETECTED';
+      case 'RESOLVED':
+        return 'RESOLVED';
+      case 'FALSE_POSITIVE':
+        return 'DORMANT';
+      default:
+        return 'DETECTED';
+    }
+  }
+
+  // Reverse of mapDbCampaignStatus for status filter at the DB level.
+  function mapUiCampaignStatusToDb(
+    status: string
+  ): 'ACTIVE' | 'MONITORING' | 'RESOLVED' | 'FALSE_POSITIVE' | null {
+    switch (status.toUpperCase()) {
+      case 'ACTIVE':
+        return 'ACTIVE';
+      case 'DETECTED':
+        return 'MONITORING';
+      case 'RESOLVED':
+        return 'RESOLVED';
+      case 'DORMANT':
+        return 'FALSE_POSITIVE';
+      default:
+        return null;
+    }
+  }
+
+  function extractCampaignAttackTypes(
+    metadata: unknown,
+    correlationSignals: unknown
+  ): string[] {
+    const meta =
+      metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>) : null;
+    if (meta && Array.isArray(meta.attackTypes)) {
+      return meta.attackTypes.filter((t): t is string => typeof t === 'string');
+    }
+    const sig =
+      correlationSignals && typeof correlationSignals === 'object'
+        ? (correlationSignals as Record<string, unknown>)
+        : null;
+    if (sig && typeof sig.currentStage === 'string') return [sig.currentStage];
+    return [];
+  }
+
+  function campaignRowToSoc(row: {
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+    severity: string;
+    confidence: number;
+    firstSeenAt: Date;
+    lastActivityAt: Date;
+    correlationSignals: unknown;
+    metadata: unknown;
+    _count?: { threatLinks: number };
+  }) {
+    const attackTypes = extractCampaignAttackTypes(row.metadata, row.correlationSignals);
+    return {
+      campaignId: row.id,
+      name: row.name || formatCampaignName(row.id, attackTypes),
+      status: mapDbCampaignStatus(row.status),
+      severity: row.severity as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+      confidence: row.confidence,
+      actorCount: row._count?.threatLinks ?? 0,
+      firstSeen: row.firstSeenAt.getTime(),
+      lastSeen: row.lastActivityAt.getTime(),
+      summary:
+        row.description ??
+        (attackTypes.length ? `Attack types: ${attackTypes.join(', ')}` : null),
+      correlationTypes: attackTypes,
+    };
+  }
+
   // ==========================================================================
   // Status Endpoint
   // ==========================================================================
@@ -1349,6 +1435,229 @@ export function createSynapseRoutes(
         res.json(result);
       } catch (error) {
         await handleError(req, res, error, 'listSessions', sensorId);
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Fleet Campaign Endpoints (rollup-backed, ADR-0002)
+  // ==========================================================================
+  //
+  // Read from the tenant-scoped `Campaign` table, which the correlator service
+  // (services/correlator/index.ts) maintains with live cross-tenant correlation
+  // data (isCrossTenant, tenantsAffected, confidence, severity, lastActivityAt).
+  // The per-sensor `/synapse/:sensorId/campaigns*` routes below are retained as
+  // the sensor-detail drill-down surface.
+
+  /**
+   * GET /synapse/campaigns
+   * List campaigns across the tenant fleet.
+   */
+  router.get(
+    '/campaigns',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!prisma) {
+        res.status(503).json({ error: 'Campaign rollup unavailable' });
+        return;
+      }
+      const tenantId = req.auth!.tenantId;
+      const parsed = CampaignFilterSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid query parameters', details: parsed.error.issues });
+        return;
+      }
+
+      const dbStatus = parsed.data.status
+        ? mapUiCampaignStatusToDb(parsed.data.status)
+        : null;
+
+      try {
+        const rows = await prisma.campaign.findMany({
+          where: {
+            tenantId,
+            ...(dbStatus ? { status: dbStatus } : {}),
+          },
+          orderBy: { lastActivityAt: 'desc' },
+          take: parsed.data.limit,
+          skip: parsed.data.offset,
+          include: { _count: { select: { threatLinks: true } } },
+        });
+        res.json({ campaigns: rows.map(campaignRowToSoc) });
+      } catch (error) {
+        logger.error({ error, tenantId }, 'Fleet campaigns list failed');
+        sendProblem(
+          res,
+          500,
+          error instanceof Error ? error.message : 'Unknown error',
+          { title: 'Failed to list fleet campaigns' }
+        );
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/campaigns/:campaignId
+   */
+  router.get(
+    '/campaigns/:campaignId',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!prisma) {
+        res.status(503).json({ error: 'Campaign rollup unavailable' });
+        return;
+      }
+      const tenantId = req.auth!.tenantId;
+      const { campaignId } = req.params;
+
+      try {
+        const row = await prisma.campaign.findFirst({
+          where: { id: campaignId, tenantId },
+          include: { _count: { select: { threatLinks: true } } },
+        });
+        if (!row) {
+          res.status(404).json({ error: 'Campaign not found' });
+          return;
+        }
+
+        const sig =
+          row.correlationSignals && typeof row.correlationSignals === 'object'
+            ? (row.correlationSignals as Record<string, unknown>)
+            : null;
+        const signals = sig
+          ? Object.entries(sig)
+              .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
+              .map(([k, v]) => ({
+                type: k,
+                confidence:
+                  typeof v === 'number' ? normalizeConfidence(v) : 0,
+                reason: typeof v === 'string' ? v : null,
+              }))
+          : [];
+
+        res.json({ campaign: campaignRowToSoc(row), signals });
+      } catch (error) {
+        logger.error({ error, tenantId, campaignId }, 'Fleet campaign detail failed');
+        sendProblem(
+          res,
+          500,
+          error instanceof Error ? error.message : 'Unknown error',
+          { title: 'Failed to load campaign detail' }
+        );
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/campaigns/:campaignId/actors
+   * Actors on a campaign = threats linked to the campaign via CampaignThreat.
+   */
+  router.get(
+    '/campaigns/:campaignId/actors',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!prisma) {
+        res.status(503).json({ error: 'Campaign rollup unavailable' });
+        return;
+      }
+      const tenantId = req.auth!.tenantId;
+      const { campaignId } = req.params;
+
+      try {
+        const campaign = await prisma.campaign.findFirst({
+          where: { id: campaignId, tenantId },
+          include: {
+            threatLinks: { include: { threat: true } },
+          },
+        });
+        if (!campaign) {
+          res.status(404).json({ error: 'Campaign not found' });
+          return;
+        }
+
+        const actors = campaign.threatLinks.map((link) => ({
+          actorId: link.threat.indicator,
+          riskScore: link.threat.riskScore,
+          lastSeen: link.threat.lastSeenAt.getTime(),
+          ips: link.threat.threatType === 'IP' ? [link.threat.indicator] : [],
+        }));
+
+        res.json({ campaignId, actors });
+      } catch (error) {
+        logger.error({ error, tenantId, campaignId }, 'Fleet campaign actors failed');
+        sendProblem(
+          res,
+          500,
+          error instanceof Error ? error.message : 'Unknown error',
+          { title: 'Failed to load campaign actors' }
+        );
+      }
+    }
+  );
+
+  /**
+   * GET /synapse/campaigns/:campaignId/graph
+   * Build a simple 2-hop graph from the campaign and its linked threats.
+   */
+  router.get(
+    '/campaigns/:campaignId/graph',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      if (!prisma) {
+        res.status(503).json({ error: 'Campaign rollup unavailable' });
+        return;
+      }
+      const tenantId = req.auth!.tenantId;
+      const { campaignId } = req.params;
+
+      try {
+        const campaign = await prisma.campaign.findFirst({
+          where: { id: campaignId, tenantId },
+          include: { threatLinks: { include: { threat: true } } },
+        });
+        if (!campaign) {
+          res.status(404).json({ error: 'Campaign not found' });
+          return;
+        }
+
+        const nodes: Array<Record<string, unknown>> = [
+          {
+            id: campaign.id,
+            label: campaign.name,
+            type: 'campaign',
+            details: {
+              severity: campaign.severity,
+              confidence: campaign.confidence,
+              tenantsAffected: campaign.tenantsAffected,
+            },
+          },
+          ...campaign.threatLinks.map((link) => ({
+            id: link.threat.id,
+            label: link.threat.indicator,
+            type: link.threat.threatType === 'IP' ? 'ip' : 'actor',
+            details: {
+              riskScore: link.threat.riskScore,
+              hitCount: link.threat.hitCount,
+              threatType: link.threat.threatType,
+            },
+          })),
+        ];
+
+        const edges = campaign.threatLinks.map((link) => ({
+          source: campaign.id,
+          target: link.threat.id,
+          type: link.role ?? 'attributed',
+        }));
+
+        res.json({ data: { nodes, edges } });
+      } catch (error) {
+        logger.error({ error, tenantId, campaignId }, 'Fleet campaign graph failed');
+        sendProblem(
+          res,
+          500,
+          error instanceof Error ? error.message : 'Unknown error',
+          { title: 'Failed to build campaign graph' }
+        );
       }
     }
   );

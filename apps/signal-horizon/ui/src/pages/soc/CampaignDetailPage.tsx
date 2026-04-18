@@ -45,7 +45,6 @@ import {
 } from 'recharts';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { fetchCampaignActors, fetchCampaignDetail } from '../../hooks/soc/api';
-import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import { CampaignGraph } from '../../components/soc/CampaignGraph';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import type {
@@ -152,25 +151,24 @@ function buildDemoCampaignActors(id?: string): SocCampaignActorsResponse {
 export default function CampaignDetailPage() {
   useDocumentTitle('SOC - Campaign Detail');
   const { id } = useParams();
-  const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
 
   const { data: campaignResponse, isLoading } = useQuery({
-    queryKey: ['soc', 'campaign', sensorId, id, isDemoMode],
+    queryKey: ['soc', 'campaign', id, isDemoMode],
     queryFn: async () => {
       if (isDemoMode) return buildDemoCampaignDetail(id);
       if (!id) throw new Error('Missing campaign ID');
-      return fetchCampaignDetail(sensorId, id);
+      return fetchCampaignDetail(id);
     },
     enabled: !!id,
   });
 
   const { data: actorsResponse } = useQuery({
-    queryKey: ['soc', 'campaign-actors', sensorId, id, isDemoMode],
+    queryKey: ['soc', 'campaign-actors', id, isDemoMode],
     queryFn: async () => {
       if (isDemoMode) return buildDemoCampaignActors(id);
       if (!id) throw new Error('Missing campaign ID');
-      return fetchCampaignActors(sensorId, id);
+      return fetchCampaignActors(id);
     },
     enabled: !!id,
   });

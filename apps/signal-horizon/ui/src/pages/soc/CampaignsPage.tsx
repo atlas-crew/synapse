@@ -68,12 +68,12 @@ export default function CampaignsPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['soc', 'campaigns', sensorId, statusFilter, isDemoMode, scenario],
+    queryKey: ['soc', 'campaigns', statusFilter, isDemoMode, scenario],
     queryFn: async () => {
       if (isDemoMode) {
         return buildDemoCampaigns(scenario);
       }
-      return fetchCampaigns(sensorId, {
+      return fetchCampaigns({
         status: statusFilter === 'ALL' ? undefined : statusFilter,
         limit: 50,
       });

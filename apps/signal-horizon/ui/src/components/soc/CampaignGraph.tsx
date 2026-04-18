@@ -11,11 +11,10 @@ cytoscape.use(fcose);
 
 interface CampaignGraphProps {
   campaignId?: string;
-  sensorId?: string;
 }
 
-async function fetchGraphData(sensorId: string, campaignId: string) {
-  const result = await apiFetch<any>(`/synapse/${sensorId}/campaigns/${campaignId}/graph`, {
+async function fetchGraphData(campaignId: string) {
+  const result = await apiFetch<any>(`/synapse/campaigns/${campaignId}/graph`, {
     headers: { 'X-Admin-Key': API_KEY },
   });
   return result.data;
@@ -47,7 +46,7 @@ const colors = {
   },
 };
 
-export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
+export function CampaignGraph({ campaignId }: CampaignGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const [hoveredNode, setHoveredNode] = useState<NodeDetails | null>(null);
@@ -73,8 +72,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
           // Try to get graph for specific campaign, or default to camp-001
           graphData = demoData.fleet.campaignGraphs[campaignId] || demoData.fleet.campaignGraphs['camp-001'];
         } else {
-          const targetSensorId = sensorId || 'synapse-waf-1';
-          graphData = await fetchGraphData(targetSensorId, campaignId);
+          graphData = await fetchGraphData(campaignId);
         }
 
         if (!containerRef.current || !graphData) return;
@@ -276,7 +274,7 @@ export function CampaignGraph({ campaignId, sensorId }: CampaignGraphProps) {
         cyRef.current = null;
       }
     };
-  }, [campaignId, sensorId, handleNodeHover]);
+  }, [campaignId, handleNodeHover]);
 
   useEffect(() => {
     if (!containerRef.current || !cyRef.current) return;

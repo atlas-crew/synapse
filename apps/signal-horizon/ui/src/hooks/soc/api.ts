@@ -75,19 +75,19 @@ export async function fetchSessionDetail(sensorId: string, sessionId: string) {
   return apiFetch<SocSessionDetailResponse>(`/synapse/${sensorId}/sessions/${sessionId}`);
 }
 
-export async function fetchCampaigns(sensorId: string, params: CampaignQueryParams = {}) {
+export async function fetchCampaigns(params: CampaignQueryParams = {}) {
   const query = buildQuery({
     status: params.status,
     limit: params.limit,
     offset: params.offset,
   });
-  return apiFetch<SocCampaignListResponse>(`/synapse/${sensorId}/campaigns${query}`);
+  return apiFetch<SocCampaignListResponse>(`/synapse/campaigns${query}`);
 }
 
-export async function fetchCampaignDetail(sensorId: string, campaignId: string) {
-  return apiFetch<SocCampaignDetailResponse>(`/synapse/${sensorId}/campaigns/${campaignId}`);
+export async function fetchCampaignDetail(campaignId: string) {
+  return apiFetch<SocCampaignDetailResponse>(`/synapse/campaigns/${campaignId}`);
 }
 
-export async function fetchCampaignActors(sensorId: string, campaignId: string) {
-  return apiFetch<SocCampaignActorsResponse>(`/synapse/${sensorId}/campaigns/${campaignId}/actors`);
+export async function fetchCampaignActors(campaignId: string) {
+  return apiFetch<SocCampaignActorsResponse>(`/synapse/campaigns/${campaignId}/actors`);
 }
