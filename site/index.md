@@ -27,10 +27,10 @@ features:
   - icon:
       dark: /images/brand/horizon-icon-dark.svg
       light: /images/brand/horizon-icon-dark.svg
-    title: Horizon — Edge Fleet Command
-    details: Centralized intelligence for distributed Synapse sensors. Cross-tenant campaign correlation, real-time threat map, Sigma rules, CyberChef, and fleet-wide rule distribution.
-    link: /architecture/horizon
-    linkText: Horizon architecture
+    title: Synapse Fleet — Edge Fleet Command
+    details: Centralized intelligence for distributed Synapse sensors. Cross-tenant campaign correlation, real-time threat map, Sigma rules, CyberChef, and fleet-wide rule distribution. Formerly Signal Horizon.
+    link: /architecture/synapse-fleet
+    linkText: Synapse Fleet architecture
   - title: Signal Pipeline
     details: WebSocket telemetry from every sensor to the hub. Dual-write PostgreSQL + ClickHouse, live broadcaster to SOC dashboards, sub-100ms sync. Resilient ingest with no single point of failure.
     link: /architecture/data-flow
@@ -45,12 +45,12 @@ features:
   <a class="card" href="/getting-started/quickstart">
     <div class="card-label" style="color: #10B981;">Quickstart</div>
     <div class="card-title">Up and Running in 5 Minutes</div>
-    <div class="card-desc">The fastest path to a working Synapse + Horizon stack. Docker Compose demo, sample rules, and a local threat feed to poke at.</div>
+    <div class="card-desc">The fastest path to a working Synapse + Synapse Fleet stack. Docker Compose demo, sample rules, and a local threat feed to poke at.</div>
   </a>
   <a class="card" href="/getting-started/installation">
     <div class="card-label" style="color: #10B981;">Installation</div>
     <div class="card-title">Full Install Walkthrough</div>
-    <div class="card-desc">Step-by-step installation of Horizon and one or more Synapse sensors. Covers Linux packages, Docker images, and source builds.</div>
+    <div class="card-desc">Step-by-step installation of Synapse Fleet and one or more Synapse sensors. Covers Linux packages, Docker images, and source builds.</div>
   </a>
   <a class="card" href="/getting-started/requirements">
     <div class="card-label" style="color: #10B981;">Requirements</div>
@@ -67,23 +67,23 @@ features:
     <div class="card-title">Synapse Features</div>
     <div class="card-desc">Every detector, rule family, and behavioral signal Synapse evaluates — SQLi through session hijacking, with latency budgets and config knobs.</div>
   </a>
-  <a class="card" href="/reference/horizon-features">
+  <a class="card" href="/reference/synapse-fleet-features">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Fleet Ops</div>
-    <div class="card-title">Horizon Features</div>
+    <div class="card-title">Synapse Fleet Features</div>
     <div class="card-desc">SOC tooling, fleet management, hunt queries, war-room workflows, and all the intelligence that coordinates a multi-sensor deployment.</div>
   </a>
   <a class="card" href="/configuration/">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Config</div>
     <div class="card-title">Configuration Schema</div>
-    <div class="card-desc">~240μs atomic config swap with zero dropped requests. Rule hot-reload, feature toggles, and fleet-wide config distribution from Horizon.</div>
+    <div class="card-desc">~240μs atomic config swap with zero dropped requests. Rule hot-reload, feature toggles, and fleet-wide config distribution from Synapse Fleet.</div>
   </a>
   <a class="card" href="/reference/synapse-api">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Synapse API</div>
     <div class="card-title">Sensor Admin API</div>
-    <div class="card-desc">Per-sensor admin endpoints — rule push, config reload, diagnostics, metrics, health, and the command tunnel protocol used by Horizon.</div>
+    <div class="card-desc">Per-sensor admin endpoints — rule push, config reload, diagnostics, metrics, health, and the command tunnel protocol used by Synapse Fleet.</div>
   </a>
-  <a class="card" href="/reference/horizon-api">
-    <div class="card-label" style="color: var(--vp-c-brand-1);">Horizon API</div>
+  <a class="card" href="/reference/synapse-fleet-api">
+    <div class="card-label" style="color: var(--vp-c-brand-1);">Synapse Fleet API</div>
     <div class="card-title">Hub REST &amp; WebSocket</div>
     <div class="card-desc">80+ REST endpoints plus WebSocket streams. Signals, campaigns, fleet state, drills, and remote shell tunnels — all with per-tenant rate limiting.</div>
   </a>
@@ -105,12 +105,12 @@ features:
   <a class="card" href="/deployment/kubernetes">
     <div class="card-label" style="color: var(--vp-c-brand-1);">Fleet Mode</div>
     <div class="card-title">Kubernetes &amp; Docker</div>
-    <div class="card-desc">Helm charts, Docker images, and Terraform modules for running Synapse fleets with a self-hosted Horizon control plane.</div>
+    <div class="card-desc">Helm charts, Docker images, and Terraform modules for running Synapse fleets with a self-hosted Synapse Fleet control plane.</div>
   </a>
   <a class="card" href="/deployment/production">
     <div class="card-label" style="color: var(--vp-c-green-1, #10B981);">Production</div>
     <div class="card-title">Production Checklist</div>
-    <div class="card-desc">TLS termination, secrets management, observability hooks, capacity planning, and hardening defaults for every Synapse + Horizon deployment.</div>
+    <div class="card-desc">TLS termination, secrets management, observability hooks, capacity planning, and hardening defaults for every Synapse + Synapse Fleet deployment.</div>
   </a>
 </div>
 
@@ -145,7 +145,7 @@ features:
   <a class="card infographic" href="/infographics/full-architecture.html" target="_blank">
     <div class="card-label" style="color: #F97316;">Platform</div>
     <div class="card-title">Full Architecture</div>
-    <div class="card-desc">End-to-end view of the Horizon + Synapse platform — clients, edge sensors, control plane, storage, and consumers — with timing, resilience model, and component responsibilities.</div>
+    <div class="card-desc">End-to-end view of the Synapse Fleet + Synapse platform — clients, edge sensors, control plane, storage, and consumers — with timing, resilience model, and component responsibilities.</div>
   </a>
   <a class="card infographic" href="/infographics/request-processing-lifecycle.html" target="_blank">
     <div class="card-label" style="color: #1E90FF;">Pipeline</div>

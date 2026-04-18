@@ -34,7 +34,7 @@ packages/
   synapse-api/  → Reusable Synapse API client library (TypeScript)
 ```
 
-**Signal Horizon** is the fleet intelligence control plane — it aggregates telemetry from edge sensors, correlates attack campaigns, and drives collective defense decisions across a fleet of Synapse nodes.
+**Synapse Fleet** (formerly Signal Horizon) is the fleet intelligence control plane — it aggregates telemetry from edge sensors, correlates attack campaigns, and drives collective defense decisions across a fleet of Synapse nodes.
 
 **Synapse WAF** is a high-performance WAF and edge proxy built on Cloudflare's Pingora framework. It handles request inspection, entity tracking, risk scoring, DLP scanning, behavioral blocking, and campaign correlation at the edge.
 
@@ -55,7 +55,7 @@ docker run -d -p 6190:6190 -p 6191:6191 \
 ### npm
 
 ```bash
-npm install -g @atlascrew/horizon        # Horizon server
+npm install -g @atlascrew/synapse-fleet  # Synapse Fleet server (formerly @atlascrew/horizon)
 npm install -g @atlascrew/synapse-waf    # Synapse WAF
 npm install -g @atlascrew/synapse-client # Synapse CLI
 
@@ -198,13 +198,15 @@ just db-studio    # Open Prisma Studio
 
 | Package | Source | Registry |
 |---------|--------|----------|
-| nickcrew/horizon | `apps/signal-horizon/` | [Docker Hub](https://hub.docker.com/r/nickcrew/horizon) |
+| nickcrew/synapse-fleet | `apps/signal-horizon/` | [Docker Hub](https://hub.docker.com/r/nickcrew/synapse-fleet) |
 | nickcrew/synapse-waf | `apps/synapse-waf/` | [Docker Hub](https://hub.docker.com/r/nickcrew/synapse-waf) |
-| @atlascrew/horizon | `apps/signal-horizon/` | [npm](https://www.npmjs.com/package/@atlascrew/horizon) |
+| @atlascrew/synapse-fleet | `apps/signal-horizon/` | [npm](https://www.npmjs.com/package/@atlascrew/synapse-fleet) |
 | @atlascrew/synapse-waf | `apps/synapse-waf/` | [npm](https://www.npmjs.com/package/@atlascrew/synapse-waf) |
 | @atlascrew/synapse-api | `packages/synapse-api/` | [npm](https://www.npmjs.com/package/@atlascrew/synapse-api) |
 | @atlascrew/synapse-client | `apps/synapse-client/` | [npm](https://www.npmjs.com/package/@atlascrew/synapse-client) |
 | synapse-waf | `apps/synapse-waf/` | [crates.io](https://crates.io/crates/synapse-waf) |
+
+> **Note:** Synapse Fleet was previously published as `@atlascrew/horizon` / `nickcrew/horizon`. The old names are deprecated and will not receive new builds. The repo directory at `apps/signal-horizon/` is intentionally unchanged — see [ADR-0003](apps/signal-horizon/docs/architecture/adr-0003-synapse-fleet-rename.md).
 
 ## Workspace Tooling
 
@@ -219,7 +221,7 @@ Synapse WAF also has its own `justfile` at `apps/synapse-waf/justfile` with demo
 
 | Component | License |
 |-----------|---------|
-| Signal Horizon (API, UI) | [AGPL-3.0-only](LICENSE) |
+| Synapse Fleet (API, UI) | [AGPL-3.0-only](LICENSE) |
 | Synapse WAF | [AGPL-3.0-only](LICENSE) |
 | @atlascrew/synapse-api | [MIT](packages/synapse-api/package.json) |
 | @atlascrew/synapse-client | [MIT](apps/synapse-client/package.json) |

@@ -3,9 +3,9 @@ import { withMermaid } from 'vitepress-plugin-mermaid';
 
 export default withMermaid(
   defineConfig({
-    title: 'Horizon',
+    title: 'Synapse Fleet',
     description:
-      'Administration, deployment, and development documentation for the Horizon edge protection platform.',
+      'Administration, deployment, and development documentation for Synapse Fleet (formerly Signal Horizon) — the fleet intelligence platform for Synapse edge sensors.',
     base: '/',
     appearance: 'dark',
     head: [
@@ -36,7 +36,7 @@ export default withMermaid(
 
     themeConfig: {
       logo: '/images/brand/horizon-icon-dark.svg',
-      siteTitle: 'Horizon',
+      siteTitle: 'Synapse Fleet',
 
       nav: [
         { text: 'Getting Started', link: '/getting-started/' },
@@ -46,9 +46,9 @@ export default withMermaid(
           text: 'Reference',
           items: [
             { text: 'Configuration', link: '/configuration/' },
-            { text: 'Horizon Features', link: '/reference/horizon-features' },
+            { text: 'Synapse Fleet Features', link: '/reference/synapse-fleet-features' },
             { text: 'Synapse Features', link: '/reference/synapse-features' },
-            { text: 'Horizon API', link: '/reference/horizon-api' },
+            { text: 'Synapse Fleet API', link: '/reference/synapse-fleet-api' },
             { text: 'Synapse API', link: '/reference/synapse-api' },
             { text: 'Synapse CLI', link: '/reference/synapse-cli' },
           ],
@@ -84,7 +84,7 @@ export default withMermaid(
             text: 'Deployment',
             items: [
               { text: 'Overview', link: '/deployment/' },
-              { text: 'Deploy Horizon', link: '/deployment/horizon' },
+              { text: 'Deploy Synapse Fleet', link: '/deployment/synapse-fleet' },
               {
                 text: 'Deploy Synapse Standalone',
                 link: '/deployment/synapse-standalone',
@@ -118,7 +118,7 @@ export default withMermaid(
             text: 'Architecture',
             items: [
               { text: 'Overview', link: '/architecture/' },
-              { text: 'Horizon Hub', link: '/architecture/horizon' },
+              { text: 'Synapse Fleet Hub', link: '/architecture/synapse-fleet' },
               { text: 'Synapse WAF Engine', link: '/architecture/synapse' },
               { text: 'Data Flow & Telemetry', link: '/architecture/data-flow' },
             ],
@@ -129,7 +129,7 @@ export default withMermaid(
             text: 'Configuration',
             items: [
               { text: 'Overview', link: '/configuration/' },
-              { text: 'Horizon', link: '/configuration/horizon' },
+              { text: 'Synapse Fleet', link: '/configuration/synapse-fleet' },
               { text: 'Synapse', link: '/configuration/synapse' },
               {
                 text: 'Feature Toggles',
@@ -142,14 +142,14 @@ export default withMermaid(
           {
             text: 'Feature Reference',
             items: [
-              { text: 'Horizon Features', link: '/reference/horizon-features' },
+              { text: 'Synapse Fleet Features', link: '/reference/synapse-fleet-features' },
               { text: 'Synapse Features', link: '/reference/synapse-features' },
             ],
           },
           {
             text: 'API Reference',
             items: [
-              { text: 'Horizon REST & WebSocket', link: '/reference/horizon-api' },
+              { text: 'Synapse Fleet REST & WebSocket', link: '/reference/synapse-fleet-api' },
               { text: 'Synapse Admin API', link: '/reference/synapse-api' },
               { text: 'Synapse CLI', link: '/reference/synapse-cli' },
             ],

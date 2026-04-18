@@ -16,7 +16,7 @@ For the detailed simulator internals, see
 
 ```
                            ┌───────────────────┐
-                           │   Horizon UI      │
+                           │ Synapse Fleet UI  │
                            │   Vite / React    │
                            │   :5180           │
                            └─────────┬─────────┘
@@ -24,7 +24,7 @@ For the detailed simulator internals, see
                                      │ REST /api/v1/…
                                      ▼
   ┌─────────────┐  SSE    ┌─────────────────────┐   Prisma   ┌──────────┐
-  │  Apparatus  │────────▶│   Horizon API       │───────────▶│ Postgres │
+  │  Apparatus  │────────▶│  Synapse Fleet API  │───────────▶│ Postgres │
   │ :8090/:8443 │  /sse   │   Node / tsx        │            │  :5432   │
   │ + protocols │         │   :3100             │            └──────────┘
   └─────┬───────┘         │                     │
@@ -50,8 +50,8 @@ For the detailed simulator internals, see
 
 | Service | Location | Port(s) | Language | Status | Role |
 |---|---|---|---|---|---|
-| **Horizon API** | `apps/signal-horizon/api` | 3100 | TypeScript / tsx-watch | ✅ production | REST + WebSocket gateways, Prisma ingestion, aggregator pipeline, Apparatus SSE bridge, synapse-direct poller |
-| **Horizon UI** | `apps/signal-horizon/ui` | 5180 | React / Vite | ✅ production | Dashboard frontend; consumes `/api/v1/...` and `/ws/dashboard` |
+| **Synapse Fleet API** (formerly Horizon API) | `apps/signal-horizon/api` | 3100 | TypeScript / tsx-watch | ✅ production | REST + WebSocket gateways, Prisma ingestion, aggregator pipeline, Apparatus SSE bridge, synapse-direct poller |
+| **Synapse Fleet UI** (formerly Horizon UI) | `apps/signal-horizon/ui` | 5180 | React / Vite | ✅ production | Dashboard frontend; consumes `/api/v1/...` and `/ws/dashboard` |
 | **Synapse WAF** | `apps/synapse-pingora` | 6190 proxy / 6191 admin | Rust / Pingora | ✅ production | Real WAF engine (248 rules, DLP, correlation, fingerprinting). `--demo` launches the in-process simulator; `--config config.horizon.yaml` wires the HorizonManager push client |
 | Synapse WAF #2 | `apps/synapse-pingora` | 6290 / 6291 | Rust | demo-only | `config.horizon.2.yaml`; same binary, different sensor identity |
 | Synapse WAF #3 | `apps/synapse-pingora` | 6390 / 6391 | Rust | demo-only | `config.horizon.3.yaml`; same binary, different sensor identity |

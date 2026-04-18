@@ -1,12 +1,14 @@
-# Signal Horizon
+# Synapse Fleet
 
 Multi-tenant fleet intelligence hub and management control plane for distributed Synapse WAF sensors. Centralized threat correlation, impossible travel detection, historical hunting, and collaborative incident response.
+
+> **Renamed from Signal Horizon.** This image was previously published as `nickcrew/horizon`. The old image is deprecated and no longer receives updates. See the migration note at the bottom of this page.
 
 Part of the [Edge Protection](https://github.com/inferno-lab/edge-protection) platform alongside [Synapse WAF](https://hub.docker.com/r/nickcrew/synapse-waf).
 
 ## Quick Start
 
-Horizon requires PostgreSQL as its source of truth:
+Synapse Fleet requires PostgreSQL as its source of truth:
 
 ```bash
 # Start PostgreSQL
@@ -17,10 +19,10 @@ docker run -d --name postgres \
   -p 5432:5432 \
   postgres:15-alpine
 
-# Start Horizon
+# Start Synapse Fleet
 docker run -p 3100:3100 \
   -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/signal_horizon \
-  nickcrew/horizon
+  nickcrew/synapse-fleet
 ```
 
 - API: [localhost:3100](http://localhost:3100)
@@ -95,13 +97,13 @@ docker run -p 3100:3100 \
 
 ## Using with Synapse WAF
 
-[Synapse WAF](https://hub.docker.com/r/nickcrew/synapse-waf) sensors connect to Horizon via WebSocket to stream detection signals and receive blocklist updates. Configure Synapse's telemetry section to point at Horizon:
+[Synapse WAF](https://hub.docker.com/r/nickcrew/synapse-waf) sensors connect to Synapse Fleet via WebSocket to stream detection signals and receive blocklist updates. Configure Synapse's telemetry section to point at the fleet hub:
 
 ```yaml
 # In Synapse config.yaml
 telemetry:
   enabled: true
-  endpoint: "http://horizon:3100/telemetry"
+  endpoint: "http://synapse-fleet:3100/telemetry"
   api_key: "your-api-key"
   batch_size: 100
   flush_interval: 10s
@@ -109,12 +111,12 @@ telemetry:
 
 ## Full Platform (Compose)
 
-Run Horizon with Synapse WAF, PostgreSQL, and optional ClickHouse:
+Run Synapse Fleet with Synapse WAF, PostgreSQL, and optional ClickHouse:
 
 ```yaml
 services:
-  horizon:
-    image: nickcrew/horizon:latest
+  synapse-fleet:
+    image: nickcrew/synapse-fleet:latest
     ports:
       - "3100:3100"
     environment:
@@ -183,19 +185,31 @@ docker compose up -d
 
 | Service | URL |
 |---------|-----|
-| Horizon API | [localhost:3100](http://localhost:3100) |
+| Synapse Fleet API | [localhost:3100](http://localhost:3100) |
 | Synapse Proxy | [localhost:6190](http://localhost:6190) |
 | Synapse Admin | [localhost:6191](http://localhost:6191) |
 
 ## Also available on npm
 
 ```bash
-npm install -g @atlascrew/horizon
-horizon start
+npm install -g @atlascrew/synapse-fleet
+synapse-fleet start
 ```
+
+## Migrating from `nickcrew/horizon`
+
+Signal Horizon has been renamed to **Synapse Fleet**. The Docker image `nickcrew/horizon` is deprecated and will not receive new builds. Existing tags remain pullable, but new releases (bug fixes, features, security patches) are only published under `nickcrew/synapse-fleet`.
+
+To migrate:
+
+- Replace `nickcrew/horizon` with `nickcrew/synapse-fleet` in compose files, Kubernetes manifests, and pull commands.
+- Environment variables (`HORIZON_*`, `DATABASE_URL`, etc.) and the on-wire protocol are unchanged — no data migration required.
+- The internal behaviour, API, and storage layout are identical. This is a pure name change.
+
+See [ADR-0003](https://github.com/atlas-crew/edge-protection/blob/main/apps/signal-horizon/docs/architecture/adr-0003-synapse-fleet-rename.md) for the full rename scope.
 
 ## Links
 
 - [Documentation](https://edge.atlascrew.dev)
 - [GitHub](https://github.com/inferno-lab/edge-protection)
-- [npm](https://www.npmjs.com/package/@atlascrew/horizon)
+- [npm](https://www.npmjs.com/package/@atlascrew/synapse-fleet)
