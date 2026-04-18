@@ -395,8 +395,12 @@ static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> =
     Lazy::new(|| RwLock::new(VecDeque::with_capacity(60)));
 
 static ADMIN_CONSOLE_TEMPLATE: &str = include_str!("../assets/admin_console.html");
+static ADMIN_CONSOLE_NEXT_TEMPLATE: &str = include_str!("../assets/console-next/index.html");
+static ADMIN_CONSOLE_NEXT_APP_JS: &str = include_str!("../assets/console-next/assets/app.js");
+static ADMIN_CONSOLE_NEXT_APP_CSS: &str = include_str!("../assets/console-next/assets/app.css");
 static SIDEBAR_LOCKUP_SVG: &str = include_str!("../assets/sidebar-lockup.svg");
 const ADMIN_CONSOLE_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self'";
+const ADMIN_CONSOLE_NEXT_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'";
 
 /// Dev mode flag - when true, serves admin console from disk instead of embedded
 static DEV_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -1669,6 +1673,15 @@ pub async fn start_admin_server(
     // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
+        .route("/console-next", get(admin_console_next_handler))
+        .route(
+            "/console-next/assets/sidebar-lockup.svg",
+            get(sidebar_lockup_handler),
+        )
+        .route(
+            "/console-next/assets/*path",
+            get(admin_console_next_asset_handler),
+        )
         .route(
             "/console/assets/sidebar-lockup.svg",
             get(sidebar_lockup_handler),
@@ -1914,6 +1927,94 @@ async fn admin_console_handler() -> impl IntoResponse {
         ],
         Html(content),
     )
+}
+
+fn console_next_asset_from_path(path: &str) -> Option<(&'static str, &'static str)> {
+    match path {
+        "app.js" => Some((ADMIN_CONSOLE_NEXT_APP_JS, "text/javascript; charset=utf-8")),
+        "app.css" => Some((ADMIN_CONSOLE_NEXT_APP_CSS, "text/css; charset=utf-8")),
+        _ => None,
+    }
+}
+
+
+
+/// GET /console-next - React-based admin console bootstrap.
+async fn admin_console_next_handler() -> impl IntoResponse {
+    let body = if is_dev_mode() {
+        match std::fs::read_to_string("assets/console-next/index.html") {
+            Ok(content) => Body::from(content),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read next admin console from disk: {}, falling back to embedded",
+                    e
+                );
+                Body::from(ADMIN_CONSOLE_NEXT_TEMPLATE)
+            }
+        }
+    } else {
+        Body::from(ADMIN_CONSOLE_NEXT_TEMPLATE)
+    };
+
+    let mut response = Response::new(body);
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(ADMIN_CONSOLE_NEXT_CSP),
+    );
+    response.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response
+}
+
+/// GET /console-next/assets/*path - Static bundle files for the React-based
+/// admin console bootstrap.
+async fn admin_console_next_asset_handler(Path(path): Path<String>) -> impl IntoResponse {
+    let normalized = path.trim_start_matches('/');
+
+    let Some((embedded, content_type)) = console_next_asset_from_path(normalized) else {
+        return build_response(
+            StatusCode::NOT_FOUND,
+            "console-next asset not found".to_string(),
+            "text/plain; charset=utf-8",
+            None,
+        );
+    };
+
+    let body = if is_dev_mode() {
+        let disk_path = format!("assets/console-next/assets/{}", normalized);
+        match std::fs::read_to_string(&disk_path) {
+            Ok(content) => Body::from(content),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read next admin console asset from disk ({}): {}, falling back to embedded",
+                    disk_path,
+                    e
+                );
+                Body::from(embedded)
+            }
+        }
+    } else {
+        Body::from(embedded)
+    };
+
+    let mut response = Response::new(body);
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(content_type),
+    );
+    response.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response
 }
 
 /// GET /console/assets/sidebar-lockup.svg - Synapse brand mark for the
@@ -9028,6 +9129,15 @@ mod tests {
         // Console route with require_admin_read middleware
         let admin_read_routes = Router::new()
             .route("/console", get(admin_console_handler))
+            .route("/console-next", get(admin_console_next_handler))
+            .route(
+                "/console-next/assets/sidebar-lockup.svg",
+                get(sidebar_lockup_handler),
+            )
+            .route(
+                "/console-next/assets/*path",
+                get(admin_console_next_asset_handler),
+            )
             .route(
                 "/console/assets/sidebar-lockup.svg",
                 get(sidebar_lockup_handler),
@@ -9096,6 +9206,161 @@ mod tests {
             response.status(),
             StatusCode::OK,
             "/console should return 200 with valid key and admin:read scope"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_with_admin_read_scope() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "/console-next should return 200 with valid key and admin:read scope"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_requires_auth() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "/console-next should return 401 without authentication"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_assets_with_admin_read_scope() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next/assets/app.js")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "/console-next asset route should return 200 with valid key and admin:read scope"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_assets_require_auth() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next/assets/app.js")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "/console-next asset route should return 401 without authentication"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_assets_without_scope() {
+        let app = create_test_app_with_console(vec![scopes::SENSOR_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next/assets/app.js")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "/console-next asset route should return 403 without admin:read scope"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_assets_missing_file() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next/assets/does-not-exist.js")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "/console-next asset route should return 404 for missing files"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_csp_header() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.headers().get(header::CONTENT_SECURITY_POLICY).unwrap(),
+            ADMIN_CONSOLE_NEXT_CSP
+        );
+        assert_eq!(
+            response.headers().get(header::X_CONTENT_TYPE_OPTIONS).unwrap(),
+            "nosniff"
         );
     }
 
