@@ -17,8 +17,69 @@ use super::types::{
 };
 use crate::geo::{GeoLocation, ImpossibleTravelDetector, LoginEvent, TravelConfig};
 
+/// Stable reason tags passed to external risk callbacks.
+///
+/// The current tags intentionally preserve the existing callback strings so
+/// EntityManager logs and downstream consumers do not see a silent format
+/// change while we remove the stringly-typed callback API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrendsReason {
+    Anomaly(AnomalyType),
+}
+
+impl TrendsReason {
+    pub const fn as_tag(self) -> &'static str {
+        match self {
+            TrendsReason::Anomaly(AnomalyType::FingerprintChange) => {
+                "trends_anomaly:Anomaly: fingerprint_change"
+            }
+            TrendsReason::Anomaly(AnomalyType::SessionSharing) => {
+                "trends_anomaly:Anomaly: session_sharing"
+            }
+            TrendsReason::Anomaly(AnomalyType::VelocitySpike) => {
+                "trends_anomaly:Anomaly: velocity_spike"
+            }
+            TrendsReason::Anomaly(AnomalyType::ImpossibleTravel) => {
+                "trends_anomaly:Anomaly: impossible_travel"
+            }
+            TrendsReason::Anomaly(AnomalyType::TokenReuse) => "trends_anomaly:Anomaly: token_reuse",
+            TrendsReason::Anomaly(AnomalyType::RotationPattern) => {
+                "trends_anomaly:Anomaly: rotation_pattern"
+            }
+            TrendsReason::Anomaly(AnomalyType::TimingAnomaly) => {
+                "trends_anomaly:Anomaly: timing_anomaly"
+            }
+            TrendsReason::Anomaly(AnomalyType::Ja4RotationPattern) => {
+                "trends_anomaly:Anomaly: ja4_rotation_pattern"
+            }
+            TrendsReason::Anomaly(AnomalyType::Ja4IpCluster) => {
+                "trends_anomaly:Anomaly: ja4_ip_cluster"
+            }
+            TrendsReason::Anomaly(AnomalyType::Ja4BrowserSpoofing) => {
+                "trends_anomaly:Anomaly: ja4_browser_spoofing"
+            }
+            TrendsReason::Anomaly(AnomalyType::Ja4hChange) => "trends_anomaly:Anomaly: ja4h_change",
+            TrendsReason::Anomaly(AnomalyType::OversizedRequest) => {
+                "trends_anomaly:Anomaly: oversized_request"
+            }
+            TrendsReason::Anomaly(AnomalyType::OversizedResponse) => {
+                "trends_anomaly:Anomaly: oversized_response"
+            }
+            TrendsReason::Anomaly(AnomalyType::BandwidthSpike) => {
+                "trends_anomaly:Anomaly: bandwidth_spike"
+            }
+            TrendsReason::Anomaly(AnomalyType::ExfiltrationPattern) => {
+                "trends_anomaly:Anomaly: exfiltration_pattern"
+            }
+            TrendsReason::Anomaly(AnomalyType::UploadPattern) => {
+                "trends_anomaly:Anomaly: upload_pattern"
+            }
+        }
+    }
+}
+
 /// Callback to apply risk: (entity_id, risk_score, reason)
-type RiskCallback = Box<dyn Fn(&str, u32, &str) + Send + Sync>;
+type RiskCallback = Box<dyn Fn(&str, u32, TrendsReason) + Send + Sync>;
 
 /// Dependencies for the trends manager.
 #[derive(Default)]
@@ -585,11 +646,7 @@ impl TrendsManager {
             if risk > 0 {
                 if let Some(ref apply_risk) = self.dependencies.apply_risk {
                     for entity_id in &anomaly.entities {
-                        apply_risk(
-                            entity_id,
-                            risk,
-                            &format!("Anomaly: {}", anomaly.anomaly_type),
-                        );
+                        apply_risk(entity_id, risk, TrendsReason::Anomaly(anomaly.anomaly_type));
                     }
                 }
             }
@@ -639,6 +696,90 @@ impl TrendsManager {
             signals.retain(|s| s.timestamp > cutoff);
             !signals.is_empty()
         });
+    }
+}
+
+#[cfg(test)]
+mod reason_tests {
+    use super::TrendsReason;
+    use crate::trends::AnomalyType;
+
+    #[test]
+    fn test_trends_reason_preserves_existing_risk_tag() {
+        let expected_tags = [
+            (
+                AnomalyType::FingerprintChange,
+                "trends_anomaly:Anomaly: fingerprint_change",
+            ),
+            (
+                AnomalyType::SessionSharing,
+                "trends_anomaly:Anomaly: session_sharing",
+            ),
+            (
+                AnomalyType::VelocitySpike,
+                "trends_anomaly:Anomaly: velocity_spike",
+            ),
+            (
+                AnomalyType::ImpossibleTravel,
+                "trends_anomaly:Anomaly: impossible_travel",
+            ),
+            (
+                AnomalyType::TokenReuse,
+                "trends_anomaly:Anomaly: token_reuse",
+            ),
+            (
+                AnomalyType::RotationPattern,
+                "trends_anomaly:Anomaly: rotation_pattern",
+            ),
+            (
+                AnomalyType::TimingAnomaly,
+                "trends_anomaly:Anomaly: timing_anomaly",
+            ),
+            (
+                AnomalyType::Ja4RotationPattern,
+                "trends_anomaly:Anomaly: ja4_rotation_pattern",
+            ),
+            (
+                AnomalyType::Ja4IpCluster,
+                "trends_anomaly:Anomaly: ja4_ip_cluster",
+            ),
+            (
+                AnomalyType::Ja4BrowserSpoofing,
+                "trends_anomaly:Anomaly: ja4_browser_spoofing",
+            ),
+            (
+                AnomalyType::Ja4hChange,
+                "trends_anomaly:Anomaly: ja4h_change",
+            ),
+            (
+                AnomalyType::OversizedRequest,
+                "trends_anomaly:Anomaly: oversized_request",
+            ),
+            (
+                AnomalyType::OversizedResponse,
+                "trends_anomaly:Anomaly: oversized_response",
+            ),
+            (
+                AnomalyType::BandwidthSpike,
+                "trends_anomaly:Anomaly: bandwidth_spike",
+            ),
+            (
+                AnomalyType::ExfiltrationPattern,
+                "trends_anomaly:Anomaly: exfiltration_pattern",
+            ),
+            (
+                AnomalyType::UploadPattern,
+                "trends_anomaly:Anomaly: upload_pattern",
+            ),
+        ];
+
+        for (variant, expected_tag) in expected_tags {
+            assert_eq!(
+                TrendsReason::Anomaly(variant).as_tag(),
+                expected_tag,
+                "tag mapping must stay aligned with the historical reason format"
+            );
+        }
     }
 }
 

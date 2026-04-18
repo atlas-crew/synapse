@@ -24,9 +24,6 @@ detection:
   action: "block"
   block_status: 403
   rules_path: "data/rules.json"
-  anomaly_blocking:
-    enabled: true
-    threshold: 10.0
 
 tls:
   enabled: true

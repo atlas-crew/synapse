@@ -29,7 +29,6 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use http::header::{HeaderName, HeaderValue, AUTHORIZATION, COOKIE, USER_AGENT};
 // WAF engine types (integrated Synapse WAF engine)
-use synapse_pingora::waf::BlockingMode;
 // Schema learning and validation (API anomaly detection)
 use dashmap::DashMap;
 use log::{debug, error, info, warn};
@@ -550,7 +549,9 @@ pub struct DetectionConfig {
     pub block_status: u16,
     #[serde(default = "default_rules_path")]
     pub rules_path: String,
-    /// Anomaly blocking settings (Phase 2)
+    /// Deprecated: anomaly-based blocking never shipped end-to-end and this
+    /// config block is now ignored. We still parse it so startup can warn
+    /// operators instead of silently dropping their intent.
     #[serde(default)]
     pub anomaly_blocking: AnomalyBlockingConfig,
     /// Deprecated telemetry URL (use telemetry.endpoint instead)
@@ -565,17 +566,17 @@ pub struct AnomalyBlockingConfig {
     pub threshold: f64,
 }
 
-fn default_anomaly_threshold() -> f64 {
-    10.0
-}
-
 impl Default for AnomalyBlockingConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            threshold: 10.0,
+            threshold: default_anomaly_threshold(),
         }
     }
+}
+
+fn default_anomaly_threshold() -> f64 {
+    10.0
 }
 
 fn default_action() -> String {
@@ -605,6 +606,17 @@ impl Default for DetectionConfig {
             risk_server_url: None,
         }
     }
+}
+
+fn deprecated_anomaly_blocking_warning(config: &DetectionConfig) -> Option<String> {
+    if !config.anomaly_blocking.enabled {
+        return None;
+    }
+    Some(format!(
+        "detection.anomaly_blocking is deprecated and ignored (enabled={}, threshold={}): per-request anomaly blocking never shipped end-to-end, so this config no longer has runtime effect",
+        config.anomaly_blocking.enabled,
+        config.anomaly_blocking.threshold
+    ))
 }
 
 /// TLS/HTTPS configuration
@@ -1198,19 +1210,15 @@ const INVALID_SESSION_RISK_WEIGHT: f64 = 12.0;
 /// silent regression to a dormant callback.
 ///
 /// The callback casts u32 → f64 because TrendsManager stores anomaly risk
-/// as u32 but EntityManager takes f64. The reason string is prefixed with
-/// `trends_anomaly:` so log greps can identify the contribution source.
+/// as u32 but EntityManager takes f64. `TrendsReason::as_tag()` preserves
+/// the historical tag strings while removing the stringly-typed callback API.
 pub(crate) fn build_trends_manager_with_risk_callback(
     config: synapse_pingora::trends::TrendsConfig,
     entity_manager: Arc<EntityManager>,
 ) -> Arc<TrendsManager> {
     let deps = synapse_pingora::trends::TrendsManagerDependencies {
-        apply_risk: Some(Box::new(move |entity_id: &str, risk: u32, reason: &str| {
-            entity_manager.apply_external_risk(
-                entity_id,
-                risk as f64,
-                &format!("trends_anomaly:{}", reason),
-            );
+        apply_risk: Some(Box::new(move |entity_id: &str, risk: u32, reason| {
+            entity_manager.apply_external_risk(entity_id, risk as f64, reason.as_tag());
         })),
     };
     Arc::new(TrendsManager::with_dependencies(config, deps))
@@ -3959,15 +3967,19 @@ impl ProxyHttp for SynapseProxy {
                         }
                     }
 
+                    let schema_valid = validation_result.is_valid();
+
                     // Store the validation result so the body-phase WAF pass can
                     // surface it via the `schema_violation` match kind.
                     ctx.schema_result = Some(validation_result);
 
-                    // Stash the parsed body on RequestContext for deferred
-                    // learning. Consumed at the end of upstream_request_filter
-                    // so it survives across both the body-phase WAF decision
-                    // AND the deferred WAF pass. See TASK-59.
-                    ctx.pending_learn = Some((template_path, json_body));
+                    // TASK-69: only fully-valid bodies are allowed to train
+                    // the learner. Any schema deviation, regardless of score,
+                    // suppresses training so sub-threshold drift attempts do
+                    // not move the baseline. The clean-body payload still
+                    // stays on RequestContext so TASK-59's deferred-pass
+                    // poisoning guard remains intact.
+                    ctx.pending_learn = schema_valid.then_some((template_path, json_body));
                 }
             }
 
@@ -5493,18 +5505,8 @@ fn main() {
         .map(|u| (u.host.clone(), u.port))
         .collect();
 
-    // Apply anomaly blocking configuration
-    if config.detection.anomaly_blocking.enabled {
-        let engine = DetectionEngine::shared_engine();
-        let synapse = engine.write();
-        let mut risk_config = synapse.risk_config();
-        risk_config.blocking_mode = BlockingMode::Enforcement;
-        risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
-        synapse.set_risk_config(risk_config);
-        info!(
-            "Anomaly blocking ENABLED (threshold: {:.1})",
-            config.detection.anomaly_blocking.threshold
-        );
+    if let Some(message) = deprecated_anomaly_blocking_warning(&config.detection) {
+        warn!("{}", message);
     }
 
     // Phase 6: Initialize TLS Manager
@@ -6902,6 +6904,56 @@ tls:
 
     #[test]
     #[serial]
+    fn test_config_still_parses_deprecated_anomaly_blocking() {
+        let yaml = r#"
+detection:
+  anomaly_blocking:
+    enabled: true
+    threshold: 8.0
+"#;
+        let config: Config =
+            serde_yaml::from_str(yaml).expect("deprecated anomaly_blocking should still parse");
+
+        let anomaly_blocking = config.detection.anomaly_blocking;
+        assert!(anomaly_blocking.enabled);
+        assert_eq!(anomaly_blocking.threshold, 8.0);
+    }
+
+    #[test]
+    fn test_deprecated_anomaly_blocking_warning_only_for_enabled_config() {
+        let absent = DetectionConfig::default();
+        assert!(
+            deprecated_anomaly_blocking_warning(&absent).is_none(),
+            "defaulted config should not emit a deprecation warning"
+        );
+
+        let disabled = DetectionConfig {
+            anomaly_blocking: AnomalyBlockingConfig {
+                enabled: false,
+                threshold: 8.0,
+            },
+            ..DetectionConfig::default()
+        };
+        assert!(
+            deprecated_anomaly_blocking_warning(&disabled).is_none(),
+            "disabled deprecated config should not emit a warning"
+        );
+
+        let enabled = DetectionConfig {
+            anomaly_blocking: AnomalyBlockingConfig {
+                enabled: true,
+                threshold: 8.0,
+            },
+            ..DetectionConfig::default()
+        };
+        let message = deprecated_anomaly_blocking_warning(&enabled)
+            .expect("enabled deprecated config should emit a warning");
+        assert!(message.contains("deprecated and ignored"));
+        assert!(message.contains("threshold=8"));
+    }
+
+    #[test]
+    #[serial]
     fn test_proxy_health_integration() {
         // Verify HealthChecker returns healthy by default
         let health_checker = HealthChecker::default();
@@ -7140,7 +7192,7 @@ key_path: "/etc/keys/example.key"
         use std::sync::Arc as StdArc;
         use synapse_pingora::trends::{
             AnomalyMetadata, AnomalySeverity, AnomalyType, TrendsConfig, TrendsManager,
-            TrendsManagerDependencies,
+            TrendsManagerDependencies, TrendsReason,
         };
 
         // Shared counter that the test callback bumps whenever it fires.
@@ -7151,10 +7203,17 @@ key_path: "/etc/keys/example.key"
         let risk_clone = StdArc::clone(&last_risk);
 
         let deps = TrendsManagerDependencies {
-            apply_risk: Some(Box::new(move |_entity: &str, risk: u32, _reason: &str| {
-                count_clone.fetch_add(1, Ordering::SeqCst);
-                risk_clone.store(risk, Ordering::SeqCst);
-            })),
+            apply_risk: Some(Box::new(
+                move |_entity: &str, risk: u32, reason: TrendsReason| {
+                    count_clone.fetch_add(1, Ordering::SeqCst);
+                    risk_clone.store(risk, Ordering::SeqCst);
+                    assert_eq!(
+                        reason,
+                        TrendsReason::Anomaly(AnomalyType::OversizedRequest),
+                        "callback should receive a strongly typed anomaly reason"
+                    );
+                },
+            )),
         };
 
         // Default TrendsConfig has anomaly_risk populated with non-zero

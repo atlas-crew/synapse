@@ -71,11 +71,14 @@ pub struct Verdict {
     pub endpoint_template: Option<String>,
     /// Aggregate endpoint risk score (0-100)
     pub endpoint_risk: Option<f32>,
-    /// Per-request anomaly score (-10 to +10)
+    // Per-request anomaly scoring is currently out of scope. Keep these
+    // legacy fields as inert compatibility shims for downstream Verdict
+    // consumers while the dormant anomaly-blocking path is removed.
+    /// Always None in the current build; retained for compatibility only.
     pub anomaly_score: Option<f64>,
-    /// Adjusted blocking threshold used for this request
+    /// Always None in the current build; retained for compatibility only.
     pub adjusted_threshold: Option<f64>,
-    /// Anomaly signals detected for observability
+    /// Always empty in the current build; retained for compatibility only.
     pub anomaly_signals: Vec<AnomalySignal>,
 
     // Timeout fields

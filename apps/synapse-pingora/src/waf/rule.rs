@@ -46,6 +46,12 @@ pub struct MatchCondition {
     #[serde(default)]
     pub field: Option<String>,
     #[serde(default)]
+    pub severity: Option<String>,
+    #[serde(default)]
+    pub pattern_name: Option<String>,
+    #[serde(default)]
+    pub violation_kind: Option<String>,
+    #[serde(default)]
     pub direction: Option<String>,
     #[serde(default)]
     #[allow(dead_code)]

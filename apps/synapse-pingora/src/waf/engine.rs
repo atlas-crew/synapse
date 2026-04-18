@@ -2458,9 +2458,10 @@ fn compare_threshold(value: f64, op: Option<&str>, target: f64) -> bool {
 }
 
 /// `dlp_violation` match kind. Counts DLP matches in `ctx.dlp_matches`,
-/// optionally restricted to a specific data type via `field`, and compares
-/// the count against `match` using `op` (default `gte`). Returns false
-/// when no DLP scan results are available (i.e. during the body-phase pass).
+/// optionally restricted to a specific data type via `field`, severity via
+/// `severity`, and/or pattern name via `pattern_name`, and compares the
+/// count against `match` using `op` (default `gte`). Returns false when
+/// no DLP scan results are available (i.e. during the body-phase pass).
 ///
 /// Rule shapes supported:
 ///
@@ -2468,19 +2469,34 @@ fn compare_threshold(value: f64, op: Option<&str>, target: f64) -> bool {
 /// { "type": "dlp_violation" }                             // ≥ 1 match of any type
 /// { "type": "dlp_violation", "op": "gte", "match": 3 }    // ≥ 3 total matches
 /// { "type": "dlp_violation", "field": "ssn", "match": 1 } // ≥ 1 SSN match
+/// { "type": "dlp_violation", "severity": "critical" }     // any critical DLP hit
+/// { "type": "dlp_violation", "pattern_name": "aws_key" }  // specific pattern only
 /// ```
 fn eval_dlp_violation(condition: &MatchCondition, ctx: &EvalContext) -> bool {
     if ctx.dlp_matches.is_empty() {
         return false;
     }
-    let count = match condition.field.as_deref() {
-        Some(filter) => ctx
-            .dlp_matches
-            .iter()
-            .filter(|m| m.data_type.as_str() == filter)
-            .count() as f64,
-        None => ctx.dlp_matches.len() as f64,
-    };
+    let count = ctx
+        .dlp_matches
+        .iter()
+        .filter(|m| {
+            condition
+                .field
+                .as_deref()
+                .map(|filter| m.data_type.as_str() == filter)
+                .unwrap_or(true)
+                && condition
+                    .severity
+                    .as_deref()
+                    .map(|filter| m.severity.as_str() == filter)
+                    .unwrap_or(true)
+                && condition
+                    .pattern_name
+                    .as_deref()
+                    .map(|filter| m.pattern_name == filter)
+                    .unwrap_or(true)
+        })
+        .count() as f64;
     if count <= 0.0 {
         return false;
     }
@@ -2491,14 +2507,16 @@ fn eval_dlp_violation(condition: &MatchCondition, ctx: &EvalContext) -> bool {
 }
 
 /// `schema_violation` match kind. Matches when the learned-schema validator
-/// produced violations, optionally thresholded on `total_score`. Returns false
-/// when no validation result is attached or the request validated cleanly.
+/// produced violations, optionally thresholded on `total_score` or a filtered
+/// subset of violations via `violation_kind`. Returns false when no
+/// validation result is attached or the request validated cleanly.
 ///
 /// Rule shapes supported:
 ///
 /// ```json
 /// { "type": "schema_violation" }                                 // any violation
 /// { "type": "schema_violation", "op": "gte", "match": 15 }       // score ≥ 15
+/// { "type": "schema_violation", "violation_kind": "type_mismatch" } // any type mismatch
 /// ```
 fn eval_schema_violation(condition: &MatchCondition, ctx: &EvalContext) -> bool {
     let Some(result) = ctx.schema_result else {
@@ -2507,10 +2525,39 @@ fn eval_schema_violation(condition: &MatchCondition, ctx: &EvalContext) -> bool 
     if result.is_valid() {
         return false;
     }
-    let score = result.total_score as f64;
-    match condition.match_value.as_ref().and_then(|m| m.as_num()) {
-        Some(target) => compare_threshold(score, condition.op.as_deref(), target),
-        None => true,
+    match condition.violation_kind.as_deref() {
+        Some(filter) => {
+            let matching: Vec<_> = result
+                .violations
+                .iter()
+                .filter(|violation| violation.violation_type.as_str() == filter)
+                .collect();
+            if matching.is_empty() {
+                return false;
+            }
+            match condition.match_value.as_ref().and_then(|m| m.as_num()) {
+                Some(target) => {
+                    // Filtered schema rules intentionally threshold on the
+                    // matching violations' severity-derived scores rather than
+                    // the aggregate ValidationResult.total_score so rule
+                    // authors can target a specific violation kind without
+                    // unrelated violations inflating the threshold.
+                    let score = matching
+                        .iter()
+                        .map(|violation| violation.severity.score() as u32)
+                        .sum::<u32>() as f64;
+                    compare_threshold(score, condition.op.as_deref(), target)
+                }
+                None => true,
+            }
+        }
+        None => {
+            let score = result.total_score as f64;
+            match condition.match_value.as_ref().and_then(|m| m.as_num()) {
+                Some(target) => compare_threshold(score, condition.op.as_deref(), target),
+                None => true,
+            }
+        }
     }
 }
 
@@ -2808,6 +2855,146 @@ mod tests {
     }
 
     #[test]
+    fn test_schema_violation_filters_by_violation_kind() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 90041,
+            "description": "Block type mismatches only",
+            "risk": 40.0,
+            "blocking": true,
+            "matches": [{
+                "type": "schema_violation",
+                "violation_kind": "type_mismatch",
+                "op": "gte",
+                "match": 7
+            }]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let type_mismatch = SchemaViolation::type_mismatch(
+            "user.email",
+            crate::profiler::FieldType::String,
+            crate::profiler::FieldType::Number,
+        );
+        let unexpected = SchemaViolation::unexpected_field("user.shadow");
+        let result = ValidationResult {
+            violations: vec![type_mismatch.clone(), unexpected.clone()],
+            total_score: 11,
+        };
+
+        let verdict = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            schema_result: Some(&result),
+            ..Default::default()
+        });
+        assert!(
+            verdict.matched_rules.contains(&90041),
+            "type_mismatch filter should include only matching violations"
+        );
+
+        let only_unexpected = ValidationResult {
+            violations: vec![unexpected],
+            total_score: 4,
+        };
+        let negative = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            schema_result: Some(&only_unexpected),
+            ..Default::default()
+        });
+        assert!(
+            !negative.matched_rules.contains(&90041),
+            "violation_kind filter should exclude non-matching schema violations"
+        );
+    }
+
+    #[test]
+    fn test_schema_violation_without_filter_matches_any_violation_even_with_zero_score() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 90042,
+            "description": "Match any schema violation",
+            "risk": 10.0,
+            "blocking": false,
+            "matches": [{
+                "type": "schema_violation"
+            }]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let zero_score_result = ValidationResult {
+            violations: vec![SchemaViolation::unexpected_field("user.shadow")],
+            total_score: 0,
+        };
+
+        let verdict = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            schema_result: Some(&zero_score_result),
+            ..Default::default()
+        });
+        assert!(
+            verdict.matched_rules.contains(&90042),
+            "threshold-less schema_violation rules should continue to match any attached violation"
+        );
+    }
+
+    #[test]
+    fn test_schema_violation_filtered_without_threshold_matches_any_matching_violation() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 90043,
+            "description": "Match any unexpected field violation",
+            "risk": 10.0,
+            "blocking": false,
+            "matches": [{
+                "type": "schema_violation",
+                "violation_kind": "unexpected_field"
+            }]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let result = ValidationResult {
+            violations: vec![SchemaViolation::unexpected_field("user.shadow")],
+            total_score: 0,
+        };
+
+        let verdict = engine.analyze(&Request {
+            method: "POST",
+            path: "/api/users",
+            client_ip: "1.2.3.4",
+            schema_result: Some(&result),
+            ..Default::default()
+        });
+        assert!(
+            verdict.matched_rules.contains(&90043),
+            "threshold-less filtered schema_violation rules should match any violation of the requested kind"
+        );
+    }
+
+    #[test]
+    fn test_verdict_compat_anomaly_fields_remain_empty() {
+        let engine = Engine::empty();
+        let verdict = engine.analyze(&Request {
+            method: "GET",
+            path: "/health",
+            client_ip: "1.2.3.4",
+            ..Default::default()
+        });
+
+        assert_eq!(verdict.anomaly_score, None);
+        assert_eq!(verdict.adjusted_threshold, None);
+        assert!(
+            verdict.anomaly_signals.is_empty(),
+            "compatibility shim fields should stay inert until a real producer path exists"
+        );
+    }
+
+    #[test]
     fn test_dlp_violation_is_deferred_not_body_phase() {
         let mut engine = Engine::empty();
         let rules = r#"[{
@@ -2882,6 +3069,72 @@ mod tests {
         let verdict_ssn = engine.analyze_deferred_with_timeout(&req_ssn, DEFAULT_EVAL_TIMEOUT);
         assert_eq!(verdict_ssn.action, Action::Block);
         assert!(verdict_ssn.matched_rules.contains(&9006));
+    }
+
+    #[test]
+    fn test_dlp_violation_filters_by_severity_and_pattern_name() {
+        let mut engine = Engine::empty();
+        let rules = r#"[{
+            "id": 90061,
+            "description": "Block critical AWS key leaks",
+            "risk": 70.0,
+            "blocking": true,
+            "matches": [{
+                "type": "dlp_violation",
+                "severity": "critical",
+                "pattern_name": "aws_key",
+                "match": 1
+            }]
+        }]"#;
+        engine.load_rules(rules.as_bytes()).unwrap();
+
+        let matching = vec![DlpMatch {
+            pattern_name: "aws_key",
+            data_type: SensitiveDataType::AwsKey,
+            severity: PatternSeverity::Critical,
+            masked_value: "***".to_string(),
+            start: 0,
+            end: 3,
+            stream_offset: None,
+        }];
+        let positive = engine.analyze_deferred_with_timeout(
+            &Request {
+                method: "POST",
+                path: "/api/keys",
+                client_ip: "1.2.3.4",
+                dlp_matches: Some(&matching),
+                ..Default::default()
+            },
+            DEFAULT_EVAL_TIMEOUT,
+        );
+        assert!(
+            positive.matched_rules.contains(&90061),
+            "severity + pattern_name filters should match the intended DLP signal"
+        );
+
+        let filtered_out = vec![DlpMatch {
+            pattern_name: "aws_key",
+            data_type: SensitiveDataType::AwsKey,
+            severity: PatternSeverity::High,
+            masked_value: "***".to_string(),
+            start: 0,
+            end: 3,
+            stream_offset: None,
+        }];
+        let negative = engine.analyze_deferred_with_timeout(
+            &Request {
+                method: "POST",
+                path: "/api/keys",
+                client_ip: "1.2.3.4",
+                dlp_matches: Some(&filtered_out),
+                ..Default::default()
+            },
+            DEFAULT_EVAL_TIMEOUT,
+        );
+        assert!(
+            !negative.matched_rules.contains(&90061),
+            "severity filter should exclude otherwise-matching DLP hits"
+        );
     }
 
     #[test]

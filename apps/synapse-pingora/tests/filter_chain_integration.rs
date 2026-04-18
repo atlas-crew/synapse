@@ -301,7 +301,9 @@ async fn test_request_filter_registers_fingerprint_with_campaign_manager() {
         stats_after.total_ips
     );
     assert!(
-        fingerprint_index.get_ip_fingerprints(&test_ip.to_string()).is_some(),
+        fingerprint_index
+            .get_ip_fingerprints(&test_ip.to_string())
+            .is_some(),
         "CampaignManager fingerprint index must retain the exact test IP after request_filter"
     );
 }
@@ -785,6 +787,140 @@ async fn test_schema_learner_not_poisoned_by_body_phase_waf_block() {
         "TASK-41/67: learner must NOT have trained on body that was \
          blocked by body-phase WAF. If this fails, a body-phase block \
          path is poisoning the learner baseline."
+    );
+}
+
+/// TASK-69: sub-threshold schema deviations must NOT train the learner even
+/// when the request is ultimately allowed. Otherwise an attacker can drift the
+/// learned baseline by repeatedly introducing small changes that stay under the
+/// blocking threshold.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial]
+async fn test_schema_learner_ignores_sub_threshold_schema_violation() {
+    let production_rules = include_str!("../src/production_rules.json");
+    synapse_main::DetectionEngine::reload_rules(production_rules.as_bytes())
+        .expect("production rules must load");
+
+    let template_path = "/api/task69-baseline-drift";
+    assert!(
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(template_path)
+            .is_none(),
+        "precondition: template must not already exist in learner"
+    );
+
+    let proxy = build_proxy(10_000);
+
+    for _ in 0..10 {
+        let clean_body = r#"{"name":"alice"}"#;
+        let clean_request = format!(
+            "POST {} HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            template_path,
+            clean_body.len(),
+            clean_body
+        );
+        let (mut clean_session, _clean_client) = make_session(&clean_request).await;
+        let mut clean_ctx = proxy.new_ctx();
+
+        proxy
+            .early_request_filter(&mut clean_session, &mut clean_ctx)
+            .await
+            .expect("early_request_filter clean");
+        let _ = proxy
+            .request_filter(&mut clean_session, &mut clean_ctx)
+            .await
+            .expect("request_filter clean");
+
+        loop {
+            let mut chunk = clean_session
+                .read_request_body()
+                .await
+                .expect("read clean request body");
+            let end_of_stream = chunk.is_none();
+            proxy
+                .request_body_filter(
+                    &mut clean_session,
+                    &mut chunk,
+                    end_of_stream,
+                    &mut clean_ctx,
+                )
+                .await
+                .expect("request_body_filter clean");
+            if end_of_stream {
+                break;
+            }
+        }
+
+        let mut clean_upstream = clean_session.req_header().clone();
+        proxy
+            .upstream_request_filter(&mut clean_session, &mut clean_upstream, &mut clean_ctx)
+            .await
+            .expect("upstream_request_filter clean");
+    }
+
+    let learned = synapse_main::SCHEMA_LEARNER
+        .get_schema(template_path)
+        .expect("clean traffic should seed the learner");
+    assert!(
+        learned.request_schema.contains_key("name"),
+        "clean body should be learned before the poisoning probe"
+    );
+    assert!(
+        !learned.request_schema.contains_key("shadow"),
+        "baseline should not contain the future poisoning field yet"
+    );
+
+    let drift_body = r#"{"name":"alice","shadow":"evil"}"#;
+    let drift_request = format!(
+        "POST {} HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+        template_path,
+        drift_body.len(),
+        drift_body
+    );
+    let (mut drift_session, _drift_client) = make_session(&drift_request).await;
+    let mut drift_ctx = proxy.new_ctx();
+
+    proxy
+        .early_request_filter(&mut drift_session, &mut drift_ctx)
+        .await
+        .expect("early_request_filter drift");
+    let _ = proxy
+        .request_filter(&mut drift_session, &mut drift_ctx)
+        .await
+        .expect("request_filter drift");
+
+    loop {
+        let mut chunk = drift_session
+            .read_request_body()
+            .await
+            .expect("read drift request body");
+        let end_of_stream = chunk.is_none();
+        proxy
+            .request_body_filter(
+                &mut drift_session,
+                &mut chunk,
+                end_of_stream,
+                &mut drift_ctx,
+            )
+            .await
+            .expect("request_body_filter drift");
+        if end_of_stream {
+            break;
+        }
+    }
+
+    let mut drift_upstream = drift_session.req_header().clone();
+    proxy
+        .upstream_request_filter(&mut drift_session, &mut drift_upstream, &mut drift_ctx)
+        .await
+        .expect("sub-threshold schema violation should still be allowed");
+
+    let after_drift = synapse_main::SCHEMA_LEARNER
+        .get_schema(template_path)
+        .expect("baseline should still exist after allowed request");
+    assert!(
+        !after_drift.request_schema.contains_key("shadow"),
+        "TASK-69: score>0 request bodies must not train the learner, even when allowed"
     );
 }
 
