@@ -311,18 +311,12 @@ impl DetectionEngine {
 
     /// Update the regex evaluation budget used by all request analysis paths.
     ///
-    /// The timeout is clamped into the 1ms..=500ms range because Synapse
-    /// executes regex-heavy rules inline on the request path and values
-    /// outside that range either weaken coverage or materially increase ReDoS
-    /// exposure during attacker-controlled traffic.
+    /// The timeout is clamped to a maximum of 500ms because Synapse executes
+    /// regex-heavy rules inline on the request path and higher limits
+    /// materially increase ReDoS exposure during attacker-controlled traffic.
     pub fn set_regex_timeout_ms(timeout_ms: u64) -> u64 {
-        let applied_ms = timeout_ms.clamp(1, 500);
-        if timeout_ms < applied_ms {
-            warn!(
-                "Requested WAF regex timeout {}ms is below the safety floor; clamping to {}ms",
-                timeout_ms, applied_ms
-            );
-        } else if timeout_ms > applied_ms {
+        let applied_ms = timeout_ms.min(500);
+        if timeout_ms > applied_ms {
             warn!(
                 "Requested WAF regex timeout {}ms exceeds safety cap; clamping to {}ms",
                 timeout_ms, applied_ms

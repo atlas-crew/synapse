@@ -102,7 +102,8 @@ use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use synapse_pingora::utils::auth_detection::has_auth_header;
 use synapse_pingora::utils::path_normalizer::endpoint_key;
 use synapse_pingora::vhost::{SiteConfig, VhostMatcher};
-pub use synapse_pingora::{DetectionEngine, DetectionResult, HeaderSnapshot};
+use synapse_pingora::HeaderSnapshot;
+pub use synapse_pingora::{DetectionEngine, DetectionResult};
 
 // Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
 
