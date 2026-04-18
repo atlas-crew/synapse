@@ -234,6 +234,141 @@ mod tests {
     }
 
     #[test]
+    fn test_load_rules_parse_error_preserves_existing_ruleset() {
+        const SENTINEL_RULE_ID: u32 = 90_001;
+        const SENTINEL_PATH: &str = "/reload-rules-preserved";
+
+        let mut synapse = Synapse::new();
+        let valid_rules = format!(
+            r#"[
+            {{
+                "id": {},
+                "description": "Reload rules preservation sentinel",
+                "risk": 10.0,
+                "blocking": true,
+                "matches": [
+                    {{
+                        "type": "uri",
+                        "match": {{
+                            "type": "contains",
+                            "match": "{}"
+                        }}
+                    }}
+                ]
+            }}
+        ]"#,
+            SENTINEL_RULE_ID, SENTINEL_PATH
+        );
+
+        let loaded = synapse
+            .load_rules(valid_rules.as_bytes())
+            .expect("valid sentinel rules must load");
+        assert_eq!(
+            loaded, 1,
+            "expected sentinel rule to be the only loaded rule"
+        );
+
+        let make_sentinel_request = || Request {
+            method: "GET",
+            path: SENTINEL_PATH,
+            ..Default::default()
+        };
+
+        let before_failure = synapse.analyze(&make_sentinel_request());
+        assert_eq!(
+            before_failure.action,
+            crate::waf::Action::Block,
+            "sentinel rule must block before the failed reload attempt"
+        );
+        assert!(
+            before_failure.matched_rules.contains(&SENTINEL_RULE_ID),
+            "sentinel rule id must be observable before the failed reload"
+        );
+
+        let err = synapse
+            .load_rules(b"{")
+            .expect_err("malformed JSON must not be accepted during reload");
+        match err {
+            WafError::ParseError(msg) => {
+                assert!(
+                    !msg.is_empty(),
+                    "parse errors should preserve the serde failure context"
+                );
+            }
+            other => panic!("expected parse error from malformed JSON, got {:?}", other),
+        }
+
+        assert_eq!(
+            synapse.rule_count(),
+            1,
+            "failed reload must preserve the prior ruleset atomically"
+        );
+
+        let after_failure = synapse.analyze(&make_sentinel_request());
+        assert_eq!(
+            after_failure.action,
+            crate::waf::Action::Block,
+            "failed reload must leave the previously loaded blocking rule active"
+        );
+        assert!(
+            after_failure.matched_rules.contains(&SENTINEL_RULE_ID),
+            "failed reload must preserve the previously loaded sentinel rule"
+        );
+
+        let regex_err = synapse
+            .load_rules(
+                br#"[
+                    {
+                        "id": 90002,
+                        "description": "Invalid regex",
+                        "risk": 10.0,
+                        "matches": [
+                            {
+                                "type": "uri",
+                                "match": {
+                                    "type": "regex",
+                                    "match": "["
+                                }
+                            }
+                        ]
+                    }
+                ]"#,
+            )
+            .expect_err("invalid regex must not be accepted during reload");
+        match regex_err {
+            WafError::RegexError(msg) => {
+                assert!(
+                    msg.contains('['),
+                    "regex errors should preserve the invalid pattern context"
+                );
+            }
+            other => panic!(
+                "expected regex error from invalid rule reload, got {:?}",
+                other
+            ),
+        }
+
+        assert_eq!(
+            synapse.rule_count(),
+            1,
+            "compile-time reload failures must also preserve the prior ruleset atomically"
+        );
+
+        let after_regex_failure = synapse.analyze(&make_sentinel_request());
+        assert_eq!(
+            after_regex_failure.action,
+            crate::waf::Action::Block,
+            "regex reload failures must leave the previously loaded blocking rule active"
+        );
+        assert!(
+            after_regex_failure
+                .matched_rules
+                .contains(&SENTINEL_RULE_ID),
+            "regex reload failures must preserve the previously loaded sentinel rule"
+        );
+    }
+
+    #[test]
     fn test_default_synapse() {
         let synapse = Synapse::default();
         assert_eq!(synapse.rule_count(), 0);
