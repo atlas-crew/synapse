@@ -30,7 +30,7 @@ export {
   borders,
   gradients,
   fv,
-} from './tokens/tokens';
+} from '@atlascrew/signal-ui';
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 export {
@@ -46,13 +46,10 @@ export {
   sx,
   clamp,
   applyType,
-} from './utils/helpers';
+} from '@atlascrew/signal-ui';
 
 // ─── Primitives ──────────────────────────────────────────────────────────────
-export { Box } from './primitives/Box';
-export { Text } from './primitives/Text';
-export { Stack } from './primitives/Stack';
-export { Divider, Grid } from './primitives/Layout';
+export { Box, Text, Stack, Divider, Grid } from '@atlascrew/signal-ui';
 
 // ─── Components ──────────────────────────────────────────────────────────────
 export { MetricCard } from './components/MetricCard';
@@ -66,17 +63,15 @@ export {
   TRUNCATED_CARD_HEADER_TITLE_STYLE,
 } from './components/SectionHeader';
 export { StatCard } from './components/StatCard';
-export { Panel } from './components/Panel';
-export type { PanelTone, PanelPadding, PanelSpacing, PanelVariant } from './components/Panel';
+export { Panel } from '@atlascrew/signal-ui';
+export type { PanelTone, PanelPadding, PanelSpacing, PanelVariant } from '@atlascrew/signal-ui';
 export { DataTable, ValuePill } from './components/DataTable';
-export { Button } from './components/Button';
-export { Alert } from './components/Alert';
-export { Tabs } from './components/Tabs';
+export { Button, Alert, Tabs } from '@atlascrew/signal-ui';
 export { Modal, Drawer } from './components/Modal';
 export { Sidebar, AppShell } from './components/Sidebar';
 export { TimeRangeSelector } from './components/TimeRangeSelector';
-export { Input, Select } from './components/FormControls';
-export { Tooltip, ProgressBar, EmptyState, Spinner, LoadingOverlay, Breadcrumb } from './components/Utilities';
+export { Input, Select, Tooltip, ProgressBar, EmptyState, Spinner, LoadingOverlay } from '@atlascrew/signal-ui';
+export { Breadcrumb } from './components/Utilities';
 
 // ─── Chart Defaults ──────────────────────────────────────────────────────────
 export {

@@ -19,6 +19,7 @@
     "deploy:preview": "pnpm build:demo && wrangler deploy --env preview"
   },
   "dependencies": {
+    "@atlascrew/signal-ui": "workspace:*",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-sql": "^6.10.0",
     "@codemirror/lang-yaml": "^6.1.2",

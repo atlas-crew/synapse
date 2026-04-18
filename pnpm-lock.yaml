@@ -132,6 +132,9 @@ importers:
 
   apps/signal-horizon/ui:
     dependencies:
+      '@atlascrew/signal-ui':
+        specifier: workspace:*
+        version: link:../../../packages/signal-ui
       '@codemirror/lang-json':
         specifier: ^6.0.2
         version: 6.0.2
@@ -352,6 +355,25 @@ importers:
         version: 3.2.4(@types/node@20.19.39)(jiti@2.6.1)(jsdom@26.1.0)(tsx@4.21.0)(yaml@2.8.3)
 
   apps/synapse-pingora: {}
+
+  packages/signal-ui:
+    dependencies:
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.14
+      react:
+        specifier: ^19.1.0
+        version: 19.2.4
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
 
   packages/synapse-api:
     devDependencies:
