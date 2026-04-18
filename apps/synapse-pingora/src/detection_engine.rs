@@ -311,12 +311,20 @@ impl DetectionEngine {
 
     /// Update the regex evaluation budget used by all request analysis paths.
     ///
-    /// The timeout is clamped to a maximum of 500ms because Synapse executes
-    /// regex-heavy rules inline on the request path and higher limits
-    /// materially increase ReDoS exposure during attacker-controlled traffic.
+    /// The timeout is clamped into the 1ms..=500ms range because Synapse
+    /// executes regex-heavy rules inline on the request path and values
+    /// outside that range either weaken coverage or materially increase ReDoS
+    /// exposure during attacker-controlled traffic.
+    ///
+    /// Returns the applied timeout in milliseconds after clamping.
     pub fn set_regex_timeout_ms(timeout_ms: u64) -> u64 {
-        let applied_ms = timeout_ms.min(500);
-        if timeout_ms > applied_ms {
+        let applied_ms = timeout_ms.clamp(1, 500);
+        if timeout_ms < applied_ms {
+            warn!(
+                "Requested WAF regex timeout {}ms is below the safety floor; clamping to {}ms",
+                timeout_ms, applied_ms
+            );
+        } else if timeout_ms > applied_ms {
             warn!(
                 "Requested WAF regex timeout {}ms exceeds safety cap; clamping to {}ms",
                 timeout_ms, applied_ms
@@ -324,5 +332,27 @@ impl DetectionEngine {
         }
         WAF_REGEX_TIMEOUT_US.store(applied_ms * 1000, Ordering::Relaxed);
         applied_ms
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DetectionEngine, WAF_REGEX_TIMEOUT_US};
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn test_set_regex_timeout_ms_clamps_zero_to_one() {
+        let original = WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed);
+        assert_eq!(DetectionEngine::set_regex_timeout_ms(0), 1);
+        assert_eq!(WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed), 1_000);
+        WAF_REGEX_TIMEOUT_US.store(original, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn test_set_regex_timeout_ms_caps_upper_bound() {
+        let original = WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed);
+        assert_eq!(DetectionEngine::set_regex_timeout_ms(10_000), 500);
+        assert_eq!(WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed), 500_000);
+        WAF_REGEX_TIMEOUT_US.store(original, Ordering::Relaxed);
     }
 }
