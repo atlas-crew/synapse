@@ -102,7 +102,7 @@ use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use synapse_pingora::utils::auth_detection::has_auth_header;
 use synapse_pingora::utils::path_normalizer::endpoint_key;
 use synapse_pingora::vhost::{SiteConfig, VhostMatcher};
-pub use synapse_pingora::{DetectionEngine, DetectionResult};
+pub use synapse_pingora::{DetectionEngine, DetectionResult, HeaderSnapshot};
 
 // Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
 
@@ -1331,8 +1331,6 @@ fn categorize_rule_id(rule_id: u32) -> String {
 /// The `matches` vec powers the deferred WAF pass's `dlp_violation` match kind
 /// and is empty when no matches were found.
 pub type DlpScanResult = (usize, String, u64, Vec<synapse_pingora::dlp::DlpMatch>);
-
-type HeaderSnapshot = synapse_pingora::HeaderSnapshot;
 
 /// Per-request context flowing through all Pingora hooks
 pub struct RequestContext {
