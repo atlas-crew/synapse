@@ -1,9 +1,10 @@
 ---
 id: TASK-17
 title: Add drill history and analytics
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-04-03 18:30'
+updated_date: '2026-04-18 05:42'
 labels:
   - apparatus
   - drills
