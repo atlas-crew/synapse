@@ -2,8 +2,8 @@
 layout: home
 
 hero:
-  name: Horizon
-  text: Edge Protection Platform
+  name: Synapse
+  text: High-Performance WAF
   tagline: Embedded intelligence for API security. Fleet-aware WAF, inline DLP, and behavioral profiling — all running locally at the edge.
   actions:
     - theme: brand
@@ -20,14 +20,14 @@ features:
   - icon:
       dark: /images/brand/synapse-icon-dark.svg
       light: /images/brand/synapse-icon-dark.svg
-    title: Synapse — Edge Sensor
+    title: Synapse — Edge Defense
     details: Pure Rust WAF on Cloudflare Pingora. 237 rules, 500+ bot signatures, 22+ DLP patterns, 8 correlation detectors. Sub-millisecond detection. Deploy standalone or as a fleet sensor.
     link: /architecture/synapse
     linkText: Synapse architecture
   - icon:
       dark: /images/brand/horizon-icon-dark.svg
       light: /images/brand/horizon-icon-dark.svg
-    title: Horizon — Fleet Hub
+    title: Horizon — Edge Fleet Command
     details: Centralized intelligence for distributed Synapse sensors. Cross-tenant campaign correlation, real-time threat map, Sigma rules, CyberChef, and fleet-wide rule distribution.
     link: /architecture/horizon
     linkText: Horizon architecture
