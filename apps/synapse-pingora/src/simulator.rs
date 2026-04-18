@@ -46,7 +46,9 @@
 //! old simulated events naturally fall off the dashboards as new ones
 //! push in, so the loop wraps seamlessly without explicit resets.
 
-use crate::DetectionEngine;
+// Keep the parent-module import so simulator.rs compiles both in the binary
+// crate and when tests/filter_chain_integration.rs path-imports src/main.rs.
+use super::DetectionEngine;
 use bytes::Bytes;
 use http::header::{HeaderName, HeaderValue};
 use std::sync::Arc;

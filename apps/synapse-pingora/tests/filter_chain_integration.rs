@@ -91,7 +91,10 @@ fn build_proxy(per_ip_rps_limit: usize) -> synapse_main::SynapseProxy {
     synapse_main::SynapseProxy::with_health(backends, deps)
 }
 
-async fn make_session(request: &str) -> (Session, UnixStream) {
+async fn make_session_with_ip(
+    request: &str,
+    fake_addr: std::net::SocketAddr,
+) -> (Session, UnixStream) {
     let (mut client, server_stream) = UnixStream::pair().expect("unix stream pair");
     let raw_fd = server_stream.as_raw_fd();
 
@@ -103,7 +106,6 @@ async fn make_session(request: &str) -> (Session, UnixStream) {
 
     let mut stream = Stream::from(server_stream);
     let mut socket_digest = SocketDigest::from_raw_fd(raw_fd);
-    let fake_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().expect("fake socket addr");
     let _ = socket_digest.peer_addr.set(Some(fake_addr.into()));
     let _ = socket_digest.local_addr.set(Some(fake_addr.into()));
     stream.set_socket_digest(socket_digest);
@@ -112,6 +114,11 @@ async fn make_session(request: &str) -> (Session, UnixStream) {
     assert!(read, "request should be parsed");
 
     (session, client)
+}
+
+async fn make_session(request: &str) -> (Session, UnixStream) {
+    let fake_addr: std::net::SocketAddr = "127.0.0.1:1234".parse().expect("fake socket addr");
+    make_session_with_ip(request, fake_addr).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -263,7 +270,9 @@ async fn test_request_filter_registers_fingerprint_with_campaign_manager() {
          User-Agent: task54-fingerprint-probe/1.0\r\n\
          Accept: */*\r\n\
          \r\n";
-    let (mut session, _client) = make_session(request).await;
+    let test_ip: std::net::IpAddr = "192.0.2.70".parse().expect("test ip");
+    let test_addr = std::net::SocketAddr::new(test_ip, 1234);
+    let (mut session, _client) = make_session_with_ip(request, test_addr).await;
     let mut ctx = proxy.new_ctx();
 
     // Drive early_request_filter first — sets client_ip and request_id.
@@ -283,12 +292,17 @@ async fn test_request_filter_registers_fingerprint_with_campaign_manager() {
     // request_filter pass. Before TASK-54 this assertion would fail because
     // register_fingerprints was never called and the index stayed empty.
     let stats_after = fingerprint_index.stats();
-    assert!(
-        stats_after.total_ips > ips_before,
-        "CampaignManager fingerprint index must have gained an IP after request_filter; \
+    assert_eq!(
+        stats_after.total_ips,
+        ips_before + 1,
+        "CampaignManager fingerprint index must register exactly one new IP after request_filter; \
          before={}, after={}",
         ips_before,
         stats_after.total_ips
+    );
+    assert!(
+        fingerprint_index.get_ip_fingerprints(&test_ip.to_string()).is_some(),
+        "CampaignManager fingerprint index must retain the exact test IP after request_filter"
     );
 }
 

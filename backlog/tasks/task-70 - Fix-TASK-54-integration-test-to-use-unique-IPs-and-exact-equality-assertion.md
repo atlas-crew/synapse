@@ -1,9 +1,10 @@
 ---
 id: TASK-70
 title: Fix TASK-54 integration test to use unique IPs and exact-equality assertion
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-12 22:58'
+updated_date: '2026-04-18 06:21'
 labels:
   - waf
   - synapse-pingora
@@ -63,9 +64,27 @@ This may require a new `make_session_with_ip` helper or a modification to the ex
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 test_request_filter_registers_fingerprint_with_campaign_manager uses a unique test IP (TEST-NET-1 or randomized in 127.0.0.0/8)
-- [ ] #2 The test asserts total_ips increases by exactly 1, not merely increases
-- [ ] #3 The test also asserts the specific IP is present in the fingerprint index by IP lookup
-- [ ] #4 The test remains #[serial] to coordinate with other SYNAPSE-mutating tests
-- [ ] #5 If the make_session helper needs modification to accept a peer IP, the change is additive (existing tests using the default IP still work)
+- [x] #1 test_request_filter_registers_fingerprint_with_campaign_manager uses a unique test IP (TEST-NET-1 or randomized in 127.0.0.0/8)
+- [x] #2 The test asserts total_ips increases by exactly 1, not merely increases
+- [x] #3 The test also asserts the specific IP is present in the fingerprint index by IP lookup
+- [x] #4 The test remains #[serial] to coordinate with other SYNAPSE-mutating tests
+- [x] #5 If the make_session helper needs modification to accept a peer IP, the change is additive (existing tests using the default IP still work)
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Hardened `test_request_filter_registers_fingerprint_with_campaign_manager` in `apps/synapse-pingora/tests/filter_chain_integration.rs` so it now uses an explicit TEST-NET-1 peer IP (`192.0.2.70`) instead of the shared default socket address. The test asserts `total_ips == ips_before + 1` and also verifies the exact client IP is retrievable from `CampaignManager`'s `FingerprintIndex` via `get_ip_fingerprints`, which closes both the false-positive and false-negative paths called out in the task description.
+
+To keep the change additive, the UnixStream harness gained a new `make_session_with_ip(request, fake_addr)` helper and the existing `make_session(request)` now delegates to it with the legacy `127.0.0.1:1234` default. This preserved the other tests in the file unchanged while giving TASK-70 a precise socket identity.
+
+While running verification, the integration-test harness exposed a pre-existing compile break in `apps/synapse-pingora/src/simulator.rs`: `use crate::DetectionEngine;` fails when `tests/filter_chain_integration.rs` path-imports `src/main.rs`. Switched that import to `use super::DetectionEngine;` and documented the reason inline so the existing integration target compiles in both the binary crate and the path-imported test harness.
+
+Verification:
+- `cargo test --test filter_chain_integration test_request_filter_registers_fingerprint_with_campaign_manager -- --nocapture`
+- `cargo test --test filter_chain_integration`
+
+Independent review:
+- `specialist-review.sh` on `apps/synapse-pingora/src/simulator.rs` finished with no P0/P1 findings; remaining note is a future library-vs-binary refactor suggestion.
+- `test-review-request.sh` on `apps/synapse-pingora/tests/filter_chain_integration.rs` identified broader pre-existing coverage gaps in the integration target, but nothing contradicting TASK-70's exact-IP registration assertions.
+<!-- SECTION:FINAL_SUMMARY:END -->
