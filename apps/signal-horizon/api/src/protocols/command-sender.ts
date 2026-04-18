@@ -7,7 +7,8 @@
  */
 
 import { EventEmitter } from 'events';
-import type WebSocket from 'ws';
+import { randomUUID } from 'crypto';
+import WebSocket from 'ws';
 
 export type CommandType = 'push_config' | 'push_rules' | 'restart' | 'collect_diagnostics' | 'update' | 'toggle_chaos' | 'toggle_mtd';
 export type CommandStatus = 'pending' | 'sent' | 'success' | 'failed' | 'timeout';
@@ -85,6 +86,11 @@ export class CommandSender extends EventEmitter {
 
   unregisterConnection(sensorId: string): void {
     this.sensorConnections.delete(sensorId);
+  }
+
+  hasConnection(sensorId: string): boolean {
+    const ws = this.sensorConnections.get(sensorId);
+    return !!ws && ws.readyState === WebSocket.OPEN;
   }
 
   /**
@@ -177,6 +183,57 @@ export class CommandSender extends EventEmitter {
     this.enqueueCommand(command);
     this.trySendNext(sensorId);
     return id;
+  }
+
+  async sendConnectedCommand(
+    sensorId: string,
+    type: CommandType,
+    payload: unknown,
+    customId?: string
+  ): Promise<string | null> {
+    const ws = this.sensorConnections.get(sensorId);
+    if (!this.hasConnection(sensorId) || !ws || this.inflightCommands.has(sensorId)) {
+      return null;
+    }
+
+    const id = customId ?? randomUUID();
+    const command: Command = {
+      id,
+      type,
+      sensorId,
+      payload: { redacted: true },
+      status: 'sent',
+      createdAt: Date.now(),
+      sentAt: Date.now(),
+      attempts: 1,
+      maxAttempts: 1,
+      timeoutMs: this.getTimeout(type),
+    };
+
+    this.commands.set(id, command);
+    this.inflightCommands.set(sensorId, id);
+
+    return await new Promise((resolve) => {
+      ws.send(
+        JSON.stringify({
+          type,
+          commandId: id,
+          payload,
+        }),
+        (error?: Error) => {
+          if (error) {
+            this.logger.error({ error, commandId: id }, 'WebSocket send failed');
+            this.finalizeCommand(command, 'failed', 'WebSocket send failed');
+            resolve(null);
+            return;
+          }
+
+          this.setCommandTimeout(command);
+          this.emit('command-sent', command);
+          resolve(id);
+        }
+      );
+    });
   }
 
   /**

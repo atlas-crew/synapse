@@ -24,6 +24,7 @@ import {
   updateFleetCommandFeatures,
 } from '../../services/fleet/command-features.js';
 import type { FleetCommander } from '../../services/fleet/fleet-commander.js';
+import { ALLOWED_SENSOR_SCOPES, generateApiKey } from '../../services/fleet/sensor-api-keys.js';
 
 // =============================================================================
 // Configuration
@@ -2041,18 +2042,6 @@ const createKeySchema = z.object({
 });
 
 /**
- * Allowed scopes for sensor API keys. (labs-afxu)
- * Sensors should only have access to telemetry and blocklist sync.
- */
-const ALLOWED_SENSOR_SCOPES = [
-  'signal:write',
-  'blocklist:read',
-  'heartbeat:write',
-  'config:read',
-  'diag:write',
-];
-
-/**
  * Validates that requested scopes are appropriate for a sensor. (labs-afxu)
  */
 function validateSensorScopes(requested: string[]): { valid: boolean; forbidden?: string[] } {
@@ -2067,15 +2056,6 @@ function validateSensorScopes(requested: string[]): { valid: boolean; forbidden?
 const rotateKeySchema = z.object({
   expiresAt: z.string().datetime().optional(),
 });
-
-// Utility functions for API key management
-function generateApiKey(): { key: string; hash: string; prefix: string } {
-  const keyBytes = crypto.randomBytes(32);
-  const key = keyBytes.toString('base64url');
-  const hash = crypto.createHash('sha256').update(key).digest('hex');
-  const prefix = key.substring(0, 8);
-  return { key, hash, prefix };
-}
 
 /**
  * Create management routes for API keys and connectivity

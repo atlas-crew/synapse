@@ -18,12 +18,41 @@ import { apiFetch } from '../../../lib/api';
 interface OverviewTabProps {
   sensor: any;
   systemInfo: any;
+  performance?: {
+    current?: {
+      cpu?: number;
+      memory?: number;
+      disk?: number;
+      rps?: number;
+      latencyP99?: number;
+    };
+  };
   diagnostics: any;
   onRestartSensor: () => void;
 }
 
-export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }: OverviewTabProps) {
-  const meta = sensor.metadata || {};
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatPercent(value: unknown, digits = 1): string {
+  const numeric = asNumber(value);
+  return numeric === null ? '—' : `${numeric.toFixed(digits)}%`;
+}
+
+function formatCount(value: unknown): string {
+  const numeric = asNumber(value);
+  if (numeric === null) return '—';
+  return numeric < 10 ? numeric.toFixed(1) : Math.round(numeric).toLocaleString();
+}
+
+function formatMilliseconds(value: unknown): string {
+  const numeric = asNumber(value);
+  return numeric === null ? '—' : `${numeric.toFixed(0)}ms`;
+}
+
+export function OverviewTab({ sensor, systemInfo, performance, diagnostics, onRestartSensor }: OverviewTabProps) {
+  const currentPerf = performance?.current || {};
   const { toast } = useToast();
 
   const [recentSignals, setRecentSignals] = useState<any[]>([]);
@@ -112,11 +141,11 @@ export function OverviewTab({ sensor, systemInfo, diagnostics, onRestartSensor }
 
       {/* Resource Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <MetricCard label="CPU" value={`${(meta.cpu ?? 0).toFixed(1)}%`} description="Current CPU utilization for this sensor" className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
-        <MetricCard label="Memory" value={`${(meta.memory ?? 0).toFixed(1)}%`} description="Current memory usage as a percentage of total available" className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
-        <MetricCard label="Disk" value={`${(meta.disk ?? 50).toFixed(0)}%`} description="Disk space used on the primary partition" className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
-        <MetricCard label="REQ/SEC" value={(meta.rps ?? 0).toLocaleString()} description="Requests per second currently being processed by this sensor" className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
-        <MetricCard label="Latency P99" value={`${(meta.latency ?? 0).toFixed(0)}ms`} description="99th percentile response latency — 99% of requests are faster than this" className="border-l-2 border-l-ac-red" labelClassName="text-ac-red dark:text-ac-red" valueClassName="text-ac-red dark:text-ac-red" />
+        <MetricCard label="CPU" value={formatPercent(currentPerf.cpu)} description="Current CPU utilization for this sensor" className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
+        <MetricCard label="Memory" value={formatPercent(currentPerf.memory)} description="Current memory usage as a percentage of total available" className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
+        <MetricCard label="Disk" value={formatPercent(currentPerf.disk, 0)} description="Disk space used on the primary partition" className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
+        <MetricCard label="REQ/SEC" value={formatCount(currentPerf.rps)} description="Requests per second currently being processed by this sensor" className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
+        <MetricCard label="Latency P99" value={formatMilliseconds(currentPerf.latencyP99)} description="99th percentile response latency — 99% of requests are faster than this" className="border-l-2 border-l-ac-red" labelClassName="text-ac-red dark:text-ac-red" valueClassName="text-ac-red dark:text-ac-red" />
         <MetricCard label="Uptime" value={formatUptime(sensor.uptime || systemInfo?.uptime || 0)} description="Time since the sensor process was last restarted" className="border-l-2 border-l-ac-purple" labelClassName="text-ac-purple dark:text-ac-purple" valueClassName="text-ac-purple dark:text-ac-purple" />
       </div>
 

@@ -64,6 +64,16 @@ export class CommandFeatureDisabledError extends Error {
   }
 }
 
+export class LiveCommandDeliveryError extends Error {
+  constructor(
+    public readonly code: 'COMMAND_SENDER_UNAVAILABLE' | 'SENSOR_NOT_READY',
+    message: string
+  ) {
+    super(message);
+    this.name = 'LiveCommandDeliveryError';
+  }
+}
+
 /**
  * FleetCommander Events:
  * - 'command-sent': Emitted when a command is sent to a sensor
@@ -245,6 +255,55 @@ export class FleetCommander extends EventEmitter {
     }
 
     return created.id;
+  }
+
+  async sendConnectedCommand(tenantId: string, sensorId: string, command: SensorCommand): Promise<string> {
+    this.ensureCommandEnabled(command.type);
+
+    const sensor = await this.prisma.sensor.findUnique({
+      where: { id: sensorId },
+      select: { tenantId: true },
+    });
+
+    if (!sensor) {
+      throw new Error(`Sensor not found: ${sensorId}`);
+    }
+
+    if (sensor.tenantId !== tenantId) {
+      this.logger.warn(
+        { tenantId, sensorId, sensorTenantId: sensor.tenantId },
+        'Tenant isolation violation: attempted to send live command to sensor owned by different tenant'
+      );
+      throw new Error(`Sensor ${sensorId} does not belong to tenant ${tenantId}`);
+    }
+
+    if (!this.commandSender) {
+      throw new LiveCommandDeliveryError('COMMAND_SENDER_UNAVAILABLE', 'CommandSender not wired');
+    }
+
+    this.logger.info({ sensorId, commandType: command.type }, 'Initiating live command dispatch');
+
+    const commandId = await this.commandSender.sendConnectedCommand(
+      sensorId,
+      command.type as CommandType,
+      command.payload
+    );
+
+    if (!commandId) {
+      throw new LiveCommandDeliveryError(
+        'SENSOR_NOT_READY',
+        `Sensor ${sensorId} is not ready for live command delivery`
+      );
+    }
+
+    metrics.fleetCommandsSent.inc({ type: command.type, tenant_id: tenantId });
+    this.emit('command-sent', {
+      commandId,
+      sensorId,
+      commandType: command.type,
+    });
+
+    return commandId;
   }
 
   private ensureCommandEnabled(commandType: SensorCommand['type'] | CommandType): void {

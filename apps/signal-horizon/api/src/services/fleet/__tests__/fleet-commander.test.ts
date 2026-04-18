@@ -36,8 +36,9 @@ const TEST_SENSOR_ID = 'sensor-cmd-456';
 class MockWebSocket extends EventEmitter {
   readyState = 1; // OPEN
   sentMessages: string[] = [];
-  send(data: string): void {
+  send(data: string, callback?: (error?: Error) => void): void {
     this.sentMessages.push(data);
+    callback?.();
   }
   close(): void {
     this.readyState = 3;
@@ -258,6 +259,41 @@ describe('FleetCommander', () => {
     expect(timeoutAt).toBeLessThanOrEqual(now + expectedTimeout + 100);
 
     aggregator.stop();
+  });
+
+  it('sends live commands over an active websocket without persisting fleet command rows', async () => {
+    commander = new FleetCommander(prisma, logger, {
+      timeoutCheckIntervalMs: 60000,
+    });
+
+    const mockWs = new MockWebSocket();
+    commandSender.registerConnection(TEST_SENSOR_ID, mockWs as any);
+    commander.setCommandSender(commandSender);
+
+    const commandId = await commander.sendConnectedCommand(TEST_TENANT_ID, TEST_SENSOR_ID, {
+      type: 'push_config',
+      payload: { action: 'replace_sensor_api_key' },
+    });
+
+    expect(commandId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(mockWs.sentMessages).toHaveLength(1);
+    expect(vi.mocked(prisma.fleetCommand.create)).not.toHaveBeenCalled();
+  });
+
+  it('rejects live command delivery when the sensor is not currently connected', async () => {
+    commander = new FleetCommander(prisma, logger, {
+      timeoutCheckIntervalMs: 60000,
+    });
+    commander.setCommandSender(commandSender);
+
+    await expect(
+      commander.sendConnectedCommand(TEST_TENANT_ID, TEST_SENSOR_ID, {
+        type: 'push_config',
+        payload: { action: 'replace_sensor_api_key' },
+      })
+    ).rejects.toThrow('not ready for live command delivery');
+
+    expect(vi.mocked(prisma.fleetCommand.create)).not.toHaveBeenCalled();
   });
 
   it('should clamp adaptive timeout to minimum when latency is very low', async () => {

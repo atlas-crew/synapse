@@ -70,7 +70,7 @@ export function SensorDetailPage() {
   const { data: performance } = useQuery({
     queryKey: ['fleet', 'sensor', id, 'performance'],
     queryFn: () => fetchPerformance(id!),
-    enabled: !!id && activeTab === 'performance',
+    enabled: !!id && (activeTab === 'overview' || activeTab === 'performance'),
     refetchInterval: 5000,
   });
 
@@ -246,6 +246,7 @@ export function SensorDetailPage() {
               <OverviewTab
                 sensor={sensor}
                 systemInfo={systemInfo}
+                performance={performance}
                 diagnostics={diagnosticsMutation.data}
                 onRestartSensor={() => restartMutation.mutate()}
               />
