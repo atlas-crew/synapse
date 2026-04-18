@@ -156,6 +156,10 @@ pub struct AuthPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sensor_name: Option<String>,
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
     /// Protocol version for wire-format negotiation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol_version: Option<String>,
@@ -195,6 +199,12 @@ pub struct ConfigPayload {
     pub component: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    #[serde(rename = "sensorApiKey", skip_serializing_if = "Option::is_none")]
+    pub sensor_api_key: Option<String>,
+    #[serde(rename = "restartProcess", skip_serializing_if = "Option::is_none")]
+    pub restart_process: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Messages from hub to sensor.
@@ -443,6 +453,8 @@ mod tests {
                 sensor_id: "s1".to_string(),
                 sensor_name: None,
                 version: "1.0.0".to_string(),
+                registration_token: None,
+                fingerprint: None,
                 protocol_version: Some(PROTOCOL_VERSION.to_string()),
             },
         };
@@ -458,11 +470,31 @@ mod tests {
                 sensor_id: "s1".to_string(),
                 sensor_name: None,
                 version: "1.0.0".to_string(),
+                registration_token: None,
+                fingerprint: None,
                 protocol_version: None,
             },
         };
         let json = auth.to_json().unwrap();
         assert!(!json.contains("protocolVersion"));
+    }
+
+    #[test]
+    fn test_auth_payload_serialization_with_registration_token_and_fingerprint() {
+        let auth = SensorMessage::Auth {
+            payload: AuthPayload {
+                api_key: "sh_reg_example".to_string(),
+                sensor_id: "sensor-1".to_string(),
+                sensor_name: Some("Sensor One".to_string()),
+                version: "1.0.0".to_string(),
+                registration_token: Some("sh_reg_example".to_string()),
+                fingerprint: Some("sensor-1".to_string()),
+                protocol_version: Some(PROTOCOL_VERSION.to_string()),
+            },
+        };
+        let json = auth.to_json().unwrap();
+        assert!(json.contains("\"registrationToken\":\"sh_reg_example\""));
+        assert!(json.contains("\"fingerprint\":\"sensor-1\""));
     }
 
     #[test]
@@ -479,6 +511,32 @@ mod tests {
                 assert!(payload.get("rules").is_some());
             }
             _ => panic!("Expected PushRules"),
+        }
+    }
+
+    #[test]
+    fn test_hub_message_push_config_sensor_key_handoff_deserialization() {
+        let json = r#"{"type":"push_config","commandId":"cmd-2","payload":{"action":"replace_sensor_api_key","sensorApiKey":"sensor-api-key-abcdefghijklmnopqrstuvwxyz","restartProcess":true,"source":"test"}}"#;
+        let msg = HubMessage::from_json(json).unwrap();
+
+        match msg {
+            HubMessage::PushConfig {
+                command_id,
+                payload,
+            } => {
+                assert_eq!(command_id, "cmd-2");
+                assert_eq!(
+                    payload.action.as_deref(),
+                    Some("replace_sensor_api_key")
+                );
+                assert_eq!(
+                    payload.sensor_api_key.as_deref(),
+                    Some("sensor-api-key-abcdefghijklmnopqrstuvwxyz")
+                );
+                assert_eq!(payload.restart_process, Some(true));
+                assert_eq!(payload.source.as_deref(), Some("test"));
+            }
+            _ => panic!("Expected PushConfig"),
         }
     }
 

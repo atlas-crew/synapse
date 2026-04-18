@@ -25,6 +25,10 @@ use super::types::{
     AuthPayload, ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, ThreatSignal,
     PROTOCOL_VERSION,
 };
+use crate::admin_server::{
+    get_registered_integrations_config, set_registered_integrations_config,
+    trigger_registered_restart,
+};
 use crate::access::{check_ssrf, SsrfCheckResult};
 use crate::config_manager::ConfigManager;
 use crate::utils::circuit_breaker::CircuitBreaker;
@@ -441,6 +445,13 @@ async fn connection_loop(
     let mut pending_signals: VecDeque<ThreatSignal> = VecDeque::new();
     let mut inflight_signals: VecDeque<ThreatSignal> = VecDeque::new();
 
+    // Pre-enrollment announce: tell Horizon "I'm here" once per sensor
+    // process before the WebSocket handshake, so the onboarding wizard can
+    // surface us as a candidate even if the operator hasn't approved the
+    // WebSocket-side enrollment yet. Best-effort — any failure is logged
+    // and ignored; the WebSocket handshake remains the real enrollment.
+    announce_to_horizon(&params.config).await;
+
     loop {
         // --- Shutdown Check ---
         if let Ok(()) | Err(broadcast::error::TryRecvError::Closed) = shutdown_rx.try_recv() {
@@ -564,6 +575,15 @@ async fn connection_loop(
     }
 }
 
+fn registration_token_for_auth(api_key: &str) -> Option<String> {
+    let trimmed = api_key.trim();
+    if trimmed.starts_with("sh_reg_") {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
+}
+
 enum ConnectionResult {
     Shutdown,
     AuthFailed,
@@ -582,6 +602,105 @@ fn should_enforce_hub_url_ssrf() -> bool {
 
     // Enforce in release builds (production default); keep dev/test ergonomics in debug builds.
     !cfg!(debug_assertions)
+}
+
+/// Derive the public announce URL from the configured WebSocket hub_url.
+///
+/// Input `wss://horizon.example.com:8443/sensor-gateway` ⇒ output
+/// `https://horizon.example.com:8443/api/v1/sensors/announce`. Preserves
+/// host and port (so operators running Horizon on a non-standard port keep
+/// working) and strips any hub_url query/fragment.
+fn derive_announce_url(hub_url: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(hub_url).map_err(|e| e.to_string())?;
+    let new_scheme = match url.scheme() {
+        "wss" | "https" => "https",
+        "ws" | "http" => "http",
+        other => return Err(format!("unsupported hub_url scheme '{}'", other)),
+    };
+    url.set_scheme(new_scheme)
+        .map_err(|_| "failed to rewrite hub_url scheme for announce".to_string())?;
+    url.set_path("/api/v1/sensors/announce");
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url.to_string())
+}
+
+/// Best-effort HTTP announce to Horizon. Logs and swallows all errors —
+/// the WebSocket handshake remains the authoritative enrollment path,
+/// so announce failures must never prevent a sensor from coming online.
+async fn announce_to_horizon(config: &HorizonConfig) {
+    let announce_url = match derive_announce_url(&config.hub_url) {
+        Ok(url) => url,
+        Err(e) => {
+            warn!(
+                "Skipping sensor announce: could not derive announce URL from hub_url: {}",
+                e
+            );
+            return;
+        }
+    };
+
+    let fingerprint = config.sensor_id.trim();
+    if fingerprint.len() < 8 {
+        warn!(
+            "Skipping sensor announce: sensor_id '{}' is shorter than 8 chars; \
+             set horizon.sensor_id to a stable identifier (UUID, machine-id, etc.)",
+            fingerprint
+        );
+        return;
+    }
+
+    let mut sys = System::new();
+    sys.refresh_all();
+
+    let payload = serde_json::json!({
+        "fingerprint": fingerprint,
+        "hostname": System::host_name(),
+        "os": System::name(),
+        "kernel": System::kernel_version(),
+        "architecture": std::env::consts::ARCH,
+        "version": config.version,
+    });
+
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("Skipping sensor announce: HTTP client build failed: {}", e);
+            return;
+        }
+    };
+
+    debug!("Announcing sensor to Horizon at {}", announce_url);
+    match client
+        .post(&announce_url)
+        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(res) if res.status().is_success() => {
+            info!(
+                "Sensor announce registered as onboarding candidate (status {})",
+                res.status()
+            );
+        }
+        Ok(res) => {
+            let status = res.status();
+            let body = res.text().await.unwrap_or_default();
+            warn!(
+                "Sensor announce returned non-success status {}: {}",
+                status,
+                body.chars().take(200).collect::<String>()
+            );
+        }
+        Err(e) => {
+            warn!("Sensor announce request failed: {}", e);
+        }
+    }
 }
 
 async fn validate_hub_url_ssrf(hub_url: &str) -> Result<(), HorizonError> {
@@ -785,14 +904,13 @@ async fn connect_and_run(
             sensor_id: params.config.sensor_id.clone(),
             sensor_name: params.config.sensor_name.clone(),
             version: params.config.version.clone(),
+            registration_token: registration_token_for_auth(&params.config.api_key),
+            fingerprint: Some(params.config.sensor_id.clone()),
             protocol_version: Some(PROTOCOL_VERSION.to_string()),
         },
     };
 
-    if let Err(e) = ws_tx
-        .send(Message::text(auth_msg.to_json().unwrap()))
-        .await
-    {
+    if let Err(e) = ws_tx.send(Message::text(auth_msg.to_json().unwrap())).await {
         error!("Failed to send auth: {}", e);
         return ConnectionResult::Disconnected { had_connection };
     }
@@ -1120,6 +1238,59 @@ fn soft_restart(config_manager: &Option<Arc<ConfigManager>>) -> Result<serde_jso
     }))
 }
 
+fn apply_sensor_api_key_handoff(
+    payload: &super::types::ConfigPayload,
+) -> Result<serde_json::Value, String> {
+    let sensor_api_key = payload
+        .sensor_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "push_config action 'replace_sensor_api_key' requires sensorApiKey".to_string()
+        })?;
+
+    let mut integrations = get_registered_integrations_config()?;
+    let mut updated_targets = Vec::new();
+
+    if !integrations.horizon_hub_url.trim().is_empty()
+        || !integrations.horizon_api_key.trim().is_empty()
+    {
+        integrations.horizon_api_key = sensor_api_key.to_string();
+        updated_targets.push("horizon");
+    }
+
+    if !integrations.tunnel_url.trim().is_empty() || !integrations.tunnel_api_key.trim().is_empty()
+    {
+        integrations.tunnel_api_key = sensor_api_key.to_string();
+        updated_targets.push("tunnel");
+    }
+
+    if updated_targets.is_empty() {
+        return Err(
+            "No configured Horizon or tunnel integration was available for sensor key handoff"
+                .to_string(),
+        );
+    }
+
+    set_registered_integrations_config(integrations)?;
+
+    let restart_requested = payload.restart_process.unwrap_or(true);
+    let restart_result = if restart_requested {
+        Some(trigger_registered_restart()?)
+    } else {
+        None
+    };
+
+    Ok(serde_json::json!({
+        "action": "replace_sensor_api_key",
+        "updated_targets": updated_targets,
+        "restart_requested": restart_requested,
+        "restart": restart_result,
+        "source": payload.source,
+    }))
+}
+
 fn collect_diagnostics(
     metrics_provider: &Arc<dyn MetricsProvider>,
     config_manager: &Option<Arc<ConfigManager>>,
@@ -1339,10 +1510,15 @@ async fn handle_hub_message<S>(
                         }
                     }
                 } else if let Some(action) = payload.action.as_deref() {
-                    Err(format!(
-                        "push_config action '{}' not supported via hub",
-                        action
-                    ))
+                    match action {
+                        "replace_sensor_api_key" => {
+                            apply_sensor_api_key_handoff(&payload).map(Some)
+                        }
+                        _ => Err(format!(
+                            "push_config action '{}' not supported via hub",
+                            action
+                        )),
+                    }
                 } else {
                     Err("push_config payload missing config".to_string())
                 }
@@ -1539,6 +1715,107 @@ async fn handle_hub_message<S>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::admin_server::{
+        register_integrations_callbacks, register_restart_callback, IntegrationsConfig,
+    };
+
+    #[test]
+    fn test_derive_announce_url_wss() {
+        let url = derive_announce_url("wss://horizon.example.com/sensor-gateway").unwrap();
+        assert_eq!(url, "https://horizon.example.com/api/v1/sensors/announce");
+    }
+
+    #[test]
+    fn test_derive_announce_url_ws_plain() {
+        let url = derive_announce_url("ws://localhost:8080/ws").unwrap();
+        assert_eq!(url, "http://localhost:8080/api/v1/sensors/announce");
+    }
+
+    #[test]
+    fn test_derive_announce_url_preserves_nonstandard_port() {
+        let url = derive_announce_url("wss://horizon.example.com:8443/sensor-gateway").unwrap();
+        assert_eq!(
+            url,
+            "https://horizon.example.com:8443/api/v1/sensors/announce"
+        );
+    }
+
+    #[test]
+    fn test_derive_announce_url_strips_query_and_fragment() {
+        let url =
+            derive_announce_url("wss://horizon.example.com/sensor-gateway?foo=1#frag").unwrap();
+        assert_eq!(url, "https://horizon.example.com/api/v1/sensors/announce");
+    }
+
+    #[test]
+    fn test_derive_announce_url_rejects_unsupported_scheme() {
+        assert!(derive_announce_url("ftp://example.com").is_err());
+    }
+
+    #[test]
+    fn test_registration_token_for_auth_detects_registration_tokens() {
+        assert_eq!(
+            registration_token_for_auth("sh_reg_example"),
+            Some("sh_reg_example".to_string())
+        );
+        assert_eq!(registration_token_for_auth("sensor-api-key"), None);
+    }
+
+    #[test]
+    fn test_apply_sensor_api_key_handoff_updates_integrations_and_requests_restart() {
+        let current = Arc::new(Mutex::new(IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws/sensors".to_string(),
+            horizon_api_key: "sh_reg_pending".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "sh_reg_pending".to_string(),
+            apparatus_url: String::new(),
+        }));
+        let persisted = Arc::new(Mutex::new(None::<IntegrationsConfig>));
+        let restart_calls = Arc::new(AtomicU32::new(0));
+
+        let current_for_getter = Arc::clone(&current);
+        let persisted_for_setter = Arc::clone(&persisted);
+        register_integrations_callbacks(
+            move || current_for_getter.lock().clone(),
+            move |config| {
+                *persisted_for_setter.lock() = Some(config);
+                Ok(())
+            },
+        );
+
+        let restart_calls_for_callback = Arc::clone(&restart_calls);
+        register_restart_callback(move || {
+            restart_calls_for_callback.fetch_add(1, Ordering::Relaxed);
+            Ok(crate::admin_server::RestartResult {
+                success: true,
+                message: "restart requested".to_string(),
+            })
+        });
+
+        let result = apply_sensor_api_key_handoff(&crate::horizon::types::ConfigPayload {
+            config: None,
+            version: None,
+            component: None,
+            action: Some("replace_sensor_api_key".to_string()),
+            sensor_api_key: Some("sensor-api-key-abcdefghijklmnopqrstuvwxyz".to_string()),
+            restart_process: Some(true),
+            source: Some("test".to_string()),
+        })
+        .expect("handoff should succeed");
+
+        let saved = persisted.lock().clone().expect("config should be persisted");
+        assert_eq!(
+            saved.horizon_api_key,
+            "sensor-api-key-abcdefghijklmnopqrstuvwxyz"
+        );
+        assert_eq!(
+            saved.tunnel_api_key,
+            "sensor-api-key-abcdefghijklmnopqrstuvwxyz"
+        );
+        assert_eq!(restart_calls.load(Ordering::Relaxed), 1);
+        assert_eq!(result["action"], "replace_sensor_api_key");
+        assert_eq!(result["restart_requested"], true);
+    }
 
     #[test]
     fn test_noop_metrics_provider() {
