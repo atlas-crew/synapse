@@ -3,9 +3,10 @@ id: TASK-57
 title: >-
   Populate or remove Verdict.anomaly_score / anomaly_signals /
   adjusted_threshold fields
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-04-12 19:38'
+updated_date: '2026-04-18 20:50'
 labels:
   - waf
   - synapse-pingora
@@ -61,3 +62,9 @@ This task's deliverable is the DECISION plus the execution, not just the executi
 - [ ] #5 If deleted: a comment in Verdict documents that anomaly detection is not in scope and points at a follow-up task if reinstatement is planned
 - [ ] #6 No new cargo warnings after the change
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Current implementation removed the dormant runtime anomaly-blocking path and deprecated config behavior, but kept `Verdict.anomaly_score` / `adjusted_threshold` / `anomaly_signals` as inert compatibility shims after independent review raised public-surface risk. Follow-up decision remains: remove those fields with an explicit compatibility break, or add a formal removal plan/changelog/admin-surface warning.
+<!-- SECTION:NOTES:END -->

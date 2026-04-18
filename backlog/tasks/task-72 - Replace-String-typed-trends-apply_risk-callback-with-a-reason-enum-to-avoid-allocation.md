@@ -3,9 +3,10 @@ id: TASK-72
 title: >-
   Replace String-typed trends apply_risk callback with a reason enum to avoid
   allocation
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-12 22:59'
+updated_date: '2026-04-18 20:50'
 labels:
   - waf
   - synapse-pingora
@@ -97,3 +98,9 @@ Existing internal callers (inside `trends/manager.rs`) that call `handle_anomaly
 - [ ] #5 Backwards-compat: if any external code consumes the reason string, the &'static str values are preserved (same tags)
 - [ ] #6 No new cargo warnings, all tests pass
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Replaced the stringly-typed trends risk callback with a `TrendsReason` enum. The production `apply_risk` closure now uses `reason.as_tag()` instead of allocating with `format!`, internal anomaly call sites pass typed reasons, and regression tests pin the emitted tag strings plus the end-to-end callback invocation path.
+<!-- SECTION:FINAL_SUMMARY:END -->

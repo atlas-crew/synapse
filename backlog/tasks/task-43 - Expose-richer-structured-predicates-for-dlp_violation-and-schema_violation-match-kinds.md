@@ -3,9 +3,10 @@ id: TASK-43
 title: >-
   Expose richer structured predicates for dlp_violation and schema_violation
   match kinds
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-12 05:46'
+updated_date: '2026-04-18 20:50'
 labels:
   - waf
   - synapse-pingora
@@ -43,3 +44,9 @@ Scope notes:
 - [ ] #5 JSON rule examples are added as inline docstring snippets on the match-kind handlers
 - [ ] #6 Unit tests cover at least one new predicate per match kind, including a negative case where the filter excludes an otherwise-matching signal
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added structured rule predicates for `dlp_violation` and `schema_violation` by extending `MatchCondition` with `severity`, `pattern_name`, and `violation_kind`. Updated engine evaluation to filter matching DLP/schema findings before threshold checks, preserved legacy count/total_score rule shapes, and added unit coverage for positive and negative filtered cases plus inline JSON examples on the handlers.
+<!-- SECTION:FINAL_SUMMARY:END -->

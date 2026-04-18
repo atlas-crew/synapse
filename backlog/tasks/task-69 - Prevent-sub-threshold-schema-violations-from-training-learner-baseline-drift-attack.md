@@ -3,9 +3,10 @@ id: TASK-69
 title: >-
   Prevent sub-threshold schema violations from training learner (baseline drift
   attack)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-12 22:58'
+updated_date: '2026-04-18 20:50'
 labels:
   - waf
   - synapse-pingora
@@ -61,3 +62,9 @@ Fabricate a ValidationResult with total_score=5 and a valid violation, drive req
 - [ ] #4 The fix composes cleanly with the TASK-59 deferred-pass poisoning fix (both guards coexist)
 - [ ] #5 All 205 existing tests continue to pass
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Hardened schema learning so only fully valid bodies train the learner. `request_body_filter` now gates `pending_learn` on `validation_result.is_valid()`, preserving TASK-59's deferred-pass guard while preventing sub-threshold schema drift from poisoning the baseline. Added an integration test that seeds a mature schema, sends an allowed unexpected-field request, and proves the learner does not absorb the drift.
+<!-- SECTION:FINAL_SUMMARY:END -->
