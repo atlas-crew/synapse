@@ -21,18 +21,15 @@
 //! ```
 
 // Submodules of the bin crate (see also lib.rs for the library half).
-// `simulator` lives here rather than in the lib because it depends on
-// `DetectionEngine` which is bin-local.
+// `simulator` stays here for the demo/runtime wiring and consumes the
+// library-owned DetectionEngine facade.
 mod simulator;
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::header::{HeaderName, HeaderValue, AUTHORIZATION, COOKIE, USER_AGENT};
 // WAF engine types (integrated Synapse WAF engine)
-use synapse_pingora::waf::{
-    Action as SynapseAction, BlockingMode, Header as SynapseHeader, Request as SynapseRequest,
-    Synapse, Verdict as SynapseVerdict,
-};
+use synapse_pingora::waf::BlockingMode;
 // Schema learning and validation (API anomaly detection)
 use dashmap::DashMap;
 use log::{debug, error, info, warn};
@@ -105,6 +102,7 @@ use synapse_pingora::trap::{TrapConfig, TrapMatcher};
 use synapse_pingora::utils::auth_detection::has_auth_header;
 use synapse_pingora::utils::path_normalizer::endpoint_key;
 use synapse_pingora::vhost::{SiteConfig, VhostMatcher};
+pub use synapse_pingora::{DetectionEngine, DetectionResult};
 
 // Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
 
@@ -1070,87 +1068,6 @@ fn request_process_restart() -> Result<RestartResult, String> {
     }
 }
 
-// ============================================================================
-// Detection Engine (Synapse WAF)
-// ============================================================================
-
-/// Result of detection analysis
-#[derive(Debug, Clone)]
-pub struct DetectionResult {
-    /// Whether the request should be blocked
-    pub blocked: bool,
-    /// Risk score from the engine (0-100 or higher for extended range)
-    pub risk_score: u16,
-    /// IDs of matched rules
-    pub matched_rules: Vec<u32>,
-    /// Entity (IP) cumulative risk
-    pub entity_risk: f64,
-    /// Block reason (if blocked)
-    pub block_reason: Option<String>,
-    /// Detection time in microseconds
-    pub detection_time_us: u64,
-}
-
-impl Default for DetectionResult {
-    fn default() -> Self {
-        Self {
-            blocked: false,
-            risk_score: 0,
-            matched_rules: Vec::new(),
-            entity_risk: 0.0,
-            block_reason: None,
-            detection_time_us: 0,
-        }
-    }
-}
-
-impl From<SynapseVerdict> for DetectionResult {
-    fn from(verdict: SynapseVerdict) -> Self {
-        Self {
-            blocked: verdict.action == SynapseAction::Block,
-            risk_score: verdict.risk_score,
-            matched_rules: verdict.matched_rules,
-            entity_risk: verdict.entity_risk,
-            block_reason: verdict.block_reason,
-            detection_time_us: 0, // Set by caller
-        }
-    }
-}
-
-/// Global rules data, loaded once at startup and shared across threads
-static RULES_DATA: Lazy<Option<Vec<u8>>> = Lazy::new(|| {
-    // Try multiple paths for rules.json
-    let rules_paths = [
-        "data/rules.json",
-        "rules.json",
-        "/etc/synapse-pingora/rules.json",
-    ];
-
-    for path in &rules_paths {
-        if Path::new(path).exists() {
-            match fs::read(path) {
-                Ok(rules_json) => {
-                    info!("Found rules at {} ({} bytes)", path, rules_json.len());
-                    return Some(rules_json);
-                }
-                Err(e) => {
-                    warn!("Failed to read rules from {}: {}", path, e);
-                }
-            }
-        }
-    }
-
-    warn!("No rules.json found, will use minimal embedded rules");
-    None
-});
-
-// Global shared Synapse engine instance (Shared across all Pingora workers)
-// Using RwLock for concurrent access.
-// Note: In extremely high-throughput scenarios, this lock might become a contention point.
-// For 100k RPS, we might need a sharded lock or channel-based aggregation.
-static SYNAPSE: Lazy<Arc<parking_lot::RwLock<Synapse>>> =
-    Lazy::new(|| Arc::new(parking_lot::RwLock::new(create_synapse_engine())));
-
 // Global Schema Learner for API anomaly detection
 // Learns request/response JSON schemas per endpoint and validates against them.
 // Thread-safe via DashMap, minimal contention for high-throughput scenarios.
@@ -1171,18 +1088,11 @@ pub(crate) static SCHEMA_LEARNER: Lazy<SchemaLearner> = Lazy::new(|| {
 static CONFIG_HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static RULES_HASH: Lazy<Arc<RwLock<String>>> = Lazy::new(|| Arc::new(RwLock::new(String::new())));
 
-// WAF regex evaluation timeout in microseconds (prevents ReDoS attacks).
-// Default: 100ms. Configurable via server.waf_regex_timeout_ms.
-// Using AtomicU64 for lock-free access in hot path.
-static WAF_REGEX_TIMEOUT_US: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(100_000); // 100ms default
-
 /// Compute SHA256 hash of data and return as hex string.
 fn compute_hash(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();
-    // Convert to hex - take first 16 chars for brevity
     format!("{:x}", result)[..16].to_string()
 }
 
@@ -1200,13 +1110,14 @@ fn get_buffer() -> Vec<u8> {
     })
 }
 
-/// Return a buffer to the thread-local pool for reuse
+/// Return a buffer to the thread-local pool for reuse.
+///
+/// We only retain reasonably small buffers so a single large upload does not
+/// permanently bloat the per-thread pool.
 fn return_buffer(mut buf: Vec<u8>) {
-    // Only keep buffers up to 64KB to avoid hoarding huge memory
     if buf.capacity() <= 64 * 1024 {
-        buf.clear(); // Ensure it's empty but keeps capacity
+        buf.clear();
         BUFFER_POOL.with(|pool| {
-            // Limit pool size to 128 buffers per thread to avoid unlimited growth
             let mut p = pool.borrow_mut();
             if p.len() < 128 {
                 p.push(buf);
@@ -1215,21 +1126,20 @@ fn return_buffer(mut buf: Vec<u8>) {
     }
 }
 
-/// Normalize a URL path to a template by replacing numeric/UUID segments with placeholders.
-/// This allows schema learning to group similar endpoints together.
+/// Normalize a URL path to a reusable template.
 ///
 /// Examples:
 /// - `/api/users/123` -> `/api/users/{id}`
-/// - `/api/orders/abc-def-123/items/456` -> `/api/orders/{id}/items/{id}`
-/// - `/api/v1/products` -> `/api/v1/products` (unchanged)
+/// - `/api/orders/550e8400-e29b-41d4-a716-446655440000` -> `/api/orders/{id}`
+///
+/// This keeps endpoint profiling and anomaly tracking stable across per-entity
+/// resource identifiers.
 fn normalize_path_to_template(path: &str) -> String {
     path.split('/')
         .map(|segment| {
-            // Check if segment is purely numeric
             if !segment.is_empty() && segment.chars().all(|c| c.is_ascii_digit()) {
                 return "{id}";
             }
-            // Check if segment looks like a UUID (8-4-4-4-12 hex pattern or 32 hex chars)
             if segment.len() == 36 && segment.chars().filter(|&c| c == '-').count() == 4 {
                 let hex_parts: Vec<&str> = segment.split('-').collect();
                 if hex_parts.len() == 5
@@ -1240,7 +1150,6 @@ fn normalize_path_to_template(path: &str) -> String {
                     return "{id}";
                 }
             }
-            // Check for MongoDB ObjectId (24 hex chars)
             if segment.len() == 24 && segment.chars().all(|c| c.is_ascii_hexdigit()) {
                 return "{id}";
             }
@@ -1248,242 +1157,6 @@ fn normalize_path_to_template(path: &str) -> String {
         })
         .collect::<Vec<&str>>()
         .join("/")
-}
-
-/// Create a new Synapse engine with rules
-fn create_synapse_engine() -> Synapse {
-    let mut synapse = Synapse::new();
-
-    // Load from pre-loaded rules data or minimal rules
-    if let Some(ref rules_json) = *RULES_DATA {
-        match synapse.load_rules(rules_json) {
-            Ok(count) => {
-                debug!("Thread loaded {} rules", count);
-            }
-            Err(e) => {
-                warn!("Failed to parse rules: {}", e);
-            }
-        }
-    } else {
-        // Load the embedded production ruleset. No runtime rules file was
-        // found on any of the probed paths, so we fall through to the
-        // rules baked into the binary at compile time. The Dockerfile's
-        // "rules are embedded in the binary" comment is satisfied by
-        // this include_str!.
-        //
-        // Embedded load failure is fatal (panic) rather than a silent
-        // warn-and-continue because a WAF proxy running with zero rules
-        // is more dangerous than a proxy that fails to start — ops needs
-        // a loud signal, not a quiet degradation.
-        // `test_production_rules_load_into_current_engine` in waf/engine.rs
-        // is the compile-time regression gate that ensures this panic
-        // cannot fire in practice: if the embedded bytes don't parse, CI
-        // fails before a release binary is built. The panic here is
-        // defense against accidental corruption of the bundled file.
-        let production_rules = include_str!("production_rules.json");
-        match synapse.load_rules(production_rules.as_bytes()) {
-            Ok(count) => debug!("Loaded {} embedded production rules", count),
-            Err(e) => panic!(
-                "FATAL: embedded production_rules.json failed to load at startup: {}. \
-                 This should never happen in a released binary because \
-                 test_production_rules_load_into_current_engine gates it in CI. \
-                 If you see this panic, the binary is corrupted or a regression \
-                 slipped past CI. Do not run a WAF proxy with zero rules.",
-                e
-            ),
-        }
-    }
-
-    synapse
-}
-
-/// Get the global rule count (from first instance)
-#[allow(dead_code)]
-static RULE_COUNT: Lazy<usize> = Lazy::new(|| SYNAPSE.read().rule_count());
-
-/// The Synapse detection engine wrapper
-pub struct DetectionEngine;
-
-impl DetectionEngine {
-    /// Analyze a request using the Synapse WAF engine with timeout protection.
-    /// Returns a DetectionResult with timing information.
-    ///
-    /// The timeout is configurable via `server.waf_regex_timeout_ms` in the config file.
-    /// Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).
-    #[inline]
-    pub fn analyze(
-        method: &str,
-        uri: &str,
-        headers: &[HeaderSnapshot],
-        body: Option<&[u8]>,
-        client_ip: &str,
-    ) -> DetectionResult {
-        let start = Instant::now();
-
-        // Build Synapse Request
-        let mut synapse_headers = Vec::with_capacity(headers.len());
-        for (name, value) in headers {
-            if let Ok(value_str) = value.to_str() {
-                synapse_headers.push(SynapseHeader::new(name.as_str(), value_str));
-            }
-        }
-
-        let request = SynapseRequest {
-            method,
-            path: uri,
-            query: None, // Extracted from path by Synapse
-            headers: synapse_headers,
-            body,
-            client_ip,
-            is_static: false,
-            ..Default::default()
-        };
-
-        // Get configured timeout (atomic load for lock-free access in hot path)
-        let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
-        let timeout = Duration::from_micros(timeout_us);
-
-        // Run the real detection engine with timeout protection (prevents ReDoS)
-        let verdict = SYNAPSE.read().analyze_with_timeout(&request, timeout);
-
-        let elapsed = start.elapsed();
-
-        DetectionResult {
-            detection_time_us: elapsed.as_micros() as u64,
-            ..verdict.into()
-        }
-    }
-
-    /// Analyze a request with behavioral/structural signals attached.
-    /// Passes fingerprint + schema-validation result to the engine so rules
-    /// using the `ja4`, `ja4h`, and `schema_violation` match kinds can fire.
-    ///
-    /// Rules that use `dlp_violation` are evaluated separately by
-    /// [`DetectionEngine::analyze_deferred`] after the async DLP scan completes.
-    #[inline]
-    pub fn analyze_with_signals(
-        method: &str,
-        uri: &str,
-        headers: &[HeaderSnapshot],
-        body: Option<&[u8]>,
-        client_ip: &str,
-        fingerprint: Option<&synapse_pingora::fingerprint::ClientFingerprint>,
-        schema_result: Option<&synapse_pingora::profiler::ValidationResult>,
-    ) -> DetectionResult {
-        let start = Instant::now();
-
-        let mut synapse_headers = Vec::with_capacity(headers.len());
-        for (name, value) in headers {
-            if let Ok(value_str) = value.to_str() {
-                synapse_headers.push(SynapseHeader::new(name.as_str(), value_str));
-            }
-        }
-
-        let request = SynapseRequest {
-            method,
-            path: uri,
-            query: None,
-            headers: synapse_headers,
-            body,
-            client_ip,
-            is_static: false,
-            fingerprint,
-            dlp_matches: None,
-            schema_result,
-        };
-
-        let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
-        let timeout = Duration::from_micros(timeout_us);
-        let verdict = SYNAPSE.read().analyze_with_timeout(&request, timeout);
-        let elapsed = start.elapsed();
-
-        DetectionResult {
-            detection_time_us: elapsed.as_micros() as u64,
-            ..verdict.into()
-        }
-    }
-
-    /// Evaluate only the deferred rule set (currently: rules referencing the
-    /// `dlp_violation` match kind). The caller passes the DLP scan matches
-    /// that became available after the body-phase pass completed.
-    ///
-    /// Returns a default (Allow) verdict when no deferred rules are loaded.
-    #[inline]
-    pub fn analyze_deferred(
-        method: &str,
-        uri: &str,
-        headers: &[HeaderSnapshot],
-        body: Option<&[u8]>,
-        client_ip: &str,
-        fingerprint: Option<&synapse_pingora::fingerprint::ClientFingerprint>,
-        schema_result: Option<&synapse_pingora::profiler::ValidationResult>,
-        dlp_matches: &[synapse_pingora::dlp::DlpMatch],
-    ) -> DetectionResult {
-        let start = Instant::now();
-
-        let mut synapse_headers = Vec::with_capacity(headers.len());
-        for (name, value) in headers {
-            if let Ok(value_str) = value.to_str() {
-                synapse_headers.push(SynapseHeader::new(name.as_str(), value_str));
-            }
-        }
-
-        let request = SynapseRequest {
-            method,
-            path: uri,
-            query: None,
-            headers: synapse_headers,
-            body,
-            client_ip,
-            is_static: false,
-            fingerprint,
-            dlp_matches: Some(dlp_matches),
-            schema_result,
-        };
-
-        let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
-        let timeout = Duration::from_micros(timeout_us);
-        let verdict = SYNAPSE
-            .read()
-            .analyze_deferred_with_timeout(&request, timeout);
-        let elapsed = start.elapsed();
-
-        DetectionResult {
-            detection_time_us: elapsed.as_micros() as u64,
-            ..verdict.into()
-        }
-    }
-
-    /// Record response status for profiling (feedback loop)
-    pub fn record_status(path: &str, status: u16) {
-        SYNAPSE.read().record_response_status(path, status);
-    }
-
-    /// Get all learned profiles.
-    pub fn get_profiles() -> Vec<synapse_pingora::profiler::EndpointProfile> {
-        SYNAPSE.read().get_profiles()
-    }
-
-    /// Load profiles (e.g. from persistence).
-    pub fn load_profiles(profiles: Vec<synapse_pingora::profiler::EndpointProfile>) {
-        SYNAPSE.read().load_profiles(profiles);
-    }
-
-    /// Get the number of loaded rules (for diagnostics)
-    pub fn rule_count() -> usize {
-        SYNAPSE.read().rule_count()
-    }
-
-    /// Hot-reload the WAF rule set in the global SYNAPSE engine from a
-    /// JSON byte slice. Used by the config-reload machinery and by
-    /// integration tests that need to inject test-scoped rule shapes
-    /// without touching the canonical production_rules.json.
-    ///
-    /// Concurrent readers block briefly while the write lock is held.
-    /// Returns the number of rules parsed on success.
-    pub fn reload_rules(json: &[u8]) -> Result<usize, synapse_pingora::waf::WafError> {
-        SYNAPSE.write().load_rules(json)
-    }
 }
 
 /// TASK-61: maximum total external-risk contribution from a single request.
@@ -1659,7 +1332,7 @@ fn categorize_rule_id(rule_id: u32) -> String {
 /// and is empty when no matches were found.
 pub type DlpScanResult = (usize, String, u64, Vec<synapse_pingora::dlp::DlpMatch>);
 
-type HeaderSnapshot = (HeaderName, HeaderValue);
+type HeaderSnapshot = synapse_pingora::HeaderSnapshot;
 
 /// Per-request context flowing through all Pingora hooks
 pub struct RequestContext {
@@ -5285,9 +4958,9 @@ fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)>
 
                     // Initialize WAF regex timeout from config (ReDoS prevention)
                     // Cap at 500ms maximum to prevent disabling protection
-                    let timeout_ms = config_file.server.waf_regex_timeout_ms.min(500);
-                    let timeout_us = timeout_ms * 1000;
-                    WAF_REGEX_TIMEOUT_US.store(timeout_us, std::sync::atomic::Ordering::Relaxed);
+                    let timeout_ms = DetectionEngine::set_regex_timeout_ms(
+                        config_file.server.waf_regex_timeout_ms,
+                    );
                     info!(
                         "WAF regex timeout configured: {}ms (ReDoS protection)",
                         timeout_ms
@@ -5771,9 +5444,9 @@ fn main() {
         let _ = CONFIG_HASH.set(compute_hash(b"default"));
     }
 
-    // Compute and cache rules hash
-    // This allows Signal Horizon to verify all sensors have the same rules
-    if let Some(ref rules_data) = *RULES_DATA {
+    // Compute and cache rules hash for externally supplied rules.json.
+    // Preserving the old behavior keeps fleet drift reporting semantics stable.
+    if let Some(rules_data) = DetectionEngine::rules_data() {
         *RULES_HASH.write() = compute_hash(rules_data);
         debug!("Rules hash: {}", RULES_HASH.read());
     }
@@ -5781,37 +5454,16 @@ fn main() {
     // ... (metrics init)
 
     // Load profiles on startup (if file exists)
-    // Note: This only loads for the MAIN thread or initial state.
-    // Since we use thread_local!, each worker needs to load.
-    // Pingora is multi-process/multi-thread.
-    // Ideally, we'd load this inside `new_ctx` or `server.bootstrap()`, but `SYNAPSE` is thread_local.
-    // For this PoC, we'll rely on the background task saving the profiles from ONE thread (the one running the admin API if we moved it, or we spawn a specific monitor).
+    // Note: this currently only loads the process-local singleton state used
+    // by this worker. Persisting and broadcasting profile snapshots across
+    // processes is still a separate concern.
     //
-    // Actually, thread_local! is specific to the thread.
-    // A robust solution requires shared state (Arc<RwLock>) for profiles or a dedicated "aggregator".
-    //
-    // IMPLEMENTATION SHORTCUT: We will spawn a background task that periodically asks the CURRENT thread's engine
-    // to save. But `main` spawns `server.run_forever()` which blocks.
-    //
-    // The `metrics` endpoint effectively aggregates if we had a registry.
-    //
-    // Let's implement a simple "Load on init" for the main thread, and a "Save on interval" that runs in a spawned thread
-    // BUT that spawned thread won't have access to the Worker threads' TLS.
-    //
-    // CORRECT APPROACH FOR PINGORA:
-    // Pingora uses a "Service" model. We should create a Background Service that aggregates data.
-    //
-    // For this iteration, we will skip the complexity of cross-thread aggregation and just implement the
-    // *mechanism* to save/load, which we verify via the Admin API (which runs in its own thread).
-
-    // Attempt to load profiles for the Admin API thread (so debug/profiles shows persistence)
+    // Hydrate endpoint profiles once into the process-global engine.
+    // Multi-process worker synchronization is still a separate concern.
     if Path::new("data/profiles.json").exists() {
         if let Ok(profiles) = SnapshotManager::load_profiles(Path::new("data/profiles.json")) {
             info!("Loaded {} profiles from disk", profiles.len());
-            // This only loads into the MAIN thread's TLS if we access it here?
-            // Actually, `SYNAPSE` is lazy static thread local.
-            // We need to inject this into the worker threads.
-            // Pingora doesn't easily let us inject into worker startup without a custom Server impl.
+            DetectionEngine::load_profiles(profiles);
         }
     }
 
@@ -5844,7 +5496,8 @@ fn main() {
 
     // Apply anomaly blocking configuration
     if config.detection.anomaly_blocking.enabled {
-        let synapse = SYNAPSE.write();
+        let engine = DetectionEngine::shared_engine();
+        let synapse = engine.write();
         let mut risk_config = synapse.risk_config();
         risk_config.blocking_mode = BlockingMode::Enforcement;
         risk_config.anomaly_blocking_threshold = config.detection.anomaly_blocking.threshold;
@@ -5981,7 +5634,7 @@ fn main() {
                 Arc::clone(&access_list_mgr),
             )
             .with_rules(
-                Arc::clone(&SYNAPSE),
+                DetectionEngine::shared_engine(),
                 rules_path.clone(),
                 Some(Arc::clone(&RULES_HASH)),
             );
@@ -6195,7 +5848,7 @@ fn main() {
             .dlp_scanner(Arc::clone(&shared_dlp_scanner)) // New: pass dlp scanner
             .trends_manager(Arc::clone(&shared_trends_manager))
             .signal_manager(Arc::clone(&shared_signal_manager))
-            .synapse_engine(Arc::clone(&SYNAPSE)); // For dry-run WAF evaluation
+            .synapse_engine(DetectionEngine::shared_engine()); // For dry-run WAF evaluation
 
         if let Some(ref cm) = config_manager {
             builder = builder.config_manager(Arc::clone(cm));
@@ -6385,6 +6038,8 @@ fn main() {
         use std::sync::mpsc::sync_channel;
         let (tx, rx) = sync_channel::<Option<Arc<HorizonManager>>>(1);
         let horizon_config = config.horizon.clone();
+        let horizon_metrics = Arc::clone(&metrics_registry);
+        let horizon_health = Arc::clone(&health_checker);
         std::thread::Builder::new()
             .name("horizon-runtime".into())
             .spawn(move || {
@@ -6401,7 +6056,16 @@ fn main() {
                     }
                 };
                 rt.block_on(async move {
-                    match HorizonManager::new(horizon_config).await {
+                    let metrics_provider: Arc<dyn MetricsProvider> =
+                        Arc::new(HorizonMetricsProvider {
+                            metrics: Arc::clone(&horizon_metrics),
+                            health: Arc::clone(&horizon_health),
+                            system: Mutex::new(System::new_all()),
+                        });
+
+                    match HorizonManager::with_metrics_provider(horizon_config, metrics_provider)
+                        .await
+                    {
                         Ok(manager) => {
                             let manager = Arc::new(manager);
                             // Start kicks off the background reconnect loop.
@@ -6529,7 +6193,7 @@ fn main() {
                 Arc::clone(&access_list_mgr),
             )
             .with_rules(
-                Arc::clone(&SYNAPSE),
+                DetectionEngine::shared_engine(),
                 rules_path.clone(),
                 Some(Arc::clone(&RULES_HASH)),
             ),
@@ -6694,9 +6358,9 @@ fn main() {
         );
     }
 
-    // TASK-60: Eagerly force the SYNAPSE Lazy static BEFORE Server::run_forever.
+    // TASK-60: Eagerly force the DetectionEngine singleton BEFORE Server::run_forever.
     //
-    // create_synapse_engine panics if the embedded production_rules.json
+    // Its startup path panics if the embedded production_rules.json
     // fails to load (TASK-45 deliberate fail-fast). Without this explicit
     // force, the Lazy's first access could happen inside a Pingora worker
     // thread handling a real request, meaning the panic would drop in-flight
@@ -6710,7 +6374,7 @@ fn main() {
     // healthy binary; this force is defense-in-depth for binary corruption
     // or future refactors that might introduce a runtime rule-load path.
     //
-    // We intentionally call rule_count() instead of a bare SYNAPSE.read()
+    // We intentionally call rule_count() instead of reaching into the engine directly
     // so the log line below surfaces a visible signal that rules loaded.
     let synapse_rule_count = DetectionEngine::rule_count();
     info!(
@@ -6779,7 +6443,7 @@ fn main() {
             metrics_for_tui as Arc<dyn synapse_pingora::metrics::TuiDataProvider>,
             entities_for_tui,
             block_log_for_tui,
-            Arc::clone(&SYNAPSE),
+            DetectionEngine::shared_engine(),
         ) {
             eprintln!("TUI error: {}", e);
         }
@@ -6877,7 +6541,7 @@ fn init_logging() {
 // Tests - Using Synapse WAF engine with production rules
 // ============================================================================
 //
-// IMPORTANT: These tests use a global SYNAPSE engine with shared mutable state.
+// IMPORTANT: These tests use the process-global DetectionEngine singleton with shared mutable state.
 // To avoid race conditions, run with: cargo test --bin synapse-pingora -- --test-threads=1
 // The #[serial] attribute is used for documentation purposes but test-threads=1 is required.
 // ============================================================================
@@ -7689,26 +7353,26 @@ key_path: "/etc/keys/example.key"
     // Production rule restoration cold-start (TASK-45)
     // ────────────────────────────────────────────────────────────────────────
 
-    /// Asserts the global SYNAPSE engine — which is initialized via
-    /// create_synapse_engine during the Lazy static's first access — loads
+    /// Asserts the process-global DetectionEngine singleton — initialized on
+    /// first access by the library-owned startup path — loads
     /// at least 248 rules from the embedded production_rules.json. TASK-45
     /// restored 237 rules from archive; TASK-46 added 11 signal-correlation
     /// rules using the new match kinds, for a 248-rule floor. This test is
     /// the cold-start guarantee that closes the "237 vs 7" docs gap (TASK-45)
     /// and extends it to cover the m-6 signal-correlation additions (TASK-46):
-    /// a regression in create_synapse_engine (missing include_str, wrong
+    /// a regression in the startup path (missing include_str, wrong
     /// filename, broken load_rules) or an accidental truncation of
     /// production_rules.json would fail this test loudly at CI time.
     ///
     /// Must be #[serial] because other tests in this file and in
-    /// tests/filter_chain_integration.rs mutate SYNAPSE via reload_rules.
+    /// tests/filter_chain_integration.rs mutate the singleton via reload_rules.
     /// If one of those tests ran after this one without restoring the
     /// production ruleset, the count would be wrong.
     #[test]
     #[serial]
     fn test_synapse_cold_start_ships_full_production_ruleset() {
         // Touch the Lazy static to force initialization. On a fresh process
-        // this invokes create_synapse_engine, which prefers RULES_DATA (an
+        // this invokes the startup path, which prefers RULES_DATA (an
         // external rules.json file) and falls back to the embedded
         // production_rules.json. Tests run with no cwd-relative rules
         // files so the embedded fallback path is exercised.
@@ -7729,7 +7393,7 @@ key_path: "/etc/keys/example.key"
         );
 
         // Sanity: the rule_count() getter agrees with the reload return
-        // value. If these diverge, the global SYNAPSE lock is broken.
+        // value. If these diverge, the shared engine facade is broken.
         assert_eq!(
             DetectionEngine::rule_count(),
             reloaded,
@@ -7737,7 +7401,7 @@ key_path: "/etc/keys/example.key"
         );
 
         // If the initial read matched (i.e. no prior test had swapped
-        // rules), we've also proven create_synapse_engine's include_str!
+        // rules), we've also proven the startup path's include_str! fallback
         // fallback path works end-to-end on a fresh process.
         let _ = count; // suppress unused warning; the initial read was the Lazy trigger
     }

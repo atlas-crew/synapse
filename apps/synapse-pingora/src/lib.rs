@@ -91,6 +91,7 @@ pub mod tunnel;
 
 // Phase 10: Libsynapse Consolidation (Geo, WAF Engine, Credential Stuffing)
 pub mod detection;
+pub mod detection_engine;
 pub mod geo;
 pub mod waf;
 
@@ -122,6 +123,7 @@ pub use ratelimit::{RateLimitConfig, RateLimitDecision, RateLimitManager};
 pub use reload::{ConfigReloader, ReloadResult};
 
 // Re-export commonly used types from Phase 3
+pub use detection_engine::{DetectionEngine, DetectionResult, HeaderSnapshot};
 pub use dlp::{
     validate_credit_card, validate_iban, validate_phone, validate_ssn, DlpConfig, DlpMatch,
     DlpScanner, DlpStats, PatternSeverity, ScanResult, SensitiveDataType,
