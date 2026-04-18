@@ -42,9 +42,46 @@ pub struct IntegrationsConfig {
     pub apparatus_url: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrationAccessMode {
+    #[default]
+    Telemetry,
+    Tunnel,
+    RemoteManagement,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct IntegrationsConfigUpdate {
+    pub access_mode: Option<IntegrationAccessMode>,
+    pub sensor_api_key: Option<String>,
+    pub horizon_hub_url: Option<String>,
+    pub horizon_api_key: Option<String>,
+    pub tunnel_url: Option<String>,
+    pub tunnel_api_key: Option<String>,
+    pub apparatus_url: Option<String>,
+    pub clear_sensor_api_key: Option<bool>,
+    pub clear_horizon_api_key: Option<bool>,
+    pub clear_tunnel_api_key: Option<bool>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct IntegrationsConfigView {
+    pub access_mode: IntegrationAccessMode,
+    pub sensor_api_key_set: bool,
+    pub horizon_hub_url: String,
+    pub horizon_api_key: String,
+    pub horizon_api_key_set: bool,
+    pub tunnel_url: String,
+    pub tunnel_api_key: String,
+    pub tunnel_api_key_set: bool,
+    pub apparatus_url: String,
+}
+
 // Type aliases for integration data accessors
 type IntegrationsGetter = Box<dyn Fn() -> IntegrationsConfig + Send + Sync>;
-type IntegrationsSetter = Box<dyn Fn(IntegrationsConfig) + Send + Sync>;
+type IntegrationsSetter = Box<dyn Fn(IntegrationsConfig) -> Result<(), String> + Send + Sync>;
+type RestartTrigger = Box<dyn Fn() -> Result<RestartResult, String> + Send + Sync>;
 
 /// Detection result from WAF evaluation (for admin API)
 #[derive(Debug, Clone, serde::Serialize)]
@@ -72,6 +109,165 @@ static INTEGRATIONS_GETTER: Lazy<RwLock<Option<IntegrationsGetter>>> =
     Lazy::new(|| RwLock::new(None));
 static INTEGRATIONS_SETTER: Lazy<RwLock<Option<IntegrationsSetter>>> =
     Lazy::new(|| RwLock::new(None));
+static RESTART_TRIGGER: Lazy<RwLock<Option<RestartTrigger>>> = Lazy::new(|| RwLock::new(None));
+
+fn default_integrations_config() -> IntegrationsConfig {
+    IntegrationsConfig {
+        horizon_hub_url: String::new(),
+        horizon_api_key: String::new(),
+        tunnel_url: String::new(),
+        tunnel_api_key: String::new(),
+        apparatus_url: String::new(),
+    }
+}
+
+fn validate_integrations_ws_url(field: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Ok(());
+    }
+    if value.len() > 2048 {
+        return Err(format!("{field} must be 2048 characters or fewer"));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(format!("{field} must not contain control characters"));
+    }
+    let parsed = reqwest::Url::parse(value)
+        .map_err(|_| format!("{field} must be a valid ws:// or wss:// URL"))?;
+    if !matches!(parsed.scheme(), "ws" | "wss") || parsed.host_str().is_none() {
+        return Err(format!("{field} must be a valid ws:// or wss:// URL"));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(format!(
+            "{field} must not contain credentials; use the sensor key field instead"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_integrations_secret(field: &str, value: &str) -> Result<(), String> {
+    if value.len() > 4096 {
+        return Err(format!("{field} must be 4096 characters or fewer"));
+    }
+    Ok(())
+}
+
+fn validate_integrations_http_url(value: &str) -> Result<(), String> {
+    if value.len() > 2048 {
+        return Err("apparatus_url must be 2048 characters or fewer".to_string());
+    }
+    if value.chars().any(char::is_control) {
+        return Err("apparatus_url must not contain control characters".to_string());
+    }
+    if !value.is_empty() {
+        let parsed = reqwest::Url::parse(value)
+            .map_err(|_| "apparatus_url must be a valid http:// or https:// URL".to_string())?;
+        if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+            return Err("apparatus_url must be a valid http:// or https:// URL".to_string());
+        }
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(
+                "apparatus_url must not contain credentials; use service configuration instead"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn derive_integration_access_mode(config: &IntegrationsConfig) -> IntegrationAccessMode {
+    let has_horizon =
+        !config.horizon_hub_url.trim().is_empty() || !config.horizon_api_key.trim().is_empty();
+    let has_tunnel =
+        !config.tunnel_url.trim().is_empty() || !config.tunnel_api_key.trim().is_empty();
+    if has_horizon && has_tunnel {
+        IntegrationAccessMode::RemoteManagement
+    } else if has_tunnel {
+        IntegrationAccessMode::Tunnel
+    } else {
+        IntegrationAccessMode::Telemetry
+    }
+}
+
+fn current_sensor_api_key(config: &IntegrationsConfig) -> String {
+    if !config.horizon_api_key.trim().is_empty() {
+        config.horizon_api_key.clone()
+    } else {
+        config.tunnel_api_key.clone()
+    }
+}
+
+fn is_current_tunnel_url_derived(config: &IntegrationsConfig) -> bool {
+    let current_hub_url = config.horizon_hub_url.trim();
+    let current_tunnel_url = config.tunnel_url.trim();
+    if current_hub_url.is_empty() || current_tunnel_url.is_empty() {
+        return false;
+    }
+    match derive_tunnel_url_from_horizon_hub_url(current_hub_url) {
+        Ok(derived_url) => derived_url == current_tunnel_url,
+        Err(_) => false,
+    }
+}
+
+fn integrations_error_response(
+    message: impl Into<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let message = message.into();
+    warn!("Integrations configuration update rejected: {}", message);
+    record_log_with_source(
+        "warn",
+        LogSource::System,
+        format!("integrations_update_failed: {}", message),
+    );
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({
+            "success": false,
+            "message": message
+        })),
+    )
+}
+
+fn derive_tunnel_url_from_horizon_hub_url(hub_url: &str) -> Result<String, String> {
+    let trimmed = hub_url.trim();
+    if trimmed.is_empty() {
+        return Err(
+            "Horizon Hub WebSocket URL is required when Remote Management is enabled".to_string(),
+        );
+    }
+
+    let mut parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| "Horizon Hub WebSocket URL must be a valid ws:// or wss:// URL".to_string())?;
+    if !matches!(parsed.scheme(), "ws" | "wss") || parsed.host_str().is_none() {
+        return Err("Horizon Hub WebSocket URL must be a valid ws:// or wss:// URL".to_string());
+    }
+    parsed.set_path("/ws/tunnel/sensor");
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    Ok(parsed.to_string())
+}
+
+fn validate_integrations_update(update: &IntegrationsConfigUpdate) -> Result<(), String> {
+    if let Some(url) = update.horizon_hub_url.as_deref() {
+        validate_integrations_ws_url("horizon_hub_url", url.trim())?;
+    }
+    if let Some(key) = update.sensor_api_key.as_deref() {
+        validate_integrations_secret("sensor_api_key", key.trim())?;
+    }
+    if let Some(url) = update.tunnel_url.as_deref() {
+        validate_integrations_ws_url("tunnel_url", url.trim())?;
+    }
+    if let Some(key) = update.horizon_api_key.as_deref() {
+        validate_integrations_secret("horizon_api_key", key.trim())?;
+    }
+    if let Some(key) = update.tunnel_api_key.as_deref() {
+        validate_integrations_secret("tunnel_api_key", key.trim())?;
+    }
+    if let Some(url) = update.apparatus_url.as_deref() {
+        let trimmed = url.trim();
+        validate_integrations_http_url(trimmed)?;
+    }
+    Ok(())
+}
 
 /// Global accessor for WAF evaluation (set by binary at startup)
 static EVALUATE_CALLBACK: Lazy<RwLock<Option<EvaluateCallback>>> = Lazy::new(|| RwLock::new(None));
@@ -99,10 +295,46 @@ where
 pub fn register_integrations_callbacks<G, S>(getter: G, setter: S)
 where
     G: Fn() -> IntegrationsConfig + Send + Sync + 'static,
-    S: Fn(IntegrationsConfig) + Send + Sync + 'static,
+    S: Fn(IntegrationsConfig) -> Result<(), String> + Send + Sync + 'static,
 {
     *INTEGRATIONS_GETTER.write() = Some(Box::new(getter));
     *INTEGRATIONS_SETTER.write() = Some(Box::new(setter));
+}
+
+/// Register a callback that performs a service restart.
+/// Called by the binary (main.rs) during startup.
+pub fn register_restart_callback<F>(callback: F)
+where
+    F: Fn() -> Result<RestartResult, String> + Send + Sync + 'static,
+{
+    *RESTART_TRIGGER.write() = Some(Box::new(callback));
+}
+
+/// Retrieve the currently registered integrations config.
+pub fn get_registered_integrations_config() -> Result<IntegrationsConfig, String> {
+    let getter = INTEGRATIONS_GETTER.read();
+    let Some(getter) = getter.as_ref() else {
+        return Err("Integrations access is not supported by this sensor instance".to_string());
+    };
+    Ok(getter())
+}
+
+/// Persist integrations config through the registered setter.
+pub fn set_registered_integrations_config(config: IntegrationsConfig) -> Result<(), String> {
+    let setter = INTEGRATIONS_SETTER.read();
+    let Some(setter) = setter.as_ref() else {
+        return Err("Integrations updates are not supported by this sensor instance".to_string());
+    };
+    setter(config)
+}
+
+/// Trigger a full process restart through the registered restart callback.
+pub fn trigger_registered_restart() -> Result<RestartResult, String> {
+    let trigger = RESTART_TRIGGER.read();
+    let Some(trigger) = trigger.as_ref() else {
+        return Err("Restart is not supported by this sensor instance".to_string());
+    };
+    trigger()
 }
 
 /// Register a callback for WAF evaluation (dry-run detection).
@@ -1437,7 +1669,10 @@ pub async fn start_admin_server(
     // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
         .route("/console", get(admin_console_handler))
-        .route("/console/assets/sidebar-lockup.svg", get(sidebar_lockup_handler))
+        .route(
+            "/console/assets/sidebar-lockup.svg",
+            get(sidebar_lockup_handler),
+        )
         .route("/_sensor/system/logs", get(sensor_system_logs_handler))
         .route("/_sensor/logs", get(logs_handler))
         .route("/_sensor/logs/:source", get(logs_by_source_handler))
@@ -1746,15 +1981,12 @@ async fn test_handler(State(_state): State<AdminState>) -> impl IntoResponse {
     wrap_response(response)
 }
 
-/// POST /restart - Restart service (placeholder)
+/// POST /restart - Restart service
 async fn restart_handler() -> impl IntoResponse {
-    // Actual restart would require process management
-    // For now, return success - the dashboard will see reload working
-    let response: ApiResponse<RestartResult> = ApiResponse::ok(RestartResult {
-        success: true,
-        message: "Restart signaled (hot-reload applied)".to_string(),
-    });
-    wrap_response(response)
+    match trigger_registered_restart() {
+        Ok(result) => wrap_response(ApiResponse::ok(result)),
+        Err(error) => wrap_response(ApiResponse::<RestartResult>::err(error)),
+    }
 }
 
 /// GET /sites - List configured sites
@@ -6236,19 +6468,25 @@ async fn config_integrations_get_handler(State(_state): State<AdminState>) -> im
         .read()
         .as_ref()
         .map(|getter| getter())
-        .unwrap_or_else(|| IntegrationsConfig {
-            horizon_hub_url: String::new(),
-            horizon_api_key: String::new(),
-            tunnel_url: String::new(),
-            tunnel_api_key: String::new(),
-            apparatus_url: String::new(),
-        });
+        .unwrap_or_else(default_integrations_config);
+    let sensor_api_key = current_sensor_api_key(&config);
+    let view = IntegrationsConfigView {
+        access_mode: derive_integration_access_mode(&config),
+        sensor_api_key_set: !sensor_api_key.is_empty(),
+        horizon_hub_url: config.horizon_hub_url,
+        horizon_api_key: String::new(),
+        horizon_api_key_set: !config.horizon_api_key.is_empty(),
+        tunnel_url: config.tunnel_url,
+        tunnel_api_key: String::new(),
+        tunnel_api_key_set: !config.tunnel_api_key.is_empty(),
+        apparatus_url: config.apparatus_url,
+    };
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "success": true,
-            "data": config
+            "data": view
         })),
     )
 }
@@ -6256,18 +6494,285 @@ async fn config_integrations_get_handler(State(_state): State<AdminState>) -> im
 /// PUT /_sensor/config/integrations - Update external integrations configuration
 async fn config_integrations_put_handler(
     State(_state): State<AdminState>,
-    Json(config): Json<IntegrationsConfig>,
+    Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    // The simplified admin console opts into the managed one-key flow by sending
+    // one of the shared-key fields below. Requests that omit them are treated as
+    // literal field updates so existing callers can still manage custom tunnel
+    // URLs or separate horizon/tunnel keys without hidden coercion.
+    let request_uses_managed_sensor_key = payload
+        .as_object()
+        .map(|object| {
+            object.contains_key("access_mode")
+                || object.contains_key("sensor_api_key")
+                || object.contains_key("clear_sensor_api_key")
+        })
+        .unwrap_or(false);
+    let update = match serde_json::from_value::<IntegrationsConfigUpdate>(payload) {
+        Ok(update) => update,
+        Err(error) => {
+            return integrations_error_response(format!(
+                "Invalid integrations update payload: {}",
+                error
+            ))
+        }
+    };
+
+    if let Err(message) = validate_integrations_update(&update) {
+        return integrations_error_response(message);
+    }
+
     if let Some(setter) = INTEGRATIONS_SETTER.read().as_ref() {
-        setter(config);
+        let current = INTEGRATIONS_GETTER
+            .read()
+            .as_ref()
+            .map(|getter| getter())
+            .unwrap_or_else(default_integrations_config);
+        let uses_managed_sensor_key = request_uses_managed_sensor_key;
+
+        let access_mode = update
+            .access_mode
+            .unwrap_or_else(|| derive_integration_access_mode(&current));
+        let horizon_hub_url = update
+            .horizon_hub_url
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_string)
+            .unwrap_or_else(|| current.horizon_hub_url.clone());
+        let apparatus_url = update
+            .apparatus_url
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_string)
+            .unwrap_or_else(|| current.apparatus_url.clone());
+        let explicit_tunnel_url = update
+            .tunnel_url
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_string);
+        let explicit_sensor_key = update
+            .sensor_api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let explicit_horizon_key = update
+            .horizon_api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let explicit_tunnel_key = update
+            .tunnel_api_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let has_explicit_tunnel_fields = explicit_tunnel_url
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+            || explicit_tunnel_key.is_some();
+        let clear_sensor_key = update.clear_sensor_api_key.unwrap_or(false);
+        let clear_horizon_key = clear_sensor_key || update.clear_horizon_api_key.unwrap_or(false);
+        let clear_tunnel_key = clear_sensor_key || update.clear_tunnel_api_key.unwrap_or(false);
+
+        if uses_managed_sensor_key
+            && access_mode == IntegrationAccessMode::Telemetry
+            && has_explicit_tunnel_fields
+        {
+            return integrations_error_response(
+                "Tunnel URL and tunnel API key cannot be set when Telemetry mode is enabled",
+            );
+        }
+
+        let normalized = if uses_managed_sensor_key {
+            match access_mode {
+                IntegrationAccessMode::Telemetry => IntegrationsConfig {
+                    horizon_hub_url: horizon_hub_url.clone(),
+                    horizon_api_key: explicit_sensor_key.or(explicit_horizon_key).unwrap_or_else(
+                        || {
+                            if clear_horizon_key {
+                                String::new()
+                            } else {
+                                current.horizon_api_key.clone()
+                            }
+                        },
+                    ),
+                    tunnel_url: String::new(),
+                    tunnel_api_key: String::new(),
+                    apparatus_url: apparatus_url.clone(),
+                },
+                IntegrationAccessMode::Tunnel => {
+                    let sensor_api_key = explicit_sensor_key
+                        .or(explicit_tunnel_key)
+                        .or(explicit_horizon_key)
+                        .unwrap_or_else(|| {
+                            if clear_horizon_key || clear_tunnel_key {
+                                String::new()
+                            } else {
+                                current_sensor_api_key(&current)
+                            }
+                        });
+                    IntegrationsConfig {
+                        horizon_hub_url: String::new(),
+                        horizon_api_key: String::new(),
+                        tunnel_url: explicit_tunnel_url
+                            .filter(|value| !value.is_empty())
+                            .unwrap_or_else(|| current.tunnel_url.clone()),
+                        tunnel_api_key: sensor_api_key,
+                        apparatus_url: apparatus_url.clone(),
+                    }
+                }
+                IntegrationAccessMode::RemoteManagement => {
+                    let sensor_api_key = explicit_sensor_key
+                        .or(explicit_horizon_key)
+                        .or(explicit_tunnel_key)
+                        .unwrap_or_else(|| {
+                            if clear_horizon_key || clear_tunnel_key {
+                                String::new()
+                            } else {
+                                current_sensor_api_key(&current)
+                            }
+                        });
+                    let tunnel_url = if let Some(explicit) = explicit_tunnel_url
+                        .as_deref()
+                        .filter(|value| !value.is_empty())
+                    {
+                        explicit.to_string()
+                    } else if current.tunnel_url.trim().is_empty() {
+                        match derive_tunnel_url_from_horizon_hub_url(&horizon_hub_url) {
+                            Ok(url) => url,
+                            Err(message) => return integrations_error_response(message),
+                        }
+                    } else if update.horizon_hub_url.is_some()
+                        && is_current_tunnel_url_derived(&current)
+                    {
+                        match derive_tunnel_url_from_horizon_hub_url(&horizon_hub_url) {
+                            Ok(url) => url,
+                            Err(message) => return integrations_error_response(message),
+                        }
+                    } else {
+                        current.tunnel_url.clone()
+                    };
+
+                    IntegrationsConfig {
+                        horizon_hub_url: horizon_hub_url.clone(),
+                        horizon_api_key: sensor_api_key.clone(),
+                        tunnel_url,
+                        tunnel_api_key: sensor_api_key,
+                        apparatus_url: apparatus_url.clone(),
+                    }
+                }
+            }
+        } else {
+            IntegrationsConfig {
+                horizon_hub_url: horizon_hub_url.clone(),
+                horizon_api_key: explicit_horizon_key.unwrap_or_else(|| {
+                    if clear_horizon_key {
+                        String::new()
+                    } else {
+                        current.horizon_api_key.clone()
+                    }
+                }),
+                tunnel_url: explicit_tunnel_url.unwrap_or_else(|| current.tunnel_url.clone()),
+                tunnel_api_key: explicit_tunnel_key.unwrap_or_else(|| {
+                    if clear_tunnel_key {
+                        String::new()
+                    } else {
+                        current.tunnel_api_key.clone()
+                    }
+                }),
+                apparatus_url: apparatus_url.clone(),
+            }
+        };
+
+        if access_mode == IntegrationAccessMode::RemoteManagement
+            && normalized.horizon_hub_url.trim().is_empty()
+        {
+            return integrations_error_response(
+                "Horizon Hub WebSocket URL is required when Remote Management is enabled",
+            );
+        }
+        if access_mode == IntegrationAccessMode::RemoteManagement
+            && normalized.horizon_api_key.trim().is_empty()
+        {
+            return integrations_error_response(
+                "A sensor key is required when Remote Management is enabled",
+            );
+        }
+        if access_mode == IntegrationAccessMode::Tunnel && normalized.tunnel_url.trim().is_empty() {
+            return integrations_error_response(
+                "Tunnel WebSocket URL is required when Tunnel mode is enabled",
+            );
+        }
+        if access_mode == IntegrationAccessMode::Tunnel
+            && normalized.tunnel_api_key.trim().is_empty()
+        {
+            return integrations_error_response(
+                "A sensor key is required when Tunnel mode is enabled",
+            );
+        }
+
+        if let Err(message) =
+            validate_integrations_ws_url("horizon_hub_url", normalized.horizon_hub_url.trim())
+        {
+            return integrations_error_response(message);
+        }
+        if let Err(message) =
+            validate_integrations_ws_url("tunnel_url", normalized.tunnel_url.trim())
+        {
+            return integrations_error_response(message);
+        }
+        if let Err(message) =
+            validate_integrations_secret("horizon_api_key", normalized.horizon_api_key.trim())
+        {
+            return integrations_error_response(message);
+        }
+        if let Err(message) =
+            validate_integrations_secret("tunnel_api_key", normalized.tunnel_api_key.trim())
+        {
+            return integrations_error_response(message);
+        }
+        if let Err(message) = validate_integrations_http_url(normalized.apparatus_url.trim()) {
+            return integrations_error_response(message);
+        }
+
+        let normalized_horizon_set = !normalized.horizon_hub_url.trim().is_empty();
+        let normalized_tunnel_set = !normalized.tunnel_url.trim().is_empty();
+        let normalized_apparatus_set = !normalized.apparatus_url.trim().is_empty();
+        if let Err(message) = setter(normalized) {
+            record_log_with_source(
+                "warn",
+                LogSource::System,
+                format!("integrations_update_failed: {}", message),
+            );
+            return integrations_error_response(message);
+        }
+        record_log_with_source(
+            "info",
+            LogSource::System,
+            format!(
+                "integrations_update_applied: mode={:?} horizon_set={} tunnel_set={} apparatus_set={}",
+                access_mode,
+                normalized_horizon_set,
+                normalized_tunnel_set,
+                normalized_apparatus_set
+            ),
+        );
         (
             StatusCode::OK,
             Json(serde_json::json!({
                 "success": true,
-                "message": "Integrations configuration updated"
+                "message": "Integrations configuration updated. Restart synapse-waf to apply live Horizon and Tunnel connections."
             })),
         )
     } else {
+        record_log_with_source(
+            "warn",
+            LogSource::System,
+            "integrations_update_failed: Configuration updates not supported by this sensor instance"
+                .to_string(),
+        );
         (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(serde_json::json!({
@@ -6736,9 +7241,13 @@ mod tests {
     use axum::body::Body;
     use http::Request;
     use http_body_util::BodyExt;
+    use once_cell::sync::Lazy;
+    use parking_lot::Mutex;
     use std::num::NonZeroU32;
     use tempfile::tempdir;
     use tower::util::ServiceExt;
+
+    static INTEGRATIONS_TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn create_test_app() -> Router {
         use governor::{Quota, RateLimiter};
@@ -6762,6 +7271,12 @@ mod tests {
             report_rate_limiter,
             auth_failure_limiter,
         };
+        register_restart_callback(|| {
+            Ok(RestartResult {
+                success: true,
+                message: "Restart requested".to_string(),
+            })
+        });
 
         Router::new()
             .route("/health", get(health_handler))
@@ -6827,6 +7342,61 @@ mod tests {
         )
     }
 
+    fn create_test_app_with_integrations(
+        initial: IntegrationsConfig,
+    ) -> (Router, Arc<RwLock<IntegrationsConfig>>) {
+        use governor::{Quota, RateLimiter};
+
+        let handler = Arc::new(ApiHandler::builder().build());
+        let quota = Quota::per_minute(NonZeroU32::new(1000).unwrap());
+        let admin_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let public_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let report_rate_limiter = Arc::new(RateLimiter::keyed(quota.clone()));
+        let auth_failure_limiter = Arc::new(RateLimiter::keyed(quota));
+        let state = AdminState {
+            handler,
+            admin_api_key: "test-key".to_string(),
+            admin_auth_disabled: false,
+            admin_scopes: scopes::ALL.iter().map(|s| (*s).to_string()).collect(),
+            signal_permissions: Arc::new(SignalPermissions::default()),
+            admin_rate_limiter,
+            public_rate_limiter,
+            report_rate_limiter,
+            auth_failure_limiter,
+        };
+
+        let config = Arc::new(RwLock::new(initial));
+        let getter_ref = Arc::clone(&config);
+        let setter_ref = Arc::clone(&config);
+        register_integrations_callbacks(
+            move || getter_ref.read().clone(),
+            move |new_config| {
+                *setter_ref.write() = new_config;
+                Ok(())
+            },
+        );
+        register_restart_callback(|| {
+            Ok(RestartResult {
+                success: true,
+                message: "Restart requested".to_string(),
+            })
+        });
+
+        let router = Router::new()
+            .route(
+                "/_sensor/config/integrations",
+                get(config_integrations_get_handler).put(config_integrations_put_handler),
+            )
+            .with_state(state);
+
+        (router, config)
+    }
+
+    async fn response_json(response: axum::response::Response) -> serde_json::Value {
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&body).unwrap()
+    }
+
     #[tokio::test]
     async fn test_health_endpoint() {
         let app = create_test_app();
@@ -6843,6 +7413,553 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_remote_update_preserves_custom_tunnel_url() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "old-shared-key".to_string(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "old-shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "access_mode": "remote_management",
+            "sensor_api_key": "new-shared-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert_eq!(stored.tunnel_url, "wss://tunnel.example.com/custom/socket");
+        assert_eq!(stored.horizon_api_key, "new-shared-key");
+        assert_eq!(stored.tunnel_api_key, "new-shared-key");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_literal_update_preserves_existing_remote_management_fields() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "apparatus_url": "https://apparatus.example.internal"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert_eq!(stored.horizon_api_key, "shared-key");
+        assert_eq!(stored.tunnel_url, "wss://tunnel.example.com/custom/socket");
+        assert_eq!(stored.tunnel_api_key, "shared-key");
+        assert_eq!(stored.apparatus_url, "https://apparatus.example.internal");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_remote_hub_url_update_rederives_tunnel_url() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://old-horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://old-horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "access_mode": "remote_management",
+            "horizon_hub_url": "wss://new-horizon.example.com/ws"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert_eq!(stored.horizon_hub_url, "wss://new-horizon.example.com/ws");
+        assert_eq!(
+            stored.tunnel_url,
+            "wss://new-horizon.example.com/ws/tunnel/sensor"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_remote_hub_update_preserves_custom_tunnel_url() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://old-horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "access_mode": "remote_management",
+            "horizon_hub_url": "wss://new-horizon.example.com/ws"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert_eq!(stored.horizon_hub_url, "wss://new-horizon.example.com/ws");
+        assert_eq!(stored.tunnel_url, "wss://tunnel.example.com/custom/socket");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_tunnel_mode_saves_without_horizon() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "access_mode": "tunnel",
+            "tunnel_url": "wss://tunnel.example.com/ws/tunnel/sensor",
+            "sensor_api_key": "shared-tunnel-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert!(stored.horizon_hub_url.is_empty());
+        assert!(stored.horizon_api_key.is_empty());
+        assert_eq!(
+            stored.tunnel_url,
+            "wss://tunnel.example.com/ws/tunnel/sensor"
+        );
+        assert_eq!(stored.tunnel_api_key, "shared-tunnel-key");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_legacy_full_payload_keeps_explicit_tunnel_settings() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "horizon_hub_url": "wss://horizon.example.com/ws",
+            "horizon_api_key": "horizon-only-key",
+            "tunnel_url": "wss://tunnel.example.com/custom/socket",
+            "tunnel_api_key": "tunnel-only-key",
+            "apparatus_url": "https://apparatus.example.internal"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert_eq!(stored.horizon_api_key, "horizon-only-key");
+        assert_eq!(stored.tunnel_url, "wss://tunnel.example.com/custom/socket");
+        assert_eq!(stored.tunnel_api_key, "tunnel-only-key");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_legacy_full_payload_keeps_literal_semantics_for_managed_config() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "horizon_hub_url": "wss://literal-horizon.example.com/ws",
+            "horizon_api_key": "literal-horizon-key",
+            "tunnel_url": "wss://literal-tunnel.example.com/custom/socket",
+            "tunnel_api_key": "literal-tunnel-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert_eq!(
+            stored.horizon_hub_url,
+            "wss://literal-horizon.example.com/ws"
+        );
+        assert_eq!(stored.horizon_api_key, "literal-horizon-key");
+        assert_eq!(
+            stored.tunnel_url,
+            "wss://literal-tunnel.example.com/custom/socket"
+        );
+        assert_eq!(stored.tunnel_api_key, "literal-tunnel-key");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_telemetry_rejects_explicit_tunnel_fields() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial.clone());
+        let payload = serde_json::json!({
+            "access_mode": "telemetry",
+            "tunnel_url": "wss://other-tunnel.example.com/socket"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["message"],
+            "Tunnel URL and tunnel API key cannot be set when Telemetry mode is enabled"
+        );
+        let stored = config.read().clone();
+        assert_eq!(stored.horizon_hub_url, initial.horizon_hub_url);
+        assert_eq!(stored.horizon_api_key, initial.horizon_api_key);
+        assert_eq!(stored.tunnel_url, initial.tunnel_url);
+        assert_eq!(stored.tunnel_api_key, initial.tunnel_api_key);
+        assert_eq!(stored.apparatus_url, initial.apparatus_url);
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_tunnel_requires_sensor_key() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "access_mode": "tunnel",
+            "tunnel_url": "wss://tunnel.example.com/ws/tunnel/sensor"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["message"],
+            "A sensor key is required when Tunnel mode is enabled"
+        );
+        let stored = config.read().clone();
+        let expected = default_integrations_config();
+        assert_eq!(stored.horizon_hub_url, expected.horizon_hub_url);
+        assert_eq!(stored.horizon_api_key, expected.horizon_api_key);
+        assert_eq!(stored.tunnel_url, expected.tunnel_url);
+        assert_eq!(stored.tunnel_api_key, expected.tunnel_api_key);
+        assert_eq!(stored.apparatus_url, expected.apparatus_url);
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_remote_requires_hub_url() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial.clone());
+        let payload = serde_json::json!({
+            "access_mode": "remote_management",
+            "horizon_hub_url": "",
+            "sensor_api_key": "shared-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["message"],
+            "Horizon Hub WebSocket URL is required when Remote Management is enabled"
+        );
+        let stored = config.read().clone();
+        assert_eq!(stored.horizon_hub_url, initial.horizon_hub_url);
+        assert_eq!(stored.horizon_api_key, initial.horizon_api_key);
+        assert_eq!(stored.tunnel_url, initial.tunnel_url);
+        assert_eq!(stored.tunnel_api_key, initial.tunnel_api_key);
+        assert_eq!(stored.apparatus_url, initial.apparatus_url);
+    }
+
+    #[tokio::test]
+    async fn test_integrations_put_rejects_invalid_tunnel_url_credentials() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "access_mode": "tunnel",
+            "tunnel_url": "wss://user:pass@tunnel.example.com/ws/tunnel/sensor",
+            "sensor_api_key": "shared-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let json = response_json(response).await;
+        assert!(json["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("must not contain credentials; use the sensor key field instead"));
+        let stored = config.read().clone();
+        let expected = default_integrations_config();
+        assert_eq!(stored.horizon_hub_url, expected.horizon_hub_url);
+        assert_eq!(stored.horizon_api_key, expected.horizon_api_key);
+        assert_eq!(stored.tunnel_url, expected.tunnel_url);
+        assert_eq!(stored.tunnel_api_key, expected.tunnel_api_key);
+        assert_eq!(stored.apparatus_url, expected.apparatus_url);
+    }
+
+    #[tokio::test]
+    async fn test_integrations_clear_sensor_key_clears_both_managed_keys() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "access_mode": "telemetry",
+            "clear_sensor_api_key": true
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = config.read().clone();
+        assert!(stored.horizon_api_key.is_empty());
+        assert!(stored.tunnel_url.is_empty());
+        assert!(stored.tunnel_api_key.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_integrations_get_reports_managed_sensor_key_state() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: String::new(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, _config) = create_test_app_with_integrations(initial);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/_sensor/config/integrations")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["access_mode"], "remote_management");
+        assert_eq!(json["data"]["sensor_api_key_set"], true);
+    }
+
+    #[test]
+    fn test_tunnel_url_or_key_implies_remote_management_mode() {
+        let config = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "sensor-key".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "sensor-key".to_string(),
+            apparatus_url: String::new(),
+        };
+
+        assert_eq!(
+            derive_integration_access_mode(&config),
+            IntegrationAccessMode::RemoteManagement
+        );
+    }
+
+    #[test]
+    fn test_empty_tunnel_fields_imply_telemetry_mode() {
+        let config = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "sensor-key".to_string(),
+            tunnel_url: String::new(),
+            tunnel_api_key: String::new(),
+            apparatus_url: String::new(),
+        };
+
+        assert_eq!(
+            derive_integration_access_mode(&config),
+            IntegrationAccessMode::Telemetry
+        );
+    }
+
+    #[test]
+    fn test_tunnel_only_fields_imply_tunnel_mode() {
+        let config = IntegrationsConfig {
+            horizon_hub_url: String::new(),
+            horizon_api_key: String::new(),
+            tunnel_url: "wss://tunnel.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "sensor-key".to_string(),
+            apparatus_url: String::new(),
+        };
+
+        assert_eq!(
+            derive_integration_access_mode(&config),
+            IntegrationAccessMode::Tunnel
+        );
+    }
+
+    #[test]
+    fn test_derive_tunnel_url_from_horizon_hub_url_rewrites_path() {
+        let url = derive_tunnel_url_from_horizon_hub_url("wss://horizon.example.com/ws?foo=1#frag")
+            .unwrap();
+
+        assert_eq!(url, "wss://horizon.example.com/ws/tunnel/sensor");
+    }
+
+    #[test]
+    fn test_validate_integrations_ws_url_rejects_credentials() {
+        let result =
+            validate_integrations_ws_url("horizon_hub_url", "wss://user:pass@example.com/ws");
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("must not contain credentials; use the sensor key field instead"));
+    }
+
+    #[test]
+    fn test_derive_tunnel_url_requires_hub_url() {
+        let result = derive_tunnel_url_from_horizon_hub_url("");
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Horizon Hub WebSocket URL is required when Remote Management is enabled"));
     }
 
     #[test]
@@ -7911,7 +9028,10 @@ mod tests {
         // Console route with require_admin_read middleware
         let admin_read_routes = Router::new()
             .route("/console", get(admin_console_handler))
-            .route("/console/assets/sidebar-lockup.svg", get(sidebar_lockup_handler))
+            .route(
+                "/console/assets/sidebar-lockup.svg",
+                get(sidebar_lockup_handler),
+            )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 require_admin_read,

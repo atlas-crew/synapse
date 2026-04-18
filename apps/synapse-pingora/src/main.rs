@@ -44,9 +44,13 @@ use pingora_limits::rate::Rate;
 use pingora_proxy::{ProxyHttp, Session};
 use serde::{Deserialize, Deserializer};
 use std::cell::RefCell;
+use std::ffi::OsString;
 use std::fs;
 use std::net::{IpAddr, SocketAddr};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::Path;
+use std::process::Command;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -59,7 +63,8 @@ use uuid::Uuid;
 // Admin API imports
 use synapse_pingora::admin_server::{
     register_evaluate_callback, register_integrations_callbacks, register_profiles_getter,
-    register_schemas_getter, start_admin_server, EvaluationResult, IntegrationsConfig,
+    register_restart_callback, register_schemas_getter, start_admin_server, EvaluationResult,
+    IntegrationsConfig, RestartResult,
 };
 use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
@@ -723,6 +728,348 @@ impl Config {
     }
 }
 
+fn persist_integrations_runtime_config(path: &str, config: &Config) -> Result<(), String> {
+    let config_path = Path::new(path);
+    let contents = fs::read_to_string(config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    let mut document: serde_yaml::Value = serde_yaml::from_str(&contents)
+        .map_err(|e| format!("Failed to parse config file: {}", e))?;
+    write_integrations_into_document(&mut document, config)?;
+    let rendered = serde_yaml::to_string(&document)
+        .map_err(|e| format!("Failed to serialize config file: {}", e))?;
+
+    let temp_name = format!(
+        ".{}.integrations.{}.tmp",
+        config_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("config"),
+        Uuid::new_v4()
+    );
+    let temp_path = config_path.with_file_name(temp_name);
+    fs::write(&temp_path, rendered)
+        .map_err(|e| format!("Failed to write updated config file: {}", e))?;
+
+    let validation_result = temp_path
+        .to_str()
+        .ok_or_else(|| "Updated config path must be valid UTF-8".to_string())
+        .and_then(Config::load);
+    if let Err(error) = validation_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!(
+            "Saved integrations produced an invalid runtime config: {}",
+            error
+        ));
+    }
+
+    fs::rename(&temp_path, config_path)
+        .map_err(|e| format!("Failed to replace config file: {}", e))?;
+    Ok(())
+}
+
+fn write_integrations_into_document(
+    document: &mut serde_yaml::Value,
+    config: &Config,
+) -> Result<(), String> {
+    let root = document
+        .as_mapping_mut()
+        .ok_or_else(|| "Config file root must be a YAML mapping".to_string())?;
+    set_yaml_string(root, "apparatus_url", &config.apparatus_url);
+    set_yaml_mapping(root, "horizon", horizon_config_to_yaml(&config.horizon));
+    set_yaml_mapping(root, "tunnel", tunnel_config_to_yaml(&config.tunnel));
+    Ok(())
+}
+
+fn apply_integrations_to_runtime_config(config: &mut Config, integrations: &IntegrationsConfig) {
+    let horizon_hub_url = integrations.horizon_hub_url.trim().to_string();
+    let horizon_api_key = integrations.horizon_api_key.trim().to_string();
+    let tunnel_url = integrations.tunnel_url.trim().to_string();
+    let tunnel_api_key = integrations.tunnel_api_key.trim().to_string();
+    let apparatus_url = integrations.apparatus_url.trim().to_string();
+    let horizon_enabled = !horizon_hub_url.is_empty() && !horizon_api_key.is_empty();
+    let tunnel_enabled = !tunnel_url.is_empty() && !tunnel_api_key.is_empty();
+
+    if horizon_enabled || tunnel_enabled {
+        let (sensor_id, sensor_name) = resolve_sensor_identity(config);
+        if config.horizon.sensor_id.trim().is_empty() || horizon_enabled {
+            config.horizon.sensor_id = sensor_id.clone();
+        }
+        if config.tunnel.sensor_id.trim().is_empty() || tunnel_enabled {
+            config.tunnel.sensor_id = sensor_id;
+        }
+        if config.horizon.sensor_name.is_none() || horizon_enabled {
+            config.horizon.sensor_name = sensor_name.clone();
+        }
+        if config.tunnel.sensor_name.is_none() || tunnel_enabled {
+            config.tunnel.sensor_name = sensor_name;
+        }
+    }
+
+    config.horizon.enabled = horizon_enabled;
+    config.horizon.hub_url = horizon_hub_url;
+    config.horizon.api_key = horizon_api_key;
+    if config.horizon.version.trim().is_empty() {
+        config.horizon.version = env!("CARGO_PKG_VERSION").to_string();
+    }
+
+    config.tunnel.enabled = tunnel_enabled;
+    config.tunnel.url = tunnel_url;
+    config.tunnel.api_key = tunnel_api_key;
+    if config.tunnel.version.trim().is_empty() {
+        config.tunnel.version = env!("CARGO_PKG_VERSION").to_string();
+    }
+
+    config.apparatus_url = apparatus_url;
+}
+
+fn resolve_sensor_identity(config: &Config) -> (String, Option<String>) {
+    let existing_sensor_id = [
+        config.horizon.sensor_id.trim(),
+        config.tunnel.sensor_id.trim(),
+        std::env::var("SYNAPSE_SENSOR_ID")
+            .ok()
+            .as_deref()
+            .unwrap_or("")
+            .trim(),
+    ]
+    .into_iter()
+    .find(|value| !value.is_empty())
+    .map(str::to_string);
+
+    let existing_sensor_name = config
+        .horizon
+        .sensor_name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            config
+                .tunnel
+                .sensor_name
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+        });
+
+    let host_name = System::host_name().filter(|value| !value.trim().is_empty());
+    let sensor_id = existing_sensor_id.unwrap_or_else(|| {
+        host_name
+            .as_deref()
+            .map(slugify_sensor_hostname)
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("sensor-{}", value))
+            .unwrap_or_else(|| format!("sensor-{}", Uuid::new_v4()))
+    });
+    let sensor_name = existing_sensor_name.or(host_name);
+    (sensor_id, sensor_name)
+}
+
+fn slugify_sensor_hostname(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
+}
+
+fn set_yaml_mapping(mapping: &mut serde_yaml::Mapping, key: &str, value: serde_yaml::Mapping) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Mapping(value),
+    );
+}
+
+fn set_yaml_string(mapping: &mut serde_yaml::Mapping, key: &str, value: &str) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::String(value.to_string()),
+    );
+}
+
+fn set_yaml_bool(mapping: &mut serde_yaml::Mapping, key: &str, value: bool) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::Bool(value),
+    );
+}
+
+fn set_yaml_u64(mapping: &mut serde_yaml::Mapping, key: &str, value: u64) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::to_value(value).expect("u64 should serialize to YAML"),
+    );
+}
+
+fn set_yaml_usize(mapping: &mut serde_yaml::Mapping, key: &str, value: usize) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::to_value(value).expect("usize should serialize to YAML"),
+    );
+}
+
+fn set_yaml_u32(mapping: &mut serde_yaml::Mapping, key: &str, value: u32) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::to_value(value).expect("u32 should serialize to YAML"),
+    );
+}
+
+fn set_yaml_optional_string(mapping: &mut serde_yaml::Mapping, key: &str, value: Option<&str>) {
+    let yaml_value = match value {
+        Some(inner) => serde_yaml::Value::String(inner.to_string()),
+        None => serde_yaml::Value::Null,
+    };
+    mapping.insert(serde_yaml::Value::String(key.to_string()), yaml_value);
+}
+
+fn horizon_config_to_yaml(config: &HorizonConfig) -> serde_yaml::Mapping {
+    let mut mapping = serde_yaml::Mapping::new();
+    set_yaml_bool(&mut mapping, "enabled", config.enabled);
+    set_yaml_string(&mut mapping, "hub_url", &config.hub_url);
+    set_yaml_string(&mut mapping, "api_key", &config.api_key);
+    set_yaml_string(&mut mapping, "sensor_id", &config.sensor_id);
+    set_yaml_optional_string(&mut mapping, "sensor_name", config.sensor_name.as_deref());
+    set_yaml_string(&mut mapping, "version", &config.version);
+    set_yaml_u64(
+        &mut mapping,
+        "reconnect_delay_ms",
+        config.reconnect_delay_ms,
+    );
+    set_yaml_u32(
+        &mut mapping,
+        "max_reconnect_attempts",
+        config.max_reconnect_attempts,
+    );
+    set_yaml_u32(
+        &mut mapping,
+        "circuit_breaker_threshold",
+        config.circuit_breaker_threshold,
+    );
+    set_yaml_u64(
+        &mut mapping,
+        "circuit_breaker_cooldown_ms",
+        config.circuit_breaker_cooldown_ms,
+    );
+    set_yaml_usize(&mut mapping, "signal_batch_size", config.signal_batch_size);
+    set_yaml_u64(
+        &mut mapping,
+        "signal_batch_delay_ms",
+        config.signal_batch_delay_ms,
+    );
+    set_yaml_u64(
+        &mut mapping,
+        "heartbeat_interval_ms",
+        config.heartbeat_interval_ms,
+    );
+    set_yaml_usize(
+        &mut mapping,
+        "max_queued_signals",
+        config.max_queued_signals,
+    );
+    set_yaml_u64(
+        &mut mapping,
+        "blocklist_cache_ttl_secs",
+        config.blocklist_cache_ttl_secs,
+    );
+    mapping
+}
+
+fn tunnel_config_to_yaml(config: &TunnelConfig) -> serde_yaml::Mapping {
+    let mut mapping = serde_yaml::Mapping::new();
+    set_yaml_bool(&mut mapping, "enabled", config.enabled);
+    set_yaml_string(&mut mapping, "url", &config.url);
+    set_yaml_string(&mut mapping, "api_key", &config.api_key);
+    set_yaml_string(&mut mapping, "sensor_id", &config.sensor_id);
+    set_yaml_optional_string(&mut mapping, "sensor_name", config.sensor_name.as_deref());
+    set_yaml_string(&mut mapping, "version", &config.version);
+    mapping.insert(
+        serde_yaml::Value::String("capabilities".to_string()),
+        serde_yaml::Value::Sequence(
+            config
+                .capabilities
+                .iter()
+                .cloned()
+                .map(serde_yaml::Value::String)
+                .collect(),
+        ),
+    );
+    set_yaml_u64(
+        &mut mapping,
+        "heartbeat_interval_ms",
+        config.heartbeat_interval_ms,
+    );
+    set_yaml_u64(
+        &mut mapping,
+        "reconnect_delay_ms",
+        config.reconnect_delay_ms,
+    );
+    set_yaml_u32(
+        &mut mapping,
+        "max_reconnect_attempts",
+        config.max_reconnect_attempts,
+    );
+    set_yaml_u64(&mut mapping, "auth_timeout_ms", config.auth_timeout_ms);
+    set_yaml_bool(&mut mapping, "shell_enabled", config.shell_enabled);
+    mapping
+}
+
+fn request_process_restart() -> Result<RestartResult, String> {
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to locate current executable: {}", e))?;
+    let current_dir =
+        std::env::current_dir().map_err(|e| format!("Failed to read current dir: {}", e))?;
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+
+    #[cfg(unix)]
+    {
+        let mut command = Command::new("/bin/sh");
+        command
+            .current_dir(current_dir)
+            .process_group(0)
+            .arg("-c")
+            .arg("sleep \"$1\"; shift; exec \"$@\"")
+            .arg("synapse-waf-restart")
+            .arg("1")
+            .arg(&exe);
+        for arg in &args {
+            command.arg(arg);
+        }
+        command.spawn().map_err(|e| {
+            format!(
+                "Failed to spawn replacement process {}: {}",
+                exe.display(),
+                e
+            )
+        })?;
+
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(400));
+            std::process::exit(0);
+        });
+
+        return Ok(RestartResult {
+            success: true,
+            message: format!(
+                "Restart requested. Synapse WAF will restart using {}.",
+                exe.display()
+            ),
+        });
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = exe;
+        let _ = current_dir;
+        let _ = args;
+        Err("Restart is only supported on Unix-like hosts in this build".to_string())
+    }
+}
+
 // ============================================================================
 // Detection Engine (Synapse WAF)
 // ============================================================================
@@ -1096,7 +1443,9 @@ impl DetectionEngine {
 
         let timeout_us = WAF_REGEX_TIMEOUT_US.load(std::sync::atomic::Ordering::Relaxed);
         let timeout = Duration::from_micros(timeout_us);
-        let verdict = SYNAPSE.read().analyze_deferred_with_timeout(&request, timeout);
+        let verdict = SYNAPSE
+            .read()
+            .analyze_deferred_with_timeout(&request, timeout);
         let elapsed = start.elapsed();
 
         DetectionResult {
@@ -1308,12 +1657,7 @@ fn categorize_rule_id(rule_id: u32) -> String {
 /// Result from async DLP scan task: (match_count, types, scan_time_us, matches).
 /// The `matches` vec powers the deferred WAF pass's `dlp_violation` match kind
 /// and is empty when no matches were found.
-pub type DlpScanResult = (
-    usize,
-    String,
-    u64,
-    Vec<synapse_pingora::dlp::DlpMatch>,
-);
+pub type DlpScanResult = (usize, String, u64, Vec<synapse_pingora::dlp::DlpMatch>);
 
 type HeaderSnapshot = (HeaderName, HeaderValue);
 
@@ -2126,10 +2470,7 @@ impl SynapseProxy {
     /// - `content-length` matches `WAF_BLOCK_BODY.len()`
     /// - Security headers via `headers::apply_security_response_headers`
     ///   (HSTS is conditionally emitted only on HTTPS)
-    fn build_waf_block_response_header(
-        request_id: &str,
-        is_https: bool,
-    ) -> Result<ResponseHeader> {
+    fn build_waf_block_response_header(request_id: &str, is_https: bool) -> Result<ResponseHeader> {
         let mut resp = ResponseHeader::build(403, None)?;
         Self::apply_request_id_header(&mut resp, request_id)?;
         headers::apply_security_response_headers(&mut resp, is_https);
@@ -5989,8 +6330,11 @@ fn main() {
     // These callbacks allow the admin_server handlers to access real profile/schema data
     register_profiles_getter(DetectionEngine::get_profiles);
     register_schemas_getter(|| SCHEMA_LEARNER.get_all_schemas());
+    register_restart_callback(request_process_restart);
 
     // Register integration configuration callbacks
+    let config_path = cli.config.clone();
+    let runtime_config = Arc::new(RwLock::new(config.clone()));
     let integration_config = Arc::new(parking_lot::RwLock::new(IntegrationsConfig {
         horizon_hub_url: config.horizon.hub_url.clone(),
         horizon_api_key: config.horizon.api_key.clone(),
@@ -6001,14 +6345,22 @@ fn main() {
 
     let ic_getter = Arc::clone(&integration_config);
     let ic_setter = Arc::clone(&integration_config);
+    let runtime_config_setter = Arc::clone(&runtime_config);
     register_integrations_callbacks(
         move || ic_getter.read().clone(),
         move |new_config| {
             info!("Updating integrations configuration from admin dashboard");
+            let mut updated_runtime_config = runtime_config_setter.read().clone();
+            apply_integrations_to_runtime_config(&mut updated_runtime_config, &new_config);
+            persist_integrations_runtime_config(&config_path, &updated_runtime_config)?;
+            *runtime_config_setter.write() = updated_runtime_config;
             let mut ic = ic_setter.write();
             *ic = new_config;
-            // In a real implementation, we would also update the active managers
-            // or trigger a reload.
+            info!(
+                "Persisted integrations configuration to {}. Restart required for live Horizon/Tunnel connections.",
+                config_path
+            );
+            Ok(())
         },
     );
 
@@ -6534,6 +6886,7 @@ fn init_logging() {
 mod tests {
     use super::*;
     use serial_test::serial;
+    use tempfile::NamedTempFile;
 
     const TEST_IP: &str = "192.168.1.100";
 
@@ -7412,10 +7765,13 @@ key_path: "/etc/keys/example.key"
     fn test_waf_block_body_is_stable_json_envelope() {
         // Stability contract — if this assertion needs changing, it is an
         // API break for every client that parses the WAF error body.
-        assert_eq!(SynapseProxy::WAF_BLOCK_BODY, r#"{"error": "access_denied"}"#);
+        assert_eq!(
+            SynapseProxy::WAF_BLOCK_BODY,
+            r#"{"error": "access_denied"}"#
+        );
         // Also valid JSON.
-        let parsed: serde_json::Value =
-            serde_json::from_str(SynapseProxy::WAF_BLOCK_BODY).expect("WAF_BLOCK_BODY is valid JSON");
+        let parsed: serde_json::Value = serde_json::from_str(SynapseProxy::WAF_BLOCK_BODY)
+            .expect("WAF_BLOCK_BODY is valid JSON");
         assert_eq!(parsed["error"], "access_denied");
     }
 
@@ -7467,7 +7823,10 @@ key_path: "/etc/keys/example.key"
         let resp_http = SynapseProxy::build_waf_block_response_header("r", false).unwrap();
 
         assert!(
-            resp_https.headers.get("strict-transport-security").is_some(),
+            resp_https
+                .headers
+                .get("strict-transport-security")
+                .is_some(),
             "HSTS must be present on HTTPS responses"
         );
         assert!(
@@ -7692,5 +8051,68 @@ key_path: "/etc/keys/example.key"
             }
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn test_apply_integrations_to_runtime_config_assigns_shared_sensor_identity() {
+        let mut config = Config::default();
+        let integrations = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "sensor-api-key-abcdefghijklmnopqrstuvwxyz".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "sensor-api-key-abcdefghijklmnopqrstuvwxyz".to_string(),
+            apparatus_url: "https://apparatus.example.internal".to_string(),
+        };
+
+        apply_integrations_to_runtime_config(&mut config, &integrations);
+
+        assert!(config.horizon.enabled);
+        assert!(config.tunnel.enabled);
+        assert_eq!(config.horizon.hub_url, integrations.horizon_hub_url);
+        assert_eq!(config.tunnel.url, integrations.tunnel_url);
+        assert_eq!(config.apparatus_url, integrations.apparatus_url);
+        assert!(!config.horizon.sensor_id.is_empty());
+        assert_eq!(config.horizon.sensor_id, config.tunnel.sensor_id);
+    }
+
+    #[test]
+    fn test_persist_integrations_runtime_config_writes_complete_sections() {
+        let temp = NamedTempFile::new().expect("temp config file");
+        fs::write(
+            temp.path(),
+            r#"server:
+  listen: "127.0.0.1:6190"
+  admin_listen: "127.0.0.1:6191"
+sites:
+  - hostname: "localhost"
+    upstreams:
+      - host: "127.0.0.1"
+        port: 5555
+"#,
+        )
+        .expect("write config");
+
+        let mut config =
+            Config::load(temp.path().to_str().expect("utf-8 path")).expect("load baseline config");
+        let integrations = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "sensor-api-key-abcdefghijklmnopqrstuvwxyz".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "sensor-api-key-abcdefghijklmnopqrstuvwxyz".to_string(),
+            apparatus_url: "https://apparatus.example.internal".to_string(),
+        };
+
+        apply_integrations_to_runtime_config(&mut config, &integrations);
+        persist_integrations_runtime_config(temp.path().to_str().expect("utf-8 path"), &config)
+            .expect("persist integrations");
+
+        let reloaded = Config::load(temp.path().to_str().expect("utf-8 path"))
+            .expect("reload persisted config");
+        assert!(reloaded.horizon.enabled);
+        assert!(reloaded.tunnel.enabled);
+        assert_eq!(reloaded.horizon.hub_url, integrations.horizon_hub_url);
+        assert_eq!(reloaded.tunnel.url, integrations.tunnel_url);
+        assert_eq!(reloaded.apparatus_url, integrations.apparatus_url);
+        assert_eq!(reloaded.horizon.sensor_id, reloaded.tunnel.sensor_id);
     }
 }
