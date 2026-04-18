@@ -149,10 +149,7 @@ impl Archetype for CredentialStuffer {
         let user = self.user_pool[self.user_cursor].clone();
         self.user_cursor = (self.user_cursor + 1) % self.user_pool.len();
 
-        let body = format!(
-            r#"{{"username":"{}","password":"Summer2026!"}}"#,
-            user
-        );
+        let body = format!(r#"{{"username":"{}","password":"Summer2026!"}}"#, user);
         let body_bytes = Bytes::from(body.into_bytes());
 
         let headers = vec![
@@ -215,16 +212,32 @@ impl Default for VulnScanner {
                 // Classic SQLi probes — should trip rules in the 1xxxx
                 // (injection) range from production_rules.json.
                 ("GET", "/api/users?id=1%20OR%201%3D1", None),
-                ("GET", "/api/search?q=%27%20UNION%20SELECT%20*%20FROM%20users--", None),
+                (
+                    "GET",
+                    "/api/search?q=%27%20UNION%20SELECT%20*%20FROM%20users--",
+                    None,
+                ),
                 ("GET", "/products?cat=1%3B%20DROP%20TABLE%20users", None),
                 // XSS attempts.
-                ("GET", "/comments?text=%3Cscript%3Ealert(1)%3C%2Fscript%3E", None),
-                ("GET", "/search?q=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E", None),
+                (
+                    "GET",
+                    "/comments?text=%3Cscript%3Ealert(1)%3C%2Fscript%3E",
+                    None,
+                ),
+                (
+                    "GET",
+                    "/search?q=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E",
+                    None,
+                ),
                 // Path traversal.
                 ("GET", "/files?name=..%2F..%2F..%2Fetc%2Fpasswd", None),
                 ("GET", "/download?file=....%2F....%2Fetc%2Fshadow", None),
                 // Command injection.
-                ("GET", "/ping?host=127.0.0.1%3B%20cat%20%2Fetc%2Fpasswd", None),
+                (
+                    "GET",
+                    "/ping?host=127.0.0.1%3B%20cat%20%2Fetc%2Fpasswd",
+                    None,
+                ),
                 // Recon / scanner UA pattern (matched by bot-detection rules).
                 ("GET", "/.env", None),
                 ("GET", "/wp-admin/", None),
@@ -431,19 +444,18 @@ impl SimulatorLoop {
         // /_sensor/status and /stats endpoints read from. Without this,
         // horizon's polled "analyzed" / "blocked" / "blockRate" values
         // stay at zero even though the engine is running.
-        self.waf_stats.record(result.blocked, result.detection_time_us);
+        self.waf_stats
+            .record(result.blocked, result.detection_time_us);
 
         // Mirror the production state updates that request_filter does
         // after the analyze call. Keep this list aligned with main.rs.
         if self.entity_manager.is_enabled() {
-            let ja4_str = fingerprint.as_ref().and_then(|fp| {
-                fp.ja4.as_ref().map(|j| -> &str { &j.raw })
-            });
-            let _ = self.entity_manager.touch_entity_with_fingerprint(
-                &req.source_ip,
-                ja4_str,
-                None,
-            );
+            let ja4_str = fingerprint
+                .as_ref()
+                .and_then(|fp| fp.ja4.as_ref().map(|j| -> &str { &j.raw }));
+            let _ =
+                self.entity_manager
+                    .touch_entity_with_fingerprint(&req.source_ip, ja4_str, None);
         }
 
         if let Ok(ip_addr) = req.source_ip.parse::<std::net::IpAddr>() {

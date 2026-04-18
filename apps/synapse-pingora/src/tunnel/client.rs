@@ -646,8 +646,7 @@ fn load_root_store() -> Result<RootCertStore, TunnelError> {
                 trimmed
             )));
         }
-        let (added, ignored) =
-            root_store.add_parsable_certificates(certs);
+        let (added, ignored) = root_store.add_parsable_certificates(certs);
         if added == 0 {
             return Err(TunnelError::ConfigError(format!(
                 "SYNAPSE_CA_BUNDLE {} contained no valid certificates (ignored {})",

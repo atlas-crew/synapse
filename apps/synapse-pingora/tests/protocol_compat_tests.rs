@@ -622,6 +622,8 @@ fn protocol_compat_roundtrip_all_sensor_variants() {
                 sensor_id: "s1".to_string(),
                 sensor_name: Some("Test".to_string()),
                 version: "1.0.0".to_string(),
+                registration_token: None,
+                fingerprint: None,
                 protocol_version: Some("1.0".to_string()),
             },
         },

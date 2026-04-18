@@ -258,8 +258,7 @@ async fn test_request_filter_registers_fingerprint_with_campaign_manager() {
     let stats_before = fingerprint_index.stats();
     let ips_before = stats_before.total_ips;
 
-    let request =
-        "GET /task54-fingerprint-probe HTTP/1.1\r\n\
+    let request = "GET /task54-fingerprint-probe HTTP/1.1\r\n\
          Host: example.com\r\n\
          User-Agent: task54-fingerprint-probe/1.0\r\n\
          Accept: */*\r\n\
@@ -449,7 +448,9 @@ async fn test_deferred_dlp_block_returns_403_with_canonical_envelope() {
     // AC#2: content-type is application/json — the canonical envelope
     // is JSON, not plain text or HTML.
     assert!(
-        response.to_lowercase().contains("content-type: application/json"),
+        response
+            .to_lowercase()
+            .contains("content-type: application/json"),
         "AC#2: expected application/json content-type; full response:\n{}",
         response
     );
@@ -531,7 +532,9 @@ async fn test_schema_learner_not_poisoned_by_deferred_dlp_block() {
 
     // Precondition: the learner has no schema for this template.
     assert!(
-        synapse_main::SCHEMA_LEARNER.get_schema(template_path).is_none(),
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(template_path)
+            .is_none(),
         "precondition: template must not already be in learner (unique marker in path)"
     );
 
@@ -598,7 +601,9 @@ async fn test_schema_learner_not_poisoned_by_deferred_dlp_block() {
     // this assertion passes because the Err return above prevented the
     // consume from firing.
     assert!(
-        synapse_main::SCHEMA_LEARNER.get_schema(template_path).is_none(),
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(template_path)
+            .is_none(),
         "TASK-59: learner must NOT have trained on a deferred-blocked body. \
          If this assertion fails, a deferred block is still poisoning the baseline. \
          See TASK-59 for the exploit chain and fix."
@@ -610,7 +615,9 @@ async fn test_schema_learner_not_poisoned_by_deferred_dlp_block() {
     // collide with the previous assertion.
     let benign_template = "/api/task59-benign-probe";
     assert!(
-        synapse_main::SCHEMA_LEARNER.get_schema(benign_template).is_none(),
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(benign_template)
+            .is_none(),
         "precondition: benign template must not already be in learner"
     );
 
@@ -662,7 +669,9 @@ async fn test_schema_learner_not_poisoned_by_deferred_dlp_block() {
         .expect("upstream_request_filter should Ok for benign body");
 
     assert!(
-        synapse_main::SCHEMA_LEARNER.get_schema(benign_template).is_some(),
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(benign_template)
+            .is_some(),
         "regression guard: benign non-blocked body MUST train the learner \
          (otherwise the TASK-59 fix is over-aggressive)"
     );
@@ -699,12 +708,13 @@ async fn test_schema_learner_not_poisoned_by_body_phase_waf_block() {
         "blocking": true,
         "matches": [{"type": "header", "key": "x-task41-probe", "match": "block-me"}]
     }]"#;
-    synapse_main::DetectionEngine::reload_rules(test_rule.as_bytes())
-        .expect("test rule must load");
+    synapse_main::DetectionEngine::reload_rules(test_rule.as_bytes()).expect("test rule must load");
 
     let template_path = "/api/task41-body-phase-probe";
     assert!(
-        synapse_main::SCHEMA_LEARNER.get_schema(template_path).is_none(),
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(template_path)
+            .is_none(),
         "precondition: template must not already be in learner"
     );
 
@@ -755,7 +765,9 @@ async fn test_schema_learner_not_poisoned_by_body_phase_waf_block() {
         .expect("restore production rules");
 
     assert!(
-        synapse_main::SCHEMA_LEARNER.get_schema(template_path).is_none(),
+        synapse_main::SCHEMA_LEARNER
+            .get_schema(template_path)
+            .is_none(),
         "TASK-41/67: learner must NOT have trained on body that was \
          blocked by body-phase WAF. If this fails, a body-phase block \
          path is poisoning the learner baseline."
@@ -776,9 +788,7 @@ async fn test_schema_learner_not_poisoned_by_body_phase_waf_block() {
 #[serial]
 async fn test_production_trends_manager_apply_risk_reaches_entity_manager() {
     use synapse_pingora::entity::{EntityConfig, EntityManager};
-    use synapse_pingora::trends::{
-        AnomalyMetadata, AnomalySeverity, AnomalyType, TrendsConfig,
-    };
+    use synapse_pingora::trends::{AnomalyMetadata, AnomalySeverity, AnomalyType, TrendsConfig};
 
     // Build an isolated EntityManager so the risk contribution is
     // observable via its public API, not leaking into the shared test
@@ -850,7 +860,8 @@ fn test_task58_invalid_session_path_is_currently_unreachable() {
     // This match exists purely so the test compiles against the current
     // SessionDecision shape. If Invalid is renamed or removed, the test
     // breaks and forces a review of TASK-58's production wiring.
-    let stub = SessionDecision::Invalid("unit-test only — never produced by SessionManager".to_string());
+    let stub =
+        SessionDecision::Invalid("unit-test only — never produced by SessionManager".to_string());
     match stub {
         SessionDecision::Invalid(reason) => {
             assert_eq!(reason, "unit-test only — never produced by SessionManager");

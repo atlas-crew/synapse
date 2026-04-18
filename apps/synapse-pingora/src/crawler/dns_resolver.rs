@@ -5,14 +5,14 @@
 //! - Timeout enforcement prevents slow DNS servers from blocking requests
 //! - IP round-trip verification prevents DNS rebinding attacks
 
+use hickory_resolver::config::ResolverConfig;
+use hickory_resolver::name_server::TokioConnectionProvider;
+use hickory_resolver::Resolver;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::Semaphore;
-use hickory_resolver::config::ResolverConfig;
-use hickory_resolver::name_server::TokioConnectionProvider;
-use hickory_resolver::Resolver;
 
 /// DNS resolution errors.
 #[derive(Debug, Error, Clone)]

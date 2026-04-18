@@ -865,12 +865,7 @@ impl CampaignManager {
     /// * `ip` - The IP address of the client
     /// * `ja4` - Optional JA4 TLS fingerprint
     /// * `ja4h` - Optional JA4H HTTP fingerprint (used in combined hash)
-    pub fn register_fingerprints(
-        &self,
-        ip: IpAddr,
-        ja4: Option<Arc<str>>,
-        ja4h: Option<Arc<str>>,
-    ) {
+    pub fn register_fingerprints(&self, ip: IpAddr, ja4: Option<Arc<str>>, ja4h: Option<Arc<str>>) {
         // TASK-64: ja4 and ja4h arrive as Arc<str> so the filter-chain hot
         // path never allocates String copies for these fingerprints. The
         // rotation detector stores Arc<str> directly, so refcount bumps
