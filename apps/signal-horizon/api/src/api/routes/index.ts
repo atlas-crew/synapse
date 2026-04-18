@@ -28,6 +28,7 @@ import { createBeamRouter } from './beam/index.js';
 import { createTunnelRoutes } from './tunnel.js';
 import { createManagementRoutes } from './management.js';
 import { createOnboardingRoutes } from './onboarding.js';
+import { createSensorEnrollmentRoutes } from './sensor-enrollment.js';
 import { createTenantRoutes } from './tenant.js';
 import { createAuthRoutes } from './auth.js';
 import { createUserRoutes } from './users.js';
@@ -135,6 +136,12 @@ export function createApiRouter(
 
   // Mount Auth routes (handled its own auth for public endpoints)
   router.use('/auth', createAuthRoutes(prisma, logger, userAuthService, authMiddleware));
+
+  // Public sensor-enrollment surface: the announce endpoint is authenticated
+  // by the registration token in the Authorization header, not by a user
+  // session, so it must mount before the global auth middleware.
+  router.use('/sensors', createSensorEnrollmentRoutes(prisma, logger));
+  logger.info('Public sensor enrollment routes mounted at /api/v1/sensors');
 
   // All other API routes require authentication
   router.use(authMiddleware);
@@ -249,7 +256,9 @@ export function createApiRouter(
   logger.info('User Management routes mounted at /api/v1/users');
 
   // Mount Onboarding routes for sensor registration
-  router.use('/onboarding', createOnboardingRoutes(prisma, logger));
+  router.use('/onboarding', createOnboardingRoutes(prisma, logger, {
+    fleetCommander: options.fleetCommander,
+  }));
   logger.info('Onboarding routes mounted at /api/v1/onboarding');
 
   // Mount Synapse proxy routes for sensor introspection

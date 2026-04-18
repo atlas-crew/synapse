@@ -538,12 +538,16 @@ export class SensorGateway {
     // Extract registration token and fingerprint from payload (optional fields)
     const registrationToken = (payload as Record<string, unknown>).registrationToken as string | undefined;
     const sensorFingerprint = (payload as Record<string, unknown>).fingerprint as string | undefined;
+    const apiKeyLooksLikeRegistrationToken = Boolean(apiKey && apiKey.startsWith('sh_reg_'));
 
     try {
       let tenantId: string;
       let apiKeyId: string | null = null;
       let apiKeySource: 'sensor' | 'legacy' | null = null;
       let sharingPreference: SharingPreference = 'CONTRIBUTE_AND_RECEIVE';
+      let validatedRegistrationToken:
+        | { valid: boolean; reason: string; tokenId?: string; region?: string; tenantId?: string }
+        | null = null;
 
       if (token) {
         // JWT Authentication (P1-SEC-003)
@@ -586,6 +590,36 @@ export class SensorGateway {
 
         if (!tenant) {
           this.send(conn, { type: 'auth-failed', error: 'Tenant not found' });
+          return;
+        }
+
+        sharingPreference = tenant.sharingPreference as SharingPreference;
+      } else if (registrationToken && (!apiKey || apiKeyLooksLikeRegistrationToken)) {
+        validatedRegistrationToken = await this.validateRegistrationToken(registrationToken);
+
+        if (!validatedRegistrationToken.valid || !validatedRegistrationToken.tenantId) {
+          this.logger.warn(
+            {
+              sensorName: sensorName || sensorId,
+              reason: validatedRegistrationToken.reason,
+            },
+            'Invalid registration token during sensor auth'
+          );
+          this.send(conn, { type: 'auth-failed', error: validatedRegistrationToken.reason });
+          conn.ws.close(4003, 'Invalid registration token');
+          return;
+        }
+
+        tenantId = validatedRegistrationToken.tenantId;
+
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { sharingPreference: true },
+        });
+
+        if (!tenant) {
+          this.send(conn, { type: 'auth-failed', error: 'Tenant not found' });
+          conn.ws.close(4003, 'Tenant not found');
           return;
         }
 
@@ -790,10 +824,9 @@ export class SensorGateway {
         }
 
         // Validate registration token
-        const tokenValidation = await this.validateRegistrationToken(
-          registrationToken,
-          tenantId
-        );
+        const tokenValidation =
+          validatedRegistrationToken ??
+          await this.validateRegistrationToken(registrationToken, tenantId);
 
         if (!tokenValidation.valid) {
           this.logger.warn(
@@ -981,8 +1014,8 @@ export class SensorGateway {
    */
   private async validateRegistrationToken(
     token: string,
-    tenantId: string
-  ): Promise<{ valid: boolean; reason: string; tokenId?: string; region?: string }> {
+    tenantId?: string
+  ): Promise<{ valid: boolean; reason: string; tokenId?: string; region?: string; tenantId?: string }> {
     try {
       // Hash the token to find the record
       const tokenHash = await this.hashApiKey(token);
@@ -1001,7 +1034,7 @@ export class SensorGateway {
       }
 
       // Verify token belongs to the correct tenant
-      if (tokenRecord.tenantId !== tenantId) {
+      if (tenantId && tokenRecord.tenantId !== tenantId) {
         return { valid: false, reason: 'Registration token belongs to a different tenant' };
       }
 
@@ -1025,6 +1058,7 @@ export class SensorGateway {
         reason: 'Valid',
         tokenId: tokenRecord.id,
         region: tokenRecord.region || undefined,
+        tenantId: tokenRecord.tenantId,
       };
     } catch (error) {
       this.logger.error({ error }, 'Failed to validate registration token');

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { Button, MetricCard, Modal, PAGE_TITLE_STYLE, Panel, SectionHeader, Stack, colors } from '@/ui';
+import { OnboardingWizard } from '../../components/onboarding/OnboardingWizard';
 
 interface RegistrationToken {
   id: string;
@@ -64,6 +65,7 @@ const PAGE_HEADER_STYLE = { marginBottom: 0 };
 export function OnboardingPage(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<'tokens' | 'pending'>('tokens');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [tokenToRevoke, setTokenToRevoke] = useState<string | null>(null);
   // Note: sensorToProcess reserved for future modal-based approval with confirmation
   const [_sensorToProcess, _setSensorToProcess] = useState<{
@@ -217,17 +219,27 @@ export function OnboardingPage(): React.ReactElement {
         style={PAGE_HEADER_STYLE}
         titleStyle={PAGE_TITLE_STYLE}
         actions={
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn-primary"
-          >
-            <Stack as="span" inline direction="row" align="center" gap="sm">
-              <Plus className="w-4 h-4" />
-              New Token
-            </Stack>
-          </button>
+          <Stack direction="row" gap="sm">
+            <Button variant="primary" onClick={() => setIsWizardOpen(true)}>
+              <Stack as="span" inline direction="row" align="center" gap="sm">
+                <UserPlus className="w-4 h-4" />
+                Guided setup
+              </Stack>
+            </Button>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary"
+            >
+              <Stack as="span" inline direction="row" align="center" gap="sm">
+                <Plus className="w-4 h-4" />
+                New Token
+              </Stack>
+            </button>
+          </Stack>
         }
       />
+
+      <OnboardingWizard open={isWizardOpen} onClose={() => setIsWizardOpen(false)} />
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
