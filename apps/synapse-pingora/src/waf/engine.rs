@@ -2549,11 +2549,7 @@ fn condition_is_deferred(condition: &MatchCondition) -> bool {
 fn compute_deferred_rule_indices(rules: &[WafRule]) -> Vec<usize> {
     let mut out = Vec::new();
     for (idx, rule) in rules.iter().enumerate() {
-        if rule
-            .matches
-            .iter()
-            .any(|cond| condition_is_deferred(cond))
-        {
+        if rule.matches.iter().any(|cond| condition_is_deferred(cond)) {
             out.push(idx);
         }
     }
@@ -2608,7 +2604,9 @@ fn collect_word_values(condition: &MatchCondition, out: &mut Vec<String>) {
 mod tests {
     use super::*;
     use crate::dlp::{DlpMatch, PatternSeverity, SensitiveDataType};
-    use crate::fingerprint::{ClientFingerprint, Ja4Fingerprint, Ja4Protocol, Ja4SniType, Ja4hFingerprint};
+    use crate::fingerprint::{
+        ClientFingerprint, Ja4Fingerprint, Ja4Protocol, Ja4SniType, Ja4hFingerprint,
+    };
     use crate::profiler::{SchemaViolation, ValidationResult};
     use crate::waf::types::Header;
 
@@ -2669,7 +2667,10 @@ mod tests {
         }]"#;
         engine.load_rules(rules.as_bytes()).unwrap();
 
-        let fp = sample_fingerprint("t13d1516h2_8daaf6152771_e5627efa2ab1", "ge11nn00_abcdef012345_000000000000");
+        let fp = sample_fingerprint(
+            "t13d1516h2_8daaf6152771_e5627efa2ab1",
+            "ge11nn00_abcdef012345_000000000000",
+        );
         let verdict = engine.analyze(&Request {
             method: "GET",
             path: "/",
@@ -2718,7 +2719,10 @@ mod tests {
         }]"#;
         engine.load_rules(rules.as_bytes()).unwrap();
 
-        let fp = sample_fingerprint("t13d1516h2_8daaf6152771_e5627efa2ab1", "ge11nn00_abcdef012345_000000000000");
+        let fp = sample_fingerprint(
+            "t13d1516h2_8daaf6152771_e5627efa2ab1",
+            "ge11nn00_abcdef012345_000000000000",
+        );
         let verdict = engine.analyze(&Request {
             method: "GET",
             path: "/",
@@ -2821,7 +2825,10 @@ mod tests {
 
         // Body-phase `analyze` must skip the deferred rule even if DLP matches
         // were (erroneously) available — the index set blocks it.
-        let matches = vec![dlp_match(SensitiveDataType::Ssn), dlp_match(SensitiveDataType::Ssn)];
+        let matches = vec![
+            dlp_match(SensitiveDataType::Ssn),
+            dlp_match(SensitiveDataType::Ssn),
+        ];
         let req = Request {
             method: "POST",
             path: "/api",
@@ -2891,10 +2898,8 @@ mod tests {
 
         assert!(engine.deferred_rule_indices.is_empty());
 
-        let verdict = engine.analyze_deferred_with_timeout(
-            &Request::default(),
-            DEFAULT_EVAL_TIMEOUT,
-        );
+        let verdict =
+            engine.analyze_deferred_with_timeout(&Request::default(), DEFAULT_EVAL_TIMEOUT);
         assert_eq!(verdict.action, Action::Allow);
         assert!(verdict.matched_rules.is_empty());
     }
@@ -2963,8 +2968,7 @@ mod tests {
     // the global engine state.
     // ────────────────────────────────────────────────────────────────────
 
-    const PRODUCTION_RULES_FOR_SIGNAL_TESTS: &str =
-        include_str!("../production_rules.json");
+    const PRODUCTION_RULES_FOR_SIGNAL_TESTS: &str = include_str!("../production_rules.json");
 
     /// Load the full production ruleset into a fresh local engine for
     /// signal-correlation rule-fire tests. Used by the three test
@@ -3201,7 +3205,8 @@ mod tests {
             ..Default::default()
         };
 
-        let verdict_emails = engine.analyze_deferred_with_timeout(&req_emails, DEFAULT_EVAL_TIMEOUT);
+        let verdict_emails =
+            engine.analyze_deferred_with_timeout(&req_emails, DEFAULT_EVAL_TIMEOUT);
 
         // 220001 should fire (5 matches >= 5 threshold, any type).
         assert!(
@@ -3387,14 +3392,13 @@ mod tests {
     fn test_signal_correlation_ja4_rules_fire_on_deprecated_tls() {
         let engine = load_production_rules_engine();
 
-        // Build a ClientFingerprint with a specific JA4 raw prefix. The
-        // JA4 match kind does a substring check, so only the first few
-        // characters matter — the rest of the raw string just needs to
-        // parse-trip without actually being a real JA4.
-        fn fingerprint_with_ja4_prefix(prefix: &str) -> ClientFingerprint {
+        // Build a ClientFingerprint with a controlled JA4 raw string so we
+        // can verify these deprecated-TLS rules only match the version
+        // prefix, not incidental substrings inside the hash segments.
+        fn fingerprint_with_ja4_raw(raw: &str) -> ClientFingerprint {
             ClientFingerprint {
                 ja4: Some(Ja4Fingerprint {
-                    raw: std::sync::Arc::from(format!("{}d1516h2_000000000000_000000000000", prefix)),
+                    raw: std::sync::Arc::from(raw.to_string()),
                     protocol: Ja4Protocol::TCP,
                     tls_version: 10,
                     sni_type: Ja4SniType::Domain,
@@ -3418,8 +3422,8 @@ mod tests {
             }
         }
 
-        let run = |prefix: &str| -> Vec<u32> {
-            let fp = fingerprint_with_ja4_prefix(prefix);
+        let run = |raw: &str| -> Vec<u32> {
+            let fp = fingerprint_with_ja4_raw(raw);
             let req = Request {
                 method: "GET",
                 path: "/",
@@ -3431,7 +3435,7 @@ mod tests {
         };
 
         // Rule 220020: TLS 1.0 (JA4 prefix "t10").
-        let hits = run("t10");
+        let hits = run("t10d1516h2_000000000000_000000000000");
         assert!(
             hits.contains(&220020),
             "220020 (TLS 1.0) must fire on 't10' JA4 prefix, got {:?}",
@@ -3443,7 +3447,7 @@ mod tests {
         );
 
         // Rule 220021: TLS 1.1 (JA4 prefix "t11").
-        let hits = run("t11");
+        let hits = run("t11d1516h2_000000000000_000000000000");
         assert!(
             hits.contains(&220021),
             "220021 (TLS 1.1) must fire on 't11' JA4 prefix, got {:?}",
@@ -3458,7 +3462,7 @@ mod tests {
         // rule fires. This is the important false-positive guard: if
         // 220020/220021 were over-broad, legitimate modern clients would
         // accumulate risk score for no reason.
-        let hits = run("t13");
+        let hits = run("t13d1516h2_000000000000_000000000000");
         assert!(
             !hits.contains(&220020),
             "220020 must NOT fire on modern TLS 1.3 client"
@@ -3466,6 +3470,40 @@ mod tests {
         assert!(
             !hits.contains(&220021),
             "220021 must NOT fire on modern TLS 1.3 client"
+        );
+
+        // Regression guard for TASK-68: before the rule switched to
+        // starts_with semantics, this modern TLS 1.3 fingerprint would have
+        // matched 220020 because the cipher-hash segment contains "t10".
+        // Keep this pinned so we never fall back to substring behavior.
+        let hits = run("t13d1516h2_000t10000000_000000000000");
+        assert!(
+            !hits.contains(&220020),
+            "220020 must NOT fire when 't10' only appears in the JA4 hash segment"
+        );
+        assert!(
+            !hits.contains(&220021),
+            "220021 must NOT fire on the TLS 1.3 hash-substring regression case"
+        );
+
+        let hits = run("t13d1516h2_000t11000000_000000000000");
+        assert!(
+            !hits.contains(&220020),
+            "220020 must NOT fire when 't11' only appears in the JA4 hash segment"
+        );
+        assert!(
+            !hits.contains(&220021),
+            "220021 must NOT fire when 't11' only appears in the JA4 hash segment"
+        );
+
+        let hits = run("t13d1516h2_000000000000_0000000t1000");
+        assert!(
+            !hits.contains(&220020),
+            "220020 must NOT fire when 't10' only appears in the JA4 ext-hash segment"
+        );
+        assert!(
+            !hits.contains(&220021),
+            "220021 must NOT fire when 't10' only appears in the JA4 ext-hash segment"
         );
 
         // Negative baseline: no fingerprint attached at all (e.g. plain
@@ -3594,7 +3632,9 @@ mod tests {
         // matched_rules set. We build fresh Vec<DlpMatch> each call so the
         // borrow on `matches` lives long enough for `dlp_matches: Some(&m)`.
         let run = |count: usize| -> Vec<u32> {
-            let m: Vec<DlpMatch> = (0..count).map(|_| dlp_match(SensitiveDataType::Ssn)).collect();
+            let m: Vec<DlpMatch> = (0..count)
+                .map(|_| dlp_match(SensitiveDataType::Ssn))
+                .collect();
             let req = Request {
                 method: "POST",
                 path: "/",

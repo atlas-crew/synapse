@@ -3,7 +3,7 @@ id: TASK-68
 title: >-
   Anchor JA4 rules 220020/220021 to prefix match to prevent hash-substring false
   positives
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-12 22:57'
 labels:
@@ -57,9 +57,16 @@ Add a test fabricating a `Ja4Fingerprint` with raw `"t13d1516h2_000t10000000_000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Rules 220020 and 220021 match only on the JA4 prefix, not anywhere in the raw string
-- [ ] #2 If the engine supports starts_with match kind, use it; otherwise add one (small engine extension) or use regex with ^ anchor
-- [ ] #3 New test case: a fabricated JA4 raw string with modern TLS version (t13) but containing 't10' as a substring in the hash portion MUST NOT trigger rule 220020
-- [ ] #4 Existing positive test cases for rules 220020/220021 still pass
-- [ ] #5 Rule descriptions in production_rules.json are updated to clarify prefix matching
+- [x] #1 Rules 220020 and 220021 match only on the JA4 prefix, not anywhere in the raw string
+- [x] #2 If the engine supports starts_with match kind, use it; otherwise add one (small engine extension) or use regex with ^ anchor
+- [x] #3 New test case: a fabricated JA4 raw string with modern TLS version (t13) but containing 't10' as a substring in the hash portion MUST NOT trigger rule 220020
+- [x] #4 Existing positive test cases for rules 220020/220021 still pass
+- [x] #5 Rule descriptions in production_rules.json are updated to clarify prefix matching
 <!-- AC:END -->
+
+## Final Summary
+
+- Switched production rules 220020 and 220021 from bare-string JA4 substring matching to structured starts_with matching so only the JA4 version prefix can trigger the deprecated TLS rules.
+- Updated the rule descriptions to call out the JA4 prefix semantics for auditability in the production ruleset.
+- Expanded test_signal_correlation_ja4_rules_fire_on_deprecated_tls to keep the positive prefix cases and add negative regressions for t10/t11 appearing inside the JA4 cipher-hash and ext-hash segments of an otherwise modern TLS 1.3 fingerprint.
+- Verification: cargo test --manifest-path apps/synapse-pingora/Cargo.toml --lib waf::engine::tests::test_signal_correlation_ja4_rules_fire_on_deprecated_tls

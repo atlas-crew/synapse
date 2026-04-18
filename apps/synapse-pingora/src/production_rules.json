@@ -16223,25 +16223,31 @@
   },
   {
     "id": 220020,
-    "description": "JA4: TLS 1.0 client detected (deprecated, suspicious in 2026 — non-blocking risk contribution)",
+    "description": "JA4: raw starts with t10 (TLS 1.0 version segment; deprecated, suspicious in 2026 — non-blocking risk contribution)",
     "risk": 10.0,
     "blocking": false,
     "matches": [
       {
         "type": "ja4",
-        "match": "t10"
+        "match": {
+          "type": "starts_with",
+          "match": "t10"
+        }
       }
     ]
   },
   {
     "id": 220021,
-    "description": "JA4: TLS 1.1 client detected (deprecated, suspicious in 2026 — non-blocking risk contribution)",
+    "description": "JA4: raw starts with t11 (TLS 1.1 version segment; deprecated, suspicious in 2026 — non-blocking risk contribution)",
     "risk": 10.0,
     "blocking": false,
     "matches": [
       {
         "type": "ja4",
-        "match": "t11"
+        "match": {
+          "type": "starts_with",
+          "match": "t11"
+        }
       }
     ]
   }
