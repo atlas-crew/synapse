@@ -213,17 +213,40 @@ const PushConfigPayloadSchema = z.object({
   action: z.enum(['test', 'reload']).optional(),
 }).strict();
 
-/** push_rules: Push security rules to sensors */
+/** push_rules: Push security rules to sensors.
+ *
+ * Rule ids are either Synapse catalog numeric ids (u32) or CustomerRule cuids.
+ * Rule bodies use the Synapse WafRule wire shape — `matches`, `risk`, etc. —
+ * because sensors deserialize `payload.rules` directly into Vec<WafRule>.
+ * Individual rule objects use .passthrough() so future upstream fields survive
+ * validation instead of being stripped before reaching sensors.
+ */
+const RuleIdSchema = z.union([
+  z.number().int().min(0).max(0xffffffff),
+  z.string().min(1).max(128).regex(/^[\w-]+$/),
+]);
+
 const PushRulesPayloadSchema = z.object({
-  rules: z.array(z.object({
-    id: z.string().uuid(),
-    name: safeString(255).refine(SafeStringRefine.check, SafeStringRefine.message),
-    enabled: z.boolean(),
-    conditions: z.record(z.unknown()).optional(),
-    actions: z.record(z.unknown()).optional(),
-    priority: z.number().int().min(0).max(10000),
-  })).max(1000).optional(),
-  ruleIds: z.array(z.string().uuid()).max(1000).optional(),
+  rules: z.array(
+    z.object({
+      id: RuleIdSchema,
+      name: safeString(255).refine(SafeStringRefine.check, SafeStringRefine.message).optional(),
+      description: safeString(1000).refine(SafeStringRefine.check, SafeStringRefine.message).optional(),
+      enabled: z.boolean().optional(),
+      priority: z.number().int().min(0).max(10000).optional(),
+      conditions: z.record(z.unknown()).optional(),
+      actions: z.record(z.unknown()).optional(),
+      matches: z.array(z.unknown()).optional(),
+      classification: z.string().max(100).nullable().optional(),
+      state: z.string().max(100).nullable().optional(),
+      risk: z.number().nullable().optional(),
+      contributing_score: z.number().nullable().optional(),
+      blocking: z.boolean().nullable().optional(),
+      beta: z.boolean().nullable().optional(),
+      tag_name: z.string().max(255).nullable().optional(),
+    }).passthrough()
+  ).max(1000).optional(),
+  ruleIds: z.array(RuleIdSchema).max(1000).optional(),
   hash: z.string().max(128).regex(/^[a-f0-9]+$/i).optional(), // Hex hash
   activate: z.boolean().optional(),
   deploymentId: z.string().max(100).regex(/^[\w-]+$/).optional(),
@@ -2417,40 +2440,287 @@ const SensorLogsQuerySchema = z.object({
   });
 
   /**
-   * GET /api/v1/fleet/rules
-   * Compatibility endpoint: provides a synthetic rule catalog so the UI can render
-   * without relying on live sensor-side rule definitions.
+   * GET /api/v1/fleet/rules/catalog/version
+   * Returns the installed Synapse WAF catalog version, hash, row count, and
+   * most recent import timestamp. Operators and sensors use this to detect
+   * drift (e.g. a sensor running an older `production_rules.json` than what
+   * Horizon now has in its catalog).
    */
-  router.get('/rules', requireScope('fleet:read'), async (_req, res) => {
-    res.json([
-      {
-        id: 'rule-sqli-001',
-        name: 'SQL Injection Protection',
-        description: 'Detects common SQL injection patterns in request parameters and bodies.',
-        severity: 'critical',
-        enabled: true,
-        category: 'injection',
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'rule-xss-001',
-        name: 'XSS Protection',
-        description: 'Detects common cross-site scripting payloads.',
-        severity: 'high',
-        enabled: true,
-        category: 'xss',
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 'rule-rate-001',
-        name: 'Credential Stuffing Rate Control',
-        description: 'Mitigates credential stuffing bursts via adaptive rate limiting.',
-        severity: 'medium',
-        enabled: true,
-        category: 'rate-limit',
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+  router.get('/rules/catalog/version', requireScope('fleet:read'), async (_req, res) => {
+    try {
+      const sample = await prisma.synapseRule.findFirst({
+        orderBy: { importedAt: 'desc' },
+        select: { catalogVersion: true, catalogHash: true, importedAt: true, updatedAt: true },
+      });
+      const ruleCount = await prisma.synapseRule.count();
+      if (!sample || ruleCount === 0) {
+        res.json({
+          catalogVersion: null,
+          catalogHash: null,
+          ruleCount: 0,
+          lastImportedAt: null,
+        });
+        return;
+      }
+      res.json({
+        catalogVersion: sample.catalogVersion,
+        catalogHash: sample.catalogHash,
+        ruleCount,
+        lastImportedAt: sample.updatedAt.toISOString(),
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to read Synapse catalog version');
+      res.status(500).json({
+        error: 'Failed to read catalog version',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/fleet/rules/available
+   * Paginated, filterable view over the tenant's effective rule set:
+   * Synapse catalog rules (with tenant overrides merged) + tenant custom rules.
+   * Intended for UI pickers that let operators select rules to push.
+   */
+  const AvailableRulesQuerySchema = z.object({
+    classification: z.string().max(100).optional(),
+    state: z.string().max(100).optional(),
+    source: z.enum(['catalog', 'custom', 'all']).default('all'),
+    enabled: z.enum(['true', 'false']).optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
+
+  router.get(
+    '/rules/available',
+    requireScope('fleet:read'),
+    validateQuery(AvailableRulesQuerySchema),
+    async (req, res) => {
+      try {
+        const auth = req.auth!;
+        const q = req.query as unknown as z.infer<typeof AvailableRulesQuerySchema>;
+        const enabledFilter =
+          q.enabled === 'true' ? true : q.enabled === 'false' ? false : undefined;
+
+        const items: Array<Record<string, unknown>> = [];
+        let catalogTotal = 0;
+        let customTotal = 0;
+
+        if (q.source === 'catalog' || q.source === 'all') {
+          const where = {
+            ...(q.classification ? { classification: q.classification } : {}),
+            ...(q.state ? { state: q.state } : {}),
+          };
+          catalogTotal = await prisma.synapseRule.count({ where });
+
+          const catalog = await prisma.synapseRule.findMany({
+            where,
+            orderBy: { ruleId: 'asc' },
+            take: q.source === 'catalog' ? q.limit : Math.max(0, q.limit - items.length),
+            skip: q.source === 'catalog' ? q.offset : 0,
+          });
+          const catalogIds = catalog.map((r) => r.ruleId);
+          const overrides = catalogIds.length
+            ? await prisma.tenantRuleOverride.findMany({
+                where: { tenantId: auth.tenantId, synapseRuleId: { in: catalogIds } },
+              })
+            : [];
+          const overrideById = new Map(overrides.map((o) => [o.synapseRuleId, o] as const));
+
+          for (const row of catalog) {
+            const override = overrideById.get(row.ruleId);
+            const effectiveEnabled = override?.enabled ?? true;
+            if (enabledFilter !== undefined && effectiveEnabled !== enabledFilter) continue;
+            items.push({
+              source: 'catalog',
+              id: row.ruleId,
+              name: row.name ?? row.description,
+              description: row.description,
+              classification: row.classification,
+              state: row.state,
+              risk:
+                override?.riskOverride !== null && override?.riskOverride !== undefined
+                  ? override.riskOverride
+                  : row.risk,
+              blocking:
+                override?.blockingOverride !== null && override?.blockingOverride !== undefined
+                  ? override.blockingOverride
+                  : row.blocking,
+              enabled: effectiveEnabled,
+              hasOverride: Boolean(override),
+              catalogVersion: row.catalogVersion,
+              updatedAt: row.updatedAt.toISOString(),
+            });
+          }
+        }
+
+        if (q.source === 'custom' || q.source === 'all') {
+          const where = {
+            tenantId: auth.tenantId,
+            ...(enabledFilter !== undefined ? { enabled: enabledFilter } : {}),
+          };
+          customTotal = await prisma.customerRule.count({ where });
+          const remaining =
+            q.source === 'custom' ? q.limit : Math.max(0, q.limit - items.length);
+          const customRules = remaining
+            ? await prisma.customerRule.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                take: remaining,
+                skip: q.source === 'custom' ? q.offset : 0,
+              })
+            : [];
+          for (const row of customRules) {
+            items.push({
+              source: 'custom',
+              id: row.id,
+              name: row.name,
+              description: row.description,
+              classification: row.category,
+              state: null,
+              severity: row.severity,
+              action: row.action,
+              enabled: row.enabled,
+              status: row.status,
+              updatedAt: row.updatedAt.toISOString(),
+            });
+          }
+        }
+
+        res.json({
+          items,
+          pagination: {
+            total:
+              q.source === 'catalog'
+                ? catalogTotal
+                : q.source === 'custom'
+                  ? customTotal
+                  : catalogTotal + customTotal,
+            limit: q.limit,
+            offset: q.offset,
+          },
+        });
+      } catch (error) {
+        logger.error({ error }, 'Failed to list available rules');
+        res.status(500).json({
+          error: 'Failed to list available rules',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/v1/fleet/rules/drift
+   * For each sensor owned by the tenant, compare the rulesHash reported in
+   * its heartbeat against the expected hash computed from the current
+   * catalog + overrides + custom set. Sensors that have not heartbeated
+   * recently, or are reporting a stale hash, surface here so operators
+   * can requeue a push.
+   */
+  router.get('/rules/drift', requireScope('fleet:read'), async (req, res) => {
+    try {
+      if (!ruleDistributor) {
+        res.status(503).json({ error: 'Rule distributor service not available' });
+        return;
+      }
+      const auth = req.auth!;
+
+      // Load tenant sensors (source of truth for ownership) and merge with
+      // the live hash from FleetAggregator if available. Sensors without a
+      // live snapshot report reportedHash=null, which the distributor
+      // treats as drifted (unless the tenant has no rules at all).
+      const [sensors, liveMetrics] = await Promise.all([
+        prisma.sensor.findMany({
+          where: { tenantId: auth.tenantId },
+          select: { id: true, lastHeartbeat: true },
+        }),
+        fleetAggregator ? fleetAggregator.getAllSensorMetrics() : Promise.resolve([]),
+      ]);
+      const liveById = new Map(liveMetrics.map((m) => [m.sensorId, m] as const));
+
+      const snapshots = sensors.map((s) => {
+        const live = liveById.get(s.id);
+        return {
+          sensorId: s.id,
+          reportedHash: live?.rulesHash,
+          lastHeartbeat: live?.lastHeartbeat ?? s.lastHeartbeat ?? undefined,
+        };
+      });
+
+      const drift = await ruleDistributor.getRuleDrift(auth.tenantId, snapshots);
+      res.json(drift);
+    } catch (error) {
+      logger.error({ error }, 'Failed to compute rules drift');
+      res.status(500).json({
+        error: 'Failed to compute rules drift',
+        message: getErrorMessage(error),
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/fleet/rules
+   * Returns the tenant's effective rule set (catalog + overrides + custom) as
+   * a flat array. Use /rules/available for paginated/filtered access.
+   */
+  router.get('/rules', requireScope('fleet:read'), async (req, res) => {
+    try {
+      const auth = req.auth!;
+      const [catalog, overrides, custom] = await Promise.all([
+        prisma.synapseRule.findMany({ orderBy: { ruleId: 'asc' } }),
+        prisma.tenantRuleOverride.findMany({ where: { tenantId: auth.tenantId } }),
+        prisma.customerRule.findMany({
+          where: { tenantId: auth.tenantId },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+      const overrideById = new Map(overrides.map((o) => [o.synapseRuleId, o] as const));
+
+      const items: Array<Record<string, unknown>> = [];
+      for (const row of catalog) {
+        const override = overrideById.get(row.ruleId);
+        items.push({
+          source: 'catalog',
+          id: row.ruleId,
+          name: row.name ?? row.description,
+          description: row.description,
+          classification: row.classification,
+          state: row.state,
+          risk:
+            override?.riskOverride !== null && override?.riskOverride !== undefined
+              ? override.riskOverride
+              : row.risk,
+          blocking:
+            override?.blockingOverride !== null && override?.blockingOverride !== undefined
+              ? override.blockingOverride
+              : row.blocking,
+          enabled: override?.enabled ?? true,
+          hasOverride: Boolean(override),
+        });
+      }
+      for (const row of custom) {
+        items.push({
+          source: 'custom',
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          classification: row.category,
+          severity: row.severity,
+          action: row.action,
+          enabled: row.enabled,
+          status: row.status,
+        });
+      }
+      res.json(items);
+    } catch (error) {
+      logger.error({ error }, 'Failed to list rules');
+      res.status(500).json({
+        error: 'Failed to list rules',
+        message: getErrorMessage(error),
+      });
+    }
   });
 
   /**

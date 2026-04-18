@@ -308,7 +308,7 @@ export class RuleDistributor {
    */
   async distributeRules(
     tenantId: string,
-    ruleIds: string[],
+    ruleIds: Array<string | number>,
     sensorIds: string[],
     options: {
       strategy: RolloutConfig['strategy'];
@@ -333,16 +333,16 @@ export class RuleDistributor {
     // SECURITY: Validate tenant owns all target sensors BEFORE any operation
     await this.validateSensorOwnership(tenantId, sensorIds);
 
-    // For now, create minimal rule objects with just the IDs
-    // In a full implementation, rules would be fetched from a rules table
-    const rules: Rule[] = ruleIds.map((id, index) => ({
-      id,
-      name: `Rule ${id}`,
-      enabled: true,
-      conditions: {},
-      actions: {},
-      priority: index,
-    }));
+    // Fetch real rule bodies (Synapse catalog + tenant overrides + custom)
+    // so sensors receive deserializable WafRule JSON, not placeholder ids.
+    const rules = await this.buildRulePushPayload(tenantId, ruleIds);
+
+    if (rules.length === 0) {
+      this.logger.warn(
+        { tenantId, requestedIds: ruleIds.length },
+        'distributeRules: no deployable rules resolved from request'
+      );
+    }
 
     // Build RolloutConfig from options, including strategy-specific fields
     const config: RolloutConfig = {
@@ -458,17 +458,18 @@ export class RuleDistributor {
     // Batched upserts: O(1) transaction instead of O(sensors × rules) sequential operations
     await this.prisma.$transaction(
       sensorIds.flatMap((sensorId) =>
-        rules.map((rule) =>
-          this.prisma.ruleSyncState.upsert({
+        rules.map((rule) => {
+          const ruleId = String(rule.id);
+          return this.prisma.ruleSyncState.upsert({
             where: {
               sensorId_ruleId: {
                 sensorId,
-                ruleId: rule.id,
+                ruleId,
               },
             },
             create: {
               sensorId,
-              ruleId: rule.id,
+              ruleId,
               status: 'pending',
             },
             update: {
@@ -476,8 +477,8 @@ export class RuleDistributor {
               syncedAt: null,
               error: null,
             },
-          })
-        )
+          });
+        })
       )
     );
 
@@ -1795,11 +1796,178 @@ export class RuleDistributor {
   // =============================================================================
 
   /**
+   * Resolve a mixed list of rule ids into full push-ready Rule objects.
+   *
+   * Numeric ids are looked up in the SynapseRule catalog; string ids are
+   * resolved against CustomerRule. Tenant overrides are merged on top of the
+   * catalog body. Rules disabled by an override (enabled=false) are filtered
+   * out so sensors do not receive rules the tenant has turned off.
+   *
+   * Returned bodies retain the full Synapse WafRule shape (id:number,
+   * description, matches, ...) so `payload.rules` deserializes directly on
+   * the sensor via the same path as loading production_rules.json.
+   */
+  private async buildRulePushPayload(
+    tenantId: string,
+    ruleIds: Array<string | number>
+  ): Promise<Rule[]> {
+    const catalogIds: number[] = [];
+    const customIds: string[] = [];
+    for (const id of ruleIds) {
+      if (typeof id === 'number' && Number.isInteger(id)) catalogIds.push(id);
+      else if (typeof id === 'string') {
+        const asNum = Number(id);
+        if (Number.isInteger(asNum) && String(asNum) === id) catalogIds.push(asNum);
+        else customIds.push(id);
+      }
+    }
+
+    const [catalog, overrides, custom] = await Promise.all([
+      catalogIds.length
+        ? this.prisma.synapseRule.findMany({ where: { ruleId: { in: catalogIds } } })
+        : Promise.resolve([]),
+      catalogIds.length
+        ? this.prisma.tenantRuleOverride.findMany({
+            where: { tenantId, synapseRuleId: { in: catalogIds } },
+          })
+        : Promise.resolve([]),
+      customIds.length
+        ? this.prisma.customerRule.findMany({
+            where: { tenantId, id: { in: customIds } },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const overrideByRuleId = new Map(
+      overrides.map((o) => [o.synapseRuleId, o] as const)
+    );
+
+    const rules: Rule[] = [];
+    let priority = 0;
+
+    for (const row of catalog) {
+      const override = overrideByRuleId.get(row.ruleId);
+      if (override?.enabled === false) continue;
+
+      const base = (row.rawDefinition ?? {}) as Record<string, unknown>;
+      const blocking =
+        override?.blockingOverride !== null && override?.blockingOverride !== undefined
+          ? override.blockingOverride
+          : row.blocking;
+      const risk =
+        override?.riskOverride !== null && override?.riskOverride !== undefined
+          ? override.riskOverride
+          : row.risk;
+
+      rules.push({
+        ...base,
+        id: row.ruleId,
+        name: row.name ?? row.description,
+        description: row.description,
+        classification: row.classification,
+        state: row.state,
+        risk: risk ?? undefined,
+        contributing_score: row.contributingScore ?? undefined,
+        blocking: blocking ?? undefined,
+        matches: (base.matches as unknown) ?? [],
+        enabled: override?.enabled ?? true,
+        priority: priority++,
+        conditions: {},
+        actions: {},
+      });
+    }
+
+    for (const row of custom) {
+      if (!row.enabled) continue;
+      rules.push({
+        id: row.id,
+        name: row.name,
+        description: row.description ?? row.name,
+        enabled: row.enabled,
+        priority: priority++,
+        conditions: (row.patterns as Record<string, unknown>) ?? {},
+        actions: { type: row.action },
+      });
+    }
+
+    return rules;
+  }
+
+  /**
+   * Compute the expected push-rule hash for a tenant — the hash sensors
+   * owned by this tenant *should* be reporting once they have fully synced
+   * the current catalog + overrides + custom set.
+   *
+   * Returns null when the tenant has no rules at all (fresh tenant,
+   * pre-catalog-sync). Callers can treat null as "drift check not applicable."
+   */
+  async computeTenantExpectedRulesHash(tenantId: string): Promise<string | null> {
+    const [catalogIds, customIds] = await Promise.all([
+      this.prisma.synapseRule.findMany({ select: { ruleId: true } }),
+      this.prisma.customerRule.findMany({
+        where: { tenantId, enabled: true },
+        select: { id: true },
+      }),
+    ]);
+    const ids: Array<number | string> = [
+      ...catalogIds.map((r) => r.ruleId),
+      ...customIds.map((r) => r.id),
+    ];
+    if (ids.length === 0) return null;
+
+    const rules = await this.buildRulePushPayload(tenantId, ids);
+    if (rules.length === 0) return null;
+    return this.computeRulesHash(rules);
+  }
+
+  /**
+   * For each sensor snapshot (live hash from heartbeat), report whether it
+   * matches the tenant's expected hash. Snapshots with a missing or stale
+   * hash are flagged as drifted. When the expected hash is null (empty
+   * rule set) every sensor is reported as in-sync.
+   */
+  async getRuleDrift(
+    tenantId: string,
+    snapshots: Array<{ sensorId: string; reportedHash?: string; lastHeartbeat?: Date }>
+  ): Promise<{
+    expectedHash: string | null;
+    inSyncCount: number;
+    driftedCount: number;
+    sensors: Array<{
+      sensorId: string;
+      reportedHash: string | null;
+      inSync: boolean;
+      lastHeartbeat: Date | null;
+    }>;
+  }> {
+    const expectedHash = await this.computeTenantExpectedRulesHash(tenantId);
+    let inSyncCount = 0;
+    let driftedCount = 0;
+    const sensors = snapshots.map((s) => {
+      const reportedHash = s.reportedHash ?? null;
+      const inSync =
+        expectedHash === null ? true : reportedHash !== null && reportedHash === expectedHash;
+      if (inSync) inSyncCount++;
+      else driftedCount++;
+      return {
+        sensorId: s.sensorId,
+        reportedHash,
+        inSync,
+        lastHeartbeat: s.lastHeartbeat ?? null,
+      };
+    });
+    return { expectedHash, inSyncCount, driftedCount, sensors };
+  }
+
+  /**
    * Compute hash of rules for sync tracking
    */
   private async computeRulesHash(rules: Rule[]): Promise<string> {
-    // Sort rules by ID for consistent hashing
-    const sortedRules = [...rules].sort((a, b) => a.id.localeCompare(b.id));
+    // Sort rules by stringified ID for consistent hashing across mixed
+    // catalog (numeric) and custom (cuid) rule ids.
+    const sortedRules = [...rules].sort((a, b) =>
+      String(a.id).localeCompare(String(b.id))
+    );
     const rulesString = JSON.stringify(sortedRules);
 
     const encoder = new TextEncoder();

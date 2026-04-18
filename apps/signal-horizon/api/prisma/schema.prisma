@@ -15,52 +15,54 @@ datasource db {
 // =============================================================================
 
 model Tenant {
-  id                String            @id @default(cuid())
-  shortId           Int               @unique @default(autoincrement()) // labs-8y5m: Compact numeric ID
-  name              String
-  tier              TenantTier        @default(STANDARD)
-  sharingPreference SharingPreference @default(CONTRIBUTE_AND_RECEIVE)
-  anonymizationSalt String            @default(cuid()) // labs-6wkk: Tenant-specific salt for anonymization
-  preferenceVersion String            @default("1.0")
+  id                  String            @id @default(cuid())
+  shortId             Int               @unique @default(autoincrement()) // labs-8y5m: Compact numeric ID
+  name                String
+  tier                TenantTier        @default(STANDARD)
+  sharingPreference   SharingPreference @default(CONTRIBUTE_AND_RECEIVE)
+  anonymizationSalt   String            @default(cuid()) // labs-6wkk: Tenant-specific salt for anonymization
+  preferenceVersion   String            @default("1.0")
   preferenceChangedBy String?
   preferenceChangedAt DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   // Relations
-  members           TenantMember[]
-  apiKeys           ApiKey[]
-  sensors           Sensor[]
-  signals           Signal[]
-  threats           Threat[]
-  blocklistEntries  BlocklistEntry[]
-  campaigns         Campaign[]
-  warRooms          WarRoom[]
-  warRoomActivities WarRoomActivity[]
-  playbooks         Playbook[]
-  tunnelSessions    TunnelSession[]
-  auditLogs         AuditLog[]
-  securityAuditLogs SecurityAuditLog[]
-  configTemplates   ConfigTemplate[]
-  policyTemplates   PolicyTemplate[]
+  members              TenantMember[]
+  apiKeys              ApiKey[]
+  sensors              Sensor[]
+  signals              Signal[]
+  threats              Threat[]
+  blocklistEntries     BlocklistEntry[]
+  campaigns            Campaign[]
+  warRooms             WarRoom[]
+  warRoomActivities    WarRoomActivity[]
+  playbooks            Playbook[]
+  tunnelSessions       TunnelSession[]
+  auditLogs            AuditLog[]
+  securityAuditLogs    SecurityAuditLog[]
+  configTemplates      ConfigTemplate[]
+  policyTemplates      PolicyTemplate[]
   scheduledDeployments ScheduledDeployment[]
-  fleetAlerts       FleetAlert[]
-  registrationTokens RegistrationToken[]
-  consents          TenantConsent[]
-  idempotencyRequests IdempotencyRequest[]
-  savedHunts        SavedHunt[]
+  fleetAlerts          FleetAlert[]
+  registrationTokens   RegistrationToken[]
+  consents             TenantConsent[]
+  idempotencyRequests  IdempotencyRequest[]
+  savedHunts           SavedHunt[]
 
   // Intel relations
-  sensorIntelActors    SensorIntelActor[]
-  sensorIntelSessions   SensorIntelSession[]
-  sensorIntelCampaigns SensorIntelCampaign[]
-  sensorIntelProfiles  SensorIntelProfile[]
+  sensorIntelActors      SensorIntelActor[]
+  sensorIntelSessions    SensorIntelSession[]
+  sensorIntelCampaigns   SensorIntelCampaign[]
+  sensorIntelProfiles    SensorIntelProfile[]
   sensorPayloadSnapshots SensorPayloadSnapshot[]
 
   // Beam relations
-  beamEndpoints      Endpoint[]      @relation("TenantEndpoints")
-  beamRules          CustomerRule[]  @relation("TenantRules")
-  beamBlockDecisions BlockDecision[] @relation("TenantBlockDecisions")
+  beamEndpoints        Endpoint[]           @relation("TenantEndpoints")
+  beamRules            CustomerRule[]       @relation("TenantRules")
+  beamBlockDecisions   BlockDecision[]      @relation("TenantBlockDecisions")
+  synapseRuleOverrides TenantRuleOverride[] @relation("TenantSynapseRuleOverrides")
+  sensorCandidates     SensorCandidate[]    @relation("TenantSensorCandidates")
 
   @@index([id, sharingPreference]) // labs-lk08: Covering index for aggregator lookups
   @@map("tenants")
@@ -81,17 +83,17 @@ enum SharingPreference {
 }
 
 model TenantConsent {
-  id          String   @id @default(cuid())
-  tenantId    String
-  consentType String   // e.g., 'BLOCKLIST_SHARING'
-  grantedAt   DateTime @default(now())
-  grantedBy   String   // userId who granted
-  version     String   // Policy version
+  id           String   @id @default(cuid())
+  tenantId     String
+  consentType  String // e.g., 'BLOCKLIST_SHARING'
+  grantedAt    DateTime @default(now())
+  grantedBy    String // userId who granted
+  version      String // Policy version
   acknowledged Boolean  @default(true)
-  ipAddress   String?
-  userAgent   String?
+  ipAddress    String?
+  userAgent    String?
 
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("tenant_consents")
@@ -104,7 +106,7 @@ model IdempotencyRequest {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@id([key, tenantId])
   @@index([expiresAt])
@@ -278,14 +280,14 @@ model Sensor {
   registeredByToken   RegistrationToken? @relation("TokenSensors", fields: [registrationTokenId], references: [id])
 
   // Relations
-  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  signals       Signal[]
-  syncState     SensorSyncState?
-  commands      FleetCommand[]
-  ruleSyncState RuleSyncState[]
-  pingoraConfig SensorPingoraConfig?
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  signals        Signal[]
+  syncState      SensorSyncState?
+  commands       FleetCommand[]
+  ruleSyncState  RuleSyncState[]
+  pingoraConfig  SensorPingoraConfig?
   tunnelSessions TunnelSession[]
-  fleetAlerts   FleetAlert[]
+  fleetAlerts    FleetAlert[]
 
   // Sensor intel relations
   intelActors      SensorIntelActor[]
@@ -342,15 +344,15 @@ enum KeyStatus {
 // =============================================================================
 
 model SensorIntelActor {
-  id        String @id @default(cuid())
-  tenantId  String
-  sensorId  String
-  actorId   String
-  riskScore Float
-  isBlocked Boolean @default(false)
-  firstSeenAt DateTime
-  lastSeenAt  DateTime
-  ips         Json?
+  id           String   @id @default(cuid())
+  tenantId     String
+  sensorId     String
+  actorId      String
+  riskScore    Float
+  isBlocked    Boolean  @default(false)
+  firstSeenAt  DateTime
+  lastSeenAt   DateTime
+  ips          Json?
   fingerprints Json?
   sessionIds   Json?
   raw          Json
@@ -367,20 +369,20 @@ model SensorIntelActor {
 }
 
 model SensorIntelSession {
-  id           String @id @default(cuid())
-  tenantId     String
-  sensorId     String
-  sessionId    String
-  actorId      String?
-  requestCount Int
-  isSuspicious Boolean
+  id             String   @id @default(cuid())
+  tenantId       String
+  sensorId       String
+  sessionId      String
+  actorId        String?
+  requestCount   Int
+  isSuspicious   Boolean
   lastActivityAt DateTime
-  boundIp      String?
-  boundJa4     String?
-  hijackAlerts Json?
-  raw          Json
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  boundIp        String?
+  boundJa4       String?
+  hijackAlerts   Json?
+  raw            Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -392,7 +394,7 @@ model SensorIntelSession {
 }
 
 model SensorIntelCampaign {
-  id             String @id @default(cuid())
+  id             String   @id @default(cuid())
   tenantId       String
   sensorId       String
   campaignId     String
@@ -416,7 +418,7 @@ model SensorIntelCampaign {
 }
 
 model SensorIntelProfile {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   tenantId  String
   sensorId  String
   template  String
@@ -434,7 +436,7 @@ model SensorIntelProfile {
 }
 
 model SensorPayloadSnapshot {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   tenantId   String
   sensorId   String
   capturedAt DateTime
@@ -799,15 +801,15 @@ model WarRoomCampaign {
 // =============================================================================
 
 model SavedHunt {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   tenantId    String?
   name        String
   description String?
   query       Json
   createdBy   String // userId
   lastRunAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -821,18 +823,18 @@ model SavedHunt {
 // =============================================================================
 
 model Playbook {
-  id          String   @id @default(cuid())
-  tenantId    String
-  name        String
-  description String?
-  triggerType String   // MANUAL, SIGNAL_SEVERITY, SIGNAL_TYPE
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  description  String?
+  triggerType  String // MANUAL, SIGNAL_SEVERITY, SIGNAL_TYPE
   triggerValue String? // e.g., "HIGH", "CREDENTIAL_STUFFING"
-  isActive    Boolean  @default(true)
-  steps       Json     // Array of PlaybookStep
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive     Boolean  @default(true)
+  steps        Json // Array of PlaybookStep
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   runs   PlaybookRun[]
 
   @@unique([tenantId, name])
@@ -844,16 +846,16 @@ model Playbook {
 }
 
 model PlaybookRun {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   playbookId  String
   warRoomId   String
   tenantId    String
-  status      String   // RUNNING, COMPLETED, FAILED
-  currentStep Int      @default(0)
-  stepResults Json?    // Array of step execution results
-  startedAt   DateTime @default(now())
+  status      String // RUNNING, COMPLETED, FAILED
+  currentStep Int       @default(0)
+  stepResults Json? // Array of step execution results
+  startedAt   DateTime  @default(now())
   completedAt DateTime?
-  startedBy   String?  // User ID or "system"
+  startedBy   String? // User ID or "system"
 
   playbook Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
   warRoom  WarRoom  @relation(fields: [warRoomId], references: [id], onDelete: Cascade)
@@ -898,15 +900,15 @@ model AuditLog {
 
 model SecurityAuditLog {
   id           String   @id @default(uuid())
-  action       String   // PLAYBOOK_CREATED, PLAYBOOK_UPDATED, PLAYBOOK_DELETED, etc.
-  resourceType String   // playbook, playbook_run, sensor_command
+  action       String // PLAYBOOK_CREATED, PLAYBOOK_UPDATED, PLAYBOOK_DELETED, etc.
+  resourceType String // playbook, playbook_run, sensor_command
   resourceId   String
   userId       String
   tenantId     String
   ipAddress    String?
   userAgent    String?
-  result       String   // SUCCESS, FAILURE, DENIED
-  details      String?  // JSON stringified additional context
+  result       String // SUCCESS, FAILURE, DENIED
+  details      String? // JSON stringified additional context
   timestamp    DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -927,7 +929,7 @@ model SecurityAuditLog {
 
 model ConfigTemplate {
   id          String   @id @default(cuid())
-  tenantId    String?  // Null for global system templates
+  tenantId    String? // Null for global system templates
   name        String
   description String?
   environment String   @default("production") // production, staging, dev
@@ -954,8 +956,8 @@ model PolicyTemplate {
   name        String
   description String?
   severity    String   @default("standard") // strict, standard, dev
-  config      Json     // Full PolicyConfig object
-  metadata    Json?    // PolicyTemplateMetadata
+  config      Json // Full PolicyConfig object
+  metadata    Json? // PolicyTemplateMetadata
   isDefault   Boolean  @default(false)
   isActive    Boolean  @default(true)
   version     String   @default("1.0.0")
@@ -1049,29 +1051,29 @@ model RuleSyncState {
 }
 
 model SensorPingoraConfig {
-  id              String   @id @default(cuid())
-  sensorId        String   @unique
-  sensor          Sensor   @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  sensorId String @unique
+  sensor   Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
 
   // WAF Settings
-  wafEnabled      Boolean  @default(true)
-  wafThreshold    Float    @default(0.5)
-  wafOverrides    Json?    // Map of ruleId -> { enabled, action }
+  wafEnabled   Boolean @default(true)
+  wafThreshold Float   @default(0.5)
+  wafOverrides Json? // Map of ruleId -> { enabled, action }
 
   // Rate Limiting
   rateLimitEnabled Boolean @default(true)
-  rps             Int      @default(100)
-  burst           Int      @default(50)
+  rps              Int     @default(100)
+  burst            Int     @default(50)
 
   // Access Control
-  allowList       String[]
-  denyList        String[]
+  allowList String[]
+  denyList  String[]
 
   // Full Configuration Management
-  fullConfig      Json?    // Complete config structure matching Pingora Config struct
-  version         Int      @default(1)
+  fullConfig Json? // Complete config structure matching Pingora Config struct
+  version    Int   @default(1)
 
-  updatedAt       DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@map("sensor_pingora_configs")
 }
@@ -1085,7 +1087,7 @@ model ScheduledDeployment {
   id          String   @id @default(cuid())
   tenantId    String
   sensorIds   String[] // Target sensor IDs
-  rules       Json     // Serialized Rule[] payload
+  rules       Json // Serialized Rule[] payload
   scheduledAt DateTime // When to execute the deployment
 
   status      ScheduledDeploymentStatus @default(PENDING)
@@ -1094,7 +1096,7 @@ model ScheduledDeployment {
   error       String?
 
   // Deployment result tracking
-  resultSuccess     Boolean?
+  resultSuccess      Boolean?
   resultTotalTargets Int?
   resultSuccessCount Int?
   resultFailureCount Int?
@@ -1112,11 +1114,11 @@ model ScheduledDeployment {
 }
 
 enum ScheduledDeploymentStatus {
-  PENDING    // Waiting to be executed
-  EXECUTING  // Currently running
-  COMPLETED  // Successfully executed
-  FAILED     // Execution failed
-  CANCELLED  // Manually cancelled
+  PENDING // Waiting to be executed
+  EXECUTING // Currently running
+  COMPLETED // Successfully executed
+  FAILED // Execution failed
+  CANCELLED // Manually cancelled
 }
 
 // =============================================================================
@@ -1205,7 +1207,7 @@ model RegistrationToken {
   id          String    @id @default(cuid())
   tenantId    String
   tokenHash   String    @unique
-  tokenPrefix String    // First 16 chars for display
+  tokenPrefix String // First 16 chars for display
   name        String?
   region      String?
   maxUses     Int       @default(1)
@@ -1217,8 +1219,9 @@ model RegistrationToken {
   metadata    Json?
 
   // Sensors registered with this token
-  registeredSensors Sensor[] @relation("TokenSensors")
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registeredSensors Sensor[]            @relation("TokenSensors")
+  candidates        SensorCandidate[]
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1226,13 +1229,54 @@ model RegistrationToken {
   @@map("registration_tokens")
 }
 
+// Pre-enrollment record: a sensor host that has hit the `/onboarding/announce`
+// endpoint with a valid registration token but has not yet completed the
+// WebSocket handshake that would turn it into a real Sensor row.
+//
+// Exists so the onboarding wizard can show "we see your sensor" feedback and
+// display its fingerprint/hostname/OS before the operator approves the
+// eventual PENDING Sensor. Cascade-deleted with the registration token so
+// revoking a token also garbage-collects any stale candidates that used it.
+model SensorCandidate {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  registrationTokenId String
+
+  fingerprint  String
+  hostname     String?
+  os           String?
+  kernel       String?
+  architecture String?
+  ipAddress    String?
+  version      String?
+  userAgent    String?
+  metadata     Json?
+
+  // Set once the sensor completes enrollment via WebSocket; lets the UI
+  // collapse the candidate card into the real Sensor row without deleting
+  // the audit trail of who announced.
+  claimedSensorId String?
+
+  announceCount Int      @default(1)
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+
+  tenant            Tenant            @relation("TenantSensorCandidates", fields: [tenantId], references: [id], onDelete: Cascade)
+  registrationToken RegistrationToken @relation(fields: [registrationTokenId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationTokenId, fingerprint])
+  @@index([tenantId, lastSeenAt])
+  @@index([registrationTokenId])
+  @@map("sensor_candidates")
+}
+
 model TunnelSession {
   id           String    @id @default(uuid()) // sessionId
   sensorId     String
   tenantId     String
   userId       String
-  type         String    // shell, dashboard, logs
-  status       String    // pending, connected, disconnected, error
+  type         String // shell, dashboard, logs
+  status       String // pending, connected, disconnected, error
   createdAt    DateTime  @default(now())
   lastActivity DateTime?
   expiresAt    DateTime?
@@ -1397,6 +1441,64 @@ model RuleEndpointBinding {
   @@map("beam_rule_endpoint_bindings")
 }
 
+// Canonical mirror of Synapse's production_rules.json. Immutable per catalog
+// version; tenant-specific tuning lives in TenantRuleOverride. `rawDefinition`
+// holds the full imported JSON so sensors receive a verbatim copy and new
+// upstream fields do not require schema changes.
+model SynapseRule {
+  ruleId            Int      @id
+  name              String?
+  description       String
+  classification    String?
+  state             String?
+  risk              Float?
+  contributingScore Float?
+  blocking          Boolean?
+  beta              Boolean?
+  tagName           String?
+
+  rawDefinition Json
+
+  catalogVersion String
+  catalogHash    String
+  importedAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  overrides TenantRuleOverride[]
+
+  @@index([classification])
+  @@index([state])
+  @@index([catalogVersion])
+  @@map("synapse_rules")
+}
+
+// Per-tenant overlay on a catalog rule. Null override columns mean "inherit
+// the catalog value"; the distributor merges override + SynapseRule at push
+// time so the catalog row stays canonical.
+model TenantRuleOverride {
+  id            String @id @default(cuid())
+  tenantId      String
+  synapseRuleId Int
+
+  enabled             Boolean?
+  blockingOverride    Boolean?
+  sensitivityOverride Int?
+  riskOverride        Float?
+  notes               String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+
+  tenant      Tenant      @relation("TenantSynapseRuleOverrides", fields: [tenantId], references: [id], onDelete: Cascade)
+  synapseRule SynapseRule @relation(fields: [synapseRuleId], references: [ruleId], onDelete: Cascade)
+
+  @@unique([tenantId, synapseRuleId])
+  @@index([tenantId])
+  @@index([synapseRuleId])
+  @@map("synapse_rule_overrides")
+}
+
 model BlockDecision {
   id       String @id @default(cuid())
   tenantId String
@@ -1457,7 +1559,7 @@ model Release {
 model Rollout {
   id         String   @id @default(cuid())
   releaseId  String
-  strategy   String   // immediate, canary, rolling
+  strategy   String // immediate, canary, rolling
   status     String   @default("pending") // pending, in_progress, completed, failed, cancelled
   targetTags String[] // sensor tags to target
   batchSize  Int      @default(10)

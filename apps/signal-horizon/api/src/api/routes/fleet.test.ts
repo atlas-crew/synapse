@@ -137,6 +137,18 @@ describe('Fleet Routes', () => {
         create: vi.fn(),
         update: vi.fn(),
       } as unknown as PrismaClient['fleetCommand'],
+      synapseRule: {
+        findMany: vi.fn().mockResolvedValue([]),
+        findFirst: vi.fn().mockResolvedValue(null),
+        count: vi.fn().mockResolvedValue(0),
+      } as unknown as PrismaClient['synapseRule'],
+      tenantRuleOverride: {
+        findMany: vi.fn().mockResolvedValue([]),
+      } as unknown as PrismaClient['tenantRuleOverride'],
+      customerRule: {
+        findMany: vi.fn().mockResolvedValue([]),
+        count: vi.fn().mockResolvedValue(0),
+      } as unknown as PrismaClient['customerRule'],
       $queryRaw: vi.fn(),
     };
 
@@ -643,6 +655,197 @@ describe('Fleet Routes', () => {
         .expect(404);
 
       expect(vi.mocked(mockFleetCommander.sendCommand as any)).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /fleet/rules/catalog/version', () => {
+    it('returns null/zero envelope when catalog is empty', async () => {
+      vi.mocked(mockPrisma.synapseRule!.findFirst).mockResolvedValue(null as any);
+      vi.mocked(mockPrisma.synapseRule!.count).mockResolvedValue(0);
+
+      const res = await request(app)
+        .get('/fleet/rules/catalog/version')
+        .expect(200);
+
+      expect(res.body).toEqual({
+        catalogVersion: null,
+        catalogHash: null,
+        ruleCount: 0,
+        lastImportedAt: null,
+      });
+    });
+
+    it('returns version metadata when catalog is populated', async () => {
+      const importedAt = new Date('2026-04-17T00:00:00Z');
+      vi.mocked(mockPrisma.synapseRule!.findFirst).mockResolvedValue({
+        catalogVersion: 'ef83a85a3616',
+        catalogHash: 'ef83a85a3616828a' + 'f'.repeat(48),
+        importedAt,
+        updatedAt: importedAt,
+      } as any);
+      vi.mocked(mockPrisma.synapseRule!.count).mockResolvedValue(248);
+
+      const res = await request(app)
+        .get('/fleet/rules/catalog/version')
+        .expect(200);
+
+      expect(res.body).toMatchObject({
+        catalogVersion: 'ef83a85a3616',
+        ruleCount: 248,
+      });
+      expect(res.body.lastImportedAt).toBe(importedAt.toISOString());
+    });
+  });
+
+  describe('GET /fleet/rules', () => {
+    it('returns merged catalog + custom rules with override metadata', async () => {
+      vi.mocked(mockPrisma.synapseRule!.findMany).mockResolvedValue([
+        {
+          ruleId: 200002,
+          name: null,
+          description: 'Possible hex encoding v2',
+          classification: 'Evasion',
+          state: 'WebMapping',
+          risk: 20,
+          blocking: null,
+          updatedAt: new Date('2026-04-17T00:00:00Z'),
+          catalogVersion: 'v1',
+        } as any,
+      ]);
+      vi.mocked(mockPrisma.tenantRuleOverride!.findMany).mockResolvedValue([
+        { synapseRuleId: 200002, enabled: false, blockingOverride: true, riskOverride: null } as any,
+      ]);
+      vi.mocked(mockPrisma.customerRule!.findMany).mockResolvedValue([
+        {
+          id: 'cust-1',
+          name: 'My rule',
+          description: 'custom',
+          category: 'custom',
+          severity: 'high',
+          action: 'block',
+          enabled: true,
+          status: 'draft',
+        } as any,
+      ]);
+
+      const res = await request(app).get('/fleet/rules').expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(2);
+      const catalog = res.body.find((r: any) => r.source === 'catalog');
+      expect(catalog).toMatchObject({
+        id: 200002,
+        enabled: false,
+        hasOverride: true,
+        blocking: true,
+      });
+      const custom = res.body.find((r: any) => r.source === 'custom');
+      expect(custom).toMatchObject({ id: 'cust-1', severity: 'high' });
+    });
+
+    it('filters catalog overrides by tenant', async () => {
+      vi.mocked(mockPrisma.synapseRule!.findMany).mockResolvedValue([]);
+      vi.mocked(mockPrisma.tenantRuleOverride!.findMany).mockResolvedValue([]);
+      vi.mocked(mockPrisma.customerRule!.findMany).mockResolvedValue([]);
+
+      await request(app).get('/fleet/rules').expect(200);
+
+      expect(vi.mocked(mockPrisma.tenantRuleOverride!.findMany)).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { tenantId: 'tenant-1' } })
+      );
+      expect(vi.mocked(mockPrisma.customerRule!.findMany)).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ tenantId: 'tenant-1' }) })
+      );
+    });
+  });
+
+  describe('GET /fleet/rules/drift', () => {
+    it('returns drift summary classifying each sensor as in-sync or drifted', async () => {
+      vi.mocked(mockPrisma.sensor!.findMany).mockResolvedValue([
+        createMockSensor({ id: 'sensor-1' }),
+        createMockSensor({ id: 'sensor-2' }),
+      ]);
+      const mockRuleDistributor = {
+        getRuleDrift: vi.fn().mockResolvedValue({
+          expectedHash: 'abc123',
+          inSyncCount: 1,
+          driftedCount: 1,
+          sensors: [
+            { sensorId: 'sensor-1', reportedHash: 'abc123', inSync: true, lastHeartbeat: new Date() },
+            { sensorId: 'sensor-2', reportedHash: 'stale', inSync: false, lastHeartbeat: new Date() },
+          ],
+        }),
+      };
+      const mockFleetAggregator = {
+        getAllSensorMetrics: vi.fn().mockResolvedValue([
+          { sensorId: 'sensor-1', rulesHash: 'abc123', lastHeartbeat: new Date() },
+          { sensorId: 'sensor-2', rulesHash: 'stale', lastHeartbeat: new Date() },
+        ]),
+      };
+
+      const driftApp = express();
+      driftApp.use(express.json());
+      driftApp.use(injectAuth('tenant-1', ['fleet:read']));
+      driftApp.use(
+        '/fleet',
+        createFleetRoutes(mockPrisma as PrismaClient, mockLogger, {
+          ruleDistributor: mockRuleDistributor as any,
+          fleetAggregator: mockFleetAggregator as any,
+          securityAuditService: mockAuditService as SecurityAuditService,
+        })
+      );
+
+      const res = await request(driftApp).get('/fleet/rules/drift').expect(200);
+
+      expect(res.body.expectedHash).toBe('abc123');
+      expect(res.body.inSyncCount).toBe(1);
+      expect(res.body.driftedCount).toBe(1);
+      expect(mockRuleDistributor.getRuleDrift).toHaveBeenCalledWith(
+        'tenant-1',
+        expect.arrayContaining([
+          expect.objectContaining({ sensorId: 'sensor-1', reportedHash: 'abc123' }),
+          expect.objectContaining({ sensorId: 'sensor-2', reportedHash: 'stale' }),
+        ])
+      );
+    });
+
+    it('returns 503 when rule distributor is unavailable', async () => {
+      await request(app).get('/fleet/rules/drift').expect(503);
+    });
+  });
+
+  describe('GET /fleet/rules/available', () => {
+    it('returns paginated envelope with items + pagination block', async () => {
+      vi.mocked(mockPrisma.synapseRule!.count).mockResolvedValue(1);
+      vi.mocked(mockPrisma.synapseRule!.findMany).mockResolvedValue([
+        {
+          ruleId: 200008,
+          name: null,
+          description: 'Injection string',
+          classification: 'CommandInjection',
+          state: 'Exploitation',
+          risk: 40,
+          blocking: null,
+          updatedAt: new Date('2026-04-17T00:00:00Z'),
+          catalogVersion: 'v1',
+        } as any,
+      ]);
+      vi.mocked(mockPrisma.tenantRuleOverride!.findMany).mockResolvedValue([]);
+      vi.mocked(mockPrisma.customerRule!.count).mockResolvedValue(0);
+      vi.mocked(mockPrisma.customerRule!.findMany).mockResolvedValue([]);
+
+      const res = await request(app)
+        .get('/fleet/rules/available?source=all&limit=100&offset=0')
+        .expect(200);
+
+      expect(res.body).toHaveProperty('items');
+      expect(res.body).toHaveProperty('pagination');
+      expect(res.body.pagination.total).toBe(1);
+      expect(res.body.items[0]).toMatchObject({
+        source: 'catalog',
+        id: 200008,
+        classification: 'CommandInjection',
+      });
     });
   });
 });

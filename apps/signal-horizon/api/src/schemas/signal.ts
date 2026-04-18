@@ -199,8 +199,8 @@ export const SensorAuthPayloadSchema = z.object({
   fingerprint: FingerprintSchema.optional(),
   /** Registration token for secure enrollment of new sensors */
   registrationToken: z.string().min(1).optional(),
-}).refine(data => data.apiKey || data.token, {
-  message: "Either apiKey or token must be provided",
+}).refine(data => data.apiKey || data.token || data.registrationToken, {
+  message: "Either apiKey, token, or registrationToken must be provided",
   path: ["apiKey"]
 });
 

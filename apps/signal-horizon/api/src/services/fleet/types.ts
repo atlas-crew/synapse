@@ -165,12 +165,31 @@ export interface SensorRuleStatus {
 }
 
 export interface Rule {
-  id: string;
+  /**
+   * Rule identifier. Numbers are Synapse catalog rule ids (u32 on the wire);
+   * strings are tenant-authored CustomerRule cuids. The push payload is sent
+   * to sensors verbatim — numeric ids must round-trip as JSON numbers so the
+   * sensor-side WafRule deserializer accepts them.
+   */
+  id: string | number;
   name: string;
   conditions: Record<string, unknown>;
   actions: Record<string, unknown>;
   enabled: boolean;
   priority: number;
+
+  // Synapse WafRule wire-format fields. Present on catalog-sourced rules so
+  // the sensor receives a body it can deserialize directly. Optional for
+  // legacy callers that construct Horizon-shaped rules manually.
+  description?: string;
+  classification?: string | null;
+  state?: string | null;
+  risk?: number | null;
+  contributing_score?: number | null;
+  blocking?: boolean | null;
+  beta?: boolean | null;
+  tag_name?: string | null;
+  matches?: unknown;
 }
 
 export type RolloutStrategy = 'immediate' | 'canary' | 'scheduled' | 'rolling' | 'blue_green';
