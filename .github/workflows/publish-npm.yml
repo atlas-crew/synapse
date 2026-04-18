@@ -5,7 +5,7 @@ on:
     tags:
       - 'synapse-api-v*'
       - 'synapse-client-v*'
-      - 'signal-horizon-v*'
+      - 'synapse-fleet-v*'
   workflow_dispatch:
     inputs:
       package:
@@ -14,7 +14,7 @@ on:
         options:
           - synapse-api
           - synapse-client
-          - signal-horizon
+          - synapse-fleet
           - both
           - all
         default: both
@@ -135,11 +135,11 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  publish-signal-horizon:
+  publish-synapse-fleet:
     runs-on: ubuntu-latest
     if: >-
-      startsWith(github.ref, 'refs/tags/signal-horizon-v') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.package == 'signal-horizon' || inputs.package == 'all'))
+      startsWith(github.ref, 'refs/tags/synapse-fleet-v') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.package == 'synapse-fleet' || inputs.package == 'all'))
     environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || 'npm' }}
     steps:
       - uses: actions/checkout@v4
@@ -154,20 +154,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Internal workspace package name (@atlascrew/signal-horizon-api) is
+      # intentionally unchanged per ADR-0003 decision C. The published package
+      # is @atlascrew/synapse-fleet, produced by the standalone release script.
       - name: Generate Prisma client for API tests
         run: pnpm --filter @atlascrew/signal-horizon-api db:generate
 
-      - name: Test Signal Horizon API
+      - name: Test Synapse Fleet API
         run: pnpm --filter @atlascrew/signal-horizon-api test
 
       - name: Build standalone release bundle
         run: pnpm signal-horizon:release
 
       - name: Verify tag matches package.json version
-        if: startsWith(github.ref, 'refs/tags/signal-horizon-v')
+        if: startsWith(github.ref, 'refs/tags/synapse-fleet-v')
         working-directory: apps/signal-horizon/out/signal-horizon-standalone
         run: |
-          TAG_VERSION="${GITHUB_REF#refs/tags/signal-horizon-v}"
+          TAG_VERSION="${GITHUB_REF#refs/tags/synapse-fleet-v}"
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"

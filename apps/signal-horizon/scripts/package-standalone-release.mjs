@@ -15,8 +15,10 @@ const tarballPath = path.join(outRoot, 'signal-horizon-standalone.tar.gz');
 const deployExamplesRoot = path.join(appRoot, 'deploy', 'standalone');
 const stagingParent = await fs.mkdtemp(path.join(os.tmpdir(), 'signal-horizon-release-'));
 const stagingRoot = path.join(stagingParent, 'signal-horizon-standalone');
-// Customer-facing standalone builds publish under the external npm scope used for deployable products.
-const standalonePackageName = '@atlascrew/horizon';
+// Customer-facing standalone builds publish under the external npm scope used
+// for deployable products. Renamed from @atlascrew/horizon per ADR-0003 (clean
+// cutover at major version bump; no dual-publish).
+const standalonePackageName = '@atlascrew/synapse-fleet';
 const sourcePackageJsonPath = path.join(appRoot, 'api', 'package.json');
 
 function readGitRevision(args) {
@@ -114,9 +116,9 @@ async function writeStandalonePackageManifest() {
   const standalonePackage = {
     name: standalonePackageName,
     version: sourcePackage.version,
-    description: 'Standalone Signal Horizon UI and API runtime for customer-managed deployments',
+    description: 'Synapse Fleet — standalone UI and API runtime for customer-managed deployments',
     author: 'Nicholas Crew Ferguson <nick@atlascrew.dev> (https://atlascrew.dev)',
-    keywords: ['signal-horizon', 'security', 'soc', 'fleet', 'hunting', 'dashboard'],
+    keywords: ['synapse-fleet', 'synapse', 'security', 'soc', 'fleet', 'hunting', 'dashboard'],
     repository: {
       type: 'git',
       url: 'https://github.com/atlas-crew/horizon-security-platform',
@@ -129,8 +131,8 @@ async function writeStandalonePackageManifest() {
     main: 'dist/index.js',
     types: 'dist/index.d.ts',
     bin: {
-      horizon: 'bin/start.sh',
-      'horizon-migrate': 'bin/migrate.sh',
+      'synapse-fleet': 'bin/start.sh',
+      'synapse-fleet-migrate': 'bin/migrate.sh',
     },
     files: ['dist', 'prisma', 'bin', 'config', 'docs', 'README.md', 'LICENSE', 'RELEASE.txt', '.env.example'],
     scripts: {

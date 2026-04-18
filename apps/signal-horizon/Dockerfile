@@ -1,5 +1,7 @@
-# Signal Horizon Dockerfile
-# Multi-stage build for the fleet intelligence platform
+# Synapse Fleet Dockerfile (formerly Signal Horizon — ADR-0003)
+# Multi-stage build for the fleet intelligence platform.
+# Directory path `apps/signal-horizon/` is unchanged; only the product name and
+# published image (`nickcrew/synapse-fleet`) have been renamed.
 
 # =============================================================================
 # Builder Stage
@@ -48,7 +50,7 @@ RUN npx prisma generate
 # Set permissions
 RUN chown -R horizon:horizon /app
 
-# Horizon API default port
+# Synapse Fleet API default port
 EXPOSE 3100
 
 USER horizon

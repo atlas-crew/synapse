@@ -3,7 +3,7 @@ name: Publish Docker images
 on:
   push:
     tags:
-      - 'signal-horizon-v*'
+      - 'synapse-fleet-v*'
       - 'synapse-waf-v*'
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
         description: 'Image to build and push'
         type: choice
         options:
-          - horizon
+          - synapse-fleet
           - synapse-waf
           - all
         default: all
@@ -28,13 +28,13 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Horizon (Signal Horizon)
+  # Synapse Fleet (formerly Signal Horizon — ADR-0003)
   # ---------------------------------------------------------------------------
-  horizon:
+  synapse-fleet:
     runs-on: ubuntu-latest
     if: >-
-      startsWith(github.ref, 'refs/tags/signal-horizon-v') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.image == 'horizon' || inputs.image == 'all'))
+      startsWith(github.ref, 'refs/tags/synapse-fleet-v') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.image == 'synapse-fleet' || inputs.image == 'all'))
     environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || 'docker-hub' }}
     steps:
       - uses: actions/checkout@v4
@@ -42,8 +42,8 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/signal-horizon-v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/signal-horizon-v}"
+          if [[ "$GITHUB_REF" == refs/tags/synapse-fleet-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/synapse-fleet-v}"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "is_tag=true" >> "$GITHUB_OUTPUT"
           else
@@ -66,16 +66,16 @@ jobs:
           file: apps/signal-horizon/Dockerfile
           push: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
           tags: |
-            nickcrew/horizon:latest
-            ${{ steps.version.outputs.is_tag == 'true' && format('nickcrew/horizon:{0}', steps.version.outputs.version) || '' }}
+            nickcrew/synapse-fleet:latest
+            ${{ steps.version.outputs.is_tag == 'true' && format('nickcrew/synapse-fleet:{0}', steps.version.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Verify image
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: |
-          docker pull nickcrew/horizon:latest
-          docker run --rm nickcrew/horizon:latest node -e "console.log('Horizon image OK')"
+          docker pull nickcrew/synapse-fleet:latest
+          docker run --rm nickcrew/synapse-fleet:latest node -e "console.log('Synapse Fleet image OK')"
 
   # ---------------------------------------------------------------------------
   # Synapse WAF
