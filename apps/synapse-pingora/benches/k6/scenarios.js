@@ -7,6 +7,10 @@ const scenarios = new SharedArray('scenarios', function () {
   return JSON.parse(open('../scenarios.json'));
 });
 
+// Override via TARGET_URL=http://10.10.0.2:6190 when driving Synapse across a
+// Thunderbolt bridge or remote host. Matches high_load.js convention.
+const BASE_URL = __ENV.TARGET_URL || 'http://127.0.0.1:6190';
+
 export const options = {
   scenarios: {
     realistic_load: {
@@ -31,7 +35,7 @@ export default function () {
     headers: Object.fromEntries(scenario.headers),
   };
 
-  const res = http.post(`http://127.0.0.1:6190${scenario.uri}`, JSON.stringify(scenario.body_json), params);
+  const res = http.post(`${BASE_URL}${scenario.uri}`, JSON.stringify(scenario.body_json), params);
 
   check(res, {
     'status is 200 or 403': (r) => [200, 403].includes(r.status),
