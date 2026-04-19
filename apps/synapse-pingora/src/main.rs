@@ -4941,14 +4941,15 @@ fn try_load_multisite_config() -> Option<(MultisiteConfigFile, Vec<SiteConfig>)>
                         sites.len()
                     );
 
-                    // Initialize WAF regex timeout from config (ReDoS prevention)
-                    // Cap at 500ms maximum to prevent disabling protection
                     let timeout_ms = DetectionEngine::set_regex_timeout_ms(
                         config_file.server.waf_regex_timeout_ms,
                     );
+                    let deferred_timeout_ms = DetectionEngine::set_deferred_regex_timeout_ms(
+                        config_file.server.waf_deferred_regex_timeout_ms,
+                    );
                     info!(
-                        "WAF regex timeout configured: {}ms (ReDoS protection)",
-                        timeout_ms
+                        "WAF regex timeouts configured: body={}ms deferred={}ms",
+                        timeout_ms, deferred_timeout_ms
                     );
 
                     return Some((config_file, sites));

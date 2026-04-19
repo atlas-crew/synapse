@@ -32,6 +32,7 @@ server:
   log_level: "info"
   admin_api_key: ""
   waf_regex_timeout_ms: 100
+  waf_deferred_regex_timeout_ms: 20
   trap_config:
     enabled: true
     paths: [...]
@@ -47,7 +48,8 @@ server:
 | `waf_enabled` | boolean | `true` | Enable WAF protection globally |
 | `log_level` | string | `"info"` | Log level: `trace`, `debug`, `info`, `warn`, `error` |
 | `admin_api_key` | string | auto-generated | Static admin API key (secure random if empty) |
-| `waf_regex_timeout_ms` | integer | `100` | WAF regex timeout for ReDoS protection (max 500ms) |
+| `waf_regex_timeout_ms` | integer | `100` | WAF regex timeout for ReDoS protection (max 500ms; `0` clamps to `1`ms at runtime) |
+| `waf_deferred_regex_timeout_ms` | integer | `20` | Deferred-pass WAF timeout for post-body signal rules; intentionally lower than the main pass (max 500ms; `0` clamps to `1`ms at runtime) |
 | `trap_config` | object | see below | Honeypot trap endpoint configuration |
 
 ### Trap Configuration

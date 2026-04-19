@@ -3,6 +3,9 @@
 //! This module handles YAML configuration parsing with security validations
 //! including file size limits, path validation, and schema verification.
 
+use crate::detection_engine::{
+    DEFAULT_WAF_DEFERRED_REGEX_TIMEOUT_MS, DEFAULT_WAF_REGEX_TIMEOUT_MS,
+};
 use crate::shadow::ShadowMirrorConfig;
 use crate::trap::TrapConfig;
 use crate::vhost::SiteConfig;
@@ -51,10 +54,20 @@ pub struct GlobalConfig {
     /// Default: 100ms. Maximum: 500ms (capped to prevent disabling protection).
     #[serde(default = "default_waf_regex_timeout_ms")]
     pub waf_regex_timeout_ms: u64,
+    /// Deferred-pass WAF timeout in milliseconds.
+    /// Default: 20ms. Maximum: 500ms. Kept lower because deferred rules run
+    /// after the main body-phase budget and currently evaluate only a small
+    /// signal-driven subset of rules.
+    #[serde(default = "default_waf_deferred_regex_timeout_ms")]
+    pub waf_deferred_regex_timeout_ms: u64,
 }
 
 fn default_waf_regex_timeout_ms() -> u64 {
-    100 // 100ms default, matching issue requirement
+    DEFAULT_WAF_REGEX_TIMEOUT_MS
+}
+
+fn default_waf_deferred_regex_timeout_ms() -> u64 {
+    DEFAULT_WAF_DEFERRED_REGEX_TIMEOUT_MS
 }
 
 fn default_http_addr() -> String {
@@ -97,6 +110,10 @@ impl fmt::Debug for GlobalConfig {
             )
             .field("trap_config", &self.trap_config)
             .field("waf_regex_timeout_ms", &self.waf_regex_timeout_ms)
+            .field(
+                "waf_deferred_regex_timeout_ms",
+                &self.waf_deferred_regex_timeout_ms,
+            )
             .finish()
     }
 }
@@ -114,6 +131,7 @@ impl Default for GlobalConfig {
             admin_api_key: None,
             trap_config: None,
             waf_regex_timeout_ms: default_waf_regex_timeout_ms(),
+            waf_deferred_regex_timeout_ms: default_waf_deferred_regex_timeout_ms(),
         }
     }
 }
@@ -720,6 +738,13 @@ impl ConfigLoader {
             )));
         }
 
+        if config.server.waf_deferred_regex_timeout_ms > 500 {
+            return Err(ConfigError::ValidationError(format!(
+                "extreme deferred WAF regex timeout {}ms (max 500)",
+                config.server.waf_deferred_regex_timeout_ms
+            )));
+        }
+
         // Warn if global WAF is disabled (SYNAPSE-SEC-011)
         if !config.server.waf_enabled {
             warn!(
@@ -935,6 +960,7 @@ sites:
         assert_eq!(config.waf_threshold, 70);
         assert!(config.waf_enabled);
         assert_eq!(config.waf_regex_timeout_ms, 100); // Default 100ms
+        assert_eq!(config.waf_deferred_regex_timeout_ms, 20);
     }
 
     #[test]
@@ -967,6 +993,7 @@ sites:
         let yaml = r#"
 server:
   waf_regex_timeout_ms: 200
+  waf_deferred_regex_timeout_ms: 35
 sites:
   - hostname: example.com
     upstreams:
@@ -976,6 +1003,7 @@ sites:
         let file = create_temp_config(yaml);
         let config = ConfigLoader::load(file.path()).unwrap();
         assert_eq!(config.server.waf_regex_timeout_ms, 200);
+        assert_eq!(config.server.waf_deferred_regex_timeout_ms, 35);
     }
 
     #[test]
@@ -991,6 +1019,23 @@ sites:
         let config = ConfigLoader::load(file.path()).unwrap();
         // Should use default of 100ms when not specified
         assert_eq!(config.server.waf_regex_timeout_ms, 100);
+        assert_eq!(config.server.waf_deferred_regex_timeout_ms, 20);
+    }
+
+    #[test]
+    fn test_waf_deferred_regex_timeout_rejects_extreme_values() {
+        let yaml = r#"
+server:
+  waf_deferred_regex_timeout_ms: 900
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+"#;
+        let file = create_temp_config(yaml);
+        let result = ConfigLoader::load(file.path());
+        assert!(matches!(result, Err(ConfigError::ValidationError(_))));
     }
 
     #[test]

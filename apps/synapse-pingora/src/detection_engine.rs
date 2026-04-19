@@ -87,7 +87,14 @@ static RULES_DATA: Lazy<Option<Vec<u8>>> = Lazy::new(|| {
 static SYNAPSE: Lazy<Arc<RwLock<Synapse>>> =
     Lazy::new(|| Arc::new(RwLock::new(create_synapse_engine())));
 
-static WAF_REGEX_TIMEOUT_US: AtomicU64 = AtomicU64::new(100_000);
+pub(crate) const DEFAULT_WAF_REGEX_TIMEOUT_MS: u64 = 100;
+/// Deferred rules are intentionally a small post-body subset, so they get a
+/// tighter budget than the main body-phase WAF pass.
+pub(crate) const DEFAULT_WAF_DEFERRED_REGEX_TIMEOUT_MS: u64 = 20;
+
+static WAF_REGEX_TIMEOUT_US: AtomicU64 = AtomicU64::new(DEFAULT_WAF_REGEX_TIMEOUT_MS * 1000);
+static WAF_DEFERRED_REGEX_TIMEOUT_US: AtomicU64 =
+    AtomicU64::new(DEFAULT_WAF_DEFERRED_REGEX_TIMEOUT_MS * 1000);
 
 fn clamp_timeout_ms(timeout_ms: u64) -> u64 {
     if timeout_ms == 0 {
@@ -258,7 +265,7 @@ impl DetectionEngine {
             schema_result,
             Some(dlp_matches),
         );
-        let timeout = Duration::from_micros(WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed));
+        let timeout = Duration::from_micros(WAF_DEFERRED_REGEX_TIMEOUT_US.load(Ordering::Relaxed));
         let verdict = SYNAPSE
             .read()
             .analyze_deferred_with_timeout(&request, timeout);
@@ -317,7 +324,7 @@ impl DetectionEngine {
         RULES_DATA.as_deref()
     }
 
-    /// Update the regex evaluation budget used by all request analysis paths.
+    /// Update the regex evaluation budget used by the body-phase request path.
     ///
     /// The timeout is clamped into the 1ms..=500ms range because Synapse
     /// executes regex-heavy rules inline on the request path. The 1ms floor
@@ -342,11 +349,71 @@ impl DetectionEngine {
         WAF_REGEX_TIMEOUT_US.store(applied_ms * 1000, Ordering::Relaxed);
         applied_ms
     }
+
+    pub fn regex_timeout_ms() -> u64 {
+        WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed) / 1000
+    }
+
+    /// Update the tighter deferred-pass budget used after DLP has completed.
+    ///
+    /// The deferred pass runs second and only evaluates a narrow deferred rule
+    /// subset, so the default should stay below the body-phase budget.
+    pub fn set_deferred_regex_timeout_ms(timeout_ms: u64) -> u64 {
+        let applied_ms = clamp_timeout_ms(timeout_ms);
+        if timeout_ms == 0 {
+            warn!(
+                "Requested deferred WAF regex timeout {}ms is below the safety floor; clamping to {}ms",
+                timeout_ms, applied_ms
+            );
+        } else if timeout_ms > applied_ms {
+            warn!(
+                "Requested deferred WAF regex timeout {}ms exceeds safety cap; clamping to {}ms",
+                timeout_ms, applied_ms
+            );
+        }
+        WAF_DEFERRED_REGEX_TIMEOUT_US.store(applied_ms * 1000, Ordering::Relaxed);
+        applied_ms
+    }
+
+    pub fn deferred_regex_timeout_ms() -> u64 {
+        WAF_DEFERRED_REGEX_TIMEOUT_US.load(Ordering::Relaxed) / 1000
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::clamp_timeout_ms;
+    use super::{
+        build_request, clamp_timeout_ms, DetectionEngine, DEFAULT_WAF_DEFERRED_REGEX_TIMEOUT_MS,
+        DEFAULT_WAF_REGEX_TIMEOUT_MS, SYNAPSE, WAF_DEFERRED_REGEX_TIMEOUT_US, WAF_REGEX_TIMEOUT_US,
+    };
+    use crate::dlp::{DlpMatch, PatternSeverity, SensitiveDataType};
+    use serial_test::serial;
+    use std::{sync::atomic::Ordering, time::Duration};
+
+    struct DetectionEngineStateGuard {
+        production_rules: String,
+        body_timeout_us: u64,
+        deferred_timeout_us: u64,
+    }
+
+    impl DetectionEngineStateGuard {
+        fn capture() -> Self {
+            Self {
+                production_rules: include_str!("production_rules.json").to_string(),
+                body_timeout_us: WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed),
+                deferred_timeout_us: WAF_DEFERRED_REGEX_TIMEOUT_US.load(Ordering::Relaxed),
+            }
+        }
+    }
+
+    impl Drop for DetectionEngineStateGuard {
+        fn drop(&mut self) {
+            DetectionEngine::reload_rules(self.production_rules.as_bytes())
+                .expect("production rules must restore after deferred-timeout test");
+            WAF_REGEX_TIMEOUT_US.store(self.body_timeout_us, Ordering::Relaxed);
+            WAF_DEFERRED_REGEX_TIMEOUT_US.store(self.deferred_timeout_us, Ordering::Relaxed);
+        }
+    }
 
     #[test]
     fn test_clamp_timeout_ms_clamps_zero_to_one() {
@@ -361,5 +428,74 @@ mod tests {
     #[test]
     fn test_clamp_timeout_ms_caps_upper_bound() {
         assert_eq!(clamp_timeout_ms(10_000), 500);
+    }
+
+    #[test]
+    fn test_deferred_regex_timeout_default_is_lower_than_body_phase() {
+        assert!(DEFAULT_WAF_DEFERRED_REGEX_TIMEOUT_MS < DEFAULT_WAF_REGEX_TIMEOUT_MS);
+    }
+
+    #[test]
+    #[serial]
+    fn test_set_deferred_regex_timeout_ms_clamps_and_stores_value() {
+        let original = DetectionEngine::deferred_regex_timeout_ms();
+        assert_eq!(DetectionEngine::set_deferred_regex_timeout_ms(0), 1);
+        assert_eq!(DetectionEngine::deferred_regex_timeout_ms(), 1);
+        assert_eq!(DetectionEngine::set_deferred_regex_timeout_ms(600), 500);
+        assert_eq!(DetectionEngine::deferred_regex_timeout_ms(), 500);
+        DetectionEngine::set_deferred_regex_timeout_ms(original);
+    }
+
+    #[test]
+    #[serial]
+    fn test_deferred_timeout_budget_is_independent() {
+        let _guard = DetectionEngineStateGuard::capture();
+
+        let mut heavy_rules = String::from("[");
+        for id in 0..20_000u32 {
+            if id > 0 {
+                heavy_rules.push(',');
+            }
+            heavy_rules.push_str(&format!(
+                r#"{{"id":{},"description":"deferred timeout probe","risk":5.0,"blocking":true,"matches":[{{"type":"dlp_violation","op":"gte","match":999999}}]}}"#,
+                950_000 + id
+            ));
+        }
+        heavy_rules.push(']');
+
+        DetectionEngine::reload_rules(heavy_rules.as_bytes())
+            .expect("heavy deferred rules must load");
+        DetectionEngine::set_regex_timeout_ms(500);
+        DetectionEngine::set_deferred_regex_timeout_ms(1);
+        assert_eq!(WAF_REGEX_TIMEOUT_US.load(Ordering::Relaxed), 500_000);
+        assert_eq!(WAF_DEFERRED_REGEX_TIMEOUT_US.load(Ordering::Relaxed), 1_000);
+
+        let matches = [DlpMatch {
+            pattern_name: "timeout_probe",
+            data_type: SensitiveDataType::Custom,
+            severity: PatternSeverity::Critical,
+            masked_value: "probe".to_string(),
+            start: 0,
+            end: 5,
+            stream_offset: None,
+        }];
+        let deferred_request = build_request(
+            "POST",
+            "/timeout-probe",
+            &[],
+            Some(b"probe"),
+            "127.0.0.1",
+            None,
+            None,
+            Some(&matches),
+        );
+        let deferred = SYNAPSE.read().analyze_deferred_with_timeout(
+            &deferred_request,
+            Duration::from_micros(WAF_DEFERRED_REGEX_TIMEOUT_US.load(Ordering::Relaxed)),
+        );
+        assert!(
+            deferred.timed_out,
+            "deferred pass should honor the tighter budget"
+        );
     }
 }

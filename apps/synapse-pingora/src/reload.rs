@@ -11,6 +11,7 @@ use std::time::Instant;
 use tracing::{error, info, warn};
 
 use crate::config::{ConfigError, ConfigFile, ConfigLoader};
+use crate::detection_engine::DetectionEngine;
 use crate::site_waf::SiteWafManager;
 use crate::tls::TlsManager;
 use crate::vhost::VhostMatcher;
@@ -214,7 +215,17 @@ impl ConfigReloader {
         // Atomically swap configurations
         {
             let mut config = self.current_config.write();
+            let body_timeout_ms =
+                DetectionEngine::set_regex_timeout_ms(new_config.server.waf_regex_timeout_ms);
+            let deferred_timeout_ms = DetectionEngine::set_deferred_regex_timeout_ms(
+                new_config.server.waf_deferred_regex_timeout_ms,
+            );
             *config = new_config;
+
+            info!(
+                "Configuration reload complete: {} sites loaded (body_timeout={}ms deferred_timeout={}ms)",
+                sites_count, body_timeout_ms, deferred_timeout_ms
+            );
         }
         {
             let mut matcher = self.vhost_matcher.write();
@@ -236,11 +247,6 @@ impl ConfigReloader {
                 warn!("  Failed to reload cert for {}: {}", domain, error);
             }
         }
-
-        info!(
-            "Configuration reload complete: {} sites loaded",
-            sites_count
-        );
 
         ReloadResult {
             success: true,
@@ -314,8 +320,31 @@ pub fn setup_sighup_handler(_reloader: Arc<ConfigReloader>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::detection_engine::DetectionEngine;
+    use serial_test::serial;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    struct DetectionEngineTimeoutGuard {
+        body_timeout_ms: u64,
+        deferred_timeout_ms: u64,
+    }
+
+    impl DetectionEngineTimeoutGuard {
+        fn capture() -> Self {
+            Self {
+                body_timeout_ms: DetectionEngine::regex_timeout_ms(),
+                deferred_timeout_ms: DetectionEngine::deferred_regex_timeout_ms(),
+            }
+        }
+    }
+
+    impl Drop for DetectionEngineTimeoutGuard {
+        fn drop(&mut self) {
+            DetectionEngine::set_regex_timeout_ms(self.body_timeout_ms);
+            DetectionEngine::set_deferred_regex_timeout_ms(self.deferred_timeout_ms);
+        }
+    }
 
     fn create_temp_config(content: &str) -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();
@@ -421,5 +450,41 @@ sites:
         let matcher_read = matcher.read();
 
         assert!(matcher_read.match_host("example.com").is_some());
+    }
+
+    #[test]
+    #[serial]
+    fn test_reload_updates_detection_engine_timeouts() {
+        let file = create_temp_config(MINIMAL_CONFIG);
+        let reloader = ConfigReloader::new(file.path()).unwrap();
+        let _guard = DetectionEngineTimeoutGuard::capture();
+
+        {
+            let mut config_file = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(file.path())
+                .unwrap();
+            write!(
+                config_file,
+                r#"
+server:
+  waf_regex_timeout_ms: 123
+  waf_deferred_regex_timeout_ms: 17
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+"#
+            )
+            .unwrap();
+        }
+
+        let result = reloader.reload();
+
+        assert!(result.success);
+        assert_eq!(DetectionEngine::regex_timeout_ms(), 123);
+        assert_eq!(DetectionEngine::deferred_regex_timeout_ms(), 17);
     }
 }
