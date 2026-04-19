@@ -71,15 +71,9 @@ pub struct Verdict {
     pub endpoint_template: Option<String>,
     /// Aggregate endpoint risk score (0-100)
     pub endpoint_risk: Option<f32>,
-    // Per-request anomaly scoring is currently out of scope. Keep these
-    // legacy fields as inert compatibility shims for downstream Verdict
-    // consumers while the dormant anomaly-blocking path is removed.
-    /// Always None in the current build; retained for compatibility only.
-    pub anomaly_score: Option<f64>,
-    /// Always None in the current build; retained for compatibility only.
-    pub adjusted_threshold: Option<f64>,
-    /// Always empty in the current build; retained for compatibility only.
-    pub anomaly_signals: Vec<AnomalySignal>,
+    // Per-request anomaly scoring is currently out of scope. If it returns,
+    // reintroduce explicit fields only when a live producer path exists
+    // end-to-end and has a tracked follow-up task.
 
     // Timeout fields
     /// Whether evaluation timed out (partial result)
@@ -100,9 +94,6 @@ impl Default for Verdict {
             risk_contributions: Vec::new(),
             endpoint_template: None,
             endpoint_risk: None,
-            anomaly_score: None,
-            adjusted_threshold: None,
-            anomaly_signals: Vec::new(),
             timed_out: false,
             rules_evaluated: None,
         }

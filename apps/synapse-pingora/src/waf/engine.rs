@@ -723,9 +723,6 @@ impl Engine {
             risk_contributions: Vec::new(),
             endpoint_template: None,
             endpoint_risk: None,
-            anomaly_score: None,
-            adjusted_threshold: None,
-            anomaly_signals: Vec::new(),
             timed_out,
             rules_evaluated: if timed_out {
                 Some(rules_evaluated)
@@ -854,9 +851,6 @@ impl Engine {
             risk_contributions,
             endpoint_template: None,
             endpoint_risk: None,
-            anomaly_score: None,
-            adjusted_threshold: None,
-            anomaly_signals: Vec::new(),
             timed_out,
             rules_evaluated: if timed_out {
                 Some(rules_evaluated)
@@ -2973,24 +2967,6 @@ mod tests {
         assert!(
             verdict.matched_rules.contains(&90043),
             "threshold-less filtered schema_violation rules should match any violation of the requested kind"
-        );
-    }
-
-    #[test]
-    fn test_verdict_compat_anomaly_fields_remain_empty() {
-        let engine = Engine::empty();
-        let verdict = engine.analyze(&Request {
-            method: "GET",
-            path: "/health",
-            client_ip: "1.2.3.4",
-            ..Default::default()
-        });
-
-        assert_eq!(verdict.anomaly_score, None);
-        assert_eq!(verdict.adjusted_threshold, None);
-        assert!(
-            verdict.anomaly_signals.is_empty(),
-            "compatibility shim fields should stay inert until a real producer path exists"
         );
     }
 

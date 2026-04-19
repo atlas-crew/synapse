@@ -87,7 +87,9 @@ use synapse_pingora::dlp::{DlpConfig, DlpScanner};
 // Multi-site configuration and routing
 use synapse_pingora::access::{AccessListManager, CidrRange};
 use synapse_pingora::block_log::{BlockEvent, BlockLog, IpAnonymization};
-use synapse_pingora::config::ConfigLoader;
+use synapse_pingora::config::{
+    deprecated_anomaly_blocking_error, deprecated_anomaly_blocking_warning, ConfigLoader,
+};
 use synapse_pingora::config_manager::ConfigManager;
 use synapse_pingora::correlation::CampaignManager;
 use synapse_pingora::headers;
@@ -549,34 +551,8 @@ pub struct DetectionConfig {
     pub block_status: u16,
     #[serde(default = "default_rules_path")]
     pub rules_path: String,
-    /// Deprecated: anomaly-based blocking never shipped end-to-end and this
-    /// config block is now ignored. We still parse it so startup can warn
-    /// operators instead of silently dropping their intent.
-    #[serde(default)]
-    pub anomaly_blocking: AnomalyBlockingConfig,
     /// Deprecated telemetry URL (use telemetry.endpoint instead)
     pub risk_server_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AnomalyBlockingConfig {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default = "default_anomaly_threshold")]
-    pub threshold: f64,
-}
-
-impl Default for AnomalyBlockingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            threshold: default_anomaly_threshold(),
-        }
-    }
-}
-
-fn default_anomaly_threshold() -> f64 {
-    10.0
 }
 
 fn default_action() -> String {
@@ -602,21 +578,9 @@ impl Default for DetectionConfig {
             action: default_action(),
             block_status: default_block_status(),
             rules_path: default_rules_path(),
-            anomaly_blocking: AnomalyBlockingConfig::default(),
             risk_server_url: None,
         }
     }
-}
-
-fn deprecated_anomaly_blocking_warning(config: &DetectionConfig) -> Option<String> {
-    if !config.anomaly_blocking.enabled {
-        return None;
-    }
-    Some(format!(
-        "detection.anomaly_blocking is deprecated and ignored (enabled={}, threshold={}): per-request anomaly blocking never shipped end-to-end, so this config no longer has runtime effect",
-        config.anomaly_blocking.enabled,
-        config.anomaly_blocking.threshold
-    ))
 }
 
 /// TLS/HTTPS configuration
@@ -680,6 +644,16 @@ impl Config {
 
         let contents =
             fs::read_to_string(path).map_err(|e| format!("Failed to read config file: {}", e))?;
+
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(&contents)
+            .map_err(|e| format!("Failed to parse config file: {}", e))?;
+
+        if let Some(message) = deprecated_anomaly_blocking_error(&yaml_value) {
+            return Err(message);
+        }
+        if let Some(message) = deprecated_anomaly_blocking_warning(&yaml_value) {
+            warn!("{}", message);
+        }
 
         let config: Self = serde_yaml::from_str(&contents)
             .map_err(|e| format!("Failed to parse config file: {}", e))?;
@@ -5147,6 +5121,15 @@ fn run_config_check(file: &str, json_output: bool) {
         .map(|mapping| mapping.contains_key(serde_yaml::Value::String("sites".to_string())))
         .unwrap_or(false);
 
+    if let Some(message) = deprecated_anomaly_blocking_error(&yaml_value) {
+        result.errors.push(message);
+        output_validation_result(&result, json_output);
+        std::process::exit(1);
+    }
+    if let Some(message) = deprecated_anomaly_blocking_warning(&yaml_value) {
+        result.warnings.push(message);
+    }
+
     // Try to load and validate config (multi-site or legacy)
     if is_multisite {
         match ConfigLoader::load(file) {
@@ -5504,10 +5487,6 @@ fn main() {
         .iter()
         .map(|u| (u.host.clone(), u.port))
         .collect();
-
-    if let Some(message) = deprecated_anomaly_blocking_warning(&config.detection) {
-        warn!("{}", message);
-    }
 
     // Phase 6: Initialize TLS Manager
     let tls_manager = Arc::new(TlsManager::new(
@@ -6904,52 +6883,66 @@ tls:
 
     #[test]
     #[serial]
-    fn test_config_still_parses_deprecated_anomaly_blocking() {
+    fn test_config_load_rejects_enabled_deprecated_anomaly_blocking() {
+        let temp = NamedTempFile::new().expect("temp config file");
         let yaml = r#"
 detection:
   anomaly_blocking:
     enabled: true
     threshold: 8.0
 "#;
-        let config: Config =
-            serde_yaml::from_str(yaml).expect("deprecated anomaly_blocking should still parse");
+        fs::write(temp.path(), yaml).expect("write temp config");
 
-        let anomaly_blocking = config.detection.anomaly_blocking;
-        assert!(anomaly_blocking.enabled);
-        assert_eq!(anomaly_blocking.threshold, 8.0);
+        let err = Config::load(temp.path().to_str().expect("utf-8 path"))
+            .expect_err("deprecated anomaly_blocking should be rejected");
+        assert!(err.contains("detection.anomaly_blocking"));
+        assert!(err.contains("no longer supported"));
+        assert!(err.contains("delete each"));
     }
 
     #[test]
-    fn test_deprecated_anomaly_blocking_warning_only_for_enabled_config() {
-        let absent = DetectionConfig::default();
-        assert!(
-            deprecated_anomaly_blocking_warning(&absent).is_none(),
-            "defaulted config should not emit a deprecation warning"
-        );
+    #[serial]
+    fn test_config_load_allows_disabled_deprecated_anomaly_blocking() {
+        let temp = NamedTempFile::new().expect("temp config file");
+        let yaml = r#"
+detection:
+  anomaly_blocking:
+    enabled: false
+    threshold: 8.0
+  sqli: true
+  xss: true
+"#;
+        fs::write(temp.path(), yaml).expect("write temp config");
 
-        let disabled = DetectionConfig {
-            anomaly_blocking: AnomalyBlockingConfig {
-                enabled: false,
-                threshold: 8.0,
-            },
-            ..DetectionConfig::default()
-        };
-        assert!(
-            deprecated_anomaly_blocking_warning(&disabled).is_none(),
-            "disabled deprecated config should not emit a warning"
-        );
+        let config = Config::load(temp.path().to_str().expect("utf-8 path"))
+            .expect("disabled deprecated anomaly_blocking should be ignored");
+        assert!(config.detection.sqli);
+        assert!(config.detection.xss);
+    }
 
-        let enabled = DetectionConfig {
-            anomaly_blocking: AnomalyBlockingConfig {
-                enabled: true,
-                threshold: 8.0,
-            },
-            ..DetectionConfig::default()
-        };
-        let message = deprecated_anomaly_blocking_warning(&enabled)
-            .expect("enabled deprecated config should emit a warning");
-        assert!(message.contains("deprecated and ignored"));
-        assert!(message.contains("threshold=8"));
+    #[test]
+    #[serial]
+    fn test_multisite_config_loader_rejects_enabled_deprecated_anomaly_blocking() {
+        let temp = NamedTempFile::new().expect("temp config file");
+        let yaml = r#"
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+    detection:
+      anomaly_blocking:
+        enabled: true
+        threshold: 8.0
+"#;
+        fs::write(temp.path(), yaml).expect("write temp config");
+
+        let err = ConfigLoader::load(temp.path()).expect_err(
+            "enabled deprecated anomaly_blocking in multi-site config should be rejected",
+        );
+        let message = err.to_string();
+        assert!(message.contains("sites[0].detection.anomaly_blocking"));
+        assert!(message.contains("delete each"));
     }
 
     #[test]

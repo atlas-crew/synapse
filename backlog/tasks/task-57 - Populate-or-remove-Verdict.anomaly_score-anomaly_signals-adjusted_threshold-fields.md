@@ -3,10 +3,10 @@ id: TASK-57
 title: >-
   Populate or remove Verdict.anomaly_score / anomaly_signals /
   adjusted_threshold fields
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-04-12 19:38'
-updated_date: '2026-04-18 20:50'
+updated_date: '2026-04-19 00:56'
 labels:
   - waf
   - synapse-pingora
@@ -55,12 +55,12 @@ This task's deliverable is the DECISION plus the execution, not just the executi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A deliberate decision is made and documented: implement the anomaly path OR delete it as dead code
+- [x] #1 A deliberate decision is made and documented: implement the anomaly path OR delete it as dead code
 - [ ] #2 If implemented: EndpointProfile anomaly detection feeds Verdict.anomaly_signals + anomaly_score and the anomaly_blocking_threshold from config is actually compared against the score
 - [ ] #3 If implemented: a new unit test asserts a request exceeding the threshold receives Verdict.action = Block with a populated anomaly_signals vector
-- [ ] #4 If deleted: Verdict fields, AnomalyBlockingConfig, main.rs:5272 config application, and any test references are all removed in one commit
-- [ ] #5 If deleted: a comment in Verdict documents that anomaly detection is not in scope and points at a follow-up task if reinstatement is planned
-- [ ] #6 No new cargo warnings after the change
+- [x] #4 If deleted: Verdict fields, AnomalyBlockingConfig, main.rs:5272 config application, and any test references are all removed in one commit
+- [x] #5 If deleted: a comment in Verdict documents that anomaly detection is not in scope and points at a follow-up task if reinstatement is planned
+- [x] #6 No new cargo warnings after the change
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -68,3 +68,15 @@ This task's deliverable is the DECISION plus the execution, not just the executi
 <!-- SECTION:NOTES:BEGIN -->
 Current implementation removed the dormant runtime anomaly-blocking path and deprecated config behavior, but kept `Verdict.anomaly_score` / `adjusted_threshold` / `anomaly_signals` as inert compatibility shims after independent review raised public-surface risk. Follow-up decision remains: remove those fields with an explicit compatibility break, or add a formal removal plan/changelog/admin-surface warning.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Decision: remove the dormant per-request anomaly-blocking path rather than finish a half-implemented feature. The engine had no live producer for Verdict anomaly fields, and the config knob could mislead operators into thinking request-level anomaly blocking was active.
+
+Removed the obsolete DetectionConfig.anomaly_blocking surface plus the Verdict.anomaly_score / adjusted_threshold / anomaly_signals compatibility shims, and deleted the inert engine/test wiring that only preserved empty defaults.
+
+Added shared deprecation guards so legacy Config::load, multi-site ConfigLoader::load, and synapse-waf check-config now hard-fail enabled detection.anomaly_blocking blocks, warn on disabled leftovers, and cite exact top-level or sites[i] paths.
+
+Documented the Verdict API compatibility change in apps/synapse-pingora/docs/reference/compatibility-notes.md and verified the slice with targeted cargo tests plus live check-config JSON runs for single-site, multi-site, and false-positive guard cases.
+<!-- SECTION:FINAL_SUMMARY:END -->

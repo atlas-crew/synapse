@@ -456,6 +456,119 @@ fn contains_path_traversal(path: &str) -> bool {
 /// Configuration loader with security validations.
 pub struct ConfigLoader;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DeprecatedAnomalyBlockingUsage {
+    path: String,
+    enabled: bool,
+}
+
+fn deprecated_anomaly_blocking_usage(
+    path: String,
+    block: &serde_yaml::Value,
+) -> DeprecatedAnomalyBlockingUsage {
+    let enabled = block
+        .as_mapping()
+        .and_then(|mapping| mapping.get(serde_yaml::Value::String("enabled".to_string())))
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or(false);
+
+    DeprecatedAnomalyBlockingUsage { path, enabled }
+}
+
+fn deprecated_anomaly_blocking_usages(
+    value: &serde_yaml::Value,
+) -> Vec<DeprecatedAnomalyBlockingUsage> {
+    let mut findings = Vec::new();
+    let Some(root) = value.as_mapping() else {
+        return findings;
+    };
+
+    if let Some(block) = root
+        .get(serde_yaml::Value::String("detection".to_string()))
+        .and_then(serde_yaml::Value::as_mapping)
+        .and_then(|mapping| mapping.get(serde_yaml::Value::String("anomaly_blocking".to_string())))
+    {
+        findings.push(deprecated_anomaly_blocking_usage(
+            "detection.anomaly_blocking".to_string(),
+            block,
+        ));
+    }
+
+    if let Some(sites) = root
+        .get(serde_yaml::Value::String("sites".to_string()))
+        .and_then(serde_yaml::Value::as_sequence)
+    {
+        for (index, site) in sites.iter().enumerate() {
+            let Some(site_map) = site.as_mapping() else {
+                continue;
+            };
+            let Some(block) = site_map
+                .get(serde_yaml::Value::String("detection".to_string()))
+                .and_then(serde_yaml::Value::as_mapping)
+                .and_then(|mapping| {
+                    mapping.get(serde_yaml::Value::String("anomaly_blocking".to_string()))
+                })
+            else {
+                continue;
+            };
+
+            findings.push(deprecated_anomaly_blocking_usage(
+                format!("sites[{index}].detection.anomaly_blocking"),
+                block,
+            ));
+        }
+    }
+
+    findings
+}
+
+pub fn deprecated_anomaly_blocking_error(value: &serde_yaml::Value) -> Option<String> {
+    let usages = deprecated_anomaly_blocking_usages(value);
+    let enabled_paths = usages
+        .iter()
+        .filter(|usage| usage.enabled)
+        .map(|usage| format!("`{}`", usage.path))
+        .collect::<Vec<_>>();
+    let disabled_paths = usages
+        .iter()
+        .filter(|usage| !usage.enabled)
+        .map(|usage| format!("`{}`", usage.path))
+        .collect::<Vec<_>>();
+
+    if enabled_paths.is_empty() {
+        None
+    } else {
+        let mut message = format!(
+            "Deprecated config `detection.anomaly_blocking` is no longer supported: delete each `anomaly_blocking:` block under `detection:` before starting synapse-pingora (enabled legacy config at {})",
+            enabled_paths.join(", ")
+        );
+        if !disabled_paths.is_empty() {
+            message.push_str(&format!(
+                "; disabled legacy config also found at {} and should be removed in the same cleanup pass",
+                disabled_paths.join(", ")
+            ));
+        }
+        Some(message)
+    }
+}
+
+pub fn deprecated_anomaly_blocking_warning(value: &serde_yaml::Value) -> Option<String> {
+    let paths = deprecated_anomaly_blocking_usages(value)
+        .into_iter()
+        .filter(|usage| !usage.enabled)
+        .map(|usage| format!("`{}`", usage.path))
+        .collect::<Vec<_>>();
+
+    if paths.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "Deprecated config {} will be ignored because per-request anomaly blocking never shipped end-to-end; delete each `anomaly_blocking:` block under `detection:`.",
+            paths.join(", ")
+        ))
+    }
+}
+
 impl ConfigLoader {
     /// Loads configuration from a YAML file.
     ///
@@ -486,6 +599,13 @@ impl ConfigLoader {
 
         // Read and parse
         let contents = fs::read_to_string(path)?;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(&contents)?;
+        if let Some(message) = deprecated_anomaly_blocking_error(&yaml_value) {
+            return Err(ConfigError::ValidationError(message));
+        }
+        if let Some(message) = deprecated_anomaly_blocking_warning(&yaml_value) {
+            warn!("{}", message);
+        }
         let config: ConfigFile = serde_yaml::from_str(&contents)?;
 
         // Validate
@@ -967,5 +1087,41 @@ sites:
         assert!(!contains_path_traversal("certs/server.pem"));
         assert!(!contains_path_traversal("/etc/nginx/ssl/cert.pem"));
         assert!(!contains_path_traversal("./relative/path")); // Single dot is OK
+    }
+
+    #[test]
+    fn test_deprecated_anomaly_blocking_helpers_only_scan_supported_paths() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+detection:
+  anomaly_blocking:
+    enabled: true
+sites:
+  - hostname: example.com
+    upstreams:
+      - host: 127.0.0.1
+        port: 8080
+    detection:
+      anomaly_blocking:
+        enabled: false
+nested:
+  services:
+    detection:
+      anomaly_blocking:
+        enabled: true
+"#,
+        )
+        .expect("yaml parses");
+
+        let error = deprecated_anomaly_blocking_error(&yaml).expect("enabled block should error");
+        assert!(error.contains("`detection.anomaly_blocking`"));
+        assert!(error.contains("delete each"));
+        assert!(error.contains("`sites[0].detection.anomaly_blocking`"));
+        assert!(!error.contains("nested.services.detection.anomaly_blocking"));
+
+        let warning =
+            deprecated_anomaly_blocking_warning(&yaml).expect("disabled block should warn");
+        assert!(warning.contains("`sites[0].detection.anomaly_blocking`"));
+        assert!(!warning.contains("nested.services.detection.anomaly_blocking"));
     }
 }
