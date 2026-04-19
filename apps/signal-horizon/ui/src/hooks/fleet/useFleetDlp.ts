@@ -1,22 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
-import type { SensorSummary } from '../../types/fleet';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { getDemoData } from '../../lib/demoData';
 
 /**
  * Aggregate DLP (Data Loss Prevention) telemetry across the fleet.
  *
- * Each Synapse sensor exposes `/_sensor/dlp/stats` and `/_sensor/dlp/violations`
- * via the Horizon proxy. We fan out both endpoints per-sensor and combine:
- *   - stats: sum counters; keep the max pattern count (same on every sensor
- *     in practice but we don't rely on that invariant).
- *   - violations: concat all sensors' violations, tagging each with the
- *     sensor it came from so the UI can group/filter.
- *
- * Offline or permission-denied sensors return empty — the dashboard shows
- * partial data rather than failing. Matches the pattern used by
- * useFleetSites.
+ * Horizon now exposes fleet-native DLP endpoints backed by the latest
+ * per-sensor payload snapshots. The API returns an aggregate plus a
+ * per-sensor partial-results envelope so the dashboard can stay resilient
+ * when some sensors have stale or missing snapshots.
  */
 
 export interface FleetDlpStats {
@@ -40,41 +33,31 @@ export interface FleetDlpViolation {
 export interface FleetDlpData {
   stats: FleetDlpStats;
   violations: FleetDlpViolation[];
+  partial: {
+    succeeded: number;
+    failed: number;
+    failedSensorIds: string[];
+  };
 }
 
-async function fetchSensors(): Promise<SensorSummary[]> {
-  const data = await apiFetch<{ sensors?: SensorSummary[] } | SensorSummary[]>(
-    '/fleet/sensors',
-  );
-  return Array.isArray(data) ? data : data.sensors ?? [];
-}
+type DemoDlpViolation = ReturnType<typeof getDemoData>['fleet']['dlp']['violations'][number];
 
-async function fetchStatsForSensor(sensor: SensorSummary): Promise<FleetDlpStats | null> {
-  try {
-    return await apiFetch<FleetDlpStats>(
-      `/synapse/${encodeURIComponent(sensor.id)}/proxy/_sensor/dlp/stats`,
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function fetchViolationsForSensor(
-  sensor: SensorSummary,
-): Promise<FleetDlpViolation[]> {
-  try {
-    const response = await apiFetch<{ violations?: Array<Omit<FleetDlpViolation, 'sensorId' | 'sensorName'>> }>(
-      `/synapse/${encodeURIComponent(sensor.id)}/proxy/_sensor/dlp/violations`,
-    );
-    const raw = response.violations ?? [];
-    return raw.map((v) => ({
-      ...v,
-      sensorId: sensor.id,
-      sensorName: sensor.name ?? sensor.id,
-    }));
-  } catch {
-    return [];
-  }
+interface FleetPartialAggregateResponse<TItem, TAggregate> {
+  aggregate: TAggregate;
+  results: Array<{
+    sensorId: string;
+    status: 'ok' | 'error';
+    data?: TItem;
+    error?: string;
+  }>;
+  summary: {
+    succeeded: number;
+    failed: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
 }
 
 export function useFleetDlp() {
@@ -86,7 +69,7 @@ export function useFleetDlp() {
       if (isDemoMode) {
         const demo = getDemoData(scenario);
         const violations: FleetDlpViolation[] = (demo.fleet.dlp.violations ?? []).map(
-          (v: any) => ({
+          (v: DemoDlpViolation) => ({
             timestamp: v.timestamp,
             pattern_name: v.pattern_name,
             data_type: v.data_type,
@@ -94,39 +77,52 @@ export function useFleetDlp() {
             masked_value: v.masked_value,
             client_ip: v.client_ip,
             path: v.path,
-            sensorId: v.sensorId ?? 'demo-sensor',
-            sensorName: v.sensorName ?? 'Demo Sensor',
+            sensorId:
+              'sensorId' in v && typeof v.sensorId === 'string' ? v.sensorId : 'demo-sensor',
+            sensorName:
+              'sensorName' in v && typeof v.sensorName === 'string'
+                ? v.sensorName
+                : 'Demo Sensor',
           }),
         );
         return {
           stats: demo.fleet.dlp.stats,
           violations,
+          partial: {
+            succeeded: 1,
+            failed: 0,
+            failedSensorIds: [],
+          },
         };
       }
-
-      const sensors = await fetchSensors();
-      const [statsResults, violationsResults] = await Promise.all([
-        Promise.all(sensors.map(fetchStatsForSensor)),
-        Promise.all(sensors.map(fetchViolationsForSensor)),
+      const [statsResponse, violationsResponse] = await Promise.all([
+        apiFetch<FleetPartialAggregateResponse<FleetDlpStats, FleetDlpStats>>('/synapse/dlp/stats'),
+        apiFetch<FleetPartialAggregateResponse<FleetDlpViolation[], FleetDlpViolation[]>>(
+          '/synapse/dlp/violations'
+        ),
       ]);
 
-      const stats: FleetDlpStats = statsResults.reduce<FleetDlpStats>(
-        (acc, s) => {
-          if (!s) return acc;
-          return {
-            totalScans: acc.totalScans + (s.totalScans ?? 0),
-            totalMatches: acc.totalMatches + (s.totalMatches ?? 0),
-            patternCount: Math.max(acc.patternCount, s.patternCount ?? 0),
-          };
-        },
-        { totalScans: 0, totalMatches: 0, patternCount: 0 },
+      const sensorIds = new Set([
+        ...statsResponse.results.map((result) => result.sensorId),
+        ...violationsResponse.results.map((result) => result.sensorId),
+      ]);
+      const failedSensorIds = Array.from(
+        new Set(
+          [...statsResponse.results, ...violationsResponse.results]
+            .filter((result) => result.status === 'error')
+            .map((result) => result.sensorId)
+        )
       );
 
-      const violations = violationsResults
-        .flat()
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      return { stats, violations };
+      return {
+        stats: statsResponse.aggregate,
+        violations: [...violationsResponse.aggregate].sort((a, b) => b.timestamp - a.timestamp),
+        partial: {
+          succeeded: sensorIds.size - failedSensorIds.length,
+          failed: failedSensorIds.length,
+          failedSensorIds,
+        },
+      };
     },
     refetchInterval: isDemoMode ? false : 10000,
     staleTime: isDemoMode ? Infinity : 5000,

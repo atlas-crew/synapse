@@ -207,6 +207,304 @@ describe('Synapse RBAC', () => {
     expect(fakePrisma.sensorPayloadSnapshot.findFirst).toHaveBeenCalled();
   });
 
+  it('returns aggregated fleet DLP data with a partial-results envelope', async () => {
+    const fakePrisma = {
+      sensor: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'sensor-1', name: 'edge-east' },
+          { id: 'sensor-2', name: 'edge-west' },
+          { id: 'sensor-3', name: 'edge-missing' },
+        ]),
+      },
+      sensorPayloadSnapshot: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            sensorId: 'sensor-1',
+            capturedAt: new Date('2026-04-18T12:00:00Z'),
+            stats: {
+              dlp: {
+                totalScans: 100,
+                totalMatches: 2,
+                patternCount: 25,
+                violations: [
+                  {
+                    timestamp: 1700000000000,
+                    pattern_name: 'Visa Card',
+                    data_type: 'credit_card',
+                    severity: 'critical',
+                    masked_value: '****-****-****-4242',
+                    path: '/checkout',
+                  },
+                ],
+              },
+            },
+          },
+          {
+            sensorId: 'sensor-2',
+            capturedAt: new Date('2026-04-18T12:05:00Z'),
+            stats: {
+              dlp: {
+                totalScans: 40,
+                totalMatches: 1,
+                patternCount: 25,
+                violations: [
+                  {
+                    timestamp: 1700000005000,
+                    pattern_name: 'Access Token',
+                    data_type: 'api_key',
+                    severity: 'high',
+                    masked_value: 'tok_********',
+                    path: '/oauth/token',
+                  },
+                ],
+              },
+            },
+          },
+        ]),
+      },
+    };
+
+    const seededApp = buildApp(['fleet:read'], { prisma: fakePrisma as any });
+
+    const statsRes = await request(seededApp).get('/synapse/dlp/stats').expect(200);
+    expect(statsRes.body.aggregate).toMatchObject({
+      totalScans: 140,
+      totalMatches: 3,
+      patternCount: 25,
+    });
+    expect(statsRes.body.summary).toEqual({ succeeded: 2, failed: 1 });
+    expect(statsRes.body.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sensorId: 'sensor-3',
+          status: 'error',
+          error: 'No payload snapshot available',
+        }),
+      ])
+    );
+
+    const violationsRes = await request(seededApp)
+      .get('/synapse/dlp/violations?limit=5')
+      .expect(200);
+    expect(violationsRes.body.summary).toEqual({ succeeded: 2, failed: 1 });
+    expect(violationsRes.body.aggregate).toEqual([
+      expect.objectContaining({
+        sensorId: 'sensor-2',
+        sensorName: 'edge-west',
+        pattern_name: 'Access Token',
+      }),
+      expect.objectContaining({
+        sensorId: 'sensor-1',
+        sensorName: 'edge-east',
+        pattern_name: 'Visa Card',
+      }),
+    ]);
+  });
+
+  it('returns a top-level fleet error when no DLP snapshots are usable', async () => {
+    const fakePrisma = {
+      sensor: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'sensor-1', name: 'edge-east' },
+          { id: 'sensor-2', name: 'edge-west' },
+        ]),
+      },
+      sensorPayloadSnapshot: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    };
+
+    const seededApp = buildApp(['fleet:read'], { prisma: fakePrisma as any });
+
+    const res = await request(seededApp).get('/synapse/dlp/stats').expect(200);
+
+    expect(res.body.summary).toEqual({ succeeded: 0, failed: 2 });
+    expect(res.body.error).toMatchObject({
+      code: 'FLEET_DLP_STATS_UNAVAILABLE',
+      message: 'No sensors reported a usable DLP snapshot',
+    });
+  });
+
+  it('returns aggregated payload snapshot routes with merged data and partial failures', async () => {
+    const fakePrisma = {
+      sensor: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'sensor-1', name: 'edge-east' },
+          { id: 'sensor-2', name: 'edge-west' },
+          { id: 'sensor-3', name: 'edge-missing' },
+        ]),
+      },
+      sensorPayloadSnapshot: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            sensorId: 'sensor-1',
+            capturedAt: new Date('2026-04-18T12:00:00Z'),
+            stats: {
+              total_endpoints: 4,
+              total_entities: 3,
+              total_requests: 10,
+              total_request_bytes: 100,
+              total_response_bytes: 200,
+              avg_request_size: 10,
+              avg_response_size: 20,
+              active_anomalies: 1,
+            },
+            endpoints: [
+              {
+                template: '/login',
+                request_count: 7,
+                avg_request_size: 10,
+                avg_response_size: 20,
+              },
+              {
+                template: '/checkout',
+                request_count: 3,
+                avg_request_size: 15,
+                avg_response_size: 35,
+              },
+            ],
+            anomalies: [
+              {
+                anomaly_type: 'schema',
+                severity: 'high',
+                template: '/checkout',
+                entity_id: 'ent-1',
+                detected_at_ms: 1700000001000,
+                description: 'Mismatch',
+              },
+            ],
+            bandwidth: {
+              totalBytes: 300,
+              totalBytesIn: 100,
+              totalBytesOut: 200,
+              avgBytesPerRequest: 30,
+              maxRequestSize: 25,
+              maxResponseSize: 45,
+              requestCount: 10,
+              timeline: [{ timestamp: 1700000000000, bytesIn: 100, bytesOut: 200, requestCount: 10 }],
+            },
+          },
+          {
+            sensorId: 'sensor-2',
+            capturedAt: new Date('2026-04-18T12:05:00Z'),
+            stats: {
+              total_endpoints: 6,
+              total_entities: 5,
+              total_requests: 20,
+              total_request_bytes: 300,
+              total_response_bytes: 500,
+              avg_request_size: 15,
+              avg_response_size: 25,
+              active_anomalies: 2,
+            },
+            endpoints: [
+              {
+                template: '/login',
+                request_count: 5,
+                avg_request_size: 20,
+                avg_response_size: 30,
+              },
+              {
+                template: '/orders',
+                request_count: 4,
+                avg_request_size: 22,
+                avg_response_size: 40,
+              },
+            ],
+            anomalies: [
+              {
+                anomaly_type: 'payload',
+                severity: 'medium',
+                template: '/orders',
+                entity_id: 'ent-2',
+                detected_at_ms: 1700000003000,
+                description: 'Spike',
+              },
+            ],
+            bandwidth: {
+              totalBytes: 800,
+              totalBytesIn: 300,
+              totalBytesOut: 500,
+              avgBytesPerRequest: 40,
+              maxRequestSize: 60,
+              maxResponseSize: 90,
+              requestCount: 20,
+              timeline: [
+                { timestamp: 1700000000000, bytesIn: 50, bytesOut: 75, requestCount: 5 },
+                { timestamp: 1700000060000, bytesIn: 250, bytesOut: 425, requestCount: 15 },
+              ],
+            },
+          },
+        ]),
+      },
+    };
+
+    const seededApp = buildApp(['fleet:read'], { prisma: fakePrisma as any });
+
+    const statsRes = await request(seededApp).get('/synapse/payload/stats').expect(200);
+    expect(statsRes.body.aggregate).toMatchObject({
+      total_endpoints: 10,
+      total_entities: 8,
+      total_requests: 30,
+      total_request_bytes: 400,
+      total_response_bytes: 700,
+      active_anomalies: 3,
+    });
+    expect(statsRes.body.summary).toEqual({ succeeded: 2, failed: 1 });
+
+    const endpointsRes = await request(seededApp)
+      .get('/synapse/payload/endpoints?limit=3')
+      .expect(200);
+    expect(endpointsRes.body.aggregate).toEqual([
+      expect.objectContaining({ template: '/login', request_count: 12 }),
+      expect.objectContaining({ template: '/orders', request_count: 4 }),
+      expect.objectContaining({ template: '/checkout', request_count: 3 }),
+    ]);
+
+    const anomaliesRes = await request(seededApp)
+      .get('/synapse/payload/anomalies?limit=2')
+      .expect(200);
+    expect(anomaliesRes.body.aggregate).toEqual([
+      expect.objectContaining({ template: '/orders', detected_at_ms: 1700000003000 }),
+      expect.objectContaining({ template: '/checkout', detected_at_ms: 1700000001000 }),
+    ]);
+
+    const bandwidthRes = await request(seededApp)
+      .get('/synapse/payload/bandwidth')
+      .expect(200);
+    expect(bandwidthRes.body.aggregate).toMatchObject({
+      totalBytes: 1100,
+      totalBytesIn: 400,
+      totalBytesOut: 700,
+      requestCount: 30,
+      maxRequestSize: 60,
+      maxResponseSize: 90,
+    });
+    expect(bandwidthRes.body.aggregate.timeline).toEqual([
+      expect.objectContaining({
+        timestamp: 1700000000000,
+        bytesIn: 150,
+        bytesOut: 275,
+        requestCount: 15,
+      }),
+      expect.objectContaining({
+        timestamp: 1700000060000,
+        bytesIn: 250,
+        bytesOut: 425,
+        requestCount: 15,
+      }),
+    ]);
+    expect(bandwidthRes.body.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sensorId: 'sensor-3',
+          status: 'error',
+          error: 'No payload snapshot available',
+        }),
+      ])
+    );
+  });
+
   it('rejects unauthenticated POST /synapse/:sensorId/rules', async () => {
     const unauthApp = buildApp();
 

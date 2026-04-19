@@ -462,6 +462,18 @@ export const rateLimiters: Record<string, RequestHandler> = {
   }),
 
   /**
+   * Batch onboarding limiter: 2 requests per minute (m-7 task-77 hardening)
+   * Protects high-impact batch approval/rejection endpoints from amplifying key
+   * issuance and fleet handoff operations inside a single request.
+   */
+  onboardingBatch: createRateLimiter({
+    maxRequests: 2,
+    windowMs: 60 * 1000,
+    message: 'Batch onboarding rate limit exceeded. Please wait before processing more sensors.',
+    trustProxy: getTrustedProxies(),
+  }),
+
+  /**
    * User authentication limiter: 5 requests per minute (labs-k3vx)
    * Stricter limits for login endpoints to prevent credential stuffing.
    * Applied to: /auth/login, /auth/refresh, etc.

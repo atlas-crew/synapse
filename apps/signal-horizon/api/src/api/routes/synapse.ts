@@ -12,6 +12,12 @@ import { createHash } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { requireScope, requireRole } from '../middleware/auth.js';
 import { sendProblem } from '../../lib/problem-details.js';
+import { getErrorMessage } from '../../utils/errors.js';
+import { PayloadAggregatorService } from '../../services/fleet/payload-aggregator.js';
+import {
+  type FleetPartialAggregateResult,
+  withFleetPartialError,
+} from '../../types/fleet-partial-result.js';
 import {
   SynapseProxyService,
   SynapseProxyError,
@@ -164,6 +170,28 @@ export function createSynapseRoutes(
 ): Router {
   const router = Router();
   const { fleetIntelService, prisma } = options;
+  const payloadAggregator = prisma ? new PayloadAggregatorService(prisma) : null;
+
+  function requirePayloadAggregator(res: Response): PayloadAggregatorService | null {
+    if (!payloadAggregator) {
+      res.status(503).json({ error: 'Payload aggregation is unavailable' });
+      return null;
+    }
+    return payloadAggregator;
+  }
+
+  function sendFleetAggregateResult<TItem, TAggregate>(
+    res: Response,
+    result: FleetPartialAggregateResult<TItem, TAggregate>,
+    error: { code: string; message: string }
+  ): void {
+    if (result.summary.succeeded === 0 && result.summary.failed > 0) {
+      res.json(withFleetPartialError(result, error));
+      return;
+    }
+
+    res.json(result);
+  }
 
   // ==========================================================================
   // Compatibility: DLP Proxy Endpoints
@@ -237,6 +265,171 @@ export function createSynapseRoutes(
         }));
 
       res.json({ violations });
+    }
+  );
+
+  router.get(
+    '/dlp/stats',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const aggregator = requirePayloadAggregator(res);
+      if (!aggregator) return;
+
+      try {
+        const tenantId = req.auth!.tenantId;
+        const result = await aggregator.getDlpStats(tenantId);
+        sendFleetAggregateResult(res, result, {
+          code: 'FLEET_DLP_STATS_UNAVAILABLE',
+          message: 'No sensors reported a usable DLP snapshot',
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to fetch fleet DLP stats',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  router.get(
+    '/dlp/violations',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const aggregator = requirePayloadAggregator(res);
+      if (!aggregator) return;
+
+      const parsed = PayloadLimitSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const tenantId = req.auth!.tenantId;
+        const result = await aggregator.getDlpViolations(tenantId, parsed.data.limit);
+        sendFleetAggregateResult(res, result, {
+          code: 'FLEET_DLP_VIOLATIONS_UNAVAILABLE',
+          message: 'No sensors reported usable DLP violation data',
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to fetch fleet DLP violations',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  router.get(
+    '/payload/stats',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const aggregator = requirePayloadAggregator(res);
+      if (!aggregator) return;
+
+      try {
+        const tenantId = req.auth!.tenantId;
+        const result = await aggregator.getPayloadStats(tenantId);
+        sendFleetAggregateResult(res, result, {
+          code: 'FLEET_PAYLOAD_STATS_UNAVAILABLE',
+          message: 'No sensors reported a usable payload snapshot',
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to fetch fleet payload stats',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  router.get(
+    '/payload/endpoints',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const aggregator = requirePayloadAggregator(res);
+      if (!aggregator) return;
+
+      const parsed = PayloadLimitSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const tenantId = req.auth!.tenantId;
+        const result = await aggregator.getPayloadEndpoints(tenantId, parsed.data.limit);
+        sendFleetAggregateResult(res, result, {
+          code: 'FLEET_PAYLOAD_ENDPOINTS_UNAVAILABLE',
+          message: 'No sensors reported usable payload endpoint data',
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to fetch fleet payload endpoints',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  router.get(
+    '/payload/anomalies',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const aggregator = requirePayloadAggregator(res);
+      if (!aggregator) return;
+
+      const parsed = PayloadLimitSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const tenantId = req.auth!.tenantId;
+        const result = await aggregator.getPayloadAnomalies(tenantId, parsed.data.limit);
+        sendFleetAggregateResult(res, result, {
+          code: 'FLEET_PAYLOAD_ANOMALIES_UNAVAILABLE',
+          message: 'No sensors reported usable payload anomaly data',
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to fetch fleet payload anomalies',
+          message: getErrorMessage(error),
+        });
+      }
+    }
+  );
+
+  router.get(
+    '/payload/bandwidth',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const aggregator = requirePayloadAggregator(res);
+      if (!aggregator) return;
+
+      try {
+        const tenantId = req.auth!.tenantId;
+        const result = await aggregator.getPayloadBandwidth(tenantId);
+        sendFleetAggregateResult(res, result, {
+          code: 'FLEET_PAYLOAD_BANDWIDTH_UNAVAILABLE',
+          message: 'No sensors reported usable payload bandwidth data',
+        });
+      } catch (error) {
+        res.status(500).json({
+          error: 'Failed to fetch fleet payload bandwidth',
+          message: getErrorMessage(error),
+        });
+      }
     }
   );
 

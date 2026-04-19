@@ -2,6 +2,7 @@ import { Shield, AlertTriangle, FileSearch, Search, BarChart3 } from 'lucide-rea
 import { clsx } from 'clsx';
 import { useDemoMode } from '../stores/demoModeStore';
 import { useFleetDlp } from '../hooks/fleet';
+import { formatApiError } from '../lib/api';
 import { Button, MetricCard, Panel, SectionHeader, PAGE_TITLE_STYLE } from '@/ui';
 
 const PAGE_HEADER_STYLE = { marginBottom: 0 };
@@ -12,11 +13,18 @@ const CARD_HEADER_TITLE_STYLE = {
   color: 'var(--text-primary)',
 };
 
+const COVERAGE_STATUS_CLASSES: Record<string, string> = {
+  'bg-ac-green': 'text-ac-green/80 border-ac-green/30',
+  'bg-ac-orange': 'text-ac-orange/80 border-ac-orange/30',
+  'bg-ac-blue': 'text-ac-blue/80 border-ac-blue/30',
+};
+
 export function DlpDashboardPage() {
   const { isEnabled: isDemoMode } = useDemoMode();
-  const { data, isLoading: violationsLoading } = useFleetDlp();
+  const { data, isLoading: violationsLoading, isError, error } = useFleetDlp();
   const stats = data?.stats;
   const violations = data?.violations ?? [];
+  const partial = data?.partial;
 
   return (
     <div className="p-6 space-y-6 min-h-screen bg-surface-base">
@@ -63,6 +71,30 @@ export function DlpDashboardPage() {
         />
       </div>
 
+      {partial && partial.failed > 0 ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 rounded border border-status-warning/30 bg-status-warning/10 px-4 py-3 text-sm text-ink-secondary"
+        >
+          <AlertTriangle aria-hidden="true" className="h-4 w-4 text-status-warning" />
+          <span>
+            Fleet DLP data is partial. {partial.failed} sensor{partial.failed === 1 ? '' : 's'} did not report a usable payload snapshot.
+          </span>
+        </div>
+      ) : null}
+
+      {isError ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 rounded border border-ac-red/30 bg-ac-red/10 px-4 py-3 text-sm text-ink-secondary"
+        >
+          <AlertTriangle aria-hidden="true" className="h-4 w-4 text-ac-red" />
+          <span>{formatApiError(error, 'Fleet DLP data is temporarily unavailable.')}</span>
+        </div>
+      ) : null}
+
       <Panel tone="default">
         <Panel.Header>
           <SectionHeader
@@ -93,14 +125,14 @@ export function DlpDashboardPage() {
             </caption>
             <thead>
               <tr className="bg-surface-subtle/50 text-[10px] uppercase tracking-wider text-ink-muted font-bold border-b border-border-subtle">
-                <th className="px-6 py-3">Timestamp</th>
-                <th className="px-6 py-3">Sensor</th>
-                <th className="px-6 py-3">Pattern</th>
-                <th className="px-6 py-3">Type</th>
-                <th className="px-6 py-3">Severity</th>
-                <th className="px-6 py-3">Source IP</th>
-                <th className="px-6 py-3">Masked Value</th>
-                <th className="px-6 py-3">Path</th>
+                <th scope="col" className="px-6 py-3">Timestamp</th>
+                <th scope="col" className="px-6 py-3">Sensor</th>
+                <th scope="col" className="px-6 py-3">Pattern</th>
+                <th scope="col" className="px-6 py-3">Type</th>
+                <th scope="col" className="px-6 py-3">Severity</th>
+                <th scope="col" className="px-6 py-3">Source IP</th>
+                <th scope="col" className="px-6 py-3">Masked Value</th>
+                <th scope="col" className="px-6 py-3">Path</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
@@ -110,15 +142,26 @@ export function DlpDashboardPage() {
                     <div className="animate-pulse">Loading real-time violations...</div>
                   </td>
                 </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-20 text-ink-muted italic">
+                    Fleet DLP data is temporarily unavailable.
+                  </td>
+                </tr>
               ) : violations.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-20 text-ink-muted italic">
-                    No sensitive data leaks detected in the last hour. Fleet is secure.
+                    {partial?.failed
+                      ? 'No violations reported from responding sensors.'
+                      : 'No sensitive data leaks detected in the last hour. Fleet is secure.'}
                   </td>
                 </tr>
               ) : (
-                violations.map((v, idx) => (
-                  <tr key={`${v.sensorId}-${idx}`} className="hover:bg-ac-blue/5 transition-colors group">
+                violations.map((v) => (
+                  <tr
+                    key={`${v.sensorId}:${v.timestamp}:${v.pattern_name}:${v.masked_value}`}
+                    className="group transition-colors hover:bg-ac-blue/5 focus-within:bg-ac-blue/5"
+                  >
                     <td className="px-6 py-4 text-xs text-ink-muted font-mono">
                       {new Date(v.timestamp).toLocaleTimeString()}
                     </td>
@@ -250,7 +293,7 @@ function CoverageItem({
         <span
           className={clsx(
             'text-[9px] font-black px-1.5 py-0.5 border uppercase',
-            color.replace('bg-', 'text-').replace('bg-', 'border-') + '/30',
+            COVERAGE_STATUS_CLASSES[color] ?? 'text-ink-muted border-border-subtle',
           )}
         >
           {status}

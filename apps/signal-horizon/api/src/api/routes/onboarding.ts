@@ -8,7 +8,8 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
-import type { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
 import { requireScope } from '../middleware/auth.js';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
@@ -17,6 +18,7 @@ import {
   LiveCommandDeliveryError,
 } from '../../services/fleet/fleet-commander.js';
 import { ALLOWED_SENSOR_SCOPES, generateApiKey } from '../../services/fleet/sensor-api-keys.js';
+import { createFleetPartialResult } from '../../types/fleet-partial-result.js';
 
 // Validation schemas
 const createTokenSchema = z.object({
@@ -38,7 +40,17 @@ const candidatesQuerySchema = z.object({
   since: z.string().datetime().optional(),
 });
 
+const batchPendingSchema = z.object({
+  sensorIds: z
+    .array(z.string().cuid())
+    .min(1)
+    .max(50)
+    .transform((sensorIds) => [...new Set(sensorIds)]),
+  reason: z.string().max(500).optional(),
+});
+
 const MAX_CANDIDATE_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+const BATCH_PENDING_CONCURRENCY = 5;
 
 // Utility functions
 function generateRegistrationToken(): { token: string; hash: string; prefix: string } {
@@ -47,6 +59,296 @@ function generateRegistrationToken(): { token: string; hash: string; prefix: str
   const hash = crypto.createHash('sha256').update(token).digest('hex');
   const prefix = token.substring(0, 16);
   return { token, hash, prefix };
+}
+
+class PendingSensorActionHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: Record<string, unknown>
+  ) {
+    super(String(body.error ?? body.message ?? 'Failed to process pending sensor action'));
+  }
+}
+
+type PendingSensorActionInput = z.infer<typeof approvalSchema>;
+type PendingSensorActionResponse =
+  | {
+      message: string;
+      sensor: {
+        id: string;
+        name: string;
+        status: string;
+        approvedAt: Date | null;
+      };
+      automation: {
+        sensorApiKeyIssued: boolean;
+        handoffQueued: boolean;
+      };
+    }
+  | {
+      message: string;
+      sensorId: string;
+    };
+
+function requireActorUserId(res: Response, userId: string | undefined): string | null {
+  if (userId) return userId;
+  res.status(401).json({
+    error: 'Authenticated user context is required for onboarding approval actions',
+    code: 'USER_CONTEXT_REQUIRED',
+  });
+  return null;
+}
+
+async function mapWithConcurrencyLimit<T, TResult>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T) => Promise<TResult>
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+
+  async function consume(): Promise<void> {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => consume())
+  );
+
+  return results;
+}
+
+async function listEligiblePendingSensorIds(
+  prisma: PrismaClient,
+  tenantId: string,
+  sensorIds: readonly string[]
+): Promise<Set<string>> {
+  const sensors = await prisma.sensor.findMany({
+    where: {
+      id: { in: [...sensorIds] },
+      tenantId,
+      approvalStatus: 'PENDING',
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return new Set(sensors.map((sensor) => sensor.id));
+}
+
+async function processPendingSensorAction(params: {
+  prisma: PrismaClient;
+  logger: Logger;
+  fleetCommander?: FleetCommander;
+  tenantId: string;
+  userId: string;
+  sensorId: string;
+  input: PendingSensorActionInput;
+}): Promise<PendingSensorActionResponse> {
+  const { prisma, logger, fleetCommander, tenantId, userId, sensorId, input } = params;
+  const { action, reason, assignedName } = input;
+
+  if (action === 'approve') {
+    if (!fleetCommander) {
+      logger.error({ sensorId, tenantId }, 'FleetCommander unavailable; sensor approval automation cannot continue');
+      throw new PendingSensorActionHttpError(503, {
+        error: 'Sensor handoff is unavailable right now. The sensor remains pending approval.',
+      });
+    }
+
+    const { key, hash, prefix } = generateApiKey();
+    const approvedAt = new Date();
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        const pendingSensor = await tx.sensor.findFirst({
+          where: {
+            id: sensorId,
+            tenantId,
+            approvalStatus: 'PENDING',
+          },
+        });
+
+        if (!pendingSensor) {
+          throw new PendingSensorActionHttpError(404, { error: 'Pending sensor not found' });
+        }
+
+        const approvedSensor = await tx.sensor.update({
+          where: { id: sensorId },
+          data: {
+            approvalStatus: 'APPROVED',
+            approvedAt,
+            approvedBy: userId,
+            name: assignedName || pendingSensor.name,
+          },
+        });
+
+        const sensorApiKey = await tx.sensorApiKey.create({
+          data: {
+            name: `Auto-issued key for ${approvedSensor.name} (${approvedAt.toISOString()})`,
+            keyHash: hash,
+            keyPrefix: prefix,
+            sensorId,
+            expiresAt: null,
+            permissions: ALLOWED_SENSOR_SCOPES,
+            createdBy: userId,
+            status: 'ACTIVE',
+          },
+        });
+
+        return {
+          sensor: approvedSensor,
+          sensorApiKeyId: sensorApiKey.id,
+          originalName: pendingSensor.name,
+        };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      }
+    );
+
+    let handoffCommandId: string | null = null;
+    try {
+      handoffCommandId = await fleetCommander.sendConnectedCommand(tenantId, sensorId, {
+        type: 'push_config',
+        payload: {
+          action: 'replace_sensor_api_key',
+          sensorApiKey: key,
+          restartProcess: true,
+          source: 'horizon_onboarding_approval',
+        },
+      });
+    } catch (handoffError) {
+      logger.error(
+        { error: handoffError, sensorId, tenantId },
+        'Failed to deliver sensor key handoff after approval; rolling back sensor approval'
+      );
+
+      let rollbackSucceeded = false;
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.sensor.update({
+            where: { id: sensorId },
+            data: {
+              approvalStatus: 'PENDING',
+              approvedAt: null,
+              approvedBy: null,
+              name: updated.originalName,
+            },
+          });
+
+          await tx.sensorApiKey.deleteMany({
+            where: {
+              id: updated.sensorApiKeyId,
+              sensorId,
+            },
+          });
+
+        });
+        rollbackSucceeded = true;
+      } catch (rollbackError) {
+        logger.error(
+          { error: rollbackError, sensorId, tenantId, originalError: handoffError },
+          'Failed to roll back sensor approval after handoff error'
+        );
+
+        try {
+          await prisma.sensorApiKey.updateMany({
+            where: { id: updated.sensorApiKeyId, sensorId },
+            data: { status: 'REVOKED' },
+          });
+        } catch (revokeError) {
+          logger.error(
+            { error: revokeError, sensorId, tenantId, originalError: handoffError },
+            'Failed to revoke auto-issued sensor key after rollback failure'
+          );
+        }
+      }
+
+      if (!rollbackSucceeded) {
+        throw new PendingSensorActionHttpError(500, {
+          error:
+            'Failed to complete automated approval handoff. The issued sensor key was revoked, but manual review is required for this sensor state.',
+          code: 'APPROVAL_ROLLBACK_FAILED',
+        });
+      }
+
+      const liveDeliveryIssue =
+        handoffError instanceof LiveCommandDeliveryError && handoffError.code === 'SENSOR_NOT_READY';
+      throw new PendingSensorActionHttpError(liveDeliveryIssue ? 409 : 503, {
+        error: liveDeliveryIssue
+          ? 'The sensor is not connected for live key handoff. It remains pending approval.'
+          : 'Failed to deliver the approved sensor key to the connected sensor. The sensor remains pending approval.',
+        code: liveDeliveryIssue ? 'SENSOR_NOT_CONNECTED' : 'SENSOR_HANDOFF_FAILED',
+      });
+    }
+
+    logger.info(
+      { sensorId, tenantId, action, handoffCommandId },
+      'Sensor approved and automated key handoff queued'
+    );
+      return {
+        message: 'Sensor approved successfully',
+        sensor: {
+          id: updated.sensor.id,
+        name: updated.sensor.name,
+        status: updated.sensor.approvalStatus,
+        approvedAt: updated.sensor.approvedAt,
+      },
+      automation: {
+        sensorApiKeyIssued: true,
+        handoffQueued: handoffCommandId !== null,
+      },
+    };
+  }
+
+  await prisma.$transaction(
+    async (tx) => {
+      const currentSensor = await tx.sensor.findFirst({
+        where: {
+          id: sensorId,
+          tenantId,
+          approvalStatus: 'PENDING',
+        },
+        select: {
+          metadata: true,
+        },
+      });
+
+      if (!currentSensor) {
+        throw new PendingSensorActionHttpError(404, { error: 'Pending sensor not found' });
+      }
+
+      const existingMetadata =
+        (currentSensor.metadata as Record<string, unknown> | null) ?? {};
+
+      await tx.sensor.update({
+        where: { id: sensorId },
+        data: {
+          approvalStatus: 'REJECTED',
+          metadata: {
+            ...existingMetadata,
+            rejectionReason: reason,
+            rejectedAt: new Date().toISOString(),
+            rejectedBy: userId,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    }
+  );
+
+  logger.info({ sensorId, tenantId, action, reason }, 'Sensor rejected');
+  return {
+    message: 'Sensor rejected',
+    sensorId,
+  };
 }
 
 /**
@@ -245,6 +547,162 @@ export function createOnboardingRoutes(
     }
   });
 
+  router.post(
+    '/pending/approve',
+    rateLimiters.onboardingBatch,
+    requireScope('fleet:write'),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const parsed = batchPendingSchema.safeParse(req.body);
+        if (!parsed.success) {
+          res.status(400).json({
+            error: 'Validation failed',
+            details: parsed.error.issues,
+          });
+          return;
+        }
+
+        const tenantId = req.auth!.tenantId;
+        const userId = requireActorUserId(res, req.auth!.userId);
+        if (!userId) return;
+        logger.info(
+          { tenantId, userId, sensorIds: parsed.data.sensorIds, action: 'approve' },
+          'Processing batch sensor approval request'
+        );
+        const eligibleSensorIds = await listEligiblePendingSensorIds(
+          prisma,
+          tenantId,
+          parsed.data.sensorIds
+        );
+
+        const results = await mapWithConcurrencyLimit(
+          parsed.data.sensorIds,
+          BATCH_PENDING_CONCURRENCY,
+          async (sensorId) => {
+            if (!eligibleSensorIds.has(sensorId)) {
+              return {
+                sensorId,
+                status: 'error' as const,
+                error: 'Pending sensor not found or not eligible',
+              };
+            }
+
+            try {
+              const data = await processPendingSensorAction({
+                prisma,
+                logger,
+                fleetCommander,
+                tenantId,
+                userId,
+                sensorId,
+                input: { action: 'approve' },
+              });
+              return { sensorId, status: 'ok' as const, data };
+            } catch (error) {
+              if (error instanceof PendingSensorActionHttpError) {
+                return {
+                  sensorId,
+                  status: 'error' as const,
+                  error: String(error.body.error ?? error.body.message ?? error.message),
+                };
+              }
+
+              logger.error({ error, sensorId }, 'Error processing batch sensor approval');
+              return {
+                sensorId,
+                status: 'error' as const,
+                error: 'Failed to process sensor approval',
+              };
+            }
+          }
+        );
+
+        res.json(createFleetPartialResult(results));
+      } catch (error) {
+        logger.error({ error }, 'Error processing batch sensor approval');
+        res.status(500).json({ error: 'Failed to process batch sensor approval' });
+      }
+    }
+  );
+
+  router.post(
+    '/pending/reject',
+    rateLimiters.onboardingBatch,
+    requireScope('fleet:write'),
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const parsed = batchPendingSchema.safeParse(req.body);
+        if (!parsed.success) {
+          res.status(400).json({
+            error: 'Validation failed',
+            details: parsed.error.issues,
+          });
+          return;
+        }
+
+        const tenantId = req.auth!.tenantId;
+        const userId = requireActorUserId(res, req.auth!.userId);
+        if (!userId) return;
+        logger.info(
+          { tenantId, userId, sensorIds: parsed.data.sensorIds, action: 'reject' },
+          'Processing batch sensor rejection request'
+        );
+        const eligibleSensorIds = await listEligiblePendingSensorIds(
+          prisma,
+          tenantId,
+          parsed.data.sensorIds
+        );
+
+        const results = await mapWithConcurrencyLimit(
+          parsed.data.sensorIds,
+          BATCH_PENDING_CONCURRENCY,
+          async (sensorId) => {
+            if (!eligibleSensorIds.has(sensorId)) {
+              return {
+                sensorId,
+                status: 'error' as const,
+                error: 'Pending sensor not found or not eligible',
+              };
+            }
+
+            try {
+              const data = await processPendingSensorAction({
+                prisma,
+                logger,
+                fleetCommander,
+                tenantId,
+                userId,
+                sensorId,
+                input: { action: 'reject', reason: parsed.data.reason },
+              });
+              return { sensorId, status: 'ok' as const, data };
+            } catch (error) {
+              if (error instanceof PendingSensorActionHttpError) {
+                return {
+                  sensorId,
+                  status: 'error' as const,
+                  error: String(error.body.error ?? error.body.message ?? error.message),
+                };
+              }
+
+              logger.error({ error, sensorId }, 'Error processing batch sensor rejection');
+              return {
+                sensorId,
+                status: 'error' as const,
+                error: 'Failed to process sensor rejection',
+              };
+            }
+          }
+        );
+
+        res.json(createFleetPartialResult(results));
+      } catch (error) {
+        logger.error({ error }, 'Error processing batch sensor rejection');
+        res.status(500).json({ error: 'Failed to process batch sensor rejection' });
+      }
+    }
+  );
+
   /**
    * POST /pending/:sensorId - Approve or reject a pending sensor
    */
@@ -263,178 +721,24 @@ export function createOnboardingRoutes(
         return;
       }
 
-      const { action, reason, assignedName } = parsed.data;
+      const actorUserId = requireActorUserId(res, userId);
+      if (!actorUserId) return;
 
-      const sensor = await prisma.sensor.findFirst({
-        where: {
-          id: sensorId,
-          tenantId,
-          approvalStatus: 'PENDING',
-        },
+      const response = await processPendingSensorAction({
+        prisma,
+        logger,
+        fleetCommander,
+        tenantId,
+        userId: actorUserId,
+        sensorId,
+        input: parsed.data,
       });
-
-      if (!sensor) {
-        res.status(404).json({ error: 'Pending sensor not found' });
+      res.json(response);
+    } catch (error) {
+      if (error instanceof PendingSensorActionHttpError) {
+        res.status(error.status).json(error.body);
         return;
       }
-
-      if (action === 'approve') {
-        if (!fleetCommander) {
-          logger.error({ sensorId, tenantId }, 'FleetCommander unavailable; sensor approval automation cannot continue');
-          res.status(503).json({
-            error: 'Sensor handoff is unavailable right now. The sensor remains pending approval.',
-          });
-          return;
-        }
-
-        const { key, hash, prefix } = generateApiKey();
-        const approvedAt = new Date();
-        const updated = await prisma.$transaction(async (tx) => {
-          const approvedSensor = await tx.sensor.update({
-            where: { id: sensorId },
-            data: {
-              approvalStatus: 'APPROVED',
-              approvedAt,
-              approvedBy: userId,
-              name: assignedName || sensor.name,
-            },
-          });
-
-          const sensorApiKey = await tx.sensorApiKey.create({
-            data: {
-              name: `Auto-issued key for ${approvedSensor.name} (${approvedAt.toISOString()})`,
-              keyHash: hash,
-              keyPrefix: prefix,
-              sensorId,
-              expiresAt: null,
-              permissions: ALLOWED_SENSOR_SCOPES,
-              createdBy: userId,
-              status: 'ACTIVE',
-            },
-          });
-
-          return {
-            sensor: approvedSensor,
-            sensorApiKeyId: sensorApiKey.id,
-          };
-        });
-
-        let handoffCommandId: string | null = null;
-        try {
-          handoffCommandId = await fleetCommander.sendConnectedCommand(tenantId, sensorId, {
-            type: 'push_config',
-            payload: {
-              action: 'replace_sensor_api_key',
-              sensorApiKey: key,
-              restartProcess: true,
-              source: 'horizon_onboarding_approval',
-            },
-          });
-        } catch (handoffError) {
-          logger.error(
-            { error: handoffError, sensorId, tenantId },
-            'Failed to deliver sensor key handoff after approval; rolling back sensor approval'
-          );
-
-          let rollbackSucceeded = false;
-          try {
-            await prisma.$transaction(async (tx) => {
-              await tx.sensor.update({
-                where: { id: sensorId },
-                data: {
-                  approvalStatus: 'PENDING',
-                  approvedAt: null,
-                  approvedBy: null,
-                  name: sensor.name,
-                },
-              });
-
-              await tx.sensorApiKey.deleteMany({
-                where: {
-                  id: updated.sensorApiKeyId,
-                  sensorId,
-                },
-              });
-
-              rollbackSucceeded = true;
-            });
-          } catch (rollbackError) {
-            logger.error(
-              { error: rollbackError, sensorId, tenantId, originalError: handoffError },
-              'Failed to roll back sensor approval after handoff error'
-            );
-
-            try {
-              await prisma.sensorApiKey.updateMany({
-                where: { id: updated.sensorApiKeyId, sensorId },
-                data: { status: 'REVOKED' },
-              });
-            } catch (revokeError) {
-              logger.error(
-                { error: revokeError, sensorId, tenantId, originalError: handoffError },
-                'Failed to revoke auto-issued sensor key after rollback failure'
-              );
-            }
-          }
-
-          if (!rollbackSucceeded) {
-            res.status(500).json({
-              error: 'Failed to complete automated approval handoff. The issued sensor key was revoked, but manual review is required for this sensor state.',
-              code: 'APPROVAL_ROLLBACK_FAILED',
-            });
-            return;
-          }
-
-          const liveDeliveryIssue =
-            handoffError instanceof LiveCommandDeliveryError && handoffError.code === 'SENSOR_NOT_READY';
-          res.status(liveDeliveryIssue ? 409 : 503).json({
-            error: liveDeliveryIssue
-              ? 'The sensor is not connected for live key handoff. It remains pending approval.'
-              : 'Failed to deliver the approved sensor key to the connected sensor. The sensor remains pending approval.',
-            code: liveDeliveryIssue ? 'SENSOR_NOT_CONNECTED' : 'SENSOR_HANDOFF_FAILED',
-          });
-          return;
-        }
-
-        logger.info(
-          { sensorId, tenantId, action, handoffCommandId },
-          'Sensor approved and automated key handoff queued'
-        );
-        res.json({
-          message: 'Sensor approved successfully',
-          sensor: {
-            id: updated.sensor.id,
-            name: updated.sensor.name,
-            status: updated.sensor.approvalStatus,
-            approvedAt: updated.sensor.approvedAt,
-          },
-          automation: {
-            sensorApiKeyIssued: true,
-            handoffQueued: handoffCommandId !== null,
-          },
-        });
-      } else {
-        const existingMetadata = (sensor.metadata as Record<string, unknown>) || {};
-        await prisma.sensor.update({
-          where: { id: sensorId },
-          data: {
-            approvalStatus: 'REJECTED',
-            metadata: {
-              ...existingMetadata,
-              rejectionReason: reason,
-              rejectedAt: new Date().toISOString(),
-              rejectedBy: userId,
-            } as Prisma.InputJsonValue,
-          },
-        });
-
-        logger.info({ sensorId, tenantId, action, reason }, 'Sensor rejected');
-        res.json({
-          message: 'Sensor rejected',
-          sensorId,
-        });
-      }
-    } catch (error) {
       logger.error({ error }, 'Error processing sensor approval');
       res.status(500).json({ error: 'Failed to process sensor approval' });
     }
