@@ -1,9 +1,10 @@
 ---
 id: TASK-73
 title: 'Audit #[serial] coverage on all tests that touch global SYNAPSE'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-04-12 22:59'
+updated_date: '2026-04-19 01:25'
 labels:
   - waf
   - synapse-pingora
@@ -64,9 +65,17 @@ A test runner that forgets the wrapper would still race, but the wrapper is colo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Grep audit completes: every test function that touches SYNAPSE (directly or indirectly via filter methods) is identified and its #[serial] status is verified
-- [ ] #2 Any test missing #[serial] that should have it gets the annotation added
-- [ ] #3 A grep command that finds missing annotations is documented in test docs or a CI check script (so future test additions don't silently race)
+- [x] #1 Grep audit completes: every test function that touches SYNAPSE (directly or indirectly via filter methods) is identified and its #[serial] status is verified
+- [x] #2 Any test missing #[serial] that should have it gets the annotation added
+- [x] #3 A grep command that finds missing annotations is documented in test docs or a CI check script (so future test additions don't silently race)
 - [ ] #4 Optionally: with_synapse_lock helper introduced and used consistently instead of #[serial] annotations
 - [ ] #5 Running the full test suite 5 times in a row (cargo test --lib + --bin + --test filter_chain_integration) produces zero flakes
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-04-18: Audited singleton-touching tests with a repo-local script (`apps/synapse-pingora/scripts/check-synapse-test-serial.sh`) and wired it into `just audit-synapse-serial` / `check-synapse`. The audit now passes cleanly with 16 singleton-touching tests carrying #[serial].
+
+Attempted the acceptance-criteria flake sweep (`cargo test --manifest-path apps/synapse-pingora/Cargo.toml --lib`, `--bin synapse-waf`, `--test filter_chain_integration`, repeated 5x), but the first `--lib` pass stalled for several minutes inside the existing lib test binary rather than failing on this serial guard. That broader suite hang remains the only open blocker for AC #5.
+<!-- SECTION:NOTES:END -->

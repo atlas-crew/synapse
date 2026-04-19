@@ -250,6 +250,13 @@ RUSTFLAGS="-C target-cpu=native" cargo build --release
 # Tests
 cargo test
 
+# Audit #[serial] coverage for tests that touch the global SYNAPSE engine
+bash scripts/check-synapse-test-serial.sh
+# Fails with any test function missing #[serial] after it touches DetectionEngine,
+# the filter entry points, the SynapseProxy singleton constructors, or the
+# global SYNAPSE singleton directly.
+# Fix failures by adding #[serial] from serial_test::serial above the affected test.
+
 # Benchmarks
 cargo bench
 ```

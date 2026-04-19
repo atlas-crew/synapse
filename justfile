@@ -487,8 +487,12 @@ lint:
 type-check:
     cd "{{root}}" && pnpm exec nx run-many --target=type-check --all
 
+# Audit #[serial] coverage for singleton-touching Synapse tests
+audit-synapse-serial:
+    cd "{{root}}/apps/synapse-pingora" && bash scripts/check-synapse-test-serial.sh
+
 # Lint + type-check Synapse Pingora (clippy + fmt check)
-check-synapse:
+check-synapse: audit-synapse-serial
     cd "{{root}}/apps/synapse-pingora" && cargo clippy && cargo fmt -- --check
 
 # Format Synapse Pingora Rust code
