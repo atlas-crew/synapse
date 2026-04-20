@@ -19,6 +19,14 @@ on:
         description: 'Version tag to publish for workflow_dispatch runs (for example 0.1.0)'
         type: string
         required: false
+      delete_tag:
+        description: 'Existing synapse-fleet Docker Hub tag to delete instead of publishing (for example latest)'
+        type: string
+        required: false
+      confirm_delete:
+        description: 'Type DELETE to confirm a destructive delete_tag run, even for dry-run validation'
+        type: string
+        required: false
       dry_run:
         description: 'Dry run (build without pushing)'
         type: boolean
@@ -31,14 +39,151 @@ permissions:
   contents: read
 
 jobs:
+  validate-delete-request:
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.delete_tag != '' }}
+    steps:
+      - name: Validate delete request inputs
+        shell: bash
+        env:
+          IMAGE_INPUT: ${{ inputs.image }}
+          CONFIRM_DELETE: ${{ inputs.confirm_delete }}
+          TAG: ${{ inputs.delete_tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$IMAGE_INPUT" != "synapse-fleet" ]]; then
+            echo "::error::delete_tag mode only supports image=synapse-fleet."
+            exit 1
+          fi
+
+          if [[ "$CONFIRM_DELETE" != "DELETE" ]]; then
+            echo "::error::delete_tag mode requires confirm_delete=DELETE."
+            exit 1
+          fi
+
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::delete_tag must be a valid Docker tag."
+            exit 1
+          fi
+
+  delete-synapse-fleet-tag:
+    runs-on: ubuntu-latest
+    needs: validate-delete-request
+    timeout-minutes: 5
+    permissions: {}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.delete_tag != '' }}
+    environment: docker-hub
+    steps:
+      - name: Delete requested tag from Docker Hub
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          NAMESPACE: 'nickcrew'
+          REPOSITORY: 'synapse-fleet'
+          TAG: ${{ inputs.delete_tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          LOGIN_RESPONSE=$(mktemp)
+          DELETE_RESPONSE=$(mktemp)
+          VERIFY_RESPONSE=$(mktemp)
+          CURL_CONFIG=$(mktemp)
+          chmod 600 "$CURL_CONFIG"
+          trap 'rm -f "$LOGIN_RESPONSE" "$DELETE_RESPONSE" "$VERIFY_RESPONSE" "$CURL_CONFIG"' EXIT
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Dry run: would delete $NAMESPACE/$REPOSITORY:$TAG from Docker Hub"
+            exit 0
+          fi
+
+          if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "::error::DOCKERHUB_USERNAME/DOCKERHUB_TOKEN not set."
+            exit 1
+          fi
+
+          LOGIN_STATUS=$(
+            DOCKERHUB_USERNAME="$DOCKERHUB_USERNAME" DOCKERHUB_TOKEN="$DOCKERHUB_TOKEN" \
+            jq -n '{username: env.DOCKERHUB_USERNAME, password: env.DOCKERHUB_TOKEN}' | \
+            curl -sS -o "$LOGIN_RESPONSE" -w "%{http_code}" \
+              https://hub.docker.com/v2/users/login \
+              -H 'Content-Type: application/json' \
+              --data @-
+          )
+
+          if [[ "$LOGIN_STATUS" != "200" ]]; then
+            echo "::error::failed to obtain Docker Hub JWT (HTTP $LOGIN_STATUS)"
+            exit 1
+          fi
+
+          JWT=$(jq -r '.token' "$LOGIN_RESPONSE")
+
+          if [[ -z "$JWT" || "$JWT" == "null" ]]; then
+            echo "::error::Docker Hub login succeeded but returned no token"
+            exit 1
+          fi
+
+          : > "$LOGIN_RESPONSE"
+          echo "::add-mask::$JWT"
+
+          printf 'header = "Authorization: Bearer %s"\n' "$JWT" > "$CURL_CONFIG"
+
+          DELETE_STATUS=$(curl -sS -o "$DELETE_RESPONSE" -w "%{http_code}" -X DELETE "https://hub.docker.com/v2/namespaces/$NAMESPACE/repositories/$REPOSITORY/tags/$TAG" --config "$CURL_CONFIG" || printf '000')
+
+          if [[ "$DELETE_STATUS" != "204" && "$DELETE_STATUS" != "202" && "$DELETE_STATUS" != "200" ]]; then
+            echo "::error::Docker Hub tag delete failed with HTTP $DELETE_STATUS"
+            cat "$DELETE_RESPONSE" || true
+            exit 1
+          fi
+
+          # Retries for about 20 seconds to tolerate Docker Hub eventual-consistency lag.
+          for attempt in 1 2 3 4 5; do
+            VERIFY_STATUS=$(curl -sS -o "$VERIFY_RESPONSE" -w "%{http_code}" "https://hub.docker.com/v2/namespaces/$NAMESPACE/repositories/$REPOSITORY/tags/$TAG" || printf '000')
+
+            case "$VERIFY_STATUS" in
+              404)
+                echo "Deleted $NAMESPACE/$REPOSITORY:$TAG from Docker Hub"
+                exit 0
+                ;;
+              200)
+                if [[ "$attempt" -lt 5 ]]; then
+                  sleep $((attempt * 2))
+                  continue
+                fi
+                echo "::error::Docker Hub still returns tag $TAG after delete verification."
+                cat "$VERIFY_RESPONSE" || true
+                exit 1
+                ;;
+              000|5??)
+                if [[ "$attempt" -lt 5 ]]; then
+                  sleep $((attempt * 2))
+                  continue
+                fi
+                echo "::error::Docker Hub verification was inconclusive for tag $TAG (HTTP $VERIFY_STATUS)."
+                cat "$VERIFY_RESPONSE" || true
+                exit 1
+                ;;
+              *)
+                echo "::error::Docker Hub verification failed for tag $TAG (HTTP $VERIFY_STATUS)."
+                cat "$VERIFY_RESPONSE" || true
+                exit 1
+                ;;
+            esac
+          done
+
   # ---------------------------------------------------------------------------
   # Synapse Fleet (formerly Signal Horizon — ADR-0003)
   # ---------------------------------------------------------------------------
   synapse-fleet:
     runs-on: ubuntu-latest
     if: >-
-      startsWith(github.ref, 'refs/tags/synapse-fleet-v') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.image == 'synapse-fleet' || inputs.image == 'all'))
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/synapse-fleet-v')) ||
+      (github.event_name == 'workflow_dispatch' &&
+      inputs.delete_tag == '' &&
+      (inputs.image == 'synapse-fleet' || inputs.image == 'all'))
     environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || 'docker-hub' }}
     steps:
       - uses: actions/checkout@v4
@@ -94,8 +239,10 @@ jobs:
   synapse-waf:
     runs-on: ubuntu-latest
     if: >-
-      startsWith(github.ref, 'refs/tags/synapse-waf-v') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.image == 'synapse-waf' || inputs.image == 'all'))
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/synapse-waf-v')) ||
+      (github.event_name == 'workflow_dispatch' &&
+      inputs.delete_tag == '' &&
+      (inputs.image == 'synapse-waf' || inputs.image == 'all'))
     environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '' || 'docker-hub' }}
     steps:
       - uses: actions/checkout@v4
