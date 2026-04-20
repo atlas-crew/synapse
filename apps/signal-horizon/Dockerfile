@@ -18,6 +18,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml nx.json ./
 # Copy the signal-horizon app (API, UI, shared, scripts, deploy examples)
 COPY apps/signal-horizon/ ./apps/signal-horizon/
 
+# The standalone UI build re-exports primitives from the shared signal-ui
+# workspace package, so the Docker build context must include it.
+COPY packages/signal-ui/ ./packages/signal-ui/
+
 # Root LICENSE is needed by the release script
 COPY LICENSE ./LICENSE
 
