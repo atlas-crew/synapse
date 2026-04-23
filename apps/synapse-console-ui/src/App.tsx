@@ -94,11 +94,34 @@ type SiteConfig = {
   [key: string]: unknown;
 };
 
+type RateLimitConfig = {
+  rps?: number;
+  enabled?: boolean;
+  burst?: number | null;
+  [key: string]: unknown;
+};
+
+type ProfilerConfig = {
+  enabled?: boolean;
+  max_profiles?: number;
+  max_schemas?: number;
+  min_samples_for_validation?: number;
+  payload_z_threshold?: number;
+  param_z_threshold?: number;
+  response_z_threshold?: number;
+  min_stddev?: number;
+  type_ratio_threshold?: number;
+  max_type_counts?: number;
+  redact_pii?: boolean;
+  freeze_after_samples?: number;
+  [key: string]: unknown;
+};
+
 type ConfigFile = {
   server: GlobalConfig;
   sites: SiteConfig[];
-  rate_limit: Record<string, unknown>;
-  profiler: Record<string, unknown>;
+  rate_limit: RateLimitConfig;
+  profiler: ProfilerConfig;
   [key: string]: unknown;
 };
 
@@ -133,8 +156,47 @@ type ServerFormState = {
 type SaveState =
   | { kind: 'idle' }
   | { kind: 'saving' }
-  | { kind: 'success'; message: string; sticky?: boolean }
+  | { kind: 'success'; message: string; sticky?: boolean; warning?: string }
   | { kind: 'error'; message: string };
+
+type RateLimitFormState = {
+  enabled: boolean;
+  rps: string;
+  burst: string;
+};
+
+type ProfilerFormState = {
+  enabled: boolean;
+  max_profiles: string;
+  max_schemas: string;
+  min_samples_for_validation: string;
+  payload_z_threshold: string;
+  param_z_threshold: string;
+  response_z_threshold: string;
+  min_stddev: string;
+  type_ratio_threshold: string;
+  max_type_counts: string;
+  redact_pii: boolean;
+  freeze_after_samples: string;
+};
+
+type UpstreamFormRow = {
+  id: string;
+  baseUpstream: NonNullable<SiteConfig['upstreams']>[number] | null;
+  host: string;
+  port: string;
+};
+
+type SiteFormState = {
+  hostname: string;
+  upstreams: UpstreamFormRow[];
+};
+
+type SiteEditorState =
+  | { mode: 'idle' }
+  | { mode: 'add'; form: SiteFormState }
+  | { mode: 'edit'; index: number; form: SiteFormState; baseSite: SiteConfig }
+  | { mode: 'delete-confirm'; index: number };
 
 type LoadState =
   | { kind: 'loading' }
@@ -153,6 +215,8 @@ const tabs = [
   { key: 'overview', label: 'Overview' },
   { key: 'server', label: 'Server' },
   { key: 'sites', label: 'Sites' },
+  { key: 'rate-limit', label: 'Rate Limit' },
+  { key: 'profiler', label: 'Profiler' },
   { key: 'roadmap', label: 'Roadmap' },
 ] as const;
 
@@ -178,6 +242,10 @@ const defaultTrapPaths = [
 ];
 
 type TabKey = (typeof tabs)[number]['key'];
+
+function nextUpstreamRowId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `upstream-row-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function extractMessage(data: unknown, fallback: string): string {
   if (typeof data === 'string') return data;
@@ -216,6 +284,8 @@ async function requestJsonWithMeta<T>(
         ? 'Authentication expired or missing. Re-authenticate and retry.'
         : response.status === 403
           ? 'This session does not have permission for that action.'
+          : response.status === 409 || response.status === 412
+            ? 'Config changed elsewhere. Refresh to load the latest version and retry.'
           : `Request to ${path} failed with status ${response.status}.`;
     throw new Error(extractMessage(data, fallbackMessage));
   }
@@ -277,6 +347,142 @@ function formatUpstreams(upstreams: SiteConfig['upstreams'] | undefined): string
     .join(', ');
 }
 
+function normalizeHostname(hostname: string | undefined): string {
+  return (hostname ?? '').trim().toLowerCase().replace(/\.+$/, '');
+}
+
+function getRefreshWarning(nextState: LoadState): string {
+  if (nextState.kind !== 'ready' || !nextState.fullConfig || !nextState.configEtag) {
+    return 'Refresh failed. Reload the page before editing again.';
+  }
+  if (nextState.warnings.length > 0) {
+    return `Refresh reported: ${nextState.warnings.join(' ')}`;
+  }
+  return '';
+}
+
+function getSaveButtonLabel(
+  saveState: SaveState,
+  isAnySaveInFlight: boolean,
+  idleLabel: string,
+): string {
+  if (saveState.kind === 'saving') {
+    return 'Saving…';
+  }
+  if (isAnySaveInFlight) {
+    return 'Another save in progress…';
+  }
+  return idleLabel;
+}
+
+function updateUpstreamRow(
+  row: UpstreamFormRow,
+  field: 'host' | 'port',
+  value: string,
+): UpstreamFormRow {
+  const nextRow = { ...row, [field]: value };
+  if (!row.baseUpstream) {
+    return nextRow;
+  }
+
+  const baseValue =
+    field === 'host'
+      ? typeof row.baseUpstream.host === 'string'
+        ? row.baseUpstream.host
+        : ''
+      : row.baseUpstream.port === undefined || row.baseUpstream.port === null
+        ? ''
+        : String(row.baseUpstream.port);
+
+  // Once host or port changes, stop carrying opaque extension keys from the original
+  // upstream row so edits cannot accidentally inherit stale metadata.
+  return value === baseValue ? nextRow : { ...nextRow, baseUpstream: null };
+}
+
+function buildRateLimitForm(rateLimit?: RateLimitConfig): RateLimitFormState {
+  return {
+    enabled: rateLimit?.enabled ?? true,
+    rps: String(rateLimit?.rps ?? 10000),
+    burst:
+      rateLimit?.burst === undefined || rateLimit?.burst === null
+        ? ''
+        : String(rateLimit.burst),
+  };
+}
+
+function buildProfilerForm(profiler?: ProfilerConfig): ProfilerFormState {
+  return {
+    enabled: profiler?.enabled ?? true,
+    max_profiles: String(profiler?.max_profiles ?? 1000),
+    max_schemas: String(profiler?.max_schemas ?? 500),
+    min_samples_for_validation: String(profiler?.min_samples_for_validation ?? 100),
+    payload_z_threshold: String(profiler?.payload_z_threshold ?? 3),
+    param_z_threshold: String(profiler?.param_z_threshold ?? 4),
+    response_z_threshold: String(profiler?.response_z_threshold ?? 4),
+    min_stddev: String(profiler?.min_stddev ?? 0.01),
+    type_ratio_threshold: String(profiler?.type_ratio_threshold ?? 0.9),
+    max_type_counts: String(profiler?.max_type_counts ?? 10),
+    redact_pii: profiler?.redact_pii ?? true,
+    freeze_after_samples: String(profiler?.freeze_after_samples ?? 0),
+  };
+}
+
+function buildSiteForm(site?: SiteConfig): SiteFormState {
+  const upstreamSource = site?.upstreams && site.upstreams.length > 0 ? site.upstreams : [{}];
+  return {
+    hostname: site?.hostname ?? '',
+    upstreams: upstreamSource.map((upstream, index) => ({
+      id: nextUpstreamRowId(),
+      baseUpstream: site?.upstreams ? structuredClone(site.upstreams[index]) : null,
+      host: typeof upstream.host === 'string' ? upstream.host : '',
+      port:
+        upstream.port === undefined || upstream.port === null
+          ? ''
+          : String(upstream.port),
+    })),
+  };
+}
+
+function siteFromForm(form: SiteFormState, base?: SiteConfig): SiteConfig {
+  const hostname = form.hostname.trim();
+  if (normalizeHostname(hostname) === '') {
+    throw new Error('Hostname is required.');
+  }
+
+  const upstreams = form.upstreams
+    .map((row, index) => {
+      const host = row.host.trim();
+      const portRaw = row.port.trim();
+      if (host === '' && portRaw === '') return null;
+      if (host === '') {
+        throw new Error(`Upstream #${index + 1}: host is required.`);
+      }
+      const baseUpstream = row.baseUpstream ?? {};
+      if (portRaw === '') {
+        const { port: _droppedPort, ...rest } = baseUpstream;
+        return { ...rest, host };
+      }
+      const port = parseIntegerField(portRaw, `Upstream #${index + 1} port`, {
+        min: 1,
+        max: 65535,
+      });
+      return { ...baseUpstream, host, port };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  if (upstreams.length === 0) {
+    throw new Error('At least one upstream with a hostname is required.');
+  }
+
+  // Preserve fields this editor does not expose yet (for example waf, headers, tls)
+  // by merging them from the original site snapshot carried in `base`.
+  return {
+    ...(base ?? {}),
+    hostname,
+    upstreams,
+  };
+}
+
 function buildServerForm(server?: GlobalConfig): ServerFormState {
   const trap = server?.trap_config ?? null;
 
@@ -317,6 +523,28 @@ function parseIntegerField(
     throw new Error(`${label} must be a whole number.`);
   }
   const parsed = Number(normalized);
+  if (options.min !== undefined && parsed < options.min) {
+    throw new Error(`${label} must be at least ${options.min}.`);
+  }
+  if (options.max !== undefined && parsed > options.max) {
+    throw new Error(`${label} must be at most ${options.max}.`);
+  }
+  return parsed;
+}
+
+function parseFloatField(
+  value: string,
+  label: string,
+  options: { min?: number; max?: number } = {},
+): number {
+  const normalized = value.trim();
+  if (normalized === '') {
+    throw new Error(`${label} is required.`);
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a number.`);
+  }
   if (options.min !== undefined && parsed < options.min) {
     throw new Error(`${label} must be at least ${options.min}.`);
   }
@@ -422,13 +650,162 @@ function ToggleField({
   );
 }
 
+function SiteEditor({
+  title,
+  form,
+  saving,
+  submitButtonLabel,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  title: string;
+  form: SiteFormState;
+  saving: boolean;
+  submitButtonLabel: string;
+  onChange: (updater: (form: SiteFormState) => SiteFormState) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Box bg="card" p="lg" border="top" borderColor={colors.skyBlue}>
+      <form
+        className="console-next-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <Stack gap="md">
+          <Text variant="heading">{title}</Text>
+          <Input
+            fill
+            label="Hostname"
+            value={form.hostname}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange((current) => ({ ...current, hostname: value }));
+            }}
+            helper="Example: example.com"
+          />
+
+          <Stack gap="sm">
+            <Text variant="label" color={colors.textSecondary}>
+              Upstreams
+            </Text>
+            {form.upstreams.map((row, rowIndex) => (
+              <div
+                key={row.id}
+                className="console-next-form-grid"
+                data-testid={`upstream-row-${rowIndex}`}
+              >
+                <Input
+                  fill
+                  label={`Host #${rowIndex + 1}`}
+                  value={row.host}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    onChange((current) => ({
+                      ...current,
+                      upstreams: current.upstreams.map((item, idx) =>
+                        idx === rowIndex ? updateUpstreamRow(item, 'host', value) : item,
+                      ),
+                    }));
+                  }}
+                  helper="Example: origin.internal"
+                />
+                <Input
+                  fill
+                  label={`Port #${rowIndex + 1}`}
+                  type="number"
+                  min={1}
+                  max={65535}
+                  step={1}
+                  value={row.port}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    onChange((current) => ({
+                      ...current,
+                      upstreams: current.upstreams.map((item, idx) =>
+                        idx === rowIndex ? updateUpstreamRow(item, 'port', value) : item,
+                      ),
+                    }));
+                  }}
+                  helper="1-65535; leave blank to omit"
+                />
+                <div className="console-next-button-row">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={saving || form.upstreams.length <= 1}
+                    onClick={() =>
+                      onChange((current) => ({
+                        ...current,
+                        upstreams: current.upstreams.filter((_, idx) => idx !== rowIndex),
+                      }))
+                    }
+                  >
+                    Remove upstream
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="console-next-button-row">
+              <Button
+                type="button"
+                variant="outlined"
+                size="sm"
+                disabled={saving}
+                onClick={() =>
+                  onChange((current) => ({
+                    ...current,
+                    upstreams: [
+                      ...current.upstreams,
+                      { id: nextUpstreamRowId(), baseUpstream: null, host: '', port: '' },
+                    ],
+                  }))
+                }
+              >
+                Add upstream
+              </Button>
+            </div>
+          </Stack>
+
+          <div className="console-next-button-row">
+            <Button type="submit" disabled={saving}>
+              {submitButtonLabel}
+            </Button>
+            <Button type="button" variant="outlined" disabled={saving} onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+        </Stack>
+      </form>
+    </Box>
+  );
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' });
   const [serverForm, setServerForm] = useState<ServerFormState>(() => buildServerForm());
+  const [siteEditor, setSiteEditor] = useState<SiteEditorState>({ mode: 'idle' });
+  const [siteSaveState, setSiteSaveState] = useState<SaveState>({ kind: 'idle' });
+  const [rateLimitForm, setRateLimitForm] = useState<RateLimitFormState>(() =>
+    buildRateLimitForm(),
+  );
+  const [rateLimitSaveState, setRateLimitSaveState] = useState<SaveState>({ kind: 'idle' });
+  const [profilerForm, setProfilerForm] = useState<ProfilerFormState>(() => buildProfilerForm());
+  const [profilerSaveState, setProfilerSaveState] = useState<SaveState>({ kind: 'idle' });
+  const isAnySaveInFlight =
+    saveState.kind === 'saving' ||
+    siteSaveState.kind === 'saving' ||
+    rateLimitSaveState.kind === 'saving' ||
+    profilerSaveState.kind === 'saving';
 
-  async function load() {
+  async function load(): Promise<LoadState> {
     setState({ kind: 'loading' });
 
     const results = await Promise.allSettled([
@@ -455,9 +832,11 @@ export function App() {
 
     if (fullConfig) {
       setServerForm(buildServerForm(fullConfig.server));
+      setRateLimitForm(buildRateLimitForm(fullConfig.rate_limit));
+      setProfilerForm(buildProfilerForm(fullConfig.profiler));
     }
 
-    setState({
+    const nextState: LoadState = {
       kind: 'ready',
       health,
       status,
@@ -466,7 +845,29 @@ export function App() {
       sensorConfig,
       loadedAt: new Date().toLocaleString(),
       warnings,
-    });
+    };
+
+    setState(nextState);
+    return nextState;
+  }
+
+  function assertValidMutationResult(mutation: MutationResult): MutationResult {
+    if (
+      typeof mutation.applied !== 'boolean' ||
+      typeof mutation.persisted !== 'boolean' ||
+      typeof mutation.rebuild_required !== 'boolean'
+    ) {
+      throw new Error('Invalid config mutation response. Reload and retry.');
+    }
+    return {
+      ...mutation,
+      applied: mutation.applied,
+      persisted: mutation.persisted,
+      rebuild_required: mutation.rebuild_required,
+      warnings: Array.isArray(mutation.warnings)
+        ? mutation.warnings.filter((warning): warning is string => typeof warning === 'string')
+        : [],
+    };
   }
 
   useEffect(() => {
@@ -484,6 +885,42 @@ export function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [saveState]);
+
+  useEffect(() => {
+    if (siteSaveState.kind !== 'success' || siteSaveState.sticky === true) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSiteSaveState({ kind: 'idle' });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [siteSaveState]);
+
+  useEffect(() => {
+    if (rateLimitSaveState.kind !== 'success' || rateLimitSaveState.sticky === true) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRateLimitSaveState({ kind: 'idle' });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [rateLimitSaveState]);
+
+  useEffect(() => {
+    if (profilerSaveState.kind !== 'success' || profilerSaveState.sticky === true) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setProfilerSaveState({ kind: 'idle' });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [profilerSaveState]);
 
   const overview = useMemo(() => {
     if (state.kind !== 'ready') return null;
@@ -505,7 +942,7 @@ export function App() {
   }
 
   async function saveServerConfig() {
-    if (saveState.kind === 'saving') {
+    if (saveState.kind === 'saving' || isAnySaveInFlight) {
       return;
     }
 
@@ -594,11 +1031,14 @@ export function App() {
         },
       };
 
-      const mutation = await writeApi<MutationResult>('/config', 'POST', nextConfig, {
+      const mutation = assertValidMutationResult(
+        await writeApi<MutationResult>('/config', 'POST', nextConfig, {
         'If-Match': state.configEtag,
         ...(serverForm.clear_admin_api_key ? { 'X-Clear-Admin-Api-Key': 'true' } : {}),
-      });
-      await load();
+        }),
+      );
+      const refreshedState = await load();
+      const refreshWarning = getRefreshWarning(refreshedState);
 
       const warningSuffix =
         mutation.warnings && mutation.warnings.length > 0
@@ -611,7 +1051,11 @@ export function App() {
           `Server config saved. Applied=${String(mutation.applied)} persisted=${String(
             mutation.persisted,
           )} rebuild_required=${String(mutation.rebuild_required)}.` + warningSuffix,
-        sticky: mutation.rebuild_required === true || Boolean(mutation.warnings?.length),
+        warning: refreshWarning || undefined,
+        sticky:
+          mutation.rebuild_required === true ||
+          Boolean(mutation.warnings?.length) ||
+          refreshWarning.length > 0,
       });
     } catch (error) {
       setSaveState({
@@ -619,6 +1063,328 @@ export function App() {
         message: error instanceof Error ? error.message : 'Failed to save server config.',
       });
     }
+  }
+
+  async function saveSiteMutation(
+    action: 'add' | 'edit' | 'delete',
+    options: { index?: number; form?: SiteFormState; baseSite?: SiteConfig },
+  ) {
+    if (siteSaveState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    if (state.kind !== 'ready' || !state.fullConfig) {
+      setSiteSaveState({
+        kind: 'error',
+        message:
+          'Full config is unavailable. This editor needs both config:write and admin:write scope.',
+      });
+      return;
+    }
+
+    if (!state.configEtag) {
+      setSiteSaveState({
+        kind: 'error',
+        message: 'Config version is unavailable. Refresh the page and try again.',
+      });
+      return;
+    }
+
+    setSiteSaveState({ kind: 'saving' });
+
+    try {
+      const existingSites = state.fullConfig.sites ?? [];
+      let nextSites: SiteConfig[];
+      let actionLabel: string;
+
+      if (action === 'delete') {
+        if (options.index === undefined || !existingSites[options.index]) {
+          throw new Error('Cannot delete: site was already removed. Refresh and try again.');
+        }
+        nextSites = existingSites.filter((_, idx) => idx !== options.index);
+        actionLabel = `Site removed (${existingSites[options.index].hostname ?? 'unnamed'})`;
+      } else if (action === 'add') {
+        if (!options.form) {
+          throw new Error('Cannot add: form state is missing.');
+        }
+        const nextSite = siteFromForm(options.form);
+        if (
+          existingSites.some(
+            (s) => normalizeHostname(s.hostname) === normalizeHostname(nextSite.hostname),
+          )
+        ) {
+          throw new Error(`A site with hostname "${nextSite.hostname}" already exists.`);
+        }
+        nextSites = [...existingSites, nextSite];
+        actionLabel = `Site added (${nextSite.hostname})`;
+      } else {
+        if (options.index === undefined || !options.form || !options.baseSite) {
+          throw new Error('Cannot update: site no longer exists. Refresh and try again.');
+        }
+        const nextSite = siteFromForm(options.form, options.baseSite);
+        const duplicate = existingSites.some(
+          (s, idx) =>
+            idx !== options.index &&
+            normalizeHostname(s.hostname) === normalizeHostname(nextSite.hostname),
+        );
+        if (duplicate) {
+          throw new Error(`Another site already uses hostname "${nextSite.hostname}".`);
+        }
+        nextSites = existingSites.map((site, idx) =>
+          idx === options.index ? nextSite : site,
+        );
+        actionLabel = `Site updated (${nextSite.hostname})`;
+      }
+
+      const nextConfig: ConfigFile = {
+        ...state.fullConfig,
+        sites: nextSites,
+      };
+
+      const mutation = assertValidMutationResult(
+        await writeApi<MutationResult>('/config', 'POST', nextConfig, {
+        'If-Match': state.configEtag,
+        }),
+      );
+      const refreshedState = await load();
+      setSiteEditor({ mode: 'idle' });
+      const refreshWarning = getRefreshWarning(refreshedState);
+
+      const warningSuffix =
+        mutation.warnings && mutation.warnings.length > 0
+          ? ` Warnings: ${mutation.warnings.join(' ')}`
+          : '';
+
+      setSiteSaveState({
+        kind: 'success',
+        message:
+          `${actionLabel}. Applied=${String(mutation.applied)} persisted=${String(
+            mutation.persisted,
+          )} rebuild_required=${String(mutation.rebuild_required)}.` + warningSuffix,
+        warning: refreshWarning || undefined,
+        sticky:
+          mutation.rebuild_required === true ||
+          Boolean(mutation.warnings?.length) ||
+          refreshWarning.length > 0,
+      });
+    } catch (error) {
+      setSiteSaveState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save site changes.',
+      });
+    }
+  }
+
+  async function saveRateLimitConfig() {
+    if (rateLimitSaveState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    if (state.kind !== 'ready' || !state.fullConfig) {
+      setRateLimitSaveState({
+        kind: 'error',
+        message:
+          'Full config is unavailable. This editor needs both config:write and admin:write scope.',
+      });
+      return;
+    }
+
+    if (!state.configEtag) {
+      setRateLimitSaveState({
+        kind: 'error',
+        message: 'Config version is unavailable. Refresh the page and try again.',
+      });
+      return;
+    }
+
+    setRateLimitSaveState({ kind: 'saving' });
+
+    try {
+      const rps = parseIntegerField(rateLimitForm.rps, 'Requests per second', { min: 1 });
+      const burstRaw = rateLimitForm.burst.trim();
+      const burst = burstRaw === ''
+        ? undefined
+        : parseIntegerField(rateLimitForm.burst, 'Burst capacity', { min: 0 });
+
+      const nextRateLimit: RateLimitConfig = {
+        ...state.fullConfig.rate_limit,
+        enabled: rateLimitForm.enabled,
+        rps,
+        ...(burst === undefined ? {} : { burst }),
+      };
+
+      const nextConfig: ConfigFile = {
+        ...state.fullConfig,
+        rate_limit: nextRateLimit,
+      };
+
+      const mutation = assertValidMutationResult(
+        await writeApi<MutationResult>('/config', 'POST', nextConfig, {
+        'If-Match': state.configEtag,
+        }),
+      );
+      const refreshedState = await load();
+      const refreshWarning = getRefreshWarning(refreshedState);
+
+      const warningSuffix =
+        mutation.warnings && mutation.warnings.length > 0
+          ? ` Warnings: ${mutation.warnings.join(' ')}`
+          : '';
+
+      setRateLimitSaveState({
+        kind: 'success',
+        message:
+          `Rate-limit config saved. Applied=${String(mutation.applied)} persisted=${String(
+            mutation.persisted,
+          )} rebuild_required=${String(mutation.rebuild_required)}.` + warningSuffix,
+        warning: refreshWarning || undefined,
+        sticky:
+          mutation.rebuild_required === true ||
+          Boolean(mutation.warnings?.length) ||
+          refreshWarning.length > 0,
+      });
+    } catch (error) {
+      setRateLimitSaveState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save rate-limit config.',
+      });
+    }
+  }
+
+  async function saveProfilerConfig() {
+    if (profilerSaveState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    if (state.kind !== 'ready' || !state.fullConfig) {
+      setProfilerSaveState({
+        kind: 'error',
+        message:
+          'Full config is unavailable. This editor needs both config:write and admin:write scope.',
+      });
+      return;
+    }
+
+    if (!state.configEtag) {
+      setProfilerSaveState({
+        kind: 'error',
+        message: 'Config version is unavailable. Refresh the page and try again.',
+      });
+      return;
+    }
+
+    setProfilerSaveState({ kind: 'saving' });
+
+    try {
+      const nextProfiler: ProfilerConfig = {
+        ...state.fullConfig.profiler,
+        enabled: profilerForm.enabled,
+        max_profiles: parseIntegerField(profilerForm.max_profiles, 'Max profiles', { min: 1 }),
+        max_schemas: parseIntegerField(profilerForm.max_schemas, 'Max schemas', { min: 1 }),
+        min_samples_for_validation: parseIntegerField(
+          profilerForm.min_samples_for_validation,
+          'Min samples for validation',
+          { min: 1 },
+        ),
+        payload_z_threshold: parseFloatField(
+          profilerForm.payload_z_threshold,
+          'Payload z-threshold',
+          { min: 0, max: 20 },
+        ),
+        param_z_threshold: parseFloatField(
+          profilerForm.param_z_threshold,
+          'Parameter z-threshold',
+          { min: 0, max: 20 },
+        ),
+        response_z_threshold: parseFloatField(
+          profilerForm.response_z_threshold,
+          'Response z-threshold',
+          { min: 0, max: 20 },
+        ),
+        min_stddev: parseFloatField(profilerForm.min_stddev, 'Minimum stddev', {
+          min: 0,
+          max: 100,
+        }),
+        type_ratio_threshold: parseFloatField(
+          profilerForm.type_ratio_threshold,
+          'Type-ratio threshold',
+          { min: 0, max: 1 },
+        ),
+        max_type_counts: parseIntegerField(
+          profilerForm.max_type_counts,
+          'Max type counts',
+          { min: 1 },
+        ),
+        redact_pii: profilerForm.redact_pii,
+        freeze_after_samples: parseIntegerField(
+          profilerForm.freeze_after_samples,
+          'Freeze after samples',
+          { min: 0 },
+        ),
+      };
+
+      const nextConfig: ConfigFile = {
+        ...state.fullConfig,
+        profiler: nextProfiler,
+      };
+
+      const mutation = assertValidMutationResult(
+        await writeApi<MutationResult>('/config', 'POST', nextConfig, {
+        'If-Match': state.configEtag,
+        }),
+      );
+      const refreshedState = await load();
+      const refreshWarning = getRefreshWarning(refreshedState);
+
+      const warningSuffix =
+        mutation.warnings && mutation.warnings.length > 0
+          ? ` Warnings: ${mutation.warnings.join(' ')}`
+          : '';
+
+      setProfilerSaveState({
+        kind: 'success',
+        message:
+          `Profiler config saved. Applied=${String(mutation.applied)} persisted=${String(
+            mutation.persisted,
+          )} rebuild_required=${String(mutation.rebuild_required)}.` + warningSuffix,
+        warning: refreshWarning || undefined,
+        sticky:
+          mutation.rebuild_required === true ||
+          Boolean(mutation.warnings?.length) ||
+          refreshWarning.length > 0,
+      });
+    } catch (error) {
+      setProfilerSaveState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Failed to save profiler config.',
+      });
+    }
+  }
+
+  function updateRateLimitForm<K extends keyof RateLimitFormState>(
+    key: K,
+    value: RateLimitFormState[K],
+  ) {
+    setRateLimitForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateProfilerForm<K extends keyof ProfilerFormState>(
+    key: K,
+    value: ProfilerFormState[K],
+  ) {
+    setProfilerForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateSiteFormField(updater: (form: SiteFormState) => SiteFormState) {
+    setSiteEditor((current) => {
+      if (current.mode === 'add') {
+        return { ...current, form: updater(current.form) };
+      }
+      if (current.mode === 'edit') {
+        return { ...current, form: updater(current.form) };
+      }
+      return current;
+    });
   }
 
   const fullConfigSites = state.kind === 'ready' ? state.fullConfig?.sites ?? [] : [];
@@ -749,9 +1515,16 @@ export function App() {
             </Box>
 
             {saveState.kind === 'success' ? (
-              <Alert status="success" title="Saved">
-                {saveState.message}
-              </Alert>
+              <>
+                <Alert status="success" title="Saved">
+                  {saveState.message}
+                </Alert>
+                {saveState.warning ? (
+                  <Alert status="warning" title="Reload required">
+                    {saveState.warning}
+                  </Alert>
+                ) : null}
+              </>
             ) : null}
 
             {saveState.kind === 'error' ? (
@@ -793,6 +1566,8 @@ export function App() {
                       fill
                       label="Workers"
                       type="number"
+                      min={0}
+                      step={1}
                       value={serverForm.workers}
                       onChange={(event) => updateServerForm('workers', event.currentTarget.value)}
                       helper="0 means auto-detect"
@@ -801,6 +1576,8 @@ export function App() {
                       fill
                       label="Shutdown timeout (seconds)"
                       type="number"
+                      min={1}
+                      step={1}
                       value={serverForm.shutdown_timeout_secs}
                       onChange={(event) =>
                         updateServerForm('shutdown_timeout_secs', event.currentTarget.value)
@@ -810,6 +1587,9 @@ export function App() {
                       fill
                       label="WAF threshold"
                       type="number"
+                      min={0}
+                      max={100}
+                      step={1}
                       value={serverForm.waf_threshold}
                       onChange={(event) =>
                         updateServerForm('waf_threshold', event.currentTarget.value)
@@ -820,6 +1600,9 @@ export function App() {
                       fill
                       label="WAF regex timeout (ms)"
                       type="number"
+                      min={1}
+                      max={500}
+                      step={1}
                       value={serverForm.waf_regex_timeout_ms}
                       onChange={(event) =>
                         updateServerForm('waf_regex_timeout_ms', event.currentTarget.value)
@@ -943,8 +1726,12 @@ export function App() {
                   ) : null}
 
                   <div className="console-next-button-row">
-                    <Button type="submit" disabled={saveState.kind === 'saving'}>
-                      {saveState.kind === 'saving' ? 'Saving…' : 'Save server config'}
+                    <Button type="submit" disabled={isAnySaveInFlight}>
+                      {getSaveButtonLabel(
+                        saveState,
+                        isAnySaveInFlight,
+                        'Save server config',
+                      )}
                     </Button>
                     <Button
                       type="button"
@@ -953,7 +1740,7 @@ export function App() {
                         setSaveState({ kind: 'idle' });
                         setServerForm(buildServerForm(state.fullConfig?.server));
                       }}
-                      disabled={saveState.kind === 'saving'}
+                      disabled={isAnySaveInFlight}
                     >
                       Reset form
                     </Button>
@@ -967,9 +1754,201 @@ export function App() {
 
       {state.kind === 'ready' && activeTab === 'sites' ? (
         <section role="tabpanel" id="panel-sites" aria-labelledby="tab-sites">
-          {fullConfigSites.length > 0 ? (
-            <Stack gap="md">
-              {fullConfigSites.map((site, index) => (
+          <Stack gap="lg">
+            {siteSaveState.kind === 'success' ? (
+              <>
+                <Alert status="success" title="Saved">
+                  {siteSaveState.message}
+                </Alert>
+                {siteSaveState.warning ? (
+                  <Alert status="warning" title="Reload required">
+                    {siteSaveState.warning}
+                  </Alert>
+                ) : null}
+              </>
+            ) : null}
+
+            {siteSaveState.kind === 'error' ? (
+              <Alert status="error" title="Save failed">
+                {siteSaveState.message}
+              </Alert>
+            ) : null}
+
+            {!state.fullConfig ? (
+              <Alert status="warning" title="Full config unavailable">
+                Editing sites needs `config:write` on `GET /config` and `admin:write` on `POST
+                /config`. The current session only has read-only dashboard data.
+              </Alert>
+            ) : null}
+
+            {state.fullConfig ? (
+              <div className="console-next-button-row">
+                <Button
+                  variant="primary"
+                  disabled={siteEditor.mode !== 'idle' || isAnySaveInFlight}
+                  onClick={() => {
+                    setSiteSaveState({ kind: 'idle' });
+                    setSiteEditor({ mode: 'add', form: buildSiteForm() });
+                  }}
+                >
+                  Add site
+                </Button>
+              </div>
+            ) : null}
+
+            {state.fullConfig && siteEditor.mode === 'add' ? (
+              <SiteEditor
+                title="New site"
+                form={siteEditor.form}
+                saving={isAnySaveInFlight}
+                submitButtonLabel={getSaveButtonLabel(
+                  siteSaveState,
+                  isAnySaveInFlight,
+                  'Create site',
+                )}
+                onChange={updateSiteFormField}
+                onCancel={() => {
+                  setSiteEditor({ mode: 'idle' });
+                  setSiteSaveState({ kind: 'idle' });
+                }}
+                onSubmit={() =>
+                  void saveSiteMutation('add', { form: siteEditor.form })
+                }
+              />
+            ) : null}
+
+            {fullConfigSites.length > 0 ? (
+              <Stack gap="md">
+                {fullConfigSites.map((site, index) => {
+                  const cardKey = `${site.hostname ?? 'unnamed'}-${index}`;
+                  const isEditing =
+                    siteEditor.mode === 'edit' && siteEditor.index === index;
+                  const isConfirmingDelete =
+                    siteEditor.mode === 'delete-confirm' && siteEditor.index === index;
+
+                  if (isEditing) {
+                    return (
+                      <SiteEditor
+                        key={cardKey}
+                        title={`Edit ${site.hostname ?? 'site'}`}
+                        form={siteEditor.form}
+                        saving={isAnySaveInFlight}
+                        submitButtonLabel={getSaveButtonLabel(
+                          siteSaveState,
+                          isAnySaveInFlight,
+                          'Save site',
+                        )}
+                        onChange={updateSiteFormField}
+                        onCancel={() => {
+                          setSiteEditor({ mode: 'idle' });
+                          setSiteSaveState({ kind: 'idle' });
+                        }}
+                        onSubmit={() =>
+                          void saveSiteMutation('edit', {
+                            index,
+                            form: siteEditor.form,
+                            baseSite: siteEditor.baseSite,
+                          })
+                        }
+                      />
+                    );
+                  }
+
+                  return (
+                    <Box
+                      key={cardKey}
+                      bg="card"
+                      p="lg"
+                      border="subtle"
+                      style={{ minWidth: 0 }}
+                    >
+                      <Stack gap="sm">
+                        <Text variant="heading">{site.hostname ?? 'Unnamed site'}</Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          Upstreams: {formatUpstreams(site.upstreams)}
+                        </Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          WAF: {formatBoolean(site.waf?.enabled)}
+                        </Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          Headers: {site.headers ? Object.keys(site.headers).length : 0}
+                        </Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          Rule overrides:{' '}
+                          {site.waf?.rule_overrides
+                            ? Object.keys(site.waf.rule_overrides).length
+                            : 0}
+                        </Text>
+
+                        {isConfirmingDelete ? (
+                          <Stack gap="sm">
+                            <Text variant="body" color={colors.magenta}>
+                              Delete {site.hostname ?? 'this site'}? This cannot be undone.
+                            </Text>
+                            <div className="console-next-button-row">
+                              <Button
+                                variant="magenta"
+                                size="sm"
+                                disabled={isAnySaveInFlight}
+                                onClick={() =>
+                                  void saveSiteMutation('delete', { index })
+                                }
+                              >
+                                Confirm delete
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="sm"
+                                disabled={isAnySaveInFlight}
+                                onClick={() => setSiteEditor({ mode: 'idle' })}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </Stack>
+                        ) : (
+                          <div className="console-next-button-row">
+                            <Button
+                              variant="outlined"
+                              size="sm"
+                              disabled={
+                                siteEditor.mode !== 'idle' || isAnySaveInFlight
+                              }
+                              onClick={() => {
+                                setSiteSaveState({ kind: 'idle' });
+                                setSiteEditor({
+                                  mode: 'edit',
+                                  index,
+                                  form: buildSiteForm(site),
+                                  baseSite: structuredClone(site),
+                                });
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={
+                                siteEditor.mode !== 'idle' || isAnySaveInFlight
+                              }
+                              onClick={() => {
+                                setSiteSaveState({ kind: 'idle' });
+                                setSiteEditor({ mode: 'delete-confirm', index });
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        )}
+                      </Stack>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            ) : sensorFallbackSites.length > 0 ? (
+              <Stack gap="md">
+                {sensorFallbackSites.map((site, index) => (
                   <Box
                     key={String(`${site.hostname ?? 'unnamed'}-${index}`)}
                     bg="card"
@@ -980,58 +1959,391 @@ export function App() {
                     <Stack gap="sm">
                       <Text variant="heading">{site.hostname ?? 'Unnamed site'}</Text>
                       <Text variant="body" color={colors.textSecondary}>
-                        Upstreams: {formatUpstreams(site.upstreams)}
+                        Upstreams:{' '}
+                        {site.upstreams && site.upstreams.length > 0
+                          ? site.upstreams.join(', ')
+                          : 'Not configured'}
                       </Text>
                       <Text variant="body" color={colors.textSecondary}>
-                        WAF: {formatBoolean(site.waf?.enabled)}
+                        WAF: {formatBoolean(site.waf_enabled)}
                       </Text>
                       <Text variant="body" color={colors.textSecondary}>
-                        Headers: {site.headers ? Object.keys(site.headers).length : 0}
-                      </Text>
-                      <Text variant="body" color={colors.textSecondary}>
-                        Rule overrides:{' '}
-                        {site.waf?.rule_overrides
-                          ? Object.keys(site.waf.rule_overrides).length
-                          : 0}
+                        TLS: {formatBoolean(site.tls_enabled)}
                       </Text>
                     </Stack>
                   </Box>
-              ))}
-            </Stack>
-          ) : sensorFallbackSites.length > 0 ? (
-            <Stack gap="md">
-              {sensorFallbackSites.map((site, index) => (
-                <Box
-                  key={String(`${site.hostname ?? 'unnamed'}-${index}`)}
-                  bg="card"
-                  p="lg"
-                  border="subtle"
-                  style={{ minWidth: 0 }}
-                >
-                  <Stack gap="sm">
-                    <Text variant="heading">{site.hostname ?? 'Unnamed site'}</Text>
-                    <Text variant="body" color={colors.textSecondary}>
-                      Upstreams:{' '}
-                      {site.upstreams && site.upstreams.length > 0
-                        ? site.upstreams.join(', ')
-                        : 'Not configured'}
-                    </Text>
-                    <Text variant="body" color={colors.textSecondary}>
-                      WAF: {formatBoolean(site.waf_enabled)}
-                    </Text>
-                    <Text variant="body" color={colors.textSecondary}>
-                      TLS: {formatBoolean(site.tls_enabled)}
-                    </Text>
-                  </Stack>
-                </Box>
-              ))}
-            </Stack>
-          ) : (
-            <EmptyState
-              title="No sites configured"
-              description="Once site CRUD lands in the new operator surface, configured virtual hosts will show up here."
-            />
-          )}
+                ))}
+              </Stack>
+            ) : state.fullConfig ? (
+              siteEditor.mode === 'add' ? null : (
+                <EmptyState
+                  title="No sites configured"
+                  description="Use Add site above to register the first virtual host."
+                />
+              )
+            ) : (
+              <EmptyState
+                title="No sites configured"
+                description="This session cannot read the full config, so sites cannot be rendered yet."
+              />
+            )}
+          </Stack>
+        </section>
+      ) : null}
+
+      {state.kind === 'ready' && activeTab === 'rate-limit' ? (
+        <section role="tabpanel" id="panel-rate-limit" aria-labelledby="tab-rate-limit">
+          <Stack gap="lg">
+            <Box bg="card" p="lg" border="top" borderColor={colors.skyBlue}>
+              <Stack gap="sm">
+                <Text variant="heading">Global rate-limit configuration</Text>
+                <Text variant="body" color={colors.textSecondary}>
+                  Applies across every virtual host. Per-site overrides live inside each site's
+                  config and are not edited here.
+                </Text>
+              </Stack>
+            </Box>
+
+            {rateLimitSaveState.kind === 'success' ? (
+              <>
+                <Alert status="success" title="Saved">
+                  {rateLimitSaveState.message}
+                </Alert>
+                {rateLimitSaveState.warning ? (
+                  <Alert status="warning" title="Reload required">
+                    {rateLimitSaveState.warning}
+                  </Alert>
+                ) : null}
+              </>
+            ) : null}
+
+            {rateLimitSaveState.kind === 'error' ? (
+              <Alert status="error" title="Save failed">
+                {rateLimitSaveState.message}
+              </Alert>
+            ) : null}
+
+            {!state.fullConfig ? (
+              <Alert status="warning" title="Full config unavailable">
+                This tab needs `config:write` on `GET /config` and `admin:write` on `POST /config`.
+              </Alert>
+            ) : (
+              <form
+                className="console-next-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveRateLimitConfig();
+                }}
+              >
+                <Stack gap="lg">
+                  <div className="console-next-form-grid">
+                    <Input
+                      fill
+                      label="Requests per second"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={rateLimitForm.rps}
+                      onChange={(event) =>
+                        updateRateLimitForm('rps', event.currentTarget.value)
+                      }
+                      helper="Sustained rate ceiling; backend validates non-negative integer."
+                    />
+                    <Input
+                      fill
+                      label="Burst capacity"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={rateLimitForm.burst}
+                      onChange={(event) =>
+                        updateRateLimitForm('burst', event.currentTarget.value)
+                      }
+                      helper="Leave blank for backend default (rps × 2)."
+                    />
+                  </div>
+
+                  <div className="console-next-toggle-grid">
+                    <ToggleField
+                      label="Rate limiting enabled"
+                      helper="Global enable for the configured rps / burst values."
+                      checked={rateLimitForm.enabled}
+                      onChange={(checked) => updateRateLimitForm('enabled', checked)}
+                    />
+                  </div>
+
+                  <div className="console-next-button-row">
+                    <Button type="submit" disabled={isAnySaveInFlight}>
+                      {getSaveButtonLabel(
+                        rateLimitSaveState,
+                        isAnySaveInFlight,
+                        'Save rate-limit config',
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      onClick={() => {
+                        setRateLimitSaveState({ kind: 'idle' });
+                        setRateLimitForm(buildRateLimitForm(state.fullConfig?.rate_limit));
+                      }}
+                      disabled={isAnySaveInFlight}
+                    >
+                      Reset form
+                    </Button>
+                  </div>
+                </Stack>
+              </form>
+            )}
+          </Stack>
+        </section>
+      ) : null}
+
+      {state.kind === 'ready' && activeTab === 'profiler' ? (
+        <section role="tabpanel" id="panel-profiler" aria-labelledby="tab-profiler">
+          <Stack gap="lg">
+            <Box bg="card" p="lg" border="top" borderColor={colors.skyBlue}>
+              <Stack gap="sm">
+                <Text variant="heading">Profiler configuration</Text>
+                <Text variant="body" color={colors.textSecondary}>
+                  Endpoint behavior learning: sample budgets, anomaly z-score thresholds, and
+                  security controls for model poisoning / PII redaction.
+                </Text>
+              </Stack>
+            </Box>
+
+            {profilerSaveState.kind === 'success' ? (
+              <>
+                <Alert status="success" title="Saved">
+                  {profilerSaveState.message}
+                </Alert>
+                {profilerSaveState.warning ? (
+                  <Alert status="warning" title="Reload required">
+                    {profilerSaveState.warning}
+                  </Alert>
+                ) : null}
+              </>
+            ) : null}
+
+            {profilerSaveState.kind === 'error' ? (
+              <Alert status="error" title="Save failed">
+                {profilerSaveState.message}
+              </Alert>
+            ) : null}
+
+            {!state.fullConfig ? (
+              <Alert status="warning" title="Full config unavailable">
+                This tab needs `config:write` on `GET /config` and `admin:write` on `POST /config`.
+              </Alert>
+            ) : (
+              <form
+                className="console-next-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveProfilerConfig();
+                }}
+              >
+                <Stack gap="lg">
+                  <Box bg="card" p="lg" border="top" borderColor={colors.magenta}>
+                    <Stack gap="md">
+                      <Text variant="heading">Core</Text>
+                      <div className="console-next-form-grid">
+                        <Input
+                          fill
+                          label="Max profiles"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={profilerForm.max_profiles}
+                          onChange={(event) =>
+                            updateProfilerForm('max_profiles', event.currentTarget.value)
+                          }
+                        />
+                        <Input
+                          fill
+                          label="Max schemas"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={profilerForm.max_schemas}
+                          onChange={(event) =>
+                            updateProfilerForm('max_schemas', event.currentTarget.value)
+                          }
+                        />
+                        <Input
+                          fill
+                          label="Min samples for validation"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={profilerForm.min_samples_for_validation}
+                          onChange={(event) =>
+                            updateProfilerForm(
+                              'min_samples_for_validation',
+                              event.currentTarget.value,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="console-next-toggle-grid">
+                        <ToggleField
+                          label="Profiler enabled"
+                          helper="Master enable for endpoint profiling + anomaly detection."
+                          checked={profilerForm.enabled}
+                          onChange={(checked) => updateProfilerForm('enabled', checked)}
+                        />
+                      </div>
+                    </Stack>
+                  </Box>
+
+                  <Box bg="card" p="lg" border="top" borderColor={colors.orange}>
+                    <Stack gap="md">
+                      <Text variant="heading">Anomaly thresholds</Text>
+                      <div className="console-next-form-grid">
+                        <Input
+                          fill
+                          label="Payload z-threshold"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={20}
+                          step="any"
+                          value={profilerForm.payload_z_threshold}
+                          onChange={(event) =>
+                            updateProfilerForm('payload_z_threshold', event.currentTarget.value)
+                          }
+                          helper="Default: 3.0; must be between 0 and 20."
+                        />
+                        <Input
+                          fill
+                          label="Parameter z-threshold"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={20}
+                          step="any"
+                          value={profilerForm.param_z_threshold}
+                          onChange={(event) =>
+                            updateProfilerForm('param_z_threshold', event.currentTarget.value)
+                          }
+                          helper="Default: 4.0; must be between 0 and 20."
+                        />
+                        <Input
+                          fill
+                          label="Response z-threshold"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={20}
+                          step="any"
+                          value={profilerForm.response_z_threshold}
+                          onChange={(event) =>
+                            updateProfilerForm('response_z_threshold', event.currentTarget.value)
+                          }
+                          helper="Default: 4.0; must be between 0 and 20."
+                        />
+                        <Input
+                          fill
+                          label="Minimum stddev"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={100}
+                          step="any"
+                          value={profilerForm.min_stddev}
+                          onChange={(event) =>
+                            updateProfilerForm('min_stddev', event.currentTarget.value)
+                          }
+                          helper="Default: 0.01; must be between 0 and 100."
+                        />
+                        <Input
+                          fill
+                          label="Type-ratio threshold"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={1}
+                          step="any"
+                          value={profilerForm.type_ratio_threshold}
+                          onChange={(event) =>
+                            updateProfilerForm(
+                              'type_ratio_threshold',
+                              event.currentTarget.value,
+                            )
+                          }
+                          helper="0-1; default: 0.9"
+                        />
+                      </div>
+                    </Stack>
+                  </Box>
+
+                  <Box bg="card" p="lg" border="top" borderColor={colors.green}>
+                    <Stack gap="md">
+                      <Text variant="heading">Security controls</Text>
+                      <div className="console-next-form-grid">
+                        <Input
+                          fill
+                          label="Max type counts"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={profilerForm.max_type_counts}
+                          onChange={(event) =>
+                            updateProfilerForm('max_type_counts', event.currentTarget.value)
+                          }
+                          helper="Prevents memory exhaustion."
+                        />
+                        <Input
+                          fill
+                          label="Freeze after samples"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={profilerForm.freeze_after_samples}
+                          onChange={(event) =>
+                            updateProfilerForm(
+                              'freeze_after_samples',
+                              event.currentTarget.value,
+                            )
+                          }
+                          helper="0 disables background freezing; prevents model poisoning."
+                        />
+                      </div>
+                      <div className="console-next-toggle-grid">
+                        <ToggleField
+                          label="Redact PII in anomaly descriptions"
+                          helper="Leave enabled unless operating in a PII-safe environment."
+                          checked={profilerForm.redact_pii}
+                          onChange={(checked) => updateProfilerForm('redact_pii', checked)}
+                        />
+                      </div>
+                    </Stack>
+                  </Box>
+
+                  <div className="console-next-button-row">
+                    <Button type="submit" disabled={isAnySaveInFlight}>
+                      {getSaveButtonLabel(
+                        profilerSaveState,
+                        isAnySaveInFlight,
+                        'Save profiler config',
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      onClick={() => {
+                        setProfilerSaveState({ kind: 'idle' });
+                        setProfilerForm(buildProfilerForm(state.fullConfig?.profiler));
+                      }}
+                      disabled={isAnySaveInFlight}
+                    >
+                      Reset form
+                    </Button>
+                  </div>
+                </Stack>
+              </form>
+            )}
+          </Stack>
         </section>
       ) : null}
 
@@ -1042,8 +2354,8 @@ export function App() {
               <Stack gap="sm">
                 <Text variant="heading">Next operator slices</Text>
                 <Text variant="body" color={colors.textSecondary}>
-                  Site CRUD, per-site TLS/WAF/headers controls, and safer config validation flows
-                  that expose backend warnings before restart paths are needed.
+                  Per-site TLS/WAF/headers controls and safer config validation flows that expose
+                  backend warnings before restart paths are needed.
                 </Text>
               </Stack>
             </Box>
@@ -1052,10 +2364,8 @@ export function App() {
                 <Text variant="label" color={colors.textSecondary}>
                   Remaining UI gaps after this slice
                 </Text>
-                <Text variant="body">Per-site create, update, and delete flows</Text>
                 <Text variant="body">Per-site headers and WAF rule override editing</Text>
                 <Text variant="body">Per-site TLS and shadow mirror controls</Text>
-                <Text variant="body">Profiler and module editors in the SPA shell</Text>
               </Stack>
             </Box>
           </Stack>
