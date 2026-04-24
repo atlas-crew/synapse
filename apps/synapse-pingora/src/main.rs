@@ -59,8 +59,8 @@ use uuid::Uuid;
 // Admin API imports
 use synapse_pingora::admin_server::{
     register_evaluate_callback, register_integrations_callbacks, register_profiles_getter,
-    register_restart_callback, register_schemas_getter, start_admin_server, EvaluationResult,
-    IntegrationsConfig, RestartResult,
+    register_restart_callback, register_schemas_getter, register_shutdown_callback,
+    start_admin_server, EvaluationResult, IntegrationsConfig, RestartResult, ShutdownResult,
 };
 use synapse_pingora::api::ApiHandler;
 use synapse_pingora::health::HealthChecker;
@@ -1052,6 +1052,37 @@ fn request_process_restart() -> Result<RestartResult, String> {
         let _ = current_dir;
         let _ = args;
         Err("Restart is only supported on Unix-like hosts in this build".to_string())
+    }
+}
+
+fn request_process_shutdown() -> Result<ShutdownResult, String> {
+    #[cfg(unix)]
+    {
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(250));
+            unsafe {
+                libc::kill(libc::getpid(), libc::SIGINT);
+            }
+        });
+
+        return Ok(ShutdownResult {
+            success: true,
+            message: "Shutdown requested. Synapse WAF is draining existing connections."
+                .to_string(),
+        });
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(250));
+            std::process::exit(0);
+        });
+
+        Ok(ShutdownResult {
+            success: true,
+            message: "Shutdown requested. Synapse WAF will stop shortly.".to_string(),
+        })
     }
 }
 
@@ -5376,10 +5407,18 @@ fn main() {
     if dev_mode_cli {
         // CLI --dev flag is explicit developer intent — enable directly
         synapse_pingora::admin_server::enable_dev_mode();
+        synapse_pingora::validation::set_allow_private_upstreams(true);
+        tracing::warn!(
+            "Dev mode: SSRF guard on validate_upstream is RELAXED (private/internal IPs allowed). Production deployments must never enable --dev."
+        );
     } else if dev_mode_env {
         // SECURITY: Env-var activation requires explicit non-production confirmation
         if is_explicitly_non_production {
             synapse_pingora::admin_server::enable_dev_mode();
+            synapse_pingora::validation::set_allow_private_upstreams(true);
+            tracing::warn!(
+                "Dev mode: SSRF guard on validate_upstream is RELAXED (private/internal IPs allowed). Production deployments must never set SYNAPSE_DEV with SYNAPSE_PRODUCTION=0 / NODE_ENV=development."
+            );
         } else {
             tracing::error!(
                 "SECURITY: SYNAPSE_DEV set but no explicit non-production environment detected. \
@@ -5965,6 +6004,7 @@ fn main() {
     register_profiles_getter(DetectionEngine::get_profiles);
     register_schemas_getter(|| SCHEMA_LEARNER.get_all_schemas());
     register_restart_callback(request_process_restart);
+    register_shutdown_callback(request_process_shutdown);
 
     // Register integration configuration callbacks
     let config_path = cli.config.clone();

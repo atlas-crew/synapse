@@ -161,6 +161,25 @@ type MutationResult = {
   [key: string]: unknown;
 };
 
+type ServiceActionKey = 'reload' | 'test' | 'restart' | 'shutdown';
+
+type ServiceActionResponse = {
+  success?: boolean;
+  message?: string;
+  [key: string]: unknown;
+};
+
+type ConfigImportResponse = {
+  success?: boolean;
+  message?: string;
+  applied?: boolean;
+  persisted?: boolean;
+  rebuild_required?: boolean;
+  warnings?: string[];
+  error?: string;
+  [key: string]: unknown;
+};
+
 type ServerFormState = {
   http_addr: string;
   https_addr: string;
@@ -339,8 +358,54 @@ const tabs = [
   { key: 'modules', label: 'Modules' },
   { key: 'integrations', label: 'Integrations' },
   { key: 'profiler', label: 'Profiler' },
+  { key: 'actions', label: 'Actions' },
   { key: 'roadmap', label: 'Roadmap' },
 ] as const;
+
+const serviceActionDefinitions: Array<{
+  key: ServiceActionKey;
+  label: string;
+  path: string;
+  description: string;
+  accent: string;
+  successFallback: string;
+  sticky?: boolean;
+}> = [
+  {
+    key: 'reload',
+    label: 'Reload config',
+    path: '/reload',
+    description: 'Re-read persisted configuration without replacing the running process.',
+    accent: colors.skyBlue,
+    successFallback: 'Configuration reloaded successfully.',
+  },
+  {
+    key: 'test',
+    label: 'Test config',
+    path: '/test',
+    description: 'Dry-run config validation before you reload or restart the sensor.',
+    accent: colors.green,
+    successFallback: 'Configuration syntax OK',
+  },
+  {
+    key: 'restart',
+    label: 'Restart service',
+    path: '/restart',
+    description: 'Perform a full process restart when connection-state changes require it.',
+    accent: colors.orange,
+    successFallback: 'Restart requested.',
+    sticky: true,
+  },
+  {
+    key: 'shutdown',
+    label: 'Shutdown service',
+    path: '/shutdown',
+    description: 'Drain existing connections and stop the service gracefully.',
+    accent: colors.magenta,
+    successFallback: 'Shutdown requested.',
+    sticky: true,
+  },
+];
 
 const genericModuleDefinitions: Array<{
   key: GenericModuleKey;
@@ -824,6 +889,59 @@ async function writeApi<T>(
   }
 
   return envelope.data;
+}
+
+async function requestTextWithMeta(
+  path: string,
+  init?: RequestInit,
+): Promise<{ body: string; headers: Headers }> {
+  const response = await fetch(path, init);
+  const body = await response.text();
+
+  if (!response.ok) {
+    let details: unknown = body;
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.includes('json')) {
+      try {
+        details = JSON.parse(body);
+      } catch {
+        details = body;
+      }
+    }
+    const fallbackMessage =
+      response.status === 401
+        ? 'Authentication expired or missing. Re-authenticate and retry.'
+        : response.status === 403
+          ? 'This session does not have permission for that action.'
+          : `Request to ${path} failed with status ${response.status}.`;
+    throw new Error(extractMessage(details, fallbackMessage));
+  }
+
+  return { body, headers: response.headers };
+}
+
+function extractDownloadFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) {
+    return null;
+  }
+  const filenameToken = contentDisposition
+    .split(';')
+    .map((segment) => segment.trim())
+    .find((segment) => segment.toLowerCase().startsWith('filename='));
+  if (!filenameToken) {
+    return null;
+  }
+  return filenameToken.slice('filename='.length).replace(/^"|"$/g, '');
+}
+
+function buildInitialServiceActionStates(): Record<ServiceActionKey, SaveState> {
+  return serviceActionDefinitions.reduce<Record<ServiceActionKey, SaveState>>(
+    (states, action) => ({
+      ...states,
+      [action.key]: { kind: 'idle' },
+    }),
+    {} as Record<ServiceActionKey, SaveState>,
+  );
 }
 
 function formatBoolean(value: boolean | undefined): string {
@@ -2115,9 +2233,20 @@ export function App() {
   const [kernelModuleState, setKernelModuleState] = useState<KernelModuleState>(() =>
     buildInitialKernelModuleState(),
   );
+  const [serviceActionStates, setServiceActionStates] = useState<
+    Record<ServiceActionKey, SaveState>
+  >(() => buildInitialServiceActionStates());
+  const [exportPreview, setExportPreview] = useState('');
+  const [exportSourceLabel, setExportSourceLabel] = useState<string | null>(null);
+  const [exportPreviewState, setExportPreviewState] = useState<SaveState>({ kind: 'idle' });
+  const [importPayload, setImportPayload] = useState('');
+  const [importSaveState, setImportSaveState] = useState<SaveState>({ kind: 'idle' });
   const isModuleSaveInFlight =
     Object.values(moduleCards).some((card) => card.saveState.kind === 'saving') ||
     kernelModuleState.saveState.kind === 'saving';
+  const isServiceActionInFlight = Object.values(serviceActionStates).some(
+    (actionState) => actionState.kind === 'saving',
+  );
   const modulesHaveStarted = Object.values(moduleCards).some((card) => card.kind !== 'idle');
   const isAnySaveInFlight =
     saveState.kind === 'saving' ||
@@ -2125,6 +2254,9 @@ export function App() {
     rateLimitSaveState.kind === 'saving' ||
     integrationsSaveState.kind === 'saving' ||
     profilerSaveState.kind === 'saving' ||
+    exportPreviewState.kind === 'saving' ||
+    importSaveState.kind === 'saving' ||
+    isServiceActionInFlight ||
     isModuleSaveInFlight;
 
   async function load(): Promise<LoadState> {
@@ -2434,6 +2566,128 @@ export function App() {
     }
   }
 
+  async function runServiceAction(
+    action: (typeof serviceActionDefinitions)[number],
+  ) {
+    if (serviceActionStates[action.key].kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    setServiceActionStates((current) => ({
+      ...current,
+      [action.key]: { kind: 'saving' },
+    }));
+
+    try {
+      const response = await requestJson<ApiEnvelope<ServiceActionResponse>>(action.path, {
+        method: 'POST',
+      });
+      if (!response.success || !response.data) {
+        throw new Error(response.error ?? `${action.label} failed.`);
+      }
+      const responseData = response.data;
+      setServiceActionStates((current) => ({
+        ...current,
+        [action.key]: {
+          kind: 'success',
+          message:
+            typeof responseData.message === 'string'
+              ? responseData.message
+              : action.successFallback,
+          sticky: action.sticky,
+        },
+      }));
+    } catch (error) {
+      setServiceActionStates((current) => ({
+        ...current,
+        [action.key]: {
+          kind: 'error',
+          message: error instanceof Error ? error.message : `${action.label} failed.`,
+        },
+      }));
+    }
+  }
+
+  async function loadExportPreview() {
+    if (exportPreviewState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    setExportPreviewState({ kind: 'saving' });
+
+    try {
+      const response = await requestTextWithMeta('/_sensor/config/export');
+      const filename =
+        extractDownloadFilename(response.headers.get('content-disposition')) ?? 'sensor export';
+      setExportPreview(response.body);
+      setExportSourceLabel(filename);
+      setExportPreviewState({
+        kind: 'success',
+        message: `Loaded export from ${filename}.`,
+      });
+    } catch (error) {
+      setExportPreviewState({
+        kind: 'error',
+        message: error instanceof Error ? error.message : 'Failed to export config.',
+      });
+    }
+  }
+
+  async function importConfigPayload() {
+    if (importSaveState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    if (importPayload.trim() === '') {
+      setImportSaveState({
+        kind: 'error',
+        message: 'Import payload is required.',
+      });
+      return;
+    }
+
+    setImportSaveState({ kind: 'saving' });
+
+    try {
+      const response = await requestJson<ConfigImportResponse>('/_sensor/config/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body: importPayload,
+      });
+      if (response.success !== true) {
+        throw new Error(
+          extractMessage(response, 'Failed to import configuration.'),
+        );
+      }
+      const warnings = Array.isArray(response.warnings)
+        ? response.warnings.filter((warning): warning is string => typeof warning === 'string')
+        : [];
+      const summary =
+        `${response.message ?? 'Configuration imported.'} Applied=${String(
+          response.applied === true,
+        )} persisted=${String(response.persisted === true)} rebuild_required=${String(
+          response.rebuild_required === true,
+        )}.` + (warnings.length > 0 ? ` Warnings: ${warnings.join(' ')}` : '');
+      const refreshedState = await load();
+      const refreshWarning = getRefreshWarning(refreshedState);
+      setImportSaveState({
+        kind: 'success',
+        message: summary,
+        sticky:
+          response.rebuild_required === true ||
+          warnings.length > 0 ||
+          refreshWarning.length > 0,
+        warning: refreshWarning || undefined,
+      });
+    } catch (error) {
+      setImportSaveState({
+        kind: 'error',
+        message:
+          error instanceof Error ? error.message : 'Failed to import configuration.',
+      });
+    }
+  }
+
   useEffect(() => {
     void load();
   }, []);
@@ -2507,6 +2761,30 @@ export function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [profilerSaveState]);
+
+  useEffect(() => {
+    if (exportPreviewState.kind !== 'success' || exportPreviewState.sticky === true) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setExportPreviewState({ kind: 'idle' });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [exportPreviewState]);
+
+  useEffect(() => {
+    if (importSaveState.kind !== 'success' || importSaveState.sticky === true) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setImportSaveState({ kind: 'idle' });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [importSaveState]);
 
   const overview = useMemo(() => {
     if (state.kind !== 'ready') return null;
@@ -3092,6 +3370,12 @@ export function App() {
               setSaveState({ kind: 'idle' });
               setModuleCards(buildInitialGenericModuleCards());
               setKernelModuleState(buildInitialKernelModuleState());
+              setServiceActionStates(buildInitialServiceActionStates());
+              setExportPreview('');
+              setExportSourceLabel(null);
+              setExportPreviewState({ kind: 'idle' });
+              setImportPayload('');
+              setImportSaveState({ kind: 'idle' });
               void load();
             }}
           >
@@ -3101,9 +3385,9 @@ export function App() {
       </header>
 
       <Alert status="info" title="Operator surface is live">
-        Server, site CRUD, modules, integrations, and per-site WAF/header overrides now run
-        through Console Next. TLS, shadow-mirror, and access-control editors are the next
-        full-config gaps.
+        Server, site CRUD, modules, integrations, operator actions, and per-site WAF/header
+        overrides now run through Console Next. TLS, shadow-mirror, and access-control editors
+        are the next full-config gaps.
       </Alert>
 
       <div className="console-next-tabs">
@@ -4341,6 +4625,176 @@ export function App() {
                 </Stack>
               </form>
             )}
+          </Stack>
+        </section>
+      ) : null}
+
+      {state.kind === 'ready' && activeTab === 'actions' ? (
+        <section role="tabpanel" id="panel-actions" aria-labelledby="tab-actions">
+          <Stack gap="lg">
+            <Box bg="card" p="lg" border="top" borderColor={colors.orange}>
+              <Stack gap="sm">
+                <Text variant="heading">Operator actions</Text>
+                <Text variant="body" color={colors.textSecondary}>
+                  This tab ports the legacy admin-actions surface: config reload/test,
+                  export/import, and service lifecycle controls.
+                </Text>
+              </Stack>
+            </Box>
+
+            <div className="console-next-grid">
+              {serviceActionDefinitions.map((action) => {
+                const actionState = serviceActionStates[action.key];
+                return (
+                  <Box
+                    key={action.key}
+                    bg="card"
+                    p="lg"
+                    border="top"
+                    borderColor={action.accent}
+                  >
+                    <Stack gap="md">
+                      <div>
+                        <Text variant="heading">{action.label}</Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          {action.description}
+                        </Text>
+                      </div>
+
+                      {actionState.kind === 'success' ? (
+                        <Alert status="success" title="Action completed">
+                          {actionState.message}
+                        </Alert>
+                      ) : null}
+
+                      {actionState.kind === 'error' ? (
+                        <Alert status="error" title="Action failed">
+                          {actionState.message}
+                        </Alert>
+                      ) : null}
+
+                      <div className="console-next-button-row">
+                        <Button
+                          type="button"
+                          disabled={isAnySaveInFlight}
+                          onClick={() => {
+                            void runServiceAction(action);
+                          }}
+                        >
+                          {getSaveButtonLabel(actionState, isAnySaveInFlight, action.label)}
+                        </Button>
+                      </div>
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </div>
+
+            <Box bg="card" p="lg" border="top" borderColor={colors.skyBlue}>
+              <Stack gap="md">
+                <div>
+                  <Text variant="heading">Export current config</Text>
+                  <Text variant="body" color={colors.textSecondary}>
+                    Load the raw payload from `GET /_sensor/config/export` so operators can
+                    inspect exactly what the sensor would hand off.
+                  </Text>
+                </div>
+
+                {exportPreviewState.kind === 'success' ? (
+                  <Alert status="success" title="Export ready">
+                    {exportPreviewState.message}
+                  </Alert>
+                ) : null}
+
+                {exportPreviewState.kind === 'error' ? (
+                  <Alert status="error" title="Export failed">
+                    {exportPreviewState.message}
+                  </Alert>
+                ) : null}
+
+                <div className="console-next-button-row">
+                  <Button
+                    type="button"
+                    disabled={isAnySaveInFlight}
+                    onClick={() => {
+                      void loadExportPreview();
+                    }}
+                  >
+                    {getSaveButtonLabel(exportPreviewState, isAnySaveInFlight, 'Export config')}
+                  </Button>
+                </div>
+
+                <Input
+                  fill
+                  multiline
+                  rows={12}
+                  label="Export preview"
+                  value={exportPreview}
+                  readOnly
+                  helper={
+                    exportSourceLabel
+                      ? `Loaded from ${exportSourceLabel}.`
+                      : 'Load an export to preview the current payload.'
+                  }
+                />
+              </Stack>
+            </Box>
+
+            <Box bg="card" p="lg" border="top" borderColor={colors.magenta}>
+              <form
+                className="console-next-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void importConfigPayload();
+                }}
+              >
+                <Stack gap="md">
+                  <div>
+                    <Text variant="heading">Import config</Text>
+                    <Text variant="body" color={colors.textSecondary}>
+                      Paste YAML or JSON and submit it as `text/plain` to
+                      `POST /_sensor/config/import`. Console Next refreshes the live state after
+                      a successful import.
+                    </Text>
+                  </div>
+
+                  {importSaveState.kind === 'success' ? (
+                    <>
+                      <Alert status="success" title="Import completed">
+                        {importSaveState.message}
+                      </Alert>
+                      {importSaveState.warning ? (
+                        <Alert status="warning" title="Reload required">
+                          {importSaveState.warning}
+                        </Alert>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {importSaveState.kind === 'error' ? (
+                    <Alert status="error" title="Import failed">
+                      {importSaveState.message}
+                    </Alert>
+                  ) : null}
+
+                  <Input
+                    fill
+                    multiline
+                    rows={12}
+                    label="Import config payload"
+                    value={importPayload}
+                    onChange={(event) => setImportPayload(event.currentTarget.value)}
+                    helper="Accepted formats: YAML or JSON."
+                  />
+
+                  <div className="console-next-button-row">
+                    <Button type="submit" disabled={isAnySaveInFlight}>
+                      {getSaveButtonLabel(importSaveState, isAnySaveInFlight, 'Import config')}
+                    </Button>
+                  </div>
+                </Stack>
+              </form>
+            </Box>
           </Stack>
         </section>
       ) : null}

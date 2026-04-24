@@ -123,6 +123,18 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   );
 }
 
+function textResponse(body: string, init?: ResponseInit) {
+  return Promise.resolve(
+    new Response(body, {
+      status: init?.status ?? 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        ...(init?.headers ?? {}),
+      },
+    }),
+  );
+}
+
 describe('App', () => {
   let currentConfig: any;
   let currentIntegrations: any;
@@ -133,6 +145,7 @@ describe('App', () => {
   let modulePutFailures: Record<string, { status: number; body: unknown }>;
   let kernelGetFailure: { status: number; body: unknown } | null;
   let kernelPutResponse: { status: number; body: unknown } | null;
+  let currentExportPayload: string;
   let fetchMock: FetchMock;
 
   beforeEach(() => {
@@ -145,6 +158,16 @@ describe('App', () => {
     modulePutFailures = {};
     kernelGetFailure = null;
     kernelPutResponse = null;
+    currentExportPayload = [
+      'server:',
+      '  http_addr: 0.0.0.0:80',
+      'sites:',
+      '  - hostname: example.com',
+      '    upstreams:',
+      '      - host: origin.internal',
+      '        port: 8080',
+      '',
+    ].join('\n');
     fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
@@ -163,6 +186,67 @@ describe('App', () => {
 
       if (url === '/_sensor/status') {
         return jsonResponse({ mode: 'proxy', blocked_requests: 4, running: true });
+      }
+
+      if (url === '/reload' && method === 'POST') {
+        return jsonResponse({
+          success: true,
+          data: {
+            success: true,
+            message: 'Configuration reloaded successfully.',
+          },
+        });
+      }
+
+      if (url === '/test' && method === 'POST') {
+        return jsonResponse({
+          success: true,
+          data: {
+            success: true,
+            message: 'Configuration syntax OK',
+          },
+        });
+      }
+
+      if (url === '/restart' && method === 'POST') {
+        return jsonResponse({
+          success: true,
+          data: {
+            success: true,
+            message: 'Restart requested. Synapse WAF will restart using /usr/local/bin/synapse-waf.',
+          },
+        });
+      }
+
+      if (url === '/shutdown' && method === 'POST') {
+        return jsonResponse({
+          success: true,
+          data: {
+            success: true,
+            message: 'Shutdown requested. Synapse WAF is draining existing connections.',
+          },
+        });
+      }
+
+      if (url === '/_sensor/config/export' && method === 'GET') {
+        return textResponse(currentExportPayload, {
+          headers: {
+            'Content-Type': 'application/x-yaml',
+            'Content-Disposition': 'attachment; filename="sensor-config.yaml"',
+          },
+        });
+      }
+
+      if (url === '/_sensor/config/import' && method === 'POST') {
+        currentExportPayload = String(init?.body ?? currentExportPayload);
+        return jsonResponse({
+          success: true,
+          message: 'Configuration imported and applied successfully.',
+          applied: true,
+          persisted: true,
+          rebuild_required: true,
+          warnings: [],
+        });
       }
 
       if (url === '/_sensor/config') {
@@ -472,6 +556,22 @@ describe('App', () => {
     await screen.findByText('Threat-detection modules');
   }
 
+  async function openActionsTab() {
+    render(<App />);
+    await screen.findByText('Synapse Operator UI');
+    fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
+    await screen.findByText('Operator actions');
+  }
+
+  function lastRequest(path: string, method: string): [string, RequestInit] | null {
+    const calls = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as [string, RequestInit | undefined];
+      return url === path && (init?.method ?? 'GET') === method;
+    }) as Array<[string, RequestInit]>;
+    if (calls.length === 0) return null;
+    return calls[calls.length - 1] ?? null;
+  }
+
   it('loads the modules tab with generic module editors and kernel parameters', async () => {
     await openModulesTab();
 
@@ -626,6 +726,73 @@ describe('App', () => {
 
     expect((await screen.findAllByText('Kernel module unavailable')).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Max matches')).toBeInTheDocument();
+  });
+
+  it('loads the export preview from the legacy config-export endpoint', async () => {
+    await openActionsTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export config' }));
+
+    await waitFor(() => {
+      expect(lastRequest('/_sensor/config/export', 'GET')).not.toBeNull();
+    });
+
+    expect(await screen.findByLabelText('Export preview')).toHaveValue(currentExportPayload);
+    expect(await screen.findByText('Loaded export from sensor-config.yaml.')).toBeInTheDocument();
+  });
+
+  it('imports raw config payloads with text/plain and surfaces the backend receipt', async () => {
+    const importPayload = ['server:', '  http_addr: 127.0.0.1:8080', 'sites: []', ''].join('\n');
+
+    await openActionsTab();
+
+    fireEvent.change(await screen.findByLabelText('Import config payload'), {
+      target: { value: importPayload },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import config' }));
+
+    await waitFor(() => {
+      expect(lastRequest('/_sensor/config/import', 'POST')).not.toBeNull();
+    });
+
+    const importRequest = lastRequest('/_sensor/config/import', 'POST');
+    expect(importRequest?.[1].headers).toMatchObject({
+      'Content-Type': 'text/plain; charset=utf-8',
+    });
+    expect(String(importRequest?.[1].body ?? '')).toBe(importPayload);
+    expect(
+      await screen.findByText(
+        'Configuration imported and applied successfully. Applied=true persisted=true rebuild_required=true.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('runs restart and shutdown actions through the service-manage endpoints', async () => {
+    await openActionsTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart service' }));
+
+    await waitFor(() => {
+      expect(lastRequest('/restart', 'POST')).not.toBeNull();
+    });
+
+    expect(
+      await screen.findByText(
+        'Restart requested. Synapse WAF will restart using /usr/local/bin/synapse-waf.',
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shutdown service' }));
+
+    await waitFor(() => {
+      expect(lastRequest('/shutdown', 'POST')).not.toBeNull();
+    });
+
+    expect(
+      await screen.findByText(
+        'Shutdown requested. Synapse WAF is draining existing connections.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('loads the integrations tab and renders the backend fields', async () => {

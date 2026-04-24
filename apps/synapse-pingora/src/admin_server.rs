@@ -7,6 +7,7 @@
 //! - POST /reload - Reload configuration (requires auth)
 //! - POST /test - Test configuration (dry-run, requires auth)
 //! - POST /restart - Restart service (requires auth)
+//! - POST /shutdown - Gracefully stop the service (requires auth)
 //! - GET /sites - List configured sites
 //! - GET /stats - Runtime statistics
 //! - GET /waf/stats - WAF statistics
@@ -83,6 +84,7 @@ pub struct IntegrationsConfigView {
 type IntegrationsGetter = Box<dyn Fn() -> IntegrationsConfig + Send + Sync>;
 type IntegrationsSetter = Box<dyn Fn(IntegrationsConfig) -> Result<(), String> + Send + Sync>;
 type RestartTrigger = Box<dyn Fn() -> Result<RestartResult, String> + Send + Sync>;
+type ShutdownTrigger = Box<dyn Fn() -> Result<ShutdownResult, String> + Send + Sync>;
 
 /// Detection result from WAF evaluation (for admin API)
 #[derive(Debug, Clone, serde::Serialize)]
@@ -111,6 +113,8 @@ static INTEGRATIONS_GETTER: Lazy<RwLock<Option<IntegrationsGetter>>> =
 static INTEGRATIONS_SETTER: Lazy<RwLock<Option<IntegrationsSetter>>> =
     Lazy::new(|| RwLock::new(None));
 static RESTART_TRIGGER: Lazy<RwLock<Option<RestartTrigger>>> = Lazy::new(|| RwLock::new(None));
+static SHUTDOWN_TRIGGER: Lazy<RwLock<Option<ShutdownTrigger>>> =
+    Lazy::new(|| RwLock::new(None));
 
 fn default_integrations_config() -> IntegrationsConfig {
     IntegrationsConfig {
@@ -317,6 +321,15 @@ where
     *RESTART_TRIGGER.write() = Some(Box::new(callback));
 }
 
+/// Register a callback that performs a graceful service shutdown.
+/// Called by the binary (main.rs) during startup.
+pub fn register_shutdown_callback<F>(callback: F)
+where
+    F: Fn() -> Result<ShutdownResult, String> + Send + Sync + 'static,
+{
+    *SHUTDOWN_TRIGGER.write() = Some(Box::new(callback));
+}
+
 /// Retrieve the currently registered integrations config.
 pub fn get_registered_integrations_config() -> Result<IntegrationsConfig, String> {
     let getter = INTEGRATIONS_GETTER.read();
@@ -340,6 +353,15 @@ pub fn trigger_registered_restart() -> Result<RestartResult, String> {
     let trigger = RESTART_TRIGGER.read();
     let Some(trigger) = trigger.as_ref() else {
         return Err("Restart is not supported by this sensor instance".to_string());
+    };
+    trigger()
+}
+
+/// Trigger a graceful service shutdown through the registered callback.
+pub fn trigger_registered_shutdown() -> Result<ShutdownResult, String> {
+    let trigger = SHUTDOWN_TRIGGER.read();
+    let Some(trigger) = trigger.as_ref() else {
+        return Err("Shutdown is not supported by this sensor instance".to_string());
     };
     trigger()
 }
@@ -693,7 +715,7 @@ pub mod scopes {
     pub const ADMIN_WRITE: &str = "admin:write";
     /// Configuration write access (site CRUD, WAF settings)
     pub const CONFIG_WRITE: &str = "config:write";
-    /// Service management (restart, reset operations)
+    /// Service management (restart, shutdown, reset operations)
     pub const SERVICE_MANAGE: &str = "service:manage";
     /// Sensitive sensor data access (campaigns, DLP, correlation graphs)
     pub const SENSOR_READ: &str = "sensor:read";
@@ -1765,9 +1787,10 @@ pub async fn start_admin_server(
             rate_limit_admin,
         ));
 
-    // Routes requiring service:manage scope (restart, reset operations)
+    // Routes requiring service:manage scope (restart, shutdown, reset operations)
     let service_manage_routes = Router::new()
         .route("/restart", post(restart_handler))
+        .route("/shutdown", post(shutdown_handler))
         .route("/api/profiles/reset", post(api_profiles_reset_handler))
         .route("/api/schemas/reset", post(api_schemas_reset_handler))
         .route_layer(middleware::from_fn_with_state(
@@ -2115,6 +2138,7 @@ async fn root_handler() -> impl IntoResponse {
             { "method": "POST", "path": "/reload", "description": "Reload configuration" },
             { "method": "POST", "path": "/test", "description": "Test configuration" },
             { "method": "POST", "path": "/restart", "description": "Restart service" },
+            { "method": "POST", "path": "/shutdown", "description": "Gracefully stop service" },
             { "method": "GET", "path": "/sites", "description": "List sites" },
             { "method": "GET", "path": "/stats", "description": "Runtime statistics" },
             { "method": "GET", "path": "/waf/stats", "description": "WAF statistics" }
@@ -2305,6 +2329,14 @@ async fn restart_handler() -> impl IntoResponse {
     match trigger_registered_restart() {
         Ok(result) => wrap_response(ApiResponse::ok(result)),
         Err(error) => wrap_response(ApiResponse::<RestartResult>::err(error)),
+    }
+}
+
+/// POST /shutdown - Gracefully stop service
+async fn shutdown_handler() -> impl IntoResponse {
+    match trigger_registered_shutdown() {
+        Ok(result) => wrap_response(ApiResponse::ok(result)),
+        Err(error) => wrap_response(ApiResponse::<ShutdownResult>::err(error)),
     }
 }
 
@@ -5909,6 +5941,13 @@ pub struct RestartResult {
     pub message: String,
 }
 
+/// Shutdown result.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ShutdownResult {
+    pub success: bool,
+    pub message: String,
+}
+
 /// Request payload for dry-run WAF evaluation (Phase 2: Lab View)
 #[derive(Debug, Deserialize)]
 pub struct EvaluateRequest {
@@ -7676,6 +7715,12 @@ mod tests {
                 message: "Restart requested".to_string(),
             })
         });
+        register_shutdown_callback(|| {
+            Ok(ShutdownResult {
+                success: true,
+                message: "Shutdown requested".to_string(),
+            })
+        });
 
         Router::new()
             .route("/health", get(health_handler))
@@ -7686,6 +7731,7 @@ mod tests {
             .route("/reload", post(reload_handler))
             .route("/test", post(test_handler))
             .route("/restart", post(restart_handler))
+            .route("/shutdown", post(shutdown_handler))
             .route("/", get(root_handler))
             .route_layer(middleware::from_fn_with_state(state.clone(), require_auth))
             .layer(middleware::from_fn(security_headers))
@@ -8773,6 +8819,25 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/restart")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_endpoint() {
+        let app = create_test_app();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/shutdown")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
