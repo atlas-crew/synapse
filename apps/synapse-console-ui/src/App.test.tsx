@@ -35,6 +35,18 @@ const baseConfig = {
   profiler: { enabled: true, max_profiles: 1000 },
 };
 
+const baseIntegrations = {
+  access_mode: 'remote_management',
+  sensor_api_key_set: true,
+  horizon_hub_url: 'wss://horizon.example.com/ws/sensors',
+  horizon_api_key: '',
+  horizon_api_key_set: true,
+  tunnel_url: 'wss://horizon.example.com/ws/tunnel/sensor',
+  tunnel_api_key: '',
+  tunnel_api_key_set: true,
+  apparatus_url: 'https://apparatus.example.com',
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
@@ -49,10 +61,16 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 
 describe('App', () => {
   let currentConfig: any;
+  let currentIntegrations: any;
+  let currentIntegrationsEtag: string;
+  let integrationsPutCount: number;
   let fetchMock: FetchMock;
 
   beforeEach(() => {
     currentConfig = structuredClone(baseConfig);
+    currentIntegrations = structuredClone(baseIntegrations);
+    currentIntegrationsEtag = '"integrations-v1"';
+    integrationsPutCount = 0;
     fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
@@ -79,6 +97,39 @@ describe('App', () => {
             ],
           },
         });
+      }
+
+      if (url === '/_sensor/config/integrations' && method === 'GET') {
+        return jsonResponse(
+          {
+            success: true,
+            data: currentIntegrations,
+          },
+          { headers: { ETag: currentIntegrationsEtag } },
+        );
+      }
+
+      if (url === '/_sensor/config/integrations' && method === 'PUT') {
+        integrationsPutCount += 1;
+        currentIntegrations = {
+          ...currentIntegrations,
+          ...JSON.parse(String(init?.body ?? '{}')),
+        };
+        currentIntegrationsEtag = `"integrations-v${integrationsPutCount + 1}"`;
+        return jsonResponse(
+          {
+            success: true,
+            data: {
+              applied: true,
+              persisted: true,
+              rebuild_required: true,
+              warnings: [],
+            },
+            message:
+              'Integrations configuration updated. Restart synapse-waf to apply live Horizon and Tunnel connections.',
+          },
+          { headers: { ETag: currentIntegrationsEtag } },
+        );
       }
 
       if (url === '/config' && method === 'GET') {
@@ -203,6 +254,23 @@ describe('App', () => {
     expect(savedBody.server.admin_api_key).toBeNull();
   });
 
+  function lastIntegrationsPutBody(): Record<string, unknown> | null {
+    const putCalls = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as [string, RequestInit | undefined];
+      return url === '/_sensor/config/integrations' && init?.method === 'PUT';
+    });
+    if (putCalls.length === 0) return null;
+    const last = putCalls[putCalls.length - 1] as [string, RequestInit];
+    return JSON.parse(String(last[1].body ?? '{}'));
+  }
+
+  function integrationsPutCalls(): Array<[string, RequestInit]> {
+    return fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as [string, RequestInit | undefined];
+      return url === '/_sensor/config/integrations' && init?.method === 'PUT';
+    }) as Array<[string, RequestInit]>;
+  }
+
   function lastSitesPostBody(): { sites: typeof baseConfig.sites } | null {
     const postCalls = fetchMock.mock.calls.filter((call) => {
       const [url, init] = call as [string, RequestInit | undefined];
@@ -233,6 +301,362 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Profiler' }));
     await screen.findByLabelText('Max profiles');
   }
+
+  async function openIntegrationsTab() {
+    render(<App />);
+    await screen.findByText('Synapse Operator UI');
+    fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+    await screen.findByLabelText('Access mode');
+  }
+
+  it('loads the integrations tab and renders the backend fields', async () => {
+    await openIntegrationsTab();
+
+    expect(await screen.findByLabelText('Access mode')).toHaveValue('remote_management');
+    expect(screen.getByLabelText('Horizon hub URL')).toHaveValue(
+      'wss://horizon.example.com/ws/sensors',
+    );
+    expect(screen.getByLabelText('Tunnel URL')).toHaveValue(
+      'wss://horizon.example.com/ws/tunnel/sensor',
+    );
+    expect(screen.getByLabelText('Apparatus URL')).toHaveValue(
+      'https://apparatus.example.com',
+    );
+    expect(screen.getByLabelText('Sensor key')).toHaveValue('');
+    expect(screen.getByText('Stored sensor key present')).toBeInTheDocument();
+    expect(screen.getByText('Stored Horizon key present')).toBeInTheDocument();
+    expect(screen.getByText('Stored tunnel key present')).toBeInTheDocument();
+  });
+
+  it('does not hydrate or resubmit dedicated integration secrets returned by the backend', async () => {
+    currentIntegrations = {
+      ...structuredClone(baseIntegrations),
+      horizon_api_key: 'server-returned-horizon-secret',
+      tunnel_api_key: 'server-returned-tunnel-secret',
+    };
+
+    await openIntegrationsTab();
+
+    expect(screen.getByLabelText('Horizon key')).toHaveValue('');
+    expect(screen.getByLabelText('Tunnel key')).toHaveValue('');
+
+    fireEvent.change(screen.getByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus-alt.example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(lastIntegrationsPutBody()).not.toBeNull();
+    });
+
+    expect(lastIntegrationsPutBody()).toEqual({
+      apparatus_url: 'https://apparatus-alt.example.com',
+    });
+  });
+
+  it('saves integrations edits through the dedicated integrations endpoint', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Access mode'), {
+      target: { value: 'tunnel' },
+    });
+    fireEvent.change(screen.getByLabelText('Tunnel URL'), {
+      target: { value: 'wss://tunnel.example.com/ws/sensor' },
+    });
+    fireEvent.change(screen.getByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus-alt.example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Sensor key'), {
+      target: { value: 'sensor-key-2' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(lastIntegrationsPutBody()).not.toBeNull();
+    });
+
+    expect(lastIntegrationsPutBody()).toEqual({
+      access_mode: 'tunnel',
+      tunnel_url: 'wss://tunnel.example.com/ws/sensor',
+      apparatus_url: 'https://apparatus-alt.example.com',
+      sensor_api_key: 'sensor-key-2',
+    });
+    const putCall = fetchMock.mock.calls.find((call) => {
+      const [url, init] = call as [string, RequestInit | undefined];
+      return url === '/_sensor/config/integrations' && init?.method === 'PUT';
+    });
+    expect((putCall?.[1] as RequestInit | undefined)?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'If-Match': '"integrations-v1"',
+    });
+    expect(
+      await screen.findByText(
+        'Integrations configuration updated. Restart synapse-waf to apply live Horizon and Tunnel connections. Applied=true persisted=true rebuild_required=true.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('advances the integrations etag after save so the next save uses the refreshed version', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus-first.example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(integrationsPutCalls()).toHaveLength(1);
+    });
+
+    fireEvent.change(screen.getByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus-second.example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(integrationsPutCalls()).toHaveLength(2);
+    });
+
+    const [, secondCall] = integrationsPutCalls()[1];
+    expect(secondCall.headers).toMatchObject({
+      'If-Match': '"integrations-v2"',
+    });
+    expect(JSON.parse(String(secondCall.body ?? '{}'))).toEqual({
+      apparatus_url: 'https://apparatus-second.example.com',
+    });
+  });
+
+  it('keeps clear-key actions exclusive from replacement-key payloads', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Access mode'), {
+      target: { value: 'telemetry' },
+    });
+    fireEvent.change(screen.getByLabelText('Sensor key'), {
+      target: { value: 'sensor-key-2' },
+    });
+    fireEvent.click(screen.getByLabelText('Clear stored sensor key'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(lastIntegrationsPutBody()).not.toBeNull();
+    });
+
+    expect(lastIntegrationsPutBody()).toEqual({
+      access_mode: 'telemetry',
+      clear_sensor_api_key: true,
+    });
+  });
+
+  it('shows clear-intent copy before integrations credentials are removed', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.click(screen.getByLabelText('Clear stored sensor key'));
+    fireEvent.click(screen.getByLabelText('Clear stored Horizon key'));
+    fireEvent.click(screen.getByLabelText('Clear stored tunnel key'));
+
+    expect(screen.getByText('Stored sensor key will be cleared on save')).toBeInTheDocument();
+    expect(screen.getByText('Stored Horizon key will be cleared on save')).toBeInTheDocument();
+    expect(screen.getByText('Stored tunnel key will be cleared on save')).toBeInTheDocument();
+  });
+
+  it('sends empty strings when integration URLs are explicitly cleared', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Access mode'), {
+      target: { value: 'telemetry' },
+    });
+    fireEvent.change(screen.getByLabelText('Horizon hub URL'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Tunnel URL'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Apparatus URL'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(lastIntegrationsPutBody()).not.toBeNull();
+    });
+
+    expect(lastIntegrationsPutBody()).toEqual({
+      access_mode: 'telemetry',
+      horizon_hub_url: '',
+      tunnel_url: '',
+      apparatus_url: '',
+    });
+  });
+
+  it('pins access mode on first save when the backend did not return one', async () => {
+    currentIntegrations = {
+      ...structuredClone(baseIntegrations),
+      access_mode: undefined,
+    };
+
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus-alt.example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    await waitFor(() => {
+      expect(lastIntegrationsPutBody()).not.toBeNull();
+    });
+
+    expect(lastIntegrationsPutBody()).toEqual({
+      access_mode: 'remote_management',
+      apparatus_url: 'https://apparatus-alt.example.com',
+    });
+  });
+
+  it('surfaces backend validation errors from the integrations endpoint', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+
+      if (url === '/health') return jsonResponse({ healthy: true, status: 'ok' });
+      if (url === '/_sensor/status')
+        return jsonResponse({ mode: 'proxy', blocked_requests: 4, running: true });
+      if (url === '/_sensor/config')
+        return jsonResponse({ success: true, data: { sites: [] } });
+      if (url === '/config' && method === 'GET') {
+        return jsonResponse(
+          { success: true, data: currentConfig },
+          { headers: { ETag: '"config-v1"' } },
+        );
+      }
+      if (url === '/_sensor/config/integrations' && method === 'GET') {
+        return jsonResponse(
+          { success: true, data: currentIntegrations },
+          { headers: { ETag: '"integrations-v1"' } },
+        );
+      }
+      if (url === '/_sensor/config/integrations' && method === 'PUT') {
+        return jsonResponse(
+          { success: false, message: 'Tunnel WebSocket URL is required when Tunnel mode is enabled' },
+          { status: 400 },
+        );
+      }
+      if (url === '/config' && method === 'POST') {
+        currentConfig = JSON.parse(String(init?.body ?? '{}'));
+        return jsonResponse({
+          success: true,
+          data: { applied: true, persisted: true, rebuild_required: true, warnings: [] },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    await openIntegrationsTab();
+    fireEvent.change(await screen.findByLabelText('Access mode'), {
+      target: { value: 'tunnel' },
+    });
+    fireEvent.change(screen.getByLabelText('Tunnel URL'), { target: { value: '' } });
+    fireEvent.click(screen.getByLabelText('Clear stored sensor key'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    expect(
+      await screen.findByText('Tunnel WebSocket URL is required when Tunnel mode is enabled'),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces unsupported-instance errors from the integrations endpoint', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+
+      if (url === '/health') return jsonResponse({ healthy: true, status: 'ok' });
+      if (url === '/_sensor/status')
+        return jsonResponse({ mode: 'proxy', blocked_requests: 4, running: true });
+      if (url === '/_sensor/config')
+        return jsonResponse({ success: true, data: { sites: [] } });
+      if (url === '/config' && method === 'GET') {
+        return jsonResponse(
+          { success: true, data: currentConfig },
+          { headers: { ETag: '"config-v1"' } },
+        );
+      }
+      if (url === '/_sensor/config/integrations' && method === 'GET') {
+        return jsonResponse(
+          { success: true, data: currentIntegrations },
+          { headers: { ETag: '"integrations-v1"' } },
+        );
+      }
+      if (url === '/_sensor/config/integrations' && method === 'PUT') {
+        return jsonResponse(
+          {
+            success: false,
+            message: 'Configuration updates not supported by this sensor instance',
+          },
+          { status: 503 },
+        );
+      }
+      if (url === '/config' && method === 'POST') {
+        currentConfig = JSON.parse(String(init?.body ?? '{}'));
+        return jsonResponse({
+          success: true,
+          data: { applied: true, persisted: true, rebuild_required: true, warnings: [] },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    await openIntegrationsTab();
+    fireEvent.change(await screen.findByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus-alt.example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    expect(
+      await screen.findByText('Configuration updates not supported by this sensor instance'),
+    ).toBeInTheDocument();
+  });
+
+  it('blocks integrations save on invalid client-side URL input', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Horizon hub URL'), {
+      target: { value: 'https://not-websocket.example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    expect(
+      await screen.findByText('Horizon hub URL must be a valid ws:// or wss:// URL.'),
+    ).toBeInTheDocument();
+    expect(lastIntegrationsPutBody()).toBeNull();
+  });
+
+  it('blocks integrations save when a URL includes embedded credentials', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Horizon hub URL'), {
+      target: { value: 'wss://admin:secret@horizon.example.com/ws/sensors' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    expect(
+      await screen.findByText('Horizon hub URL must not include embedded credentials.'),
+    ).toBeInTheDocument();
+    expect(lastIntegrationsPutBody()).toBeNull();
+  });
+
+  it('blocks integrations save when a URL includes a fragment', async () => {
+    await openIntegrationsTab();
+
+    fireEvent.change(await screen.findByLabelText('Apparatus URL'), {
+      target: { value: 'https://apparatus.example.com#fragment' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save integrations' }));
+
+    expect(
+      await screen.findByText('Apparatus URL must not include a URL fragment.'),
+    ).toBeInTheDocument();
+    expect(lastIntegrationsPutBody()).toBeNull();
+  });
 
   it('adds a new site via POST /config and preserves existing sites', async () => {
     await openSitesTab();

@@ -133,6 +133,18 @@ type ProfilerConfig = {
   [key: string]: unknown;
 };
 
+type IntegrationAccessMode = 'telemetry' | 'tunnel' | 'remote_management';
+
+type IntegrationsConfigView = {
+  access_mode?: IntegrationAccessMode;
+  sensor_api_key_set?: boolean;
+  horizon_hub_url?: string;
+  horizon_api_key_set?: boolean;
+  tunnel_url?: string;
+  tunnel_api_key_set?: boolean;
+  apparatus_url?: string;
+};
+
 type ConfigFile = {
   server: GlobalConfig;
   sites: SiteConfig[];
@@ -196,6 +208,19 @@ type ProfilerFormState = {
   freeze_after_samples: string;
 };
 
+type IntegrationsFormState = {
+  access_mode: IntegrationAccessMode;
+  horizon_hub_url: string;
+  sensor_api_key: string;
+  clear_sensor_api_key: boolean;
+  horizon_api_key: string;
+  clear_horizon_api_key: boolean;
+  tunnel_url: string;
+  tunnel_api_key: string;
+  clear_tunnel_api_key: boolean;
+  apparatus_url: string;
+};
+
 type UpstreamFormRow = {
   id: string;
   baseUpstream: NonNullable<SiteConfig['upstreams']>[number] | null;
@@ -253,6 +278,8 @@ type LoadState =
       fullConfig?: ConfigFile;
       configEtag?: string | null;
       sensorConfig?: SensorConfigResponse;
+      integrationsConfig?: IntegrationsConfigView;
+      integrationsEtag?: string | null;
       loadedAt: string;
       warnings: string[];
     };
@@ -262,6 +289,7 @@ const tabs = [
   { key: 'server', label: 'Server' },
   { key: 'sites', label: 'Sites' },
   { key: 'rate-limit', label: 'Rate Limit' },
+  { key: 'integrations', label: 'Integrations' },
   { key: 'profiler', label: 'Profiler' },
   { key: 'roadmap', label: 'Roadmap' },
 ] as const;
@@ -273,6 +301,21 @@ const logLevelOptions = [
   { value: 'warn', label: 'warn' },
   { value: 'error', label: 'error' },
 ];
+
+const integrationAccessModeOptions = [
+  { value: 'telemetry', label: 'telemetry' },
+  { value: 'tunnel', label: 'tunnel' },
+  { value: 'remote_management', label: 'remote_management' },
+];
+
+function parseIntegrationAccessMode(
+  value: string,
+  fallback: IntegrationAccessMode,
+): IntegrationAccessMode {
+  return integrationAccessModeOptions.some((option) => option.value === value)
+    ? (value as IntegrationAccessMode)
+    : fallback;
+}
 
 const defaultTrapPaths = [
   '/.git/*',
@@ -439,11 +482,21 @@ function buildHeaderOpsConfig(
   const baseRecord = isRecord(base) ? (base as HeaderOpsConfig) : {};
   const { add: _baseAdd, set: _baseSet, remove: _baseRemove, ...rest } = baseRecord;
   const next: HeaderOpsConfig = { ...rest };
-  if (Object.keys(nextOps.add).length > 0) {
-    next.add = nextOps.add;
+  const baseAddEntries = isRecord(base?.add)
+    ? Object.fromEntries(
+        Object.entries(base.add).filter(([, value]) => typeof value !== 'string'),
+      )
+    : {};
+  const baseSetEntries = isRecord(base?.set)
+    ? Object.fromEntries(
+        Object.entries(base.set).filter(([, value]) => typeof value !== 'string'),
+      )
+    : {};
+  if (Object.keys(nextOps.add).length > 0 || Object.keys(baseAddEntries).length > 0) {
+    next.add = { ...baseAddEntries, ...nextOps.add };
   }
-  if (Object.keys(nextOps.set).length > 0) {
-    next.set = nextOps.set;
+  if (Object.keys(nextOps.set).length > 0 || Object.keys(baseSetEntries).length > 0) {
+    next.set = { ...baseSetEntries, ...nextOps.set };
   }
   if (nextOps.remove.length > 0) {
     next.remove = nextOps.remove;
@@ -631,6 +684,23 @@ function buildProfilerForm(profiler?: ProfilerConfig): ProfilerFormState {
   };
 }
 
+function buildIntegrationsForm(
+  integrations?: IntegrationsConfigView,
+): IntegrationsFormState {
+  return {
+    access_mode: integrations?.access_mode ?? 'remote_management',
+    horizon_hub_url: integrations?.horizon_hub_url ?? '',
+    sensor_api_key: '',
+    clear_sensor_api_key: false,
+    horizon_api_key: '',
+    clear_horizon_api_key: false,
+    tunnel_url: integrations?.tunnel_url ?? '',
+    tunnel_api_key: '',
+    clear_tunnel_api_key: false,
+    apparatus_url: integrations?.apparatus_url ?? '',
+  };
+}
+
 function buildSiteForm(site?: SiteConfig): SiteFormState {
   const upstreamSource = site?.upstreams && site.upstreams.length > 0 ? site.upstreams : [{}];
   return {
@@ -709,7 +779,7 @@ function siteFromForm(form: SiteFormState, base?: SiteConfig): SiteConfig {
     Object.keys(nextRuleOverrides).length > 0;
 
   if (wafMatchesBase) {
-    nextSite.waf = baseWaf;
+    nextSite.waf = structuredClone(baseWaf);
   } else if (!baseWaf && !wafIsMeaningful) {
     delete nextSite.waf;
   } else {
@@ -768,7 +838,7 @@ function siteFromForm(form: SiteFormState, base?: SiteConfig): SiteConfig {
     nextResponseOps.remove.length > 0;
 
   if (headersMatchBase) {
-    nextSite.headers = baseHeaders;
+    nextSite.headers = structuredClone(baseHeaders);
   } else if (!baseHeaders && !headersAreMeaningful) {
     delete nextSite.headers;
   } else {
@@ -818,6 +888,146 @@ function buildServerForm(server?: GlobalConfig): ServerFormState {
         : String(trap.extended_tarpit_ms),
     trap_alert_telemetry: trap?.alert_telemetry ?? true,
   };
+}
+
+function validateOptionalUrl(
+  value: string,
+  label: string,
+  protocols: string[],
+  displayProtocols: string,
+): string {
+  const normalized = value.trim();
+  if (normalized === '') {
+    return '';
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`${label} must be a valid ${displayProtocols} URL.`);
+  }
+
+  if (!protocols.includes(parsed.protocol)) {
+    throw new Error(`${label} must be a valid ${displayProtocols} URL.`);
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new Error(`${label} must not include embedded credentials.`);
+  }
+  if (parsed.hash !== '') {
+    throw new Error(`${label} must not include a URL fragment.`);
+  }
+
+  return normalized;
+}
+
+function buildIntegrationsUpdate(
+  form: IntegrationsFormState,
+  base?: IntegrationsConfigView,
+): { payload: Record<string, unknown>; nextConfig: IntegrationsConfigView } {
+  const baseConfig = base ?? {};
+  const payload: Record<string, unknown> = {};
+  const nextConfig: IntegrationsConfigView = {
+    access_mode: baseConfig.access_mode,
+    sensor_api_key_set: baseConfig.sensor_api_key_set,
+    horizon_hub_url: baseConfig.horizon_hub_url,
+    horizon_api_key_set: baseConfig.horizon_api_key_set,
+    tunnel_url: baseConfig.tunnel_url,
+    tunnel_api_key_set: baseConfig.tunnel_api_key_set,
+    apparatus_url: baseConfig.apparatus_url,
+  };
+
+  const nextAccessMode = form.access_mode;
+  if (baseConfig.access_mode === undefined || nextAccessMode !== baseConfig.access_mode) {
+    payload.access_mode = nextAccessMode;
+  }
+  nextConfig.access_mode = nextAccessMode;
+
+  const nextHorizonHubUrl = validateOptionalUrl(
+    form.horizon_hub_url,
+    'Horizon hub URL',
+    ['ws:', 'wss:'],
+    'ws:// or wss://',
+  );
+  if (nextHorizonHubUrl !== (baseConfig.horizon_hub_url ?? '')) {
+    // The admin integrations endpoint accepts an empty string as an explicit clear signal.
+    payload.horizon_hub_url = nextHorizonHubUrl;
+    nextConfig.horizon_hub_url = nextHorizonHubUrl;
+  }
+
+  const nextTunnelUrl = validateOptionalUrl(
+    form.tunnel_url,
+    'Tunnel URL',
+    ['ws:', 'wss:'],
+    'ws:// or wss://',
+  );
+  if (nextTunnelUrl !== (baseConfig.tunnel_url ?? '')) {
+    payload.tunnel_url = nextTunnelUrl;
+    nextConfig.tunnel_url = nextTunnelUrl;
+  }
+
+  const nextApparatusUrl = validateOptionalUrl(
+    form.apparatus_url,
+    'Apparatus URL',
+    ['http:', 'https:'],
+    'http:// or https://',
+  );
+  if (nextApparatusUrl !== (baseConfig.apparatus_url ?? '')) {
+    payload.apparatus_url = nextApparatusUrl;
+    nextConfig.apparatus_url = nextApparatusUrl;
+  }
+  nextConfig.sensor_api_key_set = applyIntegrationSecretUpdate(payload, {
+    label: 'sensor key',
+    clear: form.clear_sensor_api_key,
+    value: form.sensor_api_key,
+    currentSet: baseConfig.sensor_api_key_set ?? false,
+    clearField: 'clear_sensor_api_key',
+    valueField: 'sensor_api_key',
+  });
+  nextConfig.horizon_api_key_set = applyIntegrationSecretUpdate(payload, {
+    label: 'Horizon key',
+    clear: form.clear_horizon_api_key,
+    value: form.horizon_api_key,
+    currentSet: baseConfig.horizon_api_key_set ?? false,
+    clearField: 'clear_horizon_api_key',
+    valueField: 'horizon_api_key',
+  });
+  nextConfig.tunnel_api_key_set = applyIntegrationSecretUpdate(payload, {
+    label: 'tunnel key',
+    clear: form.clear_tunnel_api_key,
+    value: form.tunnel_api_key,
+    currentSet: baseConfig.tunnel_api_key_set ?? false,
+    clearField: 'clear_tunnel_api_key',
+    valueField: 'tunnel_api_key',
+  });
+
+  return { payload, nextConfig };
+}
+
+function applyIntegrationSecretUpdate(
+  payload: Record<string, unknown>,
+  options: {
+    label: string;
+    clear: boolean;
+    value: string;
+    currentSet: boolean;
+    clearField: 'clear_sensor_api_key' | 'clear_horizon_api_key' | 'clear_tunnel_api_key';
+    valueField: 'sensor_api_key' | 'horizon_api_key' | 'tunnel_api_key';
+  },
+): boolean {
+  const nextValue = options.value.trim();
+  if (options.clear && nextValue !== '') {
+    throw new Error(`Cannot clear and replace the ${options.label} in the same save.`);
+  }
+  if (options.clear) {
+    payload[options.clearField] = true;
+    return false;
+  }
+  if (nextValue !== '') {
+    payload[options.valueField] = nextValue;
+    return true;
+  }
+  return options.currentSet;
 }
 
 function parseIntegerField(
@@ -1438,12 +1648,19 @@ export function App() {
     buildRateLimitForm(),
   );
   const [rateLimitSaveState, setRateLimitSaveState] = useState<SaveState>({ kind: 'idle' });
+  const [integrationsForm, setIntegrationsForm] = useState<IntegrationsFormState>(() =>
+    buildIntegrationsForm(),
+  );
+  const [integrationsSaveState, setIntegrationsSaveState] = useState<SaveState>({
+    kind: 'idle',
+  });
   const [profilerForm, setProfilerForm] = useState<ProfilerFormState>(() => buildProfilerForm());
   const [profilerSaveState, setProfilerSaveState] = useState<SaveState>({ kind: 'idle' });
   const isAnySaveInFlight =
     saveState.kind === 'saving' ||
     siteSaveState.kind === 'saving' ||
     rateLimitSaveState.kind === 'saving' ||
+    integrationsSaveState.kind === 'saving' ||
     profilerSaveState.kind === 'saving';
 
   async function load(): Promise<LoadState> {
@@ -1454,9 +1671,16 @@ export function App() {
       requestJson<StatusResponse>('/_sensor/status'),
       readApiWithMeta<ConfigFile>('/config'),
       requestJson<SensorConfigResponse>('/_sensor/config'),
+      readApiWithMeta<IntegrationsConfigView>('/_sensor/config/integrations'),
     ]);
 
-    const labels = ['Health', 'Status', 'Full config', 'Sensor config'] as const;
+    const labels = [
+      'Health',
+      'Status',
+      'Full config',
+      'Sensor config',
+      'Integrations config',
+    ] as const;
     const warnings = results.flatMap((result, index) => {
       if (result.status === 'fulfilled') return [];
       const message =
@@ -1470,11 +1694,17 @@ export function App() {
     const fullConfig = fullConfigResult?.data;
     const configEtag = fullConfigResult?.etag ?? null;
     const sensorConfig = results[3].status === 'fulfilled' ? results[3].value : undefined;
+    const integrationsResult = results[4].status === 'fulfilled' ? results[4].value : undefined;
+    const integrationsConfig = integrationsResult?.data;
+    const integrationsEtag = integrationsResult?.etag ?? null;
 
     if (fullConfig) {
       setServerForm(buildServerForm(fullConfig.server));
       setRateLimitForm(buildRateLimitForm(fullConfig.rate_limit));
       setProfilerForm(buildProfilerForm(fullConfig.profiler));
+    }
+    if (integrationsConfig) {
+      setIntegrationsForm(buildIntegrationsForm(integrationsConfig));
     }
 
     const nextState: LoadState = {
@@ -1484,6 +1714,8 @@ export function App() {
       fullConfig,
       configEtag,
       sensorConfig,
+      integrationsConfig,
+      integrationsEtag,
       loadedAt: new Date().toLocaleString(),
       warnings,
     };
@@ -1550,6 +1782,18 @@ export function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [rateLimitSaveState]);
+
+  useEffect(() => {
+    if (integrationsSaveState.kind !== 'success' || integrationsSaveState.sticky === true) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIntegrationsSaveState({ kind: 'idle' });
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [integrationsSaveState]);
 
   useEffect(() => {
     if (profilerSaveState.kind !== 'success' || profilerSaveState.sticky === true) {
@@ -1892,6 +2136,90 @@ export function App() {
     }
   }
 
+  async function saveIntegrationsConfig() {
+    if (integrationsSaveState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    if (state.kind !== 'ready' || !state.integrationsConfig) {
+      setIntegrationsSaveState({
+        kind: 'error',
+        message:
+          'Integrations config is unavailable. This tab needs admin access on the integrations endpoint.',
+      });
+      return;
+    }
+    if (!state.integrationsEtag) {
+      setIntegrationsSaveState({
+        kind: 'error',
+        message: 'Integrations version is unavailable. Refresh the page and try again.',
+      });
+      return;
+    }
+
+    setIntegrationsSaveState({ kind: 'saving' });
+
+    try {
+      const { payload } = buildIntegrationsUpdate(integrationsForm, state.integrationsConfig);
+      const { data: response, headers } = await requestJsonWithMeta<
+        ApiEnvelope<MutationResult> & { message?: string }
+      >('/_sensor/config/integrations', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'If-Match': state.integrationsEtag,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.success || response.data === undefined) {
+        throw new Error(
+          response.error ?? response.message ?? 'Failed to save integrations config.',
+        );
+      }
+      const mutation = assertValidMutationResult(response.data);
+      const refreshed = await readApiWithMeta<IntegrationsConfigView>('/_sensor/config/integrations');
+      const nextIntegrationsConfig = refreshed.data;
+      let nextIntegrationsEtag = refreshed.etag ?? headers.get('etag');
+      if (!nextIntegrationsEtag) {
+        throw new Error('Integrations version is unavailable after save. Refresh and try again.');
+      }
+
+      const nextLoadedAt = new Date().toLocaleString();
+      setState((current) =>
+        current.kind !== 'ready'
+          ? current
+          : {
+              ...current,
+              integrationsConfig: nextIntegrationsConfig,
+              integrationsEtag: nextIntegrationsEtag,
+              loadedAt: nextLoadedAt,
+            },
+      );
+      setIntegrationsForm(buildIntegrationsForm(nextIntegrationsConfig));
+      const warningSuffix =
+        mutation.warnings && mutation.warnings.length > 0
+          ? ` Warnings: ${mutation.warnings.join(' ')}`
+          : '';
+      setIntegrationsSaveState({
+        kind: 'success',
+        message:
+          `${response.message ?? 'Integrations configuration updated.'} Applied=${String(
+            mutation.applied,
+          )} persisted=${String(mutation.persisted)} rebuild_required=${String(
+            mutation.rebuild_required,
+          )}.` + warningSuffix,
+        sticky: mutation.rebuild_required === true || Boolean(mutation.warnings?.length),
+      });
+    } catch (error) {
+      setIntegrationsSaveState({
+        kind: 'error',
+        message:
+          error instanceof Error ? error.message : 'Failed to save integrations config.',
+      });
+    }
+  }
+
   async function saveProfilerConfig() {
     if (profilerSaveState.kind === 'saving' || isAnySaveInFlight) {
       return;
@@ -2007,6 +2335,13 @@ export function App() {
     value: RateLimitFormState[K],
   ) {
     setRateLimitForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateIntegrationsForm<K extends keyof IntegrationsFormState>(
+    key: K,
+    value: IntegrationsFormState[K],
+  ) {
+    setIntegrationsForm((current) => ({ ...current, [key]: value }));
   }
 
   function updateProfilerForm<K extends keyof ProfilerFormState>(
@@ -2727,6 +3062,249 @@ export function App() {
                       onClick={() => {
                         setRateLimitSaveState({ kind: 'idle' });
                         setRateLimitForm(buildRateLimitForm(state.fullConfig?.rate_limit));
+                      }}
+                      disabled={isAnySaveInFlight}
+                    >
+                      Reset form
+                    </Button>
+                  </div>
+                </Stack>
+              </form>
+            )}
+          </Stack>
+        </section>
+      ) : null}
+
+      {state.kind === 'ready' && activeTab === 'integrations' ? (
+        <section role="tabpanel" id="panel-integrations" aria-labelledby="tab-integrations">
+          <Stack gap="lg">
+            <Box bg="card" p="lg" border="top" borderColor={colors.skyBlue}>
+              <Stack gap="sm">
+                <Text variant="heading">Integrations</Text>
+                <Text variant="body" color={colors.textSecondary}>
+                  Migrate the legacy tunnel, Horizon, and Apparatus controls into Console Next so
+                  the old console can be retired without losing sensor integration workflows.
+                </Text>
+              </Stack>
+            </Box>
+
+            {integrationsSaveState.kind === 'success' ? (
+              <Alert status="success" title="Saved">
+                {integrationsSaveState.message}
+              </Alert>
+            ) : null}
+
+            {integrationsSaveState.kind === 'error' ? (
+              <Alert status="error" title="Save failed">
+                {integrationsSaveState.message}
+              </Alert>
+            ) : null}
+
+            {!state.integrationsConfig ? (
+              <Alert status="warning" title="Integrations config unavailable">
+                {state.warnings.find((warning) =>
+                  warning.startsWith('Integrations config failed:'),
+                ) ??
+                  'This tab needs access to GET /_sensor/config/integrations and PUT /_sensor/config/integrations.'}
+              </Alert>
+            ) : (
+              <form
+                className="console-next-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveIntegrationsConfig();
+                }}
+              >
+                <Stack gap="lg">
+                  <Box bg="card" p="lg" border="top" borderColor={colors.magenta}>
+                    <Stack gap="md">
+                      <Text variant="heading">Connectivity</Text>
+                      <div className="console-next-form-grid">
+                        <Select
+                          fill
+                          label="Access mode"
+                          options={integrationAccessModeOptions}
+                          value={integrationsForm.access_mode}
+                          onChange={(event) =>
+                            updateIntegrationsForm(
+                              'access_mode',
+                              parseIntegrationAccessMode(
+                                event.currentTarget.value,
+                                integrationsForm.access_mode,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          fill
+                          label="Horizon hub URL"
+                          value={integrationsForm.horizon_hub_url}
+                          onChange={(event) =>
+                            updateIntegrationsForm('horizon_hub_url', event.currentTarget.value)
+                          }
+                          helper="Valid values use ws:// or wss://."
+                        />
+                        <Input
+                          fill
+                          label="Tunnel URL"
+                          value={integrationsForm.tunnel_url}
+                          onChange={(event) =>
+                            updateIntegrationsForm('tunnel_url', event.currentTarget.value)
+                          }
+                          helper="Leave blank to let backend validation decide whether tunnel mode is complete."
+                        />
+                        <Input
+                          fill
+                          label="Apparatus URL"
+                          value={integrationsForm.apparatus_url}
+                          onChange={(event) =>
+                            updateIntegrationsForm('apparatus_url', event.currentTarget.value)
+                          }
+                          helper="Apparatus endpoints must use http:// or https://."
+                        />
+                      </div>
+                    </Stack>
+                  </Box>
+
+                  <Box bg="card" p="lg" border="top" borderColor={colors.orange}>
+                    <Stack gap="md">
+                      <Text variant="heading">Credentials</Text>
+                      <div className="console-next-form-grid">
+                        <Input
+                          fill
+                          label="Sensor key"
+                          type="password"
+                          autoComplete="new-password"
+                          name="integrations-sensor-key"
+                          value={integrationsForm.sensor_api_key}
+                          disabled={integrationsForm.clear_sensor_api_key}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            setIntegrationsForm((current) => ({
+                              ...current,
+                              sensor_api_key: value,
+                              clear_sensor_api_key: false,
+                            }));
+                          }}
+                          helper="Shared sensor credential for legacy-style sensor registration."
+                        />
+                        <Input
+                          fill
+                          label="Horizon key"
+                          type="password"
+                          autoComplete="new-password"
+                          name="integrations-horizon-key"
+                          value={integrationsForm.horizon_api_key}
+                          disabled={integrationsForm.clear_horizon_api_key}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            setIntegrationsForm((current) => ({
+                              ...current,
+                              horizon_api_key: value,
+                              clear_horizon_api_key: false,
+                            }));
+                          }}
+                          helper="Optional dedicated Horizon credential."
+                        />
+                        <Input
+                          fill
+                          label="Tunnel key"
+                          type="password"
+                          autoComplete="new-password"
+                          name="integrations-tunnel-key"
+                          value={integrationsForm.tunnel_api_key}
+                          disabled={integrationsForm.clear_tunnel_api_key}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            setIntegrationsForm((current) => ({
+                              ...current,
+                              tunnel_api_key: value,
+                              clear_tunnel_api_key: false,
+                            }));
+                          }}
+                          helper="Optional dedicated tunnel credential."
+                        />
+                      </div>
+
+                      <Stack gap="xs">
+                        <Text variant="body" color={colors.textSecondary}>
+                          {integrationsForm.clear_sensor_api_key
+                            ? 'Stored sensor key will be cleared on save'
+                            : state.integrationsConfig?.sensor_api_key_set
+                              ? 'Stored sensor key present'
+                              : 'No stored sensor key'}
+                        </Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          {integrationsForm.clear_horizon_api_key
+                            ? 'Stored Horizon key will be cleared on save'
+                            : state.integrationsConfig?.horizon_api_key_set
+                              ? 'Stored Horizon key present'
+                              : 'No stored Horizon key'}
+                        </Text>
+                        <Text variant="body" color={colors.textSecondary}>
+                          {integrationsForm.clear_tunnel_api_key
+                            ? 'Stored tunnel key will be cleared on save'
+                            : state.integrationsConfig?.tunnel_api_key_set
+                              ? 'Stored tunnel key present'
+                              : 'No stored tunnel key'}
+                        </Text>
+                      </Stack>
+
+                      <div className="console-next-toggle-grid">
+                        <ToggleField
+                          label="Clear stored sensor key"
+                          helper="Removes the stored shared sensor credential on save."
+                          checked={integrationsForm.clear_sensor_api_key}
+                          onChange={(checked) =>
+                            setIntegrationsForm((current) => ({
+                              ...current,
+                              clear_sensor_api_key: checked,
+                              sensor_api_key: checked ? '' : current.sensor_api_key,
+                            }))
+                          }
+                        />
+                        <ToggleField
+                          label="Clear stored Horizon key"
+                          helper="Removes the dedicated Horizon credential on save."
+                          checked={integrationsForm.clear_horizon_api_key}
+                          onChange={(checked) =>
+                            setIntegrationsForm((current) => ({
+                              ...current,
+                              clear_horizon_api_key: checked,
+                              horizon_api_key: checked ? '' : current.horizon_api_key,
+                            }))
+                          }
+                        />
+                        <ToggleField
+                          label="Clear stored tunnel key"
+                          helper="Removes the dedicated tunnel credential on save."
+                          checked={integrationsForm.clear_tunnel_api_key}
+                          onChange={(checked) =>
+                            setIntegrationsForm((current) => ({
+                              ...current,
+                              clear_tunnel_api_key: checked,
+                              tunnel_api_key: checked ? '' : current.tunnel_api_key,
+                            }))
+                          }
+                        />
+                      </div>
+                    </Stack>
+                  </Box>
+
+                  <div className="console-next-button-row">
+                    <Button type="submit" disabled={isAnySaveInFlight}>
+                      {getSaveButtonLabel(
+                        integrationsSaveState,
+                        isAnySaveInFlight,
+                        'Save integrations',
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      onClick={() => {
+                        setIntegrationsSaveState({ kind: 'idle' });
+                        setIntegrationsForm(buildIntegrationsForm(state.integrationsConfig));
                       }}
                       disabled={isAnySaveInFlight}
                     >

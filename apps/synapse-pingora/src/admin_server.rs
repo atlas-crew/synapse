@@ -24,6 +24,7 @@ use crate::signals::adapter::SignalAdapter;
 use governor::{state::keyed::DefaultKeyedStateStore, Quota, RateLimiter};
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
+use sha2::{Digest, Sha256};
 use sysinfo::{Disks, Networks, System};
 
 // Type aliases for profile/schema data accessors
@@ -33,7 +34,7 @@ type ProfilesGetter = Box<dyn Fn() -> Vec<crate::profiler::EndpointProfile> + Se
 type SchemasGetter = Box<dyn Fn() -> Vec<crate::profiler::JsonEndpointSchema> + Send + Sync>;
 
 /// Integration configuration for external services (Horizon, Tunnel, Apparatus)
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IntegrationsConfig {
     pub horizon_hub_url: String,
     pub horizon_api_key: String,
@@ -119,6 +120,11 @@ fn default_integrations_config() -> IntegrationsConfig {
         tunnel_api_key: String::new(),
         apparatus_url: String::new(),
     }
+}
+
+fn integrations_config_hash(config: &IntegrationsConfig) -> String {
+    let encoded = serde_json::to_vec(config).expect("Integrations config must serialize");
+    format!("{:x}", Sha256::digest(encoded))
 }
 
 fn validate_integrations_ws_url(field: &str, value: &str) -> Result<(), String> {
@@ -210,7 +216,7 @@ fn is_current_tunnel_url_derived(config: &IntegrationsConfig) -> bool {
 
 fn integrations_error_response(
     message: impl Into<String>,
-) -> (StatusCode, Json<serde_json::Value>) {
+) -> Response {
     let message = message.into();
     warn!("Integrations configuration update rejected: {}", message);
     record_log_with_source(
@@ -225,6 +231,7 @@ fn integrations_error_response(
             "message": message
         })),
     )
+        .into_response()
 }
 
 fn derive_tunnel_url_from_horizon_hub_url(hub_url: &str) -> Result<String, String> {
@@ -6781,6 +6788,7 @@ async fn config_integrations_get_handler(State(_state): State<AdminState>) -> im
         .as_ref()
         .map(|getter| getter())
         .unwrap_or_else(default_integrations_config);
+    let etag = format!("\"{}\"", integrations_config_hash(&config));
     let sensor_api_key = current_sensor_api_key(&config);
     let view = IntegrationsConfigView {
         access_mode: derive_integration_access_mode(&config),
@@ -6794,18 +6802,24 @@ async fn config_integrations_get_handler(State(_state): State<AdminState>) -> im
         apparatus_url: config.apparatus_url,
     };
 
-    (
+    let mut response = (
         StatusCode::OK,
         Json(serde_json::json!({
             "success": true,
             "data": view
         })),
     )
+        .into_response();
+    if let Ok(header_value) = HeaderValue::from_str(&etag) {
+        response.headers_mut().insert(header::ETAG, header_value);
+    }
+    response
 }
 
 /// PUT /_sensor/config/integrations - Update external integrations configuration
 async fn config_integrations_put_handler(
     State(_state): State<AdminState>,
+    headers: HeaderMap,
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     // The simplified admin console opts into the managed one-key flow by sending
@@ -6840,6 +6854,55 @@ async fn config_integrations_put_handler(
             .as_ref()
             .map(|getter| getter())
             .unwrap_or_else(default_integrations_config);
+        let current_hash = integrations_config_hash(&current);
+        let if_match = match headers.get(header::IF_MATCH) {
+            Some(if_match) => match if_match.to_str() {
+                Ok(value) if value.trim() == "*" => {
+                    return validation_error(
+                        "If-Match '*' is not allowed for PUT /_sensor/config/integrations",
+                        None,
+                    )
+                }
+                Ok(value) => {
+                    let mut tags = Vec::new();
+                    for token in value.split(',') {
+                        let token = token.trim();
+                        if token == "*" {
+                            return validation_error("If-Match '*' must appear alone", None);
+                        }
+                        if token.starts_with("W/") {
+                            return validation_error("Weak validators not allowed in If-Match", None);
+                        }
+                        let Some(tag) = token
+                            .strip_prefix('"')
+                            .and_then(|value| value.strip_suffix('"'))
+                        else {
+                            return validation_error("Invalid If-Match header", None);
+                        };
+                        if tag == "*" {
+                            return validation_error("If-Match '*' must appear alone", None);
+                        }
+                        tags.push(tag.to_string());
+                    }
+                    IfMatchCondition::Tags(tags)
+                }
+                Err(error) => return validation_error("Invalid If-Match header", Some(&error)),
+            },
+            None => {
+                return precondition_required_error(
+                    "If-Match header is required for PUT /_sensor/config/integrations",
+                )
+            }
+        };
+        match &if_match {
+            IfMatchCondition::Any => {}
+            IfMatchCondition::Tags(tags) if tags.iter().any(|tag| tag == &current_hash) => {}
+            IfMatchCondition::Tags(_) => {
+                return precondition_failed_error(
+                    "Integrations configuration changed since it was loaded. Refresh and try again.",
+                )
+            }
+        }
         let uses_managed_sensor_key = request_uses_managed_sensor_key;
 
         let access_mode = update
@@ -7049,6 +7112,8 @@ async fn config_integrations_put_handler(
             return integrations_error_response(message);
         }
 
+        let rebuild_required = normalized != current;
+        let next_etag = format!("\"{}\"", integrations_config_hash(&normalized));
         let normalized_horizon_set = !normalized.horizon_hub_url.trim().is_empty();
         let normalized_tunnel_set = !normalized.tunnel_url.trim().is_empty();
         let normalized_apparatus_set = !normalized.apparatus_url.trim().is_empty();
@@ -7071,13 +7136,28 @@ async fn config_integrations_put_handler(
                 normalized_apparatus_set
             ),
         );
-        (
+        let mut response = (
             StatusCode::OK,
             Json(serde_json::json!({
                 "success": true,
-                "message": "Integrations configuration updated. Restart synapse-waf to apply live Horizon and Tunnel connections."
+                "message": if rebuild_required {
+                    "Integrations configuration updated. Restart synapse-waf to apply live Horizon and Tunnel connections."
+                } else {
+                    "Integrations configuration unchanged. No restart required."
+                },
+                "data": {
+                    "applied": true,
+                    "persisted": true,
+                    "rebuild_required": rebuild_required,
+                    "warnings": []
+                }
             })),
         )
+            .into_response();
+        if let Ok(header_value) = HeaderValue::from_str(&next_etag) {
+            response.headers_mut().insert(header::ETAG, header_value);
+        }
+        response
     } else {
         record_log_with_source(
             "warn",
@@ -7092,6 +7172,7 @@ async fn config_integrations_put_handler(
                 "message": "Configuration updates not supported by this sensor instance"
             })),
         )
+            .into_response()
     }
 }
 
@@ -7715,6 +7796,11 @@ mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
+    fn integrations_etag(config: &Arc<RwLock<IntegrationsConfig>>) -> String {
+        let current = config.read().clone();
+        format!("\"{}\"", integrations_config_hash(&current))
+    }
+
     #[tokio::test]
     async fn test_health_endpoint() {
         let app = create_test_app();
@@ -7755,6 +7841,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -7789,6 +7876,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -7801,6 +7889,115 @@ mod tests {
         assert_eq!(stored.tunnel_url, "wss://tunnel.example.com/custom/socket");
         assert_eq!(stored.tunnel_api_key, "shared-key");
         assert_eq!(stored.apparatus_url, "https://apparatus.example.internal");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_literal_update_clears_apparatus_url_with_empty_string() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: "https://apparatus.example.internal".to_string(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "apparatus_url": ""
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["rebuild_required"], true);
+        let stored = config.read().clone();
+        assert!(stored.apparatus_url.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_telemetry_update_clears_horizon_hub_url_with_empty_string() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "access_mode": "telemetry",
+            "horizon_hub_url": ""
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["rebuild_required"], true);
+        let stored = config.read().clone();
+        assert!(stored.horizon_hub_url.is_empty());
+        assert!(stored.tunnel_url.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_integrations_managed_telemetry_update_clears_tunnel_url_with_empty_string() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: String::new(),
+            horizon_api_key: String::new(),
+            tunnel_url: "wss://tunnel.example.com/custom/socket".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: String::new(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial);
+        let payload = serde_json::json!({
+            "access_mode": "telemetry",
+            "tunnel_url": ""
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["rebuild_required"], true);
+        let stored = config.read().clone();
+        assert!(stored.tunnel_url.is_empty());
+        assert!(stored.tunnel_api_key.is_empty());
     }
 
     #[tokio::test]
@@ -7825,6 +8022,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -7862,6 +8060,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -7890,6 +8089,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -7897,6 +8097,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["message"],
+            "Integrations configuration updated. Restart synapse-waf to apply live Horizon and Tunnel connections."
+        );
+        assert_eq!(json["data"]["applied"], true);
+        assert_eq!(json["data"]["persisted"], true);
+        assert_eq!(json["data"]["rebuild_required"], true);
         let stored = config.read().clone();
         assert!(stored.horizon_hub_url.is_empty());
         assert!(stored.horizon_api_key.is_empty());
@@ -7905,6 +8113,40 @@ mod tests {
             "wss://tunnel.example.com/ws/tunnel/sensor"
         );
         assert_eq!(stored.tunnel_api_key, "shared-tunnel-key");
+    }
+
+    #[tokio::test]
+    async fn test_integrations_noop_save_does_not_require_rebuild() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let initial = IntegrationsConfig {
+            horizon_hub_url: "wss://horizon.example.com/ws".to_string(),
+            horizon_api_key: "shared-key".to_string(),
+            tunnel_url: "wss://horizon.example.com/ws/tunnel/sensor".to_string(),
+            tunnel_api_key: "shared-key".to_string(),
+            apparatus_url: "https://apparatus.example.internal".to_string(),
+        };
+        let (app, config) = create_test_app_with_integrations(initial.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+        assert_eq!(json["data"]["applied"], true);
+        assert_eq!(json["data"]["persisted"], true);
+        assert_eq!(json["data"]["rebuild_required"], false);
+        let stored = config.read().clone();
+        assert_eq!(stored, initial);
     }
 
     #[tokio::test]
@@ -7925,6 +8167,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -7962,6 +8205,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -8004,6 +8248,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -8039,6 +8284,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -8083,6 +8329,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -8119,6 +8366,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -8162,6 +8410,7 @@ mod tests {
                     .method("PUT")
                     .uri("/_sensor/config/integrations")
                     .header("Content-Type", "application/json")
+                    .header("If-Match", integrations_etag(&config))
                     .body(Body::from(payload.to_string()))
                     .unwrap(),
             )
@@ -8201,6 +8450,104 @@ mod tests {
         let json = response_json(response).await;
         assert_eq!(json["data"]["access_mode"], "remote_management");
         assert_eq!(json["data"]["sensor_api_key_set"], true);
+    }
+
+    #[tokio::test]
+    async fn test_integrations_put_requires_if_match() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "access_mode": "tunnel",
+            "tunnel_url": "wss://tunnel.example.com/ws/tunnel/sensor",
+            "sensor_api_key": "shared-tunnel-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PRECONDITION_REQUIRED);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["detail"],
+            "If-Match header is required for PUT /_sensor/config/integrations"
+        );
+        assert_eq!(json["code"], error_codes::PRECONDITION_REQUIRED);
+        assert_eq!(config.read().clone(), default_integrations_config());
+    }
+
+    #[tokio::test]
+    async fn test_integrations_put_rejects_stale_if_match() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "access_mode": "tunnel",
+            "tunnel_url": "wss://tunnel.example.com/ws/tunnel/sensor",
+            "sensor_api_key": "shared-tunnel-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", "\"stale-hash\"")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["detail"],
+            "Integrations configuration changed since it was loaded. Refresh and try again."
+        );
+        assert_eq!(json["code"], error_codes::PRECONDITION_FAILED);
+        assert_eq!(config.read().clone(), default_integrations_config());
+    }
+
+    #[tokio::test]
+    async fn test_integrations_put_rejects_if_match_wildcard() {
+        let _guard = INTEGRATIONS_TEST_MUTEX.lock();
+        let (app, config) = create_test_app_with_integrations(default_integrations_config());
+        let payload = serde_json::json!({
+            "access_mode": "tunnel",
+            "tunnel_url": "wss://tunnel.example.com/ws/tunnel/sensor",
+            "sensor_api_key": "shared-tunnel-key"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/_sensor/config/integrations")
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", "*")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let json = response_json(response).await;
+        assert_eq!(
+            json["detail"],
+            "If-Match '*' is not allowed for PUT /_sensor/config/integrations"
+        );
+        assert_eq!(json["code"], error_codes::VALIDATION_ERROR);
+        assert_eq!(config.read().clone(), default_integrations_config());
     }
 
     #[test]
