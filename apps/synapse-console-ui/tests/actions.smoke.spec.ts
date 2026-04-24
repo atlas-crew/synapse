@@ -215,7 +215,8 @@ test('renders the actions surface and runs the legacy operator flows', async ({ 
     await route.continue();
   });
 
-  await page.goto('/console-next/');
+  await page.goto('/live/');
+  await expect(page.getByRole('link', { name: 'Open legacy console' })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Actions' }).click();
 
   await expect(page.getByRole('heading', { name: 'Operator actions' })).toBeVisible();
@@ -363,7 +364,7 @@ test('edits per-site tls controls from the Sites tab', async ({ page }) => {
     await route.continue();
   });
 
-  await page.goto('/console-next/');
+  await page.goto('/live/');
   await page.getByRole('tab', { name: 'Sites' }).click();
   await page.getByRole('button', { name: 'Edit' }).click();
 

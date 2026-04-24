@@ -3486,7 +3486,7 @@ export function App() {
     <main className="console-next-shell">
       <header className="console-next-header">
         <div className="console-next-brand">
-          <img src="/console-next/assets/sidebar-lockup.svg" alt="Synapse Fleet" />
+          <img src="/live/assets/sidebar-lockup.svg" alt="Synapse Fleet" />
           <div>
             <Text variant="subhead" color={colors.textSecondary}>
               Console Next
@@ -3497,9 +3497,6 @@ export function App() {
           </div>
         </div>
         <div className="console-next-actions">
-          <a className="console-next-link" href="/console">
-            Open legacy console
-          </a>
           <Button
             variant="outlined"
             onClick={() => {

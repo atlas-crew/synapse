@@ -393,6 +393,11 @@ describe('App', () => {
     render(<App />);
 
     await screen.findByText('Synapse Operator UI');
+    expect(screen.queryByRole('link', { name: 'Open legacy console' })).not.toBeInTheDocument();
+    expect(screen.getByAltText('Synapse Fleet')).toHaveAttribute(
+      'src',
+      '/live/assets/sidebar-lockup.svg',
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: 'Server' }));
 

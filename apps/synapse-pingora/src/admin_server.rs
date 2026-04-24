@@ -423,12 +423,10 @@ struct MetricsPoint {
 static METRICS_HISTORY: Lazy<RwLock<VecDeque<MetricsPoint>>> =
     Lazy::new(|| RwLock::new(VecDeque::with_capacity(60)));
 
-static ADMIN_CONSOLE_TEMPLATE: &str = include_str!("../assets/admin_console.html");
-static ADMIN_CONSOLE_NEXT_TEMPLATE: &str = include_str!("../assets/console-next/index.html");
-static ADMIN_CONSOLE_NEXT_APP_JS: &str = include_str!("../assets/console-next/assets/app.js");
-static ADMIN_CONSOLE_NEXT_APP_CSS: &str = include_str!("../assets/console-next/assets/app.css");
+static ADMIN_CONSOLE_NEXT_TEMPLATE: &str = include_str!("../assets/live/index.html");
+static ADMIN_CONSOLE_NEXT_APP_JS: &str = include_str!("../assets/live/assets/app.js");
+static ADMIN_CONSOLE_NEXT_APP_CSS: &str = include_str!("../assets/live/assets/app.css");
 static SIDEBAR_LOCKUP_SVG: &str = include_str!("../assets/sidebar-lockup.svg");
-const ADMIN_CONSOLE_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; connect-src 'self'";
 const ADMIN_CONSOLE_NEXT_CSP: &str = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'";
 
 /// Dev mode flag - when true, serves admin console from disk instead of embedded
@@ -685,7 +683,7 @@ use axum::{
     extract::{Path, Query, Request, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -696,9 +694,6 @@ use subtle::ConstantTimeEq;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
-
-#[cfg(test)]
-use std::cell::Cell;
 
 use crate::api::{ApiHandler, ApiResponse};
 use crate::waf::{TraceEvent, TraceSink};
@@ -1607,7 +1602,7 @@ async fn security_headers(request: Request, next: Next) -> Response {
     );
 
     // Content-Security-Policy for API responses (stricter than console)
-    // Note: Console handler sets its own CSP via ADMIN_CONSOLE_CSP
+    // Note: Live console handler sets its own CSP via ADMIN_CONSOLE_NEXT_CSP
     if !headers.contains_key(header::CONTENT_SECURITY_POLICY) {
         headers.insert(
             header::CONTENT_SECURITY_POLICY,
@@ -1916,19 +1911,16 @@ pub async fn start_admin_server(
 
     // Routes requiring admin:read scope (console access and sensitive logs)
     let admin_read_routes = Router::new()
-        .route("/console", get(admin_console_handler))
-        .route("/console-next", get(admin_console_next_handler))
+        .route("/live", get(admin_console_next_handler))
+        .route("/console", get(admin_console_redirect_handler))
+        .route("/console-next", get(admin_console_redirect_handler))
         .route(
-            "/console-next/assets/sidebar-lockup.svg",
+            "/live/assets/sidebar-lockup.svg",
             get(sidebar_lockup_handler),
         )
         .route(
-            "/console-next/assets/*path",
+            "/live/assets/*path",
             get(admin_console_next_asset_handler),
-        )
-        .route(
-            "/console/assets/sidebar-lockup.svg",
-            get(sidebar_lockup_handler),
         )
         .route("/_sensor/system/logs", get(sensor_system_logs_handler))
         .route("/_sensor/logs", get(logs_handler))
@@ -2132,7 +2124,7 @@ async fn root_handler() -> impl IntoResponse {
         "service": "synapse-pingora",
         "version": env!("CARGO_PKG_VERSION"),
         "endpoints": [
-            { "method": "GET", "path": "/console", "description": "Admin console UI" },
+            { "method": "GET", "path": "/live", "description": "Admin console UI" },
             { "method": "GET", "path": "/health", "description": "Health check" },
             { "method": "GET", "path": "/metrics", "description": "Prometheus metrics" },
             { "method": "POST", "path": "/reload", "description": "Reload configuration" },
@@ -2146,32 +2138,19 @@ async fn root_handler() -> impl IntoResponse {
     }))
 }
 
-/// GET /console - Admin console for synapse operations
-async fn admin_console_handler() -> impl IntoResponse {
-    let content = if is_dev_mode() {
-        // In dev mode, read from disk for live reloading
-        match std::fs::read_to_string("assets/admin_console.html") {
-            Ok(content) => content,
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to read admin console from disk: {}, falling back to embedded",
-                    e
-                );
-                ADMIN_CONSOLE_TEMPLATE.to_string()
-            }
-        }
-    } else {
-        ADMIN_CONSOLE_TEMPLATE.to_string()
-    };
+fn admin_console_redirect_response() -> Response {
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::TEMPORARY_REDIRECT;
+    response
+        .headers_mut()
+        .insert(header::LOCATION, HeaderValue::from_static("/live"));
+    response
+}
 
-    (
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-            (header::CONTENT_SECURITY_POLICY, ADMIN_CONSOLE_CSP),
-        ],
-        Html(content),
-    )
+/// GET /console and GET /console-next - Legacy entry points now redirect to the
+/// canonical live console route.
+async fn admin_console_redirect_handler() -> impl IntoResponse {
+    admin_console_redirect_response()
 }
 
 fn console_next_asset_from_path(path: &str) -> Option<(&'static str, &'static str)> {
@@ -2182,14 +2161,14 @@ fn console_next_asset_from_path(path: &str) -> Option<(&'static str, &'static st
     }
 }
 
-/// GET /console-next - React-based admin console bootstrap.
+/// GET /live - React-based admin console bootstrap.
 async fn admin_console_next_handler() -> impl IntoResponse {
     let body = if is_dev_mode() {
-        match std::fs::read_to_string("assets/console-next/index.html") {
+        match std::fs::read_to_string("assets/live/index.html") {
             Ok(content) => Body::from(content),
             Err(e) => {
                 tracing::warn!(
-                    "Failed to read next admin console from disk: {}, falling back to embedded",
+                    "Failed to read live admin console from disk: {}, falling back to embedded",
                     e
                 );
                 Body::from(ADMIN_CONSOLE_NEXT_TEMPLATE)
@@ -2216,7 +2195,7 @@ async fn admin_console_next_handler() -> impl IntoResponse {
     response
 }
 
-/// GET /console-next/assets/*path - Static bundle files for the React-based
+/// GET /live/assets/*path - Static bundle files for the React-based
 /// admin console bootstrap.
 async fn admin_console_next_asset_handler(Path(path): Path<String>) -> impl IntoResponse {
     let normalized = path.trim_start_matches('/');
@@ -2231,12 +2210,12 @@ async fn admin_console_next_asset_handler(Path(path): Path<String>) -> impl Into
     };
 
     let body = if is_dev_mode() {
-        let disk_path = format!("assets/console-next/assets/{}", normalized);
+        let disk_path = format!("assets/live/assets/{}", normalized);
         match std::fs::read_to_string(&disk_path) {
             Ok(content) => Body::from(content),
             Err(e) => {
                 tracing::warn!(
-                    "Failed to read next admin console asset from disk ({}): {}, falling back to embedded",
+                    "Failed to read live admin console asset from disk ({}): {}, falling back to embedded",
                     disk_path,
                     e
                 );
@@ -2259,9 +2238,9 @@ async fn admin_console_next_asset_handler(Path(path): Path<String>) -> impl Into
     response
 }
 
-/// GET /console/assets/sidebar-lockup.svg - Synapse brand mark for the
+/// GET /live/assets/sidebar-lockup.svg - Synapse brand mark for the
 /// admin console sidebar. Dev-mode reads from disk for live-reload
-/// parity with the admin console HTML; production serves the embedded
+/// parity with the live console HTML; production serves the embedded
 /// copy baked into the binary via include_str!.
 async fn sidebar_lockup_handler() -> impl IntoResponse {
     let content = if is_dev_mode() {
@@ -9732,7 +9711,7 @@ mod tests {
     // Console Endpoint Authorization Tests (labs-s8bs)
     // =========================================================================
 
-    /// Create a test app that includes the /console route with scope-based auth.
+    /// Create a test app that includes the live admin UI routes with scope-based auth.
     fn create_test_app_with_console(scopes: Vec<String>, admin_auth_disabled: bool) -> Router {
         use governor::{Quota, RateLimiter};
         use std::num::NonZeroU32;
@@ -9755,21 +9734,18 @@ mod tests {
             auth_failure_limiter,
         };
 
-        // Console route with require_admin_read middleware
+        // Live admin UI routes with require_admin_read middleware
         let admin_read_routes = Router::new()
-            .route("/console", get(admin_console_handler))
-            .route("/console-next", get(admin_console_next_handler))
+            .route("/live", get(admin_console_next_handler))
+            .route("/console", get(admin_console_redirect_handler))
+            .route("/console-next", get(admin_console_redirect_handler))
             .route(
-                "/console-next/assets/sidebar-lockup.svg",
+                "/live/assets/sidebar-lockup.svg",
                 get(sidebar_lockup_handler),
             )
             .route(
-                "/console-next/assets/*path",
+                "/live/assets/*path",
                 get(admin_console_next_asset_handler),
-            )
-            .route(
-                "/console/assets/sidebar-lockup.svg",
-                get(sidebar_lockup_handler),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -9888,38 +9864,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_console_requires_auth() {
-        // Create app with admin:read scope
+    async fn test_live_with_admin_read_scope() {
         let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
-        // Request without X-Admin-Key should return 401
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            response.status(),
-            StatusCode::UNAUTHORIZED,
-            "/console should return 401 without authentication"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_console_with_admin_read_scope() {
-        // Create app with admin:read scope
-        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
-
-        // Request with valid key and admin:read scope should return 200
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/console")
+                    .uri("/live")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
@@ -9930,18 +9881,39 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "/console should return 200 with valid key and admin:read scope"
+            "/live should return 200 with valid key and admin:read scope"
         );
     }
 
     #[tokio::test]
-    async fn test_console_next_with_admin_read_scope() {
+    async fn test_live_requires_auth() {
         let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console-next")
+                    .uri("/live")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "/live should return 401 without authentication"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_live_assets_with_admin_read_scope() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/live/assets/app.js")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
@@ -9952,18 +9924,18 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "/console-next should return 200 with valid key and admin:read scope"
+            "/live asset route should return 200 with valid key and admin:read scope"
         );
     }
 
     #[tokio::test]
-    async fn test_console_next_requires_auth() {
+    async fn test_live_assets_require_auth() {
         let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console-next")
+                    .uri("/live/assets/app.js")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -9973,61 +9945,18 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::UNAUTHORIZED,
-            "/console-next should return 401 without authentication"
+            "/live asset route should return 401 without authentication"
         );
     }
 
     #[tokio::test]
-    async fn test_console_next_assets_with_admin_read_scope() {
-        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/console-next/assets/app.js")
-                    .header("X-Admin-Key", "test-key")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            response.status(),
-            StatusCode::OK,
-            "/console-next asset route should return 200 with valid key and admin:read scope"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_console_next_assets_require_auth() {
-        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/console-next/assets/app.js")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            response.status(),
-            StatusCode::UNAUTHORIZED,
-            "/console-next asset route should return 401 without authentication"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_console_next_assets_without_scope() {
+    async fn test_live_assets_without_scope() {
         let app = create_test_app_with_console(vec![scopes::SENSOR_READ.to_string()], false);
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console-next/assets/app.js")
+                    .uri("/live/assets/app.js")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
@@ -10038,18 +9967,18 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::FORBIDDEN,
-            "/console-next asset route should return 403 without admin:read scope"
+            "/live asset route should return 403 without admin:read scope"
         );
     }
 
     #[tokio::test]
-    async fn test_console_next_assets_missing_file() {
+    async fn test_live_assets_missing_file() {
         let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console-next/assets/does-not-exist.js")
+                    .uri("/live/assets/does-not-exist.js")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
@@ -10060,18 +9989,18 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::NOT_FOUND,
-            "/console-next asset route should return 404 for missing files"
+            "/live asset route should return 404 for missing files"
         );
     }
 
     #[tokio::test]
-    async fn test_console_next_csp_header() {
+    async fn test_live_csp_header() {
         let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console-next")
+                    .uri("/live")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
@@ -10092,6 +10021,50 @@ mod tests {
                 .get(header::X_CONTENT_TYPE_OPTIONS)
                 .unwrap(),
             "nosniff"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_redirects_to_live() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(
+            response.headers().get(header::LOCATION).unwrap(),
+            "/live"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_next_redirects_to_live() {
+        let app = create_test_app_with_console(vec![scopes::ADMIN_READ.to_string()], false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/console-next")
+                    .header("X-Admin-Key", "test-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(
+            response.headers().get(header::LOCATION).unwrap(),
+            "/live"
         );
     }
 
@@ -10515,7 +10488,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_console_without_admin_read_scope() {
+    async fn test_live_without_admin_read_scope() {
         // Create app with only sensor:read scope (not admin:read)
         let app = create_test_app_with_console(vec![scopes::SENSOR_READ.to_string()], false);
 
@@ -10523,7 +10496,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console")
+                    .uri("/live")
                     .header("X-Admin-Key", "test-key")
                     .body(Body::empty())
                     .unwrap(),
@@ -10534,7 +10507,7 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::FORBIDDEN,
-            "/console should return 403 when admin:read scope is missing"
+            "/live should return 403 when admin:read scope is missing"
         );
     }
 
@@ -10562,13 +10535,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_console_auth_disabled_allows_access() {
+    async fn test_live_auth_disabled_allows_access() {
         let app = create_test_app_with_console(vec![], true);
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/console")
+                    .uri("/live")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -10578,7 +10551,7 @@ mod tests {
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "/console should return 200 when admin auth is disabled"
+            "/live should return 200 when admin auth is disabled"
         );
     }
 

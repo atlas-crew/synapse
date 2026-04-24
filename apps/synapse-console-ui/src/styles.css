@@ -64,17 +64,6 @@ a {
   justify-content: flex-end;
 }
 
-.console-next-link {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #8899b0;
-}
-
-.console-next-link:hover {
-  color: #e8ecf4;
-}
-
 .console-next-tabs {
   margin: 20px 0 24px;
 }

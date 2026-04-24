@@ -16,7 +16,7 @@ export default defineConfig({
         target: 'http://localhost:6191',
         changeOrigin: true,
       },
-      '/console': {
+      '/live': {
         target: 'http://localhost:6191',
         changeOrigin: true,
       },
@@ -35,7 +35,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    outDir: resolve(__dirname, '../synapse-pingora/assets/console-next'),
+    outDir: resolve(__dirname, '../synapse-pingora/assets/live'),
     emptyOutDir: true,
     sourcemap: false,
     cssCodeSplit: false,
@@ -52,5 +52,5 @@ export default defineConfig({
       },
     },
   },
-  base: '/console-next/',
+  base: '/live/',
 });
