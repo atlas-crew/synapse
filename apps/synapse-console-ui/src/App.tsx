@@ -221,6 +221,53 @@ type IntegrationsFormState = {
   apparatus_url: string;
 };
 
+type GenericModuleKey =
+  | 'dlp'
+  | 'block-page'
+  | 'crawler'
+  | 'tarpit'
+  | 'travel'
+  | 'entity';
+
+type ModuleFieldKind = 'boolean' | 'integer' | 'float' | 'string';
+
+type ModuleFieldSpec = {
+  key: string;
+  label: string;
+  kind: ModuleFieldKind;
+};
+
+type GenericModuleCardState = {
+  kind: 'idle' | 'loading' | 'ready' | 'error';
+  config: Record<string, unknown> | null;
+  fields: ModuleFieldSpec[];
+  form: Record<string, string | boolean>;
+  message: string | null;
+  saveState: SaveState;
+};
+
+type KernelModuleResponse = {
+  parameters?: Record<string, unknown>;
+  errors?: Record<string, unknown>;
+};
+
+type KernelModuleMutation = {
+  applied?: Record<string, unknown>;
+  failed?: Record<string, unknown>;
+  persisted?: boolean;
+  persistError?: string | null;
+};
+
+type KernelModuleState = {
+  kind: 'idle' | 'loading' | 'ready' | 'error';
+  parameters: Record<string, string>;
+  errors: Record<string, string>;
+  form: Record<string, string>;
+  persist: boolean;
+  message: string | null;
+  saveState: SaveState;
+};
+
 type UpstreamFormRow = {
   id: string;
   baseUpstream: NonNullable<SiteConfig['upstreams']>[number] | null;
@@ -289,10 +336,62 @@ const tabs = [
   { key: 'server', label: 'Server' },
   { key: 'sites', label: 'Sites' },
   { key: 'rate-limit', label: 'Rate Limit' },
+  { key: 'modules', label: 'Modules' },
   { key: 'integrations', label: 'Integrations' },
   { key: 'profiler', label: 'Profiler' },
   { key: 'roadmap', label: 'Roadmap' },
 ] as const;
+
+const genericModuleDefinitions: Array<{
+  key: GenericModuleKey;
+  label: string;
+  path: string;
+  description: string;
+  accent: string;
+}> = [
+  {
+    key: 'dlp',
+    label: 'DLP',
+    path: '/_sensor/config/dlp',
+    description: 'Content inspection limits, text-only scanning, and keyword matching.',
+    accent: colors.magenta,
+  },
+  {
+    key: 'block-page',
+    label: 'Block page',
+    path: '/_sensor/config/block-page',
+    description: 'Operator-facing block-page branding and incident detail toggles.',
+    accent: colors.orange,
+  },
+  {
+    key: 'crawler',
+    label: 'Crawler',
+    path: '/_sensor/config/crawler',
+    description: 'Legitimate crawler verification and DNS-backed bot heuristics.',
+    accent: colors.skyBlue,
+  },
+  {
+    key: 'tarpit',
+    label: 'Tarpit',
+    path: '/_sensor/config/tarpit',
+    description: 'Delay budgets for hostile traffic that should be slowed instead of blocked.',
+    accent: colors.blue,
+  },
+  {
+    key: 'travel',
+    label: 'Travel',
+    path: '/_sensor/config/travel',
+    description: 'Impossible-travel thresholds for speed, distance, and history windows.',
+    accent: colors.magenta,
+  },
+  {
+    key: 'entity',
+    label: 'Entity',
+    path: '/_sensor/config/entity',
+    description: 'Entity-store capacity, decay, and automated block thresholds.',
+    accent: colors.orange,
+  },
+];
 
 const logLevelOptions = [
   { value: 'trace', label: 'trace' },
@@ -342,6 +441,148 @@ function nextFormRowId(): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isModuleScalarValue(value: unknown): value is boolean | number | string {
+  return ['boolean', 'number', 'string'].includes(typeof value);
+}
+
+function formatModuleFieldLabel(key: string): string {
+  const words = key
+    .split(/[_-]+/g)
+    .map((word) => word.trim().toLowerCase())
+    .filter(Boolean);
+  if (words.length === 0) return key;
+  words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+  return words.join(' ');
+}
+
+function buildModuleFieldSpecs(config: Record<string, unknown>): ModuleFieldSpec[] {
+  return Object.entries(config).flatMap(([key, value]) => {
+    if (!isModuleScalarValue(value)) {
+      return [];
+    }
+    const kind: ModuleFieldKind =
+      typeof value === 'boolean'
+        ? 'boolean'
+        : typeof value === 'number'
+          ? Number.isInteger(value)
+            ? 'integer'
+            : 'float'
+          : 'string';
+    return [
+      {
+        key,
+        label: formatModuleFieldLabel(key),
+        kind,
+      },
+    ];
+  });
+}
+
+function buildModuleForm(
+  config: Record<string, unknown>,
+  fields: ModuleFieldSpec[],
+): Record<string, string | boolean> {
+  return Object.fromEntries(
+    fields.map((field) => {
+      const value = config[field.key];
+      if (field.kind === 'boolean') {
+        return [field.key, value === true];
+      }
+      return [field.key, value === null || value === undefined ? '' : String(value)];
+    }),
+  );
+}
+
+function buildGenericModuleCardState(config: Record<string, unknown>): GenericModuleCardState {
+  const fields = buildModuleFieldSpecs(config);
+  return {
+    kind: 'ready',
+    config,
+    fields,
+    form: buildModuleForm(config, fields),
+    message: null,
+    saveState: { kind: 'idle' },
+  };
+}
+
+function normalizeStringMap(source: Record<string, unknown> | undefined): Record<string, string> {
+  if (!source) return {};
+  return Object.fromEntries(
+    Object.entries(source).map(([key, value]) => [
+      key,
+      value === null || value === undefined
+        ? ''
+        : typeof value === 'string'
+          ? value
+          : String(value),
+    ]),
+  );
+}
+
+function buildKernelModuleState(data?: KernelModuleResponse): KernelModuleState {
+  const parameters = normalizeStringMap(
+    isRecord(data?.parameters) ? (data.parameters as Record<string, unknown>) : undefined,
+  );
+  return {
+    kind: 'ready',
+    parameters,
+    errors: normalizeStringMap(
+      isRecord(data?.errors) ? (data.errors as Record<string, unknown>) : undefined,
+    ),
+    form: { ...parameters },
+    persist: false,
+    message: null,
+    saveState: { kind: 'idle' },
+  };
+}
+
+function buildInitialGenericModuleCards(): Record<GenericModuleKey, GenericModuleCardState> {
+  return genericModuleDefinitions.reduce<Record<GenericModuleKey, GenericModuleCardState>>(
+    (cards, definition) => ({
+      ...cards,
+      [definition.key]: {
+        kind: 'idle',
+        config: null,
+        fields: [],
+        form: {},
+        message: null,
+        saveState: { kind: 'idle' },
+      },
+    }),
+    {} as Record<GenericModuleKey, GenericModuleCardState>,
+  );
+}
+
+function buildInitialKernelModuleState(): KernelModuleState {
+  return {
+    kind: 'idle',
+    parameters: {},
+    errors: {},
+    form: {},
+    persist: false,
+    message: null,
+    saveState: { kind: 'idle' },
+  };
+}
+
+function buildGenericModulePayload(card: GenericModuleCardState): Record<string, unknown> {
+  const nextConfig = structuredClone(card.config ?? {});
+  card.fields.forEach((field) => {
+    if (field.kind === 'boolean') {
+      nextConfig[field.key] = card.form[field.key] === true;
+      return;
+    }
+    const rawValue = String(card.form[field.key] ?? '');
+    nextConfig[field.key] =
+      field.kind === 'integer'
+        ? parseIntegerField(rawValue, field.label)
+        : field.kind === 'float'
+          ? parseFloatField(rawValue, field.label)
+          : rawValue;
+  });
+  return nextConfig;
 }
 
 function buildKeyValueRows(source: Record<string, unknown> | undefined): KeyValueFormRow[] {
@@ -1136,11 +1377,13 @@ function ToggleField({
   label,
   helper,
   checked,
+  disabled = false,
   onChange,
 }: {
   label: string;
   helper?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   const inputId = useId();
@@ -1151,6 +1394,7 @@ function ToggleField({
         id={inputId}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         aria-describedby={helperId}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
@@ -1167,6 +1411,215 @@ function ToggleField({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function GenericModuleCard({
+  definition,
+  card,
+  disabled,
+  onFieldChange,
+  onSave,
+  onReset,
+}: {
+  definition: (typeof genericModuleDefinitions)[number];
+  card: GenericModuleCardState;
+  disabled: boolean;
+  onFieldChange: (fieldKey: string, value: string | boolean) => void;
+  onSave: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <Box bg="card" p="lg" border="top" borderColor={definition.accent}>
+      <Stack gap="md">
+        <div>
+          <Text variant="heading">{definition.label}</Text>
+          <Text variant="body" color={colors.textSecondary}>
+            {definition.description}
+          </Text>
+        </div>
+
+        {card.saveState.kind === 'success' ? (
+          <Alert status="success" title="Saved">
+            {card.saveState.message}
+          </Alert>
+        ) : null}
+
+        {card.saveState.kind === 'error' ? (
+          <Alert status="error" title="Save failed">
+            {card.saveState.message}
+          </Alert>
+        ) : null}
+
+        {card.kind === 'loading' || card.kind === 'idle' ? (
+          <div className="console-next-center">
+            <Spinner size={24} />
+          </div>
+        ) : null}
+
+        {card.kind === 'error' && card.message ? (
+          <Alert status="warning" title="Module unavailable">
+            {card.message}
+          </Alert>
+        ) : null}
+
+        {card.kind === 'ready' ? (
+          <form
+            className="console-next-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSave();
+            }}
+          >
+            <div className="console-next-form-grid">
+              {card.fields.map((field) =>
+                field.kind === 'boolean' ? (
+                  <ToggleField
+                    key={field.key}
+                    label={field.label}
+                    checked={card.form[field.key] === true}
+                    disabled={disabled}
+                    onChange={(checked) => onFieldChange(field.key, checked)}
+                  />
+                ) : (
+                  <Input
+                    key={field.key}
+                    fill
+                    label={field.label}
+                    type={field.kind === 'string' ? 'text' : 'number'}
+                    {...(field.kind === 'string'
+                      ? {}
+                      : { step: field.kind === 'float' ? '0.1' : '1' })}
+                    value={String(card.form[field.key] ?? '')}
+                    disabled={disabled}
+                    onChange={(event) => onFieldChange(field.key, event.currentTarget.value)}
+                  />
+                ),
+              )}
+            </div>
+            <div className="console-next-button-row">
+              <Button type="submit" disabled={disabled}>
+                {getSaveButtonLabel(
+                  card.saveState,
+                  disabled && card.saveState.kind !== 'saving',
+                  `Save ${definition.label} module`,
+                )}
+              </Button>
+              <Button type="button" variant="outlined" disabled={disabled} onClick={onReset}>
+                Reset form
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+}
+
+function KernelModuleCard({
+  state,
+  disabled,
+  onFieldChange,
+  onPersistChange,
+  onSave,
+  onReset,
+}: {
+  state: KernelModuleState;
+  disabled: boolean;
+  onFieldChange: (fieldKey: string, value: string) => void;
+  onPersistChange: (next: boolean) => void;
+  onSave: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <Box bg="card" p="lg" border="top" borderColor={colors.blue}>
+      <Stack gap="md">
+        <div>
+          <Text variant="heading">Kernel parameters</Text>
+          <Text variant="body" color={colors.textSecondary}>
+            Legacy sysctl controls still live on the dedicated kernel endpoint, so Console Next
+            edits them here until the older console is retired.
+          </Text>
+        </div>
+
+        {state.saveState.kind === 'success' ? (
+          <Alert status="success" title="Saved">
+            {state.saveState.message}
+          </Alert>
+        ) : null}
+
+        {state.saveState.kind === 'error' ? (
+          <Alert status="error" title="Save failed">
+            {state.saveState.message}
+          </Alert>
+        ) : null}
+
+        {state.kind === 'loading' || state.kind === 'idle' ? (
+          <div className="console-next-center">
+            <Spinner size={24} />
+          </div>
+        ) : null}
+
+        {state.kind === 'error' && state.message ? (
+          <Alert status="warning" title="Kernel module unavailable">
+            {state.message}
+          </Alert>
+        ) : null}
+
+        {state.kind === 'ready' ? (
+          <form
+            className="console-next-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSave();
+            }}
+          >
+            <div className="console-next-form-grid">
+              {Object.keys(state.form).map((key) => (
+                <Input
+                  key={key}
+                  fill
+                  label={key}
+                  value={state.form[key] ?? ''}
+                  disabled={disabled}
+                  onChange={(event) => onFieldChange(key, event.currentTarget.value)}
+                />
+              ))}
+            </div>
+
+            <ToggleField
+              label="Persist after reboot"
+              helper="Write applied sysctl values to the persisted kernel parameter file."
+              checked={state.persist}
+              disabled={disabled}
+              onChange={onPersistChange}
+            />
+
+            {Object.keys(state.errors).length > 0 ? (
+              <PropertyList
+                entries={Object.entries(state.errors).map(([label, value]) => ({
+                  label,
+                  value,
+                }))}
+              />
+            ) : null}
+
+            <div className="console-next-button-row">
+              <Button type="submit" disabled={disabled}>
+                {getSaveButtonLabel(
+                  state.saveState,
+                  disabled && state.saveState.kind !== 'saving',
+                  'Save kernel parameters',
+                )}
+              </Button>
+              <Button type="button" variant="outlined" disabled={disabled} onClick={onReset}>
+                Reset form
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Stack>
+    </Box>
   );
 }
 
@@ -1656,12 +2109,23 @@ export function App() {
   });
   const [profilerForm, setProfilerForm] = useState<ProfilerFormState>(() => buildProfilerForm());
   const [profilerSaveState, setProfilerSaveState] = useState<SaveState>({ kind: 'idle' });
+  const [moduleCards, setModuleCards] = useState<Record<GenericModuleKey, GenericModuleCardState>>(
+    () => buildInitialGenericModuleCards(),
+  );
+  const [kernelModuleState, setKernelModuleState] = useState<KernelModuleState>(() =>
+    buildInitialKernelModuleState(),
+  );
+  const isModuleSaveInFlight =
+    Object.values(moduleCards).some((card) => card.saveState.kind === 'saving') ||
+    kernelModuleState.saveState.kind === 'saving';
+  const modulesHaveStarted = Object.values(moduleCards).some((card) => card.kind !== 'idle');
   const isAnySaveInFlight =
     saveState.kind === 'saving' ||
     siteSaveState.kind === 'saving' ||
     rateLimitSaveState.kind === 'saving' ||
     integrationsSaveState.kind === 'saving' ||
-    profilerSaveState.kind === 'saving';
+    profilerSaveState.kind === 'saving' ||
+    isModuleSaveInFlight;
 
   async function load(): Promise<LoadState> {
     setState({ kind: 'loading' });
@@ -1743,9 +2207,246 @@ export function App() {
     };
   }
 
+  async function loadModules() {
+    setModuleCards((current) =>
+      Object.fromEntries(
+        genericModuleDefinitions.map((definition) => [
+          definition.key,
+          {
+            ...current[definition.key],
+            kind: 'loading',
+            message: null,
+            saveState: { kind: 'idle' },
+          },
+        ]),
+      ) as Record<GenericModuleKey, GenericModuleCardState>,
+    );
+    setKernelModuleState((current) => ({
+      ...current,
+      kind: 'loading',
+      message: null,
+      saveState: { kind: 'idle' },
+    }));
+
+    const results = await Promise.allSettled([
+      ...genericModuleDefinitions.map((definition) =>
+        readApiWithMeta<Record<string, unknown>>(definition.path),
+      ),
+      readApiWithMeta<KernelModuleResponse>('/_sensor/config/kernel'),
+    ]);
+
+    setModuleCards(() =>
+      Object.fromEntries(
+        genericModuleDefinitions.map((definition, index) => {
+          const result = results[index];
+          if (result.status === 'fulfilled') {
+            return [definition.key, buildGenericModuleCardState(result.value.data)];
+          }
+          return [
+            definition.key,
+            {
+              kind: 'error',
+              config: null,
+              fields: [],
+              form: {},
+              message:
+                result.reason instanceof Error ? result.reason.message : 'Request failed.',
+              saveState: { kind: 'idle' },
+            },
+          ];
+        }),
+      ) as Record<GenericModuleKey, GenericModuleCardState>,
+    );
+
+    const kernelResult = results[genericModuleDefinitions.length];
+    setKernelModuleState(
+      kernelResult.status === 'fulfilled'
+        ? buildKernelModuleState(kernelResult.value.data)
+        : {
+            kind: 'error',
+            parameters: {},
+            errors: {},
+            form: {},
+            persist: false,
+            message:
+              kernelResult.reason instanceof Error
+                ? kernelResult.reason.message
+                : 'Request failed.',
+            saveState: { kind: 'idle' },
+          },
+    );
+  }
+
+  function updateModuleField(
+    moduleKey: GenericModuleKey,
+    fieldKey: string,
+    value: string | boolean,
+  ) {
+    setModuleCards((current) => ({
+      ...current,
+      [moduleKey]: {
+        ...current[moduleKey],
+        form: { ...current[moduleKey].form, [fieldKey]: value },
+        saveState: { kind: 'idle' },
+      },
+    }));
+  }
+
+  async function saveGenericModule(definition: (typeof genericModuleDefinitions)[number]) {
+    const card = moduleCards[definition.key];
+    if (card.kind !== 'ready' || card.saveState.kind === 'saving' || isAnySaveInFlight) {
+      return;
+    }
+
+    setModuleCards((current) => ({
+      ...current,
+      [definition.key]: {
+        ...current[definition.key],
+        saveState: { kind: 'saving' },
+      },
+    }));
+
+    try {
+      const payload = buildGenericModulePayload(card);
+      const response = await requestJson<ApiEnvelope<unknown> & { message?: string }>(
+        definition.path,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!response.success) {
+        throw new Error(response.error ?? response.message ?? 'Failed to save module config.');
+      }
+      const refreshed = await readApiWithMeta<Record<string, unknown>>(definition.path);
+      setModuleCards((current) => ({
+        ...current,
+        [definition.key]: {
+          ...buildGenericModuleCardState(refreshed.data),
+          saveState: {
+            kind: 'success',
+            message: response.message ?? `${definition.label} configuration updated.`,
+          },
+        },
+      }));
+    } catch (error) {
+      setModuleCards((current) => ({
+        ...current,
+        [definition.key]: {
+          ...current[definition.key],
+          saveState: {
+            kind: 'error',
+            message: error instanceof Error ? error.message : 'Failed to save module config.',
+          },
+        },
+      }));
+    }
+  }
+
+  async function saveKernelModule() {
+    if (
+      kernelModuleState.kind !== 'ready' ||
+      kernelModuleState.saveState.kind === 'saving' ||
+      isAnySaveInFlight
+    ) {
+      return;
+    }
+
+    setKernelModuleState((current) => ({ ...current, saveState: { kind: 'saving' } }));
+
+    try {
+      const currentPersist = kernelModuleState.persist;
+      const currentForm = { ...kernelModuleState.form };
+      const params = Object.fromEntries(
+        Object.entries(currentForm)
+          .map(([key, value]) => [key, value.trim()] as const)
+          .filter(
+            ([key, value]) => value !== (kernelModuleState.parameters[key] ?? ''),
+          ),
+      );
+      if (Object.keys(params).length === 0) {
+        throw new Error('Change at least one kernel parameter before saving.');
+      }
+      const response = await requestJson<
+        ApiEnvelope<KernelModuleMutation> & { warnings?: string[] }
+      >('/_sensor/config/kernel', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          params,
+          persist: currentPersist,
+        }),
+      });
+      if (!response.data) {
+        throw new Error(response.error ?? 'Failed to save kernel parameters.');
+      }
+      if (!response.success) {
+        const failed = normalizeStringMap(
+          isRecord(response.data.failed)
+            ? (response.data.failed as Record<string, unknown>)
+            : undefined,
+        );
+        const applied = normalizeStringMap(
+          isRecord(response.data.applied)
+            ? (response.data.applied as Record<string, unknown>)
+            : undefined,
+        );
+        const failedKeys = Object.keys(failed);
+        setKernelModuleState((current) => ({
+          ...current,
+          parameters: { ...current.parameters, ...applied },
+          errors: failed,
+          form: currentForm,
+          persist: currentPersist,
+          saveState: {
+            kind: 'error',
+            message:
+              response.error ??
+              (failedKeys.length > 0
+                ? `Kernel parameter update failed for: ${failedKeys.join(', ')}.`
+                : 'Kernel parameter update reported failures.'),
+          },
+        }));
+        return;
+      }
+      const refreshed = await readApiWithMeta<KernelModuleResponse>('/_sensor/config/kernel');
+      const appliedCount = isRecord(response.data.applied)
+        ? Object.keys(response.data.applied).length
+        : 0;
+      setKernelModuleState({
+        ...buildKernelModuleState(refreshed.data),
+        persist: currentPersist,
+        saveState: {
+          kind: 'success',
+          message: `Kernel parameters saved. Applied ${appliedCount} parameter(s).`,
+        },
+      });
+    } catch (error) {
+      setKernelModuleState((current) => ({
+        ...current,
+        saveState: {
+          kind: 'error',
+          message:
+            error instanceof Error ? error.message : 'Failed to save kernel parameters.',
+        },
+      }));
+    }
+  }
+
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'modules') {
+      return;
+    }
+    if (modulesHaveStarted || kernelModuleState.kind !== 'idle') {
+      return;
+    }
+    void loadModules();
+  }, [activeTab, modulesHaveStarted, kernelModuleState.kind]);
 
   useEffect(() => {
     if (saveState.kind !== 'success' || saveState.sticky === true) {
@@ -2389,6 +3090,8 @@ export function App() {
             variant="outlined"
             onClick={() => {
               setSaveState({ kind: 'idle' });
+              setModuleCards(buildInitialGenericModuleCards());
+              setKernelModuleState(buildInitialKernelModuleState());
               void load();
             }}
           >
@@ -2398,8 +3101,9 @@ export function App() {
       </header>
 
       <Alert status="info" title="Operator surface is live">
-        Server, site CRUD, and per-site WAF/header overrides now run through the real
-        full-config API. TLS, shadow-mirror, and access-control editors are the next gaps.
+        Server, site CRUD, modules, integrations, and per-site WAF/header overrides now run
+        through Console Next. TLS, shadow-mirror, and access-control editors are the next
+        full-config gaps.
       </Alert>
 
       <div className="console-next-tabs">
@@ -3071,6 +3775,81 @@ export function App() {
                 </Stack>
               </form>
             )}
+          </Stack>
+        </section>
+      ) : null}
+
+      {state.kind === 'ready' && activeTab === 'modules' ? (
+        <section role="tabpanel" id="panel-modules" aria-labelledby="tab-modules">
+          <Stack gap="lg">
+            <Box bg="card" p="lg" border="top" borderColor={colors.skyBlue}>
+              <Stack gap="sm">
+                <Text variant="heading">Threat-detection modules</Text>
+                <Text variant="body" color={colors.textSecondary}>
+                  Legacy module endpoints still back DLP, crawler, tarpit, block-page, entity,
+                  travel, and kernel controls. Console Next now edits those dedicated surfaces
+                  directly so the older console can be retired without losing operator controls.
+                </Text>
+              </Stack>
+            </Box>
+
+            <Stack gap="md">
+              {genericModuleDefinitions.map((definition) => (
+                <GenericModuleCard
+                  key={definition.key}
+                  definition={definition}
+                  card={moduleCards[definition.key]}
+                  disabled={isAnySaveInFlight}
+                  onFieldChange={(fieldKey, value) =>
+                    updateModuleField(definition.key, fieldKey, value)
+                  }
+                  onSave={() => {
+                    void saveGenericModule(definition);
+                  }}
+                  onReset={() =>
+                    setModuleCards((current) => ({
+                      ...current,
+                      [definition.key]:
+                        current[definition.key].config !== null
+                          ? buildGenericModuleCardState(
+                              structuredClone(current[definition.key].config as Record<string, unknown>),
+                            )
+                          : current[definition.key],
+                    }))
+                  }
+                />
+              ))}
+
+              <KernelModuleCard
+                state={kernelModuleState}
+                disabled={isAnySaveInFlight}
+                onFieldChange={(fieldKey, value) =>
+                  setKernelModuleState((current) => ({
+                    ...current,
+                    form: { ...current.form, [fieldKey]: value },
+                    saveState: { kind: 'idle' },
+                  }))
+                }
+                onPersistChange={(persist) =>
+                  setKernelModuleState((current) => ({
+                    ...current,
+                    persist,
+                    saveState: { kind: 'idle' },
+                  }))
+                }
+                onSave={() => {
+                  void saveKernelModule();
+                }}
+                onReset={() =>
+                  setKernelModuleState((current) => ({
+                    ...current,
+                    form: { ...current.parameters },
+                    persist: false,
+                    saveState: { kind: 'idle' },
+                  }))
+                }
+              />
+            </Stack>
           </Stack>
         </section>
       ) : null}

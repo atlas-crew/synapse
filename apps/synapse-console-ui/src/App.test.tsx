@@ -47,6 +47,70 @@ const baseIntegrations = {
   apparatus_url: 'https://apparatus.example.com',
 };
 
+const baseModules = {
+  dlp: {
+    enabled: true,
+    fast_mode: false,
+    scan_text_only: true,
+    max_scan_size: 5242880,
+    max_body_inspection_bytes: 8192,
+    max_matches: 100,
+    custom_keywords: ['pii', 'secret'],
+    future_policy: { mode: 'strict' },
+  },
+  blockPage: {
+    company_name: null,
+    support_email: null,
+    logo_url: null,
+    show_request_id: true,
+    show_timestamp: true,
+    show_client_ip: false,
+    show_rule_id: false,
+    custom_css: null,
+  },
+  crawler: {
+    enabled: true,
+    verify_legitimate_crawlers: true,
+    block_bad_bots: true,
+    dns_failure_policy: 'apply_risk_penalty',
+    dns_cache_ttl_secs: 300,
+    dns_timeout_ms: 2000,
+    max_concurrent_dns_lookups: 100,
+    dns_failure_risk_penalty: 20,
+  },
+  tarpit: {
+    enabled: true,
+    base_delay_ms: 1000,
+    max_delay_ms: 30000,
+    progressive_multiplier: 1.5,
+    max_concurrent_tarpits: 1000,
+    decay_threshold_ms: 300000,
+  },
+  travel: {
+    max_speed_kmh: 800,
+    min_distance_km: 100,
+    history_window_ms: 86400000,
+    max_history_per_user: 100,
+  },
+  entity: {
+    enabled: true,
+    max_entities: 100000,
+    risk_decay_per_minute: 10,
+    block_threshold: 70,
+    max_risk: 100,
+    max_rules_per_entity: 50,
+  },
+  kernel: {
+    parameters: {
+      'net.ipv4.ip_forward': '0',
+      'net.core.somaxconn': '4096',
+    },
+    errors: {
+      'vm.overcommit_memory': 'permission denied',
+    },
+  },
+};
+
 function jsonResponse(body: unknown, init?: ResponseInit) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
@@ -64,6 +128,11 @@ describe('App', () => {
   let currentIntegrations: any;
   let currentIntegrationsEtag: string;
   let integrationsPutCount: number;
+  let currentModules: any;
+  let moduleGetFailures: Record<string, { status: number; body: unknown }>;
+  let modulePutFailures: Record<string, { status: number; body: unknown }>;
+  let kernelGetFailure: { status: number; body: unknown } | null;
+  let kernelPutResponse: { status: number; body: unknown } | null;
   let fetchMock: FetchMock;
 
   beforeEach(() => {
@@ -71,9 +140,22 @@ describe('App', () => {
     currentIntegrations = structuredClone(baseIntegrations);
     currentIntegrationsEtag = '"integrations-v1"';
     integrationsPutCount = 0;
+    currentModules = structuredClone(baseModules);
+    moduleGetFailures = {};
+    modulePutFailures = {};
+    kernelGetFailure = null;
+    kernelPutResponse = null;
     fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
+      const moduleRouteMap: Record<string, keyof typeof baseModules> = {
+        '/_sensor/config/dlp': 'dlp',
+        '/_sensor/config/block-page': 'blockPage',
+        '/_sensor/config/crawler': 'crawler',
+        '/_sensor/config/tarpit': 'tarpit',
+        '/_sensor/config/travel': 'travel',
+        '/_sensor/config/entity': 'entity',
+      };
 
       if (url === '/health') {
         return jsonResponse({ healthy: true, status: 'ok' });
@@ -130,6 +212,70 @@ describe('App', () => {
           },
           { headers: { ETag: currentIntegrationsEtag } },
         );
+      }
+
+      if (url in moduleRouteMap && method === 'GET') {
+        const failure = moduleGetFailures[url];
+        if (failure) {
+          return jsonResponse(failure.body, { status: failure.status });
+        }
+
+        return jsonResponse({
+          success: true,
+          data: currentModules[moduleRouteMap[url]],
+        });
+      }
+
+      if (url in moduleRouteMap && method === 'PUT') {
+        const failure = modulePutFailures[url];
+        if (failure) {
+          return jsonResponse(failure.body, { status: failure.status });
+        }
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        const moduleKey = moduleRouteMap[url];
+        currentModules[moduleKey] = {
+          ...currentModules[moduleKey],
+          ...body,
+        };
+        return jsonResponse({
+          success: true,
+          message: `${moduleKey} configuration updated`,
+        });
+      }
+
+      if (url === '/_sensor/config/kernel' && method === 'GET') {
+        if (kernelGetFailure) {
+          return jsonResponse(kernelGetFailure.body, { status: kernelGetFailure.status });
+        }
+        return jsonResponse({
+          success: true,
+          data: currentModules.kernel,
+        });
+      }
+
+      if (url === '/_sensor/config/kernel' && method === 'PUT') {
+        if (kernelPutResponse) {
+          return jsonResponse(kernelPutResponse.body, { status: kernelPutResponse.status });
+        }
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        const params = body.params ?? {};
+        currentModules.kernel = {
+          ...currentModules.kernel,
+          parameters: {
+            ...currentModules.kernel.parameters,
+            ...params,
+          },
+        };
+        return jsonResponse({
+          success: true,
+          data: {
+            applied: params,
+            failed: {},
+            persisted: body.persist === true,
+            persistError: null,
+          },
+          warnings: [],
+        });
       }
 
       if (url === '/config' && method === 'GET') {
@@ -281,6 +427,16 @@ describe('App', () => {
     return JSON.parse(String(last[1].body ?? '{}'));
   }
 
+  function lastPutBodyForPath(path: string): Record<string, unknown> | null {
+    const putCalls = fetchMock.mock.calls.filter((call) => {
+      const [url, init] = call as [string, RequestInit | undefined];
+      return url === path && init?.method === 'PUT';
+    });
+    if (putCalls.length === 0) return null;
+    const last = putCalls[putCalls.length - 1] as [string, RequestInit];
+    return JSON.parse(String(last[1].body ?? '{}'));
+  }
+
   async function openSitesTab() {
     render(<App />);
     await screen.findByText('Synapse Operator UI');
@@ -308,6 +464,169 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
     await screen.findByLabelText('Access mode');
   }
+
+  async function openModulesTab() {
+    render(<App />);
+    await screen.findByText('Synapse Operator UI');
+    fireEvent.click(screen.getByRole('tab', { name: 'Modules' }));
+    await screen.findByText('Threat-detection modules');
+  }
+
+  it('loads the modules tab with generic module editors and kernel parameters', async () => {
+    await openModulesTab();
+
+    expect(await screen.findByLabelText('Max matches')).toHaveValue(100);
+    expect(screen.getByLabelText('Fast mode')).not.toBeChecked();
+    expect(screen.getByLabelText('Show request id')).toBeChecked();
+    expect(screen.getByLabelText('net.ipv4.ip_forward')).toHaveValue('0');
+    expect(screen.getByText('vm.overcommit_memory')).toBeInTheDocument();
+    expect(screen.getByText('permission denied')).toBeInTheDocument();
+  });
+
+  it('saves generic module edits through the dedicated module endpoint without dropping opaque fields', async () => {
+    await openModulesTab();
+
+    fireEvent.change(await screen.findByLabelText('Max matches'), {
+      target: { value: '250' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save DLP module' }));
+
+    await waitFor(() => {
+      expect(lastPutBodyForPath('/_sensor/config/dlp')).not.toBeNull();
+    });
+
+    expect(lastPutBodyForPath('/_sensor/config/dlp')).toEqual({
+      enabled: true,
+      fast_mode: false,
+      scan_text_only: true,
+      max_scan_size: 5242880,
+      max_body_inspection_bytes: 8192,
+      max_matches: 250,
+      custom_keywords: ['pii', 'secret'],
+      future_policy: { mode: 'strict' },
+    });
+    expect(await screen.findByText('dlp configuration updated')).toBeInTheDocument();
+  });
+
+  it('preserves module form edits when a generic module save fails', async () => {
+    modulePutFailures['/_sensor/config/dlp'] = {
+      status: 400,
+      body: { success: false, error: 'max_matches must be <= 10000' },
+    };
+
+    await openModulesTab();
+
+    fireEvent.change(await screen.findByLabelText('Max matches'), {
+      target: { value: '250' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save DLP module' }));
+
+    expect(await screen.findByText('max_matches must be <= 10000')).toBeInTheDocument();
+    expect(screen.getByLabelText('Max matches')).toHaveValue(250);
+  });
+
+  it('renders float module fields with decimal step and saves decimal values', async () => {
+    await openModulesTab();
+
+    const multiplier = await screen.findByLabelText('Progressive multiplier');
+    expect(multiplier).toHaveAttribute('step', '0.1');
+
+    fireEvent.change(multiplier, {
+      target: { value: '2.25' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Tarpit module' }));
+
+    await waitFor(() => {
+      expect(lastPutBodyForPath('/_sensor/config/tarpit')).not.toBeNull();
+    });
+
+    expect(lastPutBodyForPath('/_sensor/config/tarpit')).toMatchObject({
+      progressive_multiplier: 2.25,
+    });
+  });
+
+  it('saves kernel parameter edits via the kernel endpoint', async () => {
+    await openModulesTab();
+
+    fireEvent.change(await screen.findByLabelText('net.ipv4.ip_forward'), {
+      target: { value: '1' },
+    });
+    fireEvent.click(screen.getByLabelText('Persist after reboot'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save kernel parameters' }));
+
+    await waitFor(() => {
+      expect(lastPutBodyForPath('/_sensor/config/kernel')).not.toBeNull();
+    });
+
+    expect(lastPutBodyForPath('/_sensor/config/kernel')).toEqual({
+      params: {
+        'net.ipv4.ip_forward': '1',
+      },
+      persist: true,
+    });
+    expect(
+      await screen.findByText('Kernel parameters saved. Applied 1 parameter(s).'),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces failed kernel parameters without discarding applied changes', async () => {
+    kernelPutResponse = {
+      status: 200,
+      body: {
+        success: false,
+        data: {
+          applied: { 'net.ipv4.ip_forward': '1' },
+          failed: { 'net.core.somaxconn': 'read-only' },
+          persisted: false,
+          persistError: null,
+        },
+      },
+    };
+
+    await openModulesTab();
+
+    fireEvent.change(await screen.findByLabelText('net.ipv4.ip_forward'), {
+      target: { value: '1' },
+    });
+    fireEvent.change(screen.getByLabelText('net.core.somaxconn'), {
+      target: { value: '8192' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save kernel parameters' }));
+
+    expect(
+      await screen.findByText(
+        'Kernel parameter update failed for: net.core.somaxconn.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('net.core.somaxconn').length).toBeGreaterThan(0);
+    expect(screen.getByText('read-only')).toBeInTheDocument();
+    expect(screen.getByLabelText('net.ipv4.ip_forward')).toHaveValue('1');
+    expect(screen.getByLabelText('net.core.somaxconn')).toHaveValue('8192');
+  });
+
+  it('shows a per-card warning when a legacy module endpoint is unavailable', async () => {
+    moduleGetFailures['/_sensor/config/dlp'] = {
+      status: 503,
+      body: { success: false, error: 'DLP module unavailable' },
+    };
+
+    await openModulesTab();
+
+    expect(await screen.findByText('DLP module unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Block page')).toBeInTheDocument();
+  });
+
+  it('shows a dedicated warning when the kernel module endpoint is unavailable', async () => {
+    kernelGetFailure = {
+      status: 503,
+      body: { success: false, error: 'Kernel module unavailable' },
+    };
+
+    await openModulesTab();
+
+    expect((await screen.findAllByText('Kernel module unavailable')).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Max matches')).toBeInTheDocument();
+  });
 
   it('loads the integrations tab and renders the backend fields', async () => {
     await openIntegrationsTab();
