@@ -80,15 +80,31 @@ type GlobalConfig = {
   [key: string]: unknown;
 };
 
+type SiteWafConfig = {
+  enabled?: boolean;
+  threshold?: number | null;
+  rule_overrides?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+type HeaderOpsConfig = {
+  add?: Record<string, string>;
+  set?: Record<string, string>;
+  remove?: string[];
+  [key: string]: unknown;
+};
+
+type HeaderConfig = {
+  request?: HeaderOpsConfig;
+  response?: HeaderOpsConfig;
+  [key: string]: unknown;
+};
+
 type SiteConfig = {
   hostname?: string;
   upstreams?: Array<{ host?: string; port?: number; [key: string]: unknown }>;
-  waf?: {
-    enabled?: boolean;
-    rule_overrides?: Record<string, string>;
-    [key: string]: unknown;
-  };
-  headers?: Record<string, unknown>;
+  waf?: SiteWafConfig;
+  headers?: HeaderConfig;
   shadow_mirror?: unknown;
   tls?: unknown;
   [key: string]: unknown;
@@ -187,9 +203,39 @@ type UpstreamFormRow = {
   port: string;
 };
 
+type KeyValueFormRow = {
+  id: string;
+  key: string;
+  value: string;
+};
+
+type StringFormRow = {
+  id: string;
+  value: string;
+};
+
+type SiteWafFormState = {
+  enabled: boolean;
+  threshold: string;
+  rule_overrides: KeyValueFormRow[];
+};
+
+type HeaderOpsFormState = {
+  add: KeyValueFormRow[];
+  set: KeyValueFormRow[];
+  remove: StringFormRow[];
+};
+
+type SiteHeadersFormState = {
+  request: HeaderOpsFormState;
+  response: HeaderOpsFormState;
+};
+
 type SiteFormState = {
   hostname: string;
   upstreams: UpstreamFormRow[];
+  waf: SiteWafFormState;
+  headers: SiteHeadersFormState;
 };
 
 type SiteEditorState =
@@ -245,6 +291,164 @@ type TabKey = (typeof tabs)[number]['key'];
 
 function nextUpstreamRowId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `upstream-row-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function nextFormRowId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `form-row-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function buildKeyValueRows(source: Record<string, unknown> | undefined): KeyValueFormRow[] {
+  if (!source) return [];
+  return Object.entries(source).flatMap(([key, value]) =>
+    typeof value === 'string'
+      ? [
+          {
+            id: nextFormRowId(),
+            key,
+            value,
+          },
+        ]
+      : [],
+  );
+}
+
+function buildStringRows(source: unknown): StringFormRow[] {
+  if (!Array.isArray(source)) return [];
+  return source
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => ({
+      id: nextFormRowId(),
+      value,
+    }));
+}
+
+function normalizeStringRecord(source: Record<string, unknown> | undefined): Record<string, string> {
+  if (!source) return {};
+  const next: Record<string, string> = {};
+  Object.entries(source).forEach(([key, value]) => {
+    if (typeof value === 'string') {
+      next[key] = value;
+    }
+  });
+  return next;
+}
+
+function recordsEqual(
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) return false;
+  return leftEntries.every(([key, value]) => right[key] === value);
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function buildRuleOverrideRecord(rows: KeyValueFormRow[]): Record<string, string> {
+  const next: Record<string, string> = {};
+  rows.forEach((row, index) => {
+    const key = row.key.trim();
+    const value = row.value.trim();
+    if (key === '' && value === '') return;
+    if (key === '') {
+      throw new Error(`Rule override #${index + 1}: rule ID is required.`);
+    }
+    if (value === '') {
+      throw new Error(`Rule override #${index + 1}: action is required.`);
+    }
+    next[key] = value;
+  });
+  return next;
+}
+
+function buildHeaderRecord(rows: KeyValueFormRow[], label: string): Record<string, string> {
+  const next: Record<string, string> = {};
+  rows.forEach((row, index) => {
+    const key = row.key.trim();
+    const value = row.value.trim();
+    if (key === '' && value === '') return;
+    if (key === '') {
+      throw new Error(`${label} #${index + 1}: header name is required.`);
+    }
+    if (value === '') {
+      throw new Error(`${label} #${index + 1}: header value is required.`);
+    }
+    next[key] = value;
+  });
+  return next;
+}
+
+function buildRemoveList(rows: StringFormRow[]): string[] {
+  return rows
+    .map((row) => row.value.trim())
+    .filter((value) => value !== '');
+}
+
+function buildHeaderOpsForm(source?: HeaderOpsConfig): HeaderOpsFormState {
+  return {
+    add: buildKeyValueRows(normalizeStringRecord(source?.add)),
+    set: buildKeyValueRows(normalizeStringRecord(source?.set)),
+    remove: buildStringRows(source?.remove),
+  };
+}
+
+function buildHeadersForm(source?: HeaderConfig): SiteHeadersFormState {
+  return {
+    request: buildHeaderOpsForm(source?.request),
+    response: buildHeaderOpsForm(source?.response),
+  };
+}
+
+function buildWafForm(source?: SiteWafConfig): SiteWafFormState {
+  return {
+    enabled: source?.enabled ?? true,
+    threshold:
+      typeof source?.threshold === 'number' && Number.isFinite(source.threshold)
+        ? String(source.threshold)
+        : '',
+    rule_overrides: buildKeyValueRows(normalizeStringRecord(source?.rule_overrides)),
+  };
+}
+
+function normalizeHeaderOps(source?: HeaderOpsConfig): {
+  add: Record<string, string>;
+  set: Record<string, string>;
+  remove: string[];
+} {
+  return {
+    add: normalizeStringRecord(source?.add),
+    set: normalizeStringRecord(source?.set),
+    remove: Array.isArray(source?.remove)
+      ? source.remove.filter((value): value is string => typeof value === 'string')
+      : [],
+  };
+}
+
+function buildHeaderOpsConfig(
+  nextOps: { add: Record<string, string>; set: Record<string, string>; remove: string[] },
+  base?: HeaderOpsConfig,
+): HeaderOpsConfig {
+  const baseRecord = isRecord(base) ? (base as HeaderOpsConfig) : {};
+  const { add: _baseAdd, set: _baseSet, remove: _baseRemove, ...rest } = baseRecord;
+  const next: HeaderOpsConfig = { ...rest };
+  if (Object.keys(nextOps.add).length > 0) {
+    next.add = nextOps.add;
+  }
+  if (Object.keys(nextOps.set).length > 0) {
+    next.set = nextOps.set;
+  }
+  if (nextOps.remove.length > 0) {
+    next.remove = nextOps.remove;
+  }
+  return next;
 }
 
 function extractMessage(data: unknown, fallback: string): string {
@@ -440,6 +644,8 @@ function buildSiteForm(site?: SiteConfig): SiteFormState {
           ? ''
           : String(upstream.port),
     })),
+    waf: buildWafForm(site?.waf),
+    headers: buildHeadersForm(site?.headers),
   };
 }
 
@@ -474,13 +680,117 @@ function siteFromForm(form: SiteFormState, base?: SiteConfig): SiteConfig {
     throw new Error('At least one upstream with a hostname is required.');
   }
 
-  // Preserve fields this editor does not expose yet (for example waf, headers, tls)
-  // by merging them from the original site snapshot carried in `base`.
-  return {
+  const nextSite: SiteConfig = {
     ...(base ?? {}),
     hostname,
     upstreams,
   };
+
+  const nextRuleOverrides = buildRuleOverrideRecord(form.waf.rule_overrides);
+  const nextThreshold =
+    form.waf.threshold.trim() === ''
+      ? null
+      : parseIntegerField(form.waf.threshold, 'Site WAF threshold', { min: 0, max: 100 });
+  const baseWaf = base?.waf;
+  const baseWafEnabled = baseWaf?.enabled ?? true;
+  const baseWafThreshold =
+    typeof baseWaf?.threshold === 'number' && Number.isFinite(baseWaf.threshold)
+      ? baseWaf.threshold
+      : null;
+  const baseRuleOverrides = normalizeStringRecord(baseWaf?.rule_overrides);
+  const wafMatchesBase =
+    !!baseWaf &&
+    form.waf.enabled === baseWafEnabled &&
+    nextThreshold === baseWafThreshold &&
+    recordsEqual(nextRuleOverrides, baseRuleOverrides);
+  const wafIsMeaningful =
+    form.waf.enabled !== true ||
+    nextThreshold !== null ||
+    Object.keys(nextRuleOverrides).length > 0;
+
+  if (wafMatchesBase) {
+    nextSite.waf = baseWaf;
+  } else if (!baseWaf && !wafIsMeaningful) {
+    delete nextSite.waf;
+  } else {
+    const baseWafRecord = isRecord(baseWaf) ? baseWaf : {};
+    const {
+      enabled: _baseEnabled,
+      threshold: _baseThreshold,
+      rule_overrides: _baseRuleOverrides,
+      ...restWaf
+    } = baseWafRecord;
+    const nextWaf: SiteWafConfig = {
+      ...restWaf,
+      enabled: form.waf.enabled,
+    };
+    if (nextThreshold !== null) {
+      nextWaf.threshold = nextThreshold;
+    }
+    if (Object.keys(nextRuleOverrides).length > 0) {
+      nextWaf.rule_overrides = nextRuleOverrides;
+    }
+    if (Object.keys(nextWaf).length === 1 && nextWaf.enabled === true) {
+      delete nextSite.waf;
+    } else {
+      nextSite.waf = nextWaf;
+    }
+  }
+
+  const nextRequestOps = {
+    add: buildHeaderRecord(form.headers.request.add, 'Request add header'),
+    set: buildHeaderRecord(form.headers.request.set, 'Request set header'),
+    remove: buildRemoveList(form.headers.request.remove),
+  };
+  const nextResponseOps = {
+    add: buildHeaderRecord(form.headers.response.add, 'Response add header'),
+    set: buildHeaderRecord(form.headers.response.set, 'Response set header'),
+    remove: buildRemoveList(form.headers.response.remove),
+  };
+  const baseHeaders = base?.headers;
+  const baseRequestOps = normalizeHeaderOps(baseHeaders?.request);
+  const baseResponseOps = normalizeHeaderOps(baseHeaders?.response);
+  const requestMatchesBase =
+    recordsEqual(nextRequestOps.add, baseRequestOps.add) &&
+    recordsEqual(nextRequestOps.set, baseRequestOps.set) &&
+    arraysEqual(nextRequestOps.remove, baseRequestOps.remove);
+  const responseMatchesBase =
+    recordsEqual(nextResponseOps.add, baseResponseOps.add) &&
+    recordsEqual(nextResponseOps.set, baseResponseOps.set) &&
+    arraysEqual(nextResponseOps.remove, baseResponseOps.remove);
+  const headersMatchBase = !!baseHeaders && requestMatchesBase && responseMatchesBase;
+  const headersAreMeaningful =
+    Object.keys(nextRequestOps.add).length > 0 ||
+    Object.keys(nextRequestOps.set).length > 0 ||
+    nextRequestOps.remove.length > 0 ||
+    Object.keys(nextResponseOps.add).length > 0 ||
+    Object.keys(nextResponseOps.set).length > 0 ||
+    nextResponseOps.remove.length > 0;
+
+  if (headersMatchBase) {
+    nextSite.headers = baseHeaders;
+  } else if (!baseHeaders && !headersAreMeaningful) {
+    delete nextSite.headers;
+  } else {
+    const baseHeaderRecord = isRecord(baseHeaders) ? baseHeaders : {};
+    const { request: _baseRequest, response: _baseResponse, ...restHeaders } = baseHeaderRecord;
+    const nextRequestConfig = buildHeaderOpsConfig(nextRequestOps, baseHeaders?.request);
+    const nextResponseConfig = buildHeaderOpsConfig(nextResponseOps, baseHeaders?.response);
+    const nextHeaders: HeaderConfig = { ...restHeaders };
+    if (Object.keys(nextRequestConfig).length > 0) {
+      nextHeaders.request = nextRequestConfig;
+    }
+    if (Object.keys(nextResponseConfig).length > 0) {
+      nextHeaders.response = nextResponseConfig;
+    }
+    if (Object.keys(nextHeaders).length === 0) {
+      delete nextSite.headers;
+    } else {
+      nextSite.headers = nextHeaders;
+    }
+  }
+
+  return nextSite;
 }
 
 function buildServerForm(server?: GlobalConfig): ServerFormState {
@@ -650,6 +960,163 @@ function ToggleField({
   );
 }
 
+function KeyValueListEditor({
+  title,
+  description,
+  rows,
+  saving,
+  nameLabelPrefix,
+  valueLabelPrefix,
+  addButtonLabel,
+  emptyState,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  rows: KeyValueFormRow[];
+  saving: boolean;
+  nameLabelPrefix: string;
+  valueLabelPrefix: string;
+  addButtonLabel: string;
+  emptyState: string;
+  onChange: (rows: KeyValueFormRow[]) => void;
+}) {
+  return (
+    <Stack gap="sm">
+      <div>
+        <Text variant="label">{title}</Text>
+        <Text variant="body" color={colors.textSecondary}>
+          {description}
+        </Text>
+      </div>
+      {rows.length === 0 ? (
+        <Text variant="body" color={colors.textSecondary}>
+          {emptyState}
+        </Text>
+      ) : null}
+      {rows.map((row, index) => (
+        <div key={row.id} className="console-next-form-grid">
+          <Input
+            fill
+            label={`${nameLabelPrefix} #${index + 1}`}
+            value={row.key}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange(rows.map((item, rowIndex) => (rowIndex === index ? { ...item, key: value } : item)));
+            }}
+          />
+          <Input
+            fill
+            label={`${valueLabelPrefix} #${index + 1}`}
+            value={row.value}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange(
+                rows.map((item, rowIndex) => (rowIndex === index ? { ...item, value } : item)),
+              );
+            }}
+          />
+          <div className="console-next-button-row">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+            >
+              Remove row
+            </Button>
+          </div>
+        </div>
+      ))}
+      <div className="console-next-button-row">
+        <Button
+          type="button"
+          variant="outlined"
+          size="sm"
+          disabled={saving}
+          onClick={() => onChange([...rows, { id: nextFormRowId(), key: '', value: '' }])}
+        >
+          {addButtonLabel}
+        </Button>
+      </div>
+    </Stack>
+  );
+}
+
+function StringListEditor({
+  title,
+  description,
+  rows,
+  saving,
+  labelPrefix,
+  addButtonLabel,
+  emptyState,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  rows: StringFormRow[];
+  saving: boolean;
+  labelPrefix: string;
+  addButtonLabel: string;
+  emptyState: string;
+  onChange: (rows: StringFormRow[]) => void;
+}) {
+  return (
+    <Stack gap="sm">
+      <div>
+        <Text variant="label">{title}</Text>
+        <Text variant="body" color={colors.textSecondary}>
+          {description}
+        </Text>
+      </div>
+      {rows.length === 0 ? (
+        <Text variant="body" color={colors.textSecondary}>
+          {emptyState}
+        </Text>
+      ) : null}
+      {rows.map((row, index) => (
+        <div key={row.id} className="console-next-form-grid">
+          <Input
+            fill
+            label={`${labelPrefix} #${index + 1}`}
+            value={row.value}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onChange(
+                rows.map((item, rowIndex) => (rowIndex === index ? { ...item, value } : item)),
+              );
+            }}
+          />
+          <div className="console-next-button-row">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+            >
+              Remove row
+            </Button>
+          </div>
+        </div>
+      ))}
+      <div className="console-next-button-row">
+        <Button
+          type="button"
+          variant="outlined"
+          size="sm"
+          disabled={saving}
+          onClick={() => onChange([...rows, { id: nextFormRowId(), value: '' }])}
+        >
+          {addButtonLabel}
+        </Button>
+      </div>
+    </Stack>
+  );
+}
+
 function SiteEditor({
   title,
   form,
@@ -771,6 +1238,180 @@ function SiteEditor({
               </Button>
             </div>
           </Stack>
+
+          <Box bg="canvas" p="md" border="top" borderColor={colors.magenta}>
+            <Stack gap="md">
+              <Text variant="heading">WAF</Text>
+              <ToggleField
+                label="Site WAF enabled"
+                helper="Override the global WAF enablement state for this site."
+                checked={form.waf.enabled}
+                onChange={(checked) =>
+                  onChange((current) => ({
+                    ...current,
+                    waf: { ...current.waf, enabled: checked },
+                  }))
+                }
+              />
+              <Input
+                fill
+                label="Site WAF threshold"
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={form.waf.threshold}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  onChange((current) => ({
+                    ...current,
+                    waf: { ...current.waf, threshold: value },
+                  }));
+                }}
+                helper="Leave blank to inherit the global threshold."
+              />
+              <KeyValueListEditor
+                title="Rule overrides"
+                description="Override individual rule actions for this site."
+                rows={form.waf.rule_overrides}
+                saving={saving}
+                nameLabelPrefix="Rule ID"
+                valueLabelPrefix="Rule action"
+                addButtonLabel="Add rule override"
+                emptyState="No rule overrides configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    waf: { ...current.waf, rule_overrides: rows },
+                  }))
+                }
+              />
+            </Stack>
+          </Box>
+
+          <Box bg="canvas" p="md" border="top" borderColor={colors.blue}>
+            <Stack gap="md">
+              <Text variant="heading">Request headers</Text>
+              <KeyValueListEditor
+                title="Add headers"
+                description="Append request headers without replacing existing values."
+                rows={form.headers.request.add}
+                saving={saving}
+                nameLabelPrefix="Request add header name"
+                valueLabelPrefix="Request add header value"
+                addButtonLabel="Add request add header"
+                emptyState="No request add headers configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    headers: {
+                      ...current.headers,
+                      request: { ...current.headers.request, add: rows },
+                    },
+                  }))
+                }
+              />
+              <KeyValueListEditor
+                title="Set headers"
+                description="Replace request header values before proxying upstream."
+                rows={form.headers.request.set}
+                saving={saving}
+                nameLabelPrefix="Request set header name"
+                valueLabelPrefix="Request set header value"
+                addButtonLabel="Add request set header"
+                emptyState="No request set headers configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    headers: {
+                      ...current.headers,
+                      request: { ...current.headers.request, set: rows },
+                    },
+                  }))
+                }
+              />
+              <StringListEditor
+                title="Remove headers"
+                description="Strip request headers before they reach the upstream."
+                rows={form.headers.request.remove}
+                saving={saving}
+                labelPrefix="Request remove header"
+                addButtonLabel="Add request remove header"
+                emptyState="No request remove headers configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    headers: {
+                      ...current.headers,
+                      request: { ...current.headers.request, remove: rows },
+                    },
+                  }))
+                }
+              />
+            </Stack>
+          </Box>
+
+          <Box bg="canvas" p="md" border="top" borderColor={colors.orange}>
+            <Stack gap="md">
+              <Text variant="heading">Response headers</Text>
+              <KeyValueListEditor
+                title="Add headers"
+                description="Append response headers before replies leave the proxy."
+                rows={form.headers.response.add}
+                saving={saving}
+                nameLabelPrefix="Response add header name"
+                valueLabelPrefix="Response add header value"
+                addButtonLabel="Add response add header"
+                emptyState="No response add headers configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    headers: {
+                      ...current.headers,
+                      response: { ...current.headers.response, add: rows },
+                    },
+                  }))
+                }
+              />
+              <KeyValueListEditor
+                title="Set headers"
+                description="Replace response header values before they return to clients."
+                rows={form.headers.response.set}
+                saving={saving}
+                nameLabelPrefix="Response set header name"
+                valueLabelPrefix="Response set header value"
+                addButtonLabel="Add response set header"
+                emptyState="No response set headers configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    headers: {
+                      ...current.headers,
+                      response: { ...current.headers.response, set: rows },
+                    },
+                  }))
+                }
+              />
+              <StringListEditor
+                title="Remove headers"
+                description="Strip response headers before returning traffic to clients."
+                rows={form.headers.response.remove}
+                saving={saving}
+                labelPrefix="Response remove header"
+                addButtonLabel="Add response remove header"
+                emptyState="No response remove headers configured."
+                onChange={(rows) =>
+                  onChange((current) => ({
+                    ...current,
+                    headers: {
+                      ...current.headers,
+                      response: { ...current.headers.response, remove: rows },
+                    },
+                  }))
+                }
+              />
+            </Stack>
+          </Box>
 
           <div className="console-next-button-row">
             <Button type="submit" disabled={saving}>
@@ -1422,8 +2063,8 @@ export function App() {
       </header>
 
       <Alert status="info" title="Operator surface is live">
-        Server configuration editing now runs through the real full-config API. Sites remain
-        read-only in this slice while we stand up CRUD and per-site editors next.
+        Server, site CRUD, and per-site WAF/header overrides now run through the real
+        full-config API. TLS, shadow-mirror, and access-control editors are the next gaps.
       </Alert>
 
       <div className="console-next-tabs">
@@ -2354,8 +2995,9 @@ export function App() {
               <Stack gap="sm">
                 <Text variant="heading">Next operator slices</Text>
                 <Text variant="body" color={colors.textSecondary}>
-                  Per-site TLS/WAF/headers controls and safer config validation flows that expose
-                  backend warnings before restart paths are needed.
+                  Console Next now covers live per-site WAF and header overrides. The next
+                  operator slice is finishing the remaining site-level controls and validation
+                  guardrails.
                 </Text>
               </Stack>
             </Box>
@@ -2364,8 +3006,8 @@ export function App() {
                 <Text variant="label" color={colors.textSecondary}>
                   Remaining UI gaps after this slice
                 </Text>
-                <Text variant="body">Per-site headers and WAF rule override editing</Text>
                 <Text variant="body">Per-site TLS and shadow mirror controls</Text>
+                <Text variant="body">Per-site access control and rate-limit overrides</Text>
               </Stack>
             </Box>
           </Stack>

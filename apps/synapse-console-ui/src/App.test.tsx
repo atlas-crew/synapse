@@ -48,7 +48,7 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe('App', () => {
-  let currentConfig: typeof baseConfig;
+  let currentConfig: any;
   let fetchMock: FetchMock;
 
   beforeEach(() => {
@@ -296,6 +296,278 @@ describe('App', () => {
       waf: { enabled: true, rule_overrides: { sqli: 'block' } },
       headers: { add: { 'x-test': '1' } },
     });
+  });
+
+  it('edits per-site waf controls, clears threshold, and preserves sibling sites', async () => {
+    currentConfig = structuredClone({
+      ...baseConfig,
+      sites: [
+        {
+          hostname: 'example.com',
+          upstreams: [{ host: 'origin.internal', port: 8080 }],
+          waf: {
+            enabled: true,
+            threshold: 91,
+            rule_overrides: { sqli: 'block' },
+            custom_mode: 'learning',
+          },
+          headers: {
+            request: { add: {}, set: {}, remove: [] },
+            response: { add: {}, set: {}, remove: [] },
+          },
+          tls: { mode: 'strict' },
+        },
+        {
+          hostname: 'untouched.example',
+          upstreams: [{ host: 'origin-b.internal', port: 9090, weight: 20 }],
+          waf: { enabled: false, rule_overrides: { ja4: 'log' } },
+          headers: {
+            request: { add: { 'x-existing': '1' }, set: {}, remove: [] },
+            response: { add: {}, set: {}, remove: ['server'] },
+          },
+        },
+      ],
+    });
+
+    await openSitesTab();
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+
+    fireEvent.click(await screen.findByLabelText('Site WAF enabled'));
+    fireEvent.change(screen.getByLabelText('Site WAF threshold'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Rule action #1'), {
+      target: { value: 'log' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule override' }));
+    fireEvent.change(screen.getByLabelText('Rule ID #2'), { target: { value: 'ja4' } });
+    fireEvent.change(screen.getByLabelText('Rule action #2'), { target: { value: 'allow' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save site' }));
+
+    await waitFor(() => {
+      const body = lastPostBody() as { sites: Array<Record<string, unknown>> } | null;
+      expect(body?.sites[0]?.hostname).toBe('example.com');
+    });
+
+    const body = lastPostBody() as {
+      server: unknown;
+      rate_limit: unknown;
+      profiler: unknown;
+      sites: Array<Record<string, unknown>>;
+    };
+    expect(body.server).toEqual(baseConfig.server);
+    expect(body.rate_limit).toEqual(baseConfig.rate_limit);
+    expect(body.profiler).toEqual(baseConfig.profiler);
+    expect(body.sites[0]).toMatchObject({
+      hostname: 'example.com',
+      upstreams: [{ host: 'origin.internal', port: 8080 }],
+      tls: { mode: 'strict' },
+      waf: {
+        enabled: false,
+        custom_mode: 'learning',
+        rule_overrides: {
+          sqli: 'log',
+          ja4: 'allow',
+        },
+      },
+    });
+    expect((body.sites[0].waf as Record<string, unknown>)?.threshold).toBeUndefined();
+    expect(body.sites[1]).toEqual(currentConfig.sites[1]);
+  });
+
+  it('edits all six per-site header operations and preserves opaque nested fields', async () => {
+    currentConfig = structuredClone({
+      ...baseConfig,
+      sites: [
+        {
+          hostname: 'example.com',
+          upstreams: [{ host: 'origin.internal', port: 8080 }],
+          waf: { enabled: true, rule_overrides: {} },
+          headers: {
+            request: {
+              add: { 'x-trace-id': 'trace-1' },
+              set: { 'x-mode': 'monitor' },
+              remove: ['x-remove-request'],
+              opaque_request_flag: true,
+            },
+            response: {
+              add: { 'x-powered-by': 'synapse' },
+              set: { 'cache-control': 'private' },
+              remove: ['server'],
+              opaque_response_flag: 'preserve-me',
+            },
+            legacy_extension: { keep: true },
+          },
+        },
+      ],
+    });
+
+    await openSitesTab();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(await screen.findByText('Request headers')).toBeInTheDocument();
+    expect(screen.getByText('Response headers')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Request add header value #1'), {
+      target: { value: 'trace-2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add request add header' }));
+    fireEvent.change(screen.getByLabelText('Request add header name #2'), {
+      target: { value: 'x-request-added' },
+    });
+    fireEvent.change(screen.getByLabelText('Request add header value #2'), {
+      target: { value: 'alpha' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Request set header value #1'), {
+      target: { value: 'block' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add request set header' }));
+    fireEvent.change(screen.getByLabelText('Request set header name #2'), {
+      target: { value: 'x-request-set' },
+    });
+    fireEvent.change(screen.getByLabelText('Request set header value #2'), {
+      target: { value: 'bravo' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Request remove header #1'), {
+      target: { value: 'x-remove-me' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add request remove header' }));
+    fireEvent.change(screen.getByLabelText('Request remove header #2'), {
+      target: { value: 'x-remove-later' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Response add header value #1'), {
+      target: { value: 'console-next' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add response add header' }));
+    fireEvent.change(screen.getByLabelText('Response add header name #2'), {
+      target: { value: 'x-response-added' },
+    });
+    fireEvent.change(screen.getByLabelText('Response add header value #2'), {
+      target: { value: 'charlie' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Response set header value #1'), {
+      target: { value: 'no-store' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add response set header' }));
+    fireEvent.change(screen.getByLabelText('Response set header name #2'), {
+      target: { value: 'x-response-set' },
+    });
+    fireEvent.change(screen.getByLabelText('Response set header value #2'), {
+      target: { value: 'delta' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Response remove header #1'), {
+      target: { value: 'x-hide-me' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add response remove header' }));
+    fireEvent.change(screen.getByLabelText('Response remove header #2'), {
+      target: { value: 'x-strip-later' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save site' }));
+
+    await waitFor(() => {
+      const body = lastPostBody() as { sites: Array<Record<string, unknown>> } | null;
+      expect(body?.sites[0]?.hostname).toBe('example.com');
+    });
+
+    const body = lastPostBody() as { sites: Array<Record<string, unknown>> };
+    expect(body.sites[0].headers).toEqual({
+      request: {
+        add: {
+          'x-trace-id': 'trace-2',
+          'x-request-added': 'alpha',
+        },
+        set: {
+          'x-mode': 'block',
+          'x-request-set': 'bravo',
+        },
+        remove: ['x-remove-me', 'x-remove-later'],
+        opaque_request_flag: true,
+      },
+      response: {
+        add: {
+          'x-powered-by': 'console-next',
+          'x-response-added': 'charlie',
+        },
+        set: {
+          'cache-control': 'no-store',
+          'x-response-set': 'delta',
+        },
+        remove: ['x-hide-me', 'x-strip-later'],
+        opaque_response_flag: 'preserve-me',
+      },
+      legacy_extension: { keep: true },
+    });
+  });
+
+  it('validates half-filled rule override rows before POST /config', async () => {
+    currentConfig = structuredClone({
+      ...baseConfig,
+      sites: [
+        {
+          hostname: 'example.com',
+          upstreams: [{ host: 'origin.internal', port: 8080 }],
+          waf: { enabled: true, rule_overrides: {} },
+          headers: {
+            request: { add: {}, set: {}, remove: [] },
+            response: { add: {}, set: {}, remove: [] },
+          },
+        },
+      ],
+    });
+
+    await openSitesTab();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add rule override' }));
+    fireEvent.change(screen.getByLabelText('Rule ID #1'), {
+      target: { value: 'ja4' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save site' }));
+
+    expect(
+      await screen.findByText('Rule override #1: action is required.'),
+    ).toBeInTheDocument();
+    expect(lastSitesPostBody()).toBeNull();
+  });
+
+  it('validates half-filled header rows before POST /config', async () => {
+    currentConfig = structuredClone({
+      ...baseConfig,
+      sites: [
+        {
+          hostname: 'example.com',
+          upstreams: [{ host: 'origin.internal', port: 8080 }],
+          waf: { enabled: true, rule_overrides: {} },
+          headers: {
+            request: { add: {}, set: {}, remove: [] },
+            response: { add: {}, set: {}, remove: [] },
+          },
+        },
+      ],
+    });
+
+    await openSitesTab();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add request add header' }));
+    fireEvent.change(screen.getByLabelText('Request add header name #1'), {
+      target: { value: 'x-request-added' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save site' }));
+
+    expect(
+      await screen.findByText('Request add header #1: header value is required.'),
+    ).toBeInTheDocument();
+    expect(lastSitesPostBody()).toBeNull();
   });
 
   it('rejects duplicate hostnames after normalization', async () => {
@@ -618,6 +890,47 @@ describe('App', () => {
     });
   });
 
+  it('renders backend warning suffixes after a successful rate-limit save', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+
+      if (url === '/health') return jsonResponse({ healthy: true, status: 'ok' });
+      if (url === '/_sensor/status')
+        return jsonResponse({ mode: 'proxy', blocked_requests: 0, running: true });
+      if (url === '/_sensor/config')
+        return jsonResponse({ success: true, data: { sites: [] } });
+      if (url === '/config' && method === 'GET') {
+        return jsonResponse(
+          { success: true, data: currentConfig },
+          { headers: { ETag: '"config-v1"' } },
+        );
+      }
+      if (url === '/config' && method === 'POST') {
+        currentConfig = JSON.parse(String(init?.body ?? '{}'));
+        return jsonResponse({
+          success: true,
+          data: {
+            applied: true,
+            persisted: true,
+            rebuild_required: false,
+            warnings: ['override ignored'],
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+
+    await openRateLimitTab();
+
+    fireEvent.change(screen.getByLabelText('Requests per second'), {
+      target: { value: '5000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save rate-limit config' }));
+
+    expect(await screen.findByText(/Warnings: override ignored/)).toBeInTheDocument();
+  });
+
   it('requires rps >= 1 while rate limiting is enabled', async () => {
     await openRateLimitTab();
 
@@ -920,7 +1233,8 @@ describe('App', () => {
     });
     expect(lockedButton).toBeDisabled();
 
-    resolvePost?.();
+    const finishPost = resolvePost as any;
+    finishPost?.();
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Save profiler config' })).toBeEnabled();
