@@ -217,6 +217,9 @@ test('renders the actions surface and runs the legacy operator flows', async ({ 
 
   await page.goto('/live/');
   await expect(page.getByRole('link', { name: 'Open legacy console' })).toHaveCount(0);
+  await expect(page.getByText('Console Next')).toHaveCount(0);
+  await expect(page.getByText('Synapse Operator UI')).toHaveCount(0);
+  await expect(page.getByText('Operator surface is live')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Actions' }).click();
 
   await expect(page.getByRole('heading', { name: 'Operator actions' })).toBeVisible();

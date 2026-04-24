@@ -1767,7 +1767,7 @@ function KernelModuleCard({
               onSave();
             }}
           >
-            <div className="console-next-form-grid">
+            <div className="console-next-form-grid console-next-kernel-grid">
               {Object.keys(state.form).map((key) => (
                 <Input
                   key={key}
@@ -3487,14 +3487,6 @@ export function App() {
       <header className="console-next-header">
         <div className="console-next-brand">
           <img src="/live/assets/sidebar-lockup.svg" alt="Synapse Fleet" />
-          <div>
-            <Text variant="subhead" color={colors.textSecondary}>
-              Console Next
-            </Text>
-            <Text as="h1" variant="heading">
-              Synapse Operator UI
-            </Text>
-          </div>
         </div>
         <div className="console-next-actions">
           <Button
@@ -3516,12 +3508,6 @@ export function App() {
           </Button>
         </div>
       </header>
-
-      <Alert status="info" title="Operator surface is live">
-        Server, site CRUD, modules, integrations, operator actions, and per-site WAF/header
-        overrides now run through Console Next. Shadow-mirror and access-control editors are the
-        next full-config gaps.
-      </Alert>
 
       <div className="console-next-tabs">
         <Tabs

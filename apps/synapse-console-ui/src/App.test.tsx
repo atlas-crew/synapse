@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -392,7 +394,10 @@ describe('App', () => {
   it('loads the full config and saves server edits without dropping other config blocks', async () => {
     render(<App />);
 
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
+    expect(screen.queryByText('Console Next')).not.toBeInTheDocument();
+    expect(screen.queryByText('Synapse Operator UI')).not.toBeInTheDocument();
+    expect(screen.queryByText('Operator surface is live')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open legacy console' })).not.toBeInTheDocument();
     expect(screen.getByAltText('Synapse Fleet')).toHaveAttribute(
       'src',
@@ -443,7 +448,7 @@ describe('App', () => {
   it('blocks save when admin key replacement is enabled but no value is provided', async () => {
     render(<App />);
 
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Server' }));
 
     fireEvent.click(await screen.findByLabelText('Replace admin API key'));
@@ -462,7 +467,7 @@ describe('App', () => {
   it('sends an explicit clear header when the admin key is cleared', async () => {
     render(<App />);
 
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Server' }));
 
     fireEvent.click(await screen.findByLabelText('Clear stored admin API key'));
@@ -528,42 +533,42 @@ describe('App', () => {
 
   async function openSitesTab() {
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Sites' }));
     await screen.findByRole('button', { name: 'Add site' });
   }
 
   async function openRateLimitTab() {
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Rate Limit' }));
     await screen.findByLabelText('Requests per second');
   }
 
   async function openProfilerTab() {
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Profiler' }));
     await screen.findByLabelText('Max profiles');
   }
 
   async function openIntegrationsTab() {
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
     await screen.findByLabelText('Access mode');
   }
 
   async function openModulesTab() {
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Modules' }));
     await screen.findByText('Threat-detection modules');
   }
 
   async function openActionsTab() {
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Actions' }));
     await screen.findByText('Operator actions');
   }
@@ -584,8 +589,21 @@ describe('App', () => {
     expect(screen.getByLabelText('Fast mode')).not.toBeChecked();
     expect(screen.getByLabelText('Show request id')).toBeChecked();
     expect(screen.getByLabelText('net.ipv4.ip_forward')).toHaveValue('0');
+    expect(
+      screen
+        .getByLabelText('net.ipv4.ip_forward')
+        .closest('.console-next-kernel-grid'),
+    ).not.toBeNull();
     expect(screen.getByText('vm.overcommit_memory')).toBeInTheDocument();
     expect(screen.getByText('permission denied')).toBeInTheDocument();
+  });
+
+  it('ships the live lockup artwork with the edge defense label', () => {
+    const logoSvg = readFileSync(join(process.cwd(), 'public/assets/sidebar-lockup.svg'), 'utf8');
+    expect(logoSvg).toContain('Edge Defense');
+    expect(logoSvg).toContain('LIVE');
+    expect(logoSvg).toContain('width="245.40404"');
+    expect(logoSvg).toContain('viewBox="0 0 245.40405 80"');
   });
 
   it('saves generic module edits through the dedicated module endpoint without dropping opaque fields', async () => {
@@ -2044,7 +2062,7 @@ describe('App', () => {
     });
 
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Rate Limit' }));
 
     const rps = await screen.findByLabelText('Requests per second');
@@ -2091,7 +2109,7 @@ describe('App', () => {
     });
 
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Server' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Save server config' }));
 
@@ -2294,7 +2312,7 @@ describe('App', () => {
     });
 
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Rate Limit' }));
 
     const rps = await screen.findByLabelText('Requests per second');
@@ -2362,7 +2380,7 @@ describe('App', () => {
     }) as typeof baseConfig;
 
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Profiler' }));
     await screen.findByLabelText('Max profiles');
@@ -2406,7 +2424,7 @@ describe('App', () => {
     });
 
     render(<App />);
-    await screen.findByText('Synapse Operator UI');
+    await screen.findByRole('button', { name: 'Refresh' });
     fireEvent.click(screen.getByRole('tab', { name: 'Profiler' }));
 
     await screen.findByLabelText('Max profiles');
