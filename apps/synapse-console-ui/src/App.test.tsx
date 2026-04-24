@@ -1208,6 +1208,114 @@ describe('App', () => {
     });
   });
 
+  it('edits per-site tls controls and preserves sibling site config blocks', async () => {
+    currentConfig = structuredClone({
+      ...baseConfig,
+      sites: [
+        {
+          hostname: 'example.com',
+          upstreams: [{ host: 'origin.internal', port: 8080 }],
+          tls: {
+            cert_path: '/etc/ssl/original.crt',
+            key_path: '/etc/ssl/original.key',
+            min_version: '1.2',
+            opaque_tls_flag: 'preserve-me',
+          },
+          waf: { enabled: true, rule_overrides: { sqli: 'block' } },
+          headers: { add: { 'x-test': '1' } },
+        },
+        {
+          hostname: 'untouched.example',
+          upstreams: [{ host: 'origin-b.internal', port: 9090 }],
+          waf: { enabled: false, rule_overrides: { ja4: 'log' } },
+        },
+      ],
+    });
+
+    await openSitesTab();
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+
+    expect(await screen.findByLabelText('Site TLS enabled')).toBeChecked();
+    expect(screen.getByLabelText('TLS certificate path')).toHaveValue('/etc/ssl/original.crt');
+    expect(screen.getByLabelText('TLS key path')).toHaveValue('/etc/ssl/original.key');
+    expect(screen.getByLabelText('Minimum TLS version')).toHaveValue('1.2');
+
+    fireEvent.change(screen.getByLabelText('TLS certificate path'), {
+      target: { value: '/etc/ssl/updated.crt' },
+    });
+    fireEvent.change(screen.getByLabelText('TLS key path'), {
+      target: { value: '/etc/ssl/updated.key' },
+    });
+    fireEvent.change(screen.getByLabelText('Minimum TLS version'), {
+      target: { value: '1.3' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save site' }));
+
+    await waitFor(() => {
+      expect(lastSitesPostBody()?.sites[0]?.hostname).toBe('example.com');
+    });
+
+    const body = lastSitesPostBody() as unknown as {
+      server: unknown;
+      rate_limit: unknown;
+      profiler: unknown;
+      sites: Array<Record<string, unknown>>;
+    };
+    expect(body.server).toEqual(baseConfig.server);
+    expect(body.rate_limit).toEqual(baseConfig.rate_limit);
+    expect(body.profiler).toEqual(baseConfig.profiler);
+    expect(body.sites[0]).toEqual({
+      hostname: 'example.com',
+      upstreams: [{ host: 'origin.internal', port: 8080 }],
+      tls: {
+        cert_path: '/etc/ssl/updated.crt',
+        key_path: '/etc/ssl/updated.key',
+        min_version: '1.3',
+        opaque_tls_flag: 'preserve-me',
+      },
+      waf: { enabled: true, rule_overrides: { sqli: 'block' } },
+      headers: { add: { 'x-test': '1' } },
+    });
+    expect(body.sites[1]).toEqual(currentConfig.sites[1]);
+  });
+
+  it('removes the per-site tls block when tls is disabled', async () => {
+    currentConfig = structuredClone({
+      ...baseConfig,
+      sites: [
+        {
+          hostname: 'example.com',
+          upstreams: [{ host: 'origin.internal', port: 8080 }],
+          tls: {
+            cert_path: '/etc/ssl/original.crt',
+            key_path: '/etc/ssl/original.key',
+            min_version: '1.2',
+          },
+          waf: { enabled: true, rule_overrides: { sqli: 'block' } },
+        },
+      ],
+    });
+
+    await openSitesTab();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(await screen.findByLabelText('Site TLS enabled'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save site' }));
+
+    await waitFor(() => {
+      expect(lastSitesPostBody()?.sites[0]?.hostname).toBe('example.com');
+    });
+
+    const body = lastSitesPostBody() as { sites: Array<Record<string, unknown>> };
+    expect(body.sites[0]).toEqual({
+      hostname: 'example.com',
+      upstreams: [{ host: 'origin.internal', port: 8080 }],
+      waf: { enabled: true, rule_overrides: { sqli: 'block' } },
+    });
+    expect(body.sites[0].tls).toBeUndefined();
+  });
+
   it('edits per-site waf controls, clears threshold, and preserves sibling sites', async () => {
     currentConfig = structuredClone({
       ...baseConfig,

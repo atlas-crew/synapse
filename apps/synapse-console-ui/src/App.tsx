@@ -100,13 +100,20 @@ type HeaderConfig = {
   [key: string]: unknown;
 };
 
+type SiteTlsConfig = {
+  cert_path?: string;
+  key_path?: string;
+  min_version?: string;
+  [key: string]: unknown;
+};
+
 type SiteConfig = {
   hostname?: string;
   upstreams?: Array<{ host?: string; port?: number; [key: string]: unknown }>;
   waf?: SiteWafConfig;
   headers?: HeaderConfig;
   shadow_mirror?: unknown;
-  tls?: unknown;
+  tls?: SiteTlsConfig;
   [key: string]: unknown;
 };
 
@@ -322,9 +329,17 @@ type SiteHeadersFormState = {
   response: HeaderOpsFormState;
 };
 
+type SiteTlsFormState = {
+  enabled: boolean;
+  cert_path: string;
+  key_path: string;
+  min_version: '1.2' | '1.3';
+};
+
 type SiteFormState = {
   hostname: string;
   upstreams: UpstreamFormRow[];
+  tls: SiteTlsFormState;
   waf: SiteWafFormState;
   headers: SiteHeadersFormState;
 };
@@ -470,6 +485,11 @@ const integrationAccessModeOptions = [
   { value: 'telemetry', label: 'telemetry' },
   { value: 'tunnel', label: 'tunnel' },
   { value: 'remote_management', label: 'remote_management' },
+];
+
+const tlsMinVersionOptions = [
+  { value: '1.2', label: '1.2' },
+  { value: '1.3', label: '1.3' },
 ];
 
 function parseIntegrationAccessMode(
@@ -764,6 +784,19 @@ function buildWafForm(source?: SiteWafConfig): SiteWafFormState {
         ? String(source.threshold)
         : '',
     rule_overrides: buildKeyValueRows(normalizeStringRecord(source?.rule_overrides)),
+  };
+}
+
+function parseTlsMinVersion(value: string | undefined): SiteTlsFormState['min_version'] {
+  return value === '1.3' ? '1.3' : '1.2';
+}
+
+function buildTlsForm(source?: SiteTlsConfig): SiteTlsFormState {
+  return {
+    enabled: source !== undefined,
+    cert_path: typeof source?.cert_path === 'string' ? source.cert_path : '',
+    key_path: typeof source?.key_path === 'string' ? source.key_path : '',
+    min_version: parseTlsMinVersion(source?.min_version),
   };
 }
 
@@ -1073,6 +1106,7 @@ function buildSiteForm(site?: SiteConfig): SiteFormState {
           ? ''
           : String(upstream.port),
     })),
+    tls: buildTlsForm(site?.tls),
     waf: buildWafForm(site?.waf),
     headers: buildHeadersForm(site?.headers),
   };
@@ -1114,6 +1148,47 @@ function siteFromForm(form: SiteFormState, base?: SiteConfig): SiteConfig {
     hostname,
     upstreams,
   };
+
+  const baseTls = base?.tls;
+  const nextTlsEnabled = form.tls.enabled;
+  const nextTlsCertPath = form.tls.cert_path.trim();
+  const nextTlsKeyPath = form.tls.key_path.trim();
+  const nextTlsMinVersion = parseTlsMinVersion(form.tls.min_version);
+  const baseTlsCertPath = typeof baseTls?.cert_path === 'string' ? baseTls.cert_path : '';
+  const baseTlsKeyPath = typeof baseTls?.key_path === 'string' ? baseTls.key_path : '';
+  const baseTlsMinVersion = parseTlsMinVersion(baseTls?.min_version);
+  const tlsMatchesBase =
+    !!baseTls &&
+    nextTlsEnabled &&
+    nextTlsCertPath === baseTlsCertPath &&
+    nextTlsKeyPath === baseTlsKeyPath &&
+    nextTlsMinVersion === baseTlsMinVersion;
+
+  if (tlsMatchesBase) {
+    nextSite.tls = structuredClone(baseTls);
+  } else if (!nextTlsEnabled) {
+    delete nextSite.tls;
+  } else {
+    if (nextTlsCertPath === '') {
+      throw new Error('TLS certificate path is required when site TLS is enabled.');
+    }
+    if (nextTlsKeyPath === '') {
+      throw new Error('TLS key path is required when site TLS is enabled.');
+    }
+    const baseTlsRecord = isRecord(baseTls) ? baseTls : {};
+    const {
+      cert_path: _baseCertPath,
+      key_path: _baseKeyPath,
+      min_version: _baseMinVersion,
+      ...restTls
+    } = baseTlsRecord;
+    nextSite.tls = {
+      ...restTls,
+      cert_path: nextTlsCertPath,
+      key_path: nextTlsKeyPath,
+      min_version: nextTlsMinVersion,
+    };
+  }
 
   const nextRuleOverrides = buildRuleOverrideRecord(form.waf.rule_overrides);
   const nextThreshold =
@@ -2019,6 +2094,67 @@ function SiteEditor({
               </Button>
             </div>
           </Stack>
+
+          <Box bg="canvas" p="md" border="top" borderColor={colors.green}>
+            <Stack gap="md">
+              <Text variant="heading">TLS</Text>
+              <ToggleField
+                label="Site TLS enabled"
+                helper="Attach certificate material and minimum-version requirements for this site."
+                checked={form.tls.enabled}
+                onChange={(checked) =>
+                  onChange((current) => ({
+                    ...current,
+                    tls: { ...current.tls, enabled: checked },
+                  }))
+                }
+              />
+              <div className="console-next-form-grid">
+                <Input
+                  fill
+                  label="TLS certificate path"
+                  value={form.tls.cert_path}
+                  disabled={!form.tls.enabled}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    onChange((current) => ({
+                      ...current,
+                      tls: { ...current.tls, cert_path: value },
+                    }));
+                  }}
+                  helper="Absolute path to the PEM certificate presented for this hostname."
+                />
+                <Input
+                  fill
+                  label="TLS key path"
+                  value={form.tls.key_path}
+                  disabled={!form.tls.enabled}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    onChange((current) => ({
+                      ...current,
+                      tls: { ...current.tls, key_path: value },
+                    }));
+                  }}
+                  helper="Absolute path to the private key paired with the certificate."
+                />
+                <Select
+                  fill
+                  label="Minimum TLS version"
+                  options={tlsMinVersionOptions}
+                  value={form.tls.min_version}
+                  disabled={!form.tls.enabled}
+                  onChange={(event) => {
+                    const value = parseTlsMinVersion(event.currentTarget.value);
+                    onChange((current) => ({
+                      ...current,
+                      tls: { ...current.tls, min_version: value },
+                    }));
+                  }}
+                />
+              </div>
+            </Stack>
+          </Box>
 
           <Box bg="canvas" p="md" border="top" borderColor={colors.magenta}>
             <Stack gap="md">
@@ -3386,8 +3522,8 @@ export function App() {
 
       <Alert status="info" title="Operator surface is live">
         Server, site CRUD, modules, integrations, operator actions, and per-site WAF/header
-        overrides now run through Console Next. TLS, shadow-mirror, and access-control editors
-        are the next full-config gaps.
+        overrides now run through Console Next. Shadow-mirror and access-control editors are the
+        next full-config gaps.
       </Alert>
 
       <div className="console-next-tabs">
@@ -4806,7 +4942,7 @@ export function App() {
               <Stack gap="sm">
                 <Text variant="heading">Next operator slices</Text>
                 <Text variant="body" color={colors.textSecondary}>
-                  Console Next now covers live per-site WAF and header overrides. The next
+                  Console Next now covers live per-site WAF, TLS, and header overrides. The next
                   operator slice is finishing the remaining site-level controls and validation
                   guardrails.
                 </Text>
@@ -4817,7 +4953,7 @@ export function App() {
                 <Text variant="label" color={colors.textSecondary}>
                   Remaining UI gaps after this slice
                 </Text>
-                <Text variant="body">Per-site TLS and shadow mirror controls</Text>
+                <Text variant="body">Per-site shadow mirror controls</Text>
                 <Text variant="body">Per-site access control and rate-limit overrides</Text>
               </Stack>
             </Box>
