@@ -25,11 +25,11 @@ use super::types::{
     AuthPayload, ConnectionState, HeartbeatPayload, HubMessage, SensorMessage, ThreatSignal,
     PROTOCOL_VERSION,
 };
+use crate::access::{check_ssrf, SsrfCheckResult};
 use crate::admin_server::{
     get_registered_integrations_config, set_registered_integrations_config,
     trigger_registered_restart,
 };
-use crate::access::{check_ssrf, SsrfCheckResult};
 use crate::config_manager::ConfigManager;
 use crate::utils::circuit_breaker::CircuitBreaker;
 use async_trait::async_trait;
@@ -1803,7 +1803,10 @@ mod tests {
         })
         .expect("handoff should succeed");
 
-        let saved = persisted.lock().clone().expect("config should be persisted");
+        let saved = persisted
+            .lock()
+            .clone()
+            .expect("config should be persisted");
         assert_eq!(
             saved.horizon_api_key,
             "sensor-api-key-abcdefghijklmnopqrstuvwxyz"

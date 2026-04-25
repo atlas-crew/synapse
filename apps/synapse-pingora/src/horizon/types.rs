@@ -525,10 +525,7 @@ mod tests {
                 payload,
             } => {
                 assert_eq!(command_id, "cmd-2");
-                assert_eq!(
-                    payload.action.as_deref(),
-                    Some("replace_sensor_api_key")
-                );
+                assert_eq!(payload.action.as_deref(), Some("replace_sensor_api_key"));
                 assert_eq!(
                     payload.sensor_api_key.as_deref(),
                     Some("sensor-api-key-abcdefghijklmnopqrstuvwxyz")
