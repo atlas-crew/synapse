@@ -3,14 +3,20 @@
   "version": "0.1.0",
   "description": "TypeScript client and CLI for Synapse API",
   "author": "Nicholas Crew Ferguson <nick@atlascrew.dev> (https://atlascrew.dev)",
-  "keywords": ["security", "WAF", "CLI", "synapse", "horizon"],
+  "keywords": [
+    "security",
+    "WAF",
+    "CLI",
+    "synapse",
+    "horizon"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/atlas-crew/horizon-security-platform",
+    "url": "https://github.com/atlas-crew/synapse",
     "directory": "apps/synapse-client"
   },
-  "homepage": "https://horizon.atlascrew.dev/reference/synapse-cli",
-  "bugs": "https://github.com/atlas-crew/horizon-security-platform/issues",
+  "homepage": "https://synapse.atlascrew.dev/reference/synapse-cli",
+  "bugs": "https://github.com/atlas-crew/synapse/issues",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

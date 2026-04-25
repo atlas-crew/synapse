@@ -13,7 +13,7 @@ Synapse Fleet requires PostgreSQL as its source of truth:
 ```bash
 # Start PostgreSQL
 docker run -d --name postgres \
-  -e POSTGRES_DB=signal_horizon \
+  -e POSTGRES_DB=synapse_fleet \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -p 5432:5432 \
@@ -21,7 +21,7 @@ docker run -d --name postgres \
 
 # Start Synapse Fleet
 docker run -p 3100:3100 \
-  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/signal_horizon \
+  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/synapse_fleet \
   nickcrew/synapse-fleet
 ```
 
@@ -31,53 +31,53 @@ docker run -p 3100:3100 \
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3100` | API server port |
-| `HOST` | `0.0.0.0` | Bind address |
-| `NODE_ENV` | `development` | Environment (`production` recommended) |
-| `DATABASE_URL` | — | PostgreSQL connection string (**required**) |
-| `LOG_LEVEL` | `info` | Logging level |
+| Variable       | Default       | Description                                 |
+| -------------- | ------------- | ------------------------------------------- |
+| `PORT`         | `3100`        | API server port                             |
+| `HOST`         | `0.0.0.0`     | Bind address                                |
+| `NODE_ENV`     | `development` | Environment (`production` recommended)      |
+| `DATABASE_URL` | —             | PostgreSQL connection string (**required**) |
+| `LOG_LEVEL`    | `info`        | Logging level                               |
 
 ### WebSocket
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WS_SENSOR_PATH` | `/ws/sensors` | Sensor connection endpoint |
-| `WS_DASHBOARD_PATH` | `/ws/dashboard` | Dashboard connection endpoint |
-| `WS_HEARTBEAT_INTERVAL_MS` | `30000` | Heartbeat interval |
-| `WS_MAX_SENSOR_CONNECTIONS` | `1000` | Max sensor connections |
-| `WS_MAX_DASHBOARD_CONNECTIONS` | `100` | Max dashboard connections |
+| Variable                       | Default         | Description                   |
+| ------------------------------ | --------------- | ----------------------------- |
+| `WS_SENSOR_PATH`               | `/ws/sensors`   | Sensor connection endpoint    |
+| `WS_DASHBOARD_PATH`            | `/ws/dashboard` | Dashboard connection endpoint |
+| `WS_HEARTBEAT_INTERVAL_MS`     | `30000`         | Heartbeat interval            |
+| `WS_MAX_SENSOR_CONNECTIONS`    | `1000`          | Max sensor connections        |
+| `WS_MAX_DASHBOARD_CONNECTIONS` | `100`           | Max dashboard connections     |
 
 ### Signal Processing
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SIGNAL_BATCH_SIZE` | `100` | Signals per batch |
-| `SIGNAL_BATCH_TIMEOUT_MS` | `5000` | Max batch wait time |
-| `BLOCKLIST_PUSH_DELAY_MS` | `50` | Blocklist propagation delay |
-| `BLOCKLIST_CACHE_SIZE` | `100000` | Max cached blocklist entries |
+| Variable                  | Default  | Description                  |
+| ------------------------- | -------- | ---------------------------- |
+| `SIGNAL_BATCH_SIZE`       | `100`    | Signals per batch            |
+| `SIGNAL_BATCH_TIMEOUT_MS` | `5000`   | Max batch wait time          |
+| `BLOCKLIST_PUSH_DELAY_MS` | `50`     | Blocklist propagation delay  |
+| `BLOCKLIST_CACHE_SIZE`    | `100000` | Max cached blocklist entries |
 
 ### Security
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `API_KEY_HEADER` | `X-API-Key` | Header for API authentication |
-| `CONFIG_ENCRYPTION_KEY` | — | Encryption key for stored configs |
-| `TELEMETRY_JWT_SECRET` | — | JWT secret for telemetry auth |
-| `CORS_ORIGINS` | — | Comma-separated allowed origins |
+| Variable                | Default     | Description                       |
+| ----------------------- | ----------- | --------------------------------- |
+| `API_KEY_HEADER`        | `X-API-Key` | Header for API authentication     |
+| `CONFIG_ENCRYPTION_KEY` | —           | Encryption key for stored configs |
+| `TELEMETRY_JWT_SECRET`  | —           | JWT secret for telemetry auth     |
+| `CORS_ORIGINS`          | —           | Comma-separated allowed origins   |
 
 ### Optional Services
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_URL` | — | Redis connection string (recommended for production) |
-| `CLICKHOUSE_ENABLED` | `false` | Enable ClickHouse for historical analytics |
-| `CLICKHOUSE_HOST` | `localhost` | ClickHouse host |
-| `CLICKHOUSE_HTTP_PORT` | `8123` | ClickHouse HTTP port |
-| `CLICKHOUSE_DB` | `signal_horizon` | ClickHouse database |
-| `CLICKHOUSE_USER` | `default` | ClickHouse user |
-| `CLICKHOUSE_PASSWORD` | — | ClickHouse password |
+| Variable               | Default         | Description                                          |
+| ---------------------- | --------------- | ---------------------------------------------------- |
+| `REDIS_URL`            | —               | Redis connection string (recommended for production) |
+| `CLICKHOUSE_ENABLED`   | `false`         | Enable ClickHouse for historical analytics           |
+| `CLICKHOUSE_HOST`      | `localhost`     | ClickHouse host                                      |
+| `CLICKHOUSE_HTTP_PORT` | `8123`          | ClickHouse HTTP port                                 |
+| `CLICKHOUSE_DB`        | `synapse_fleet` | ClickHouse database                                  |
+| `CLICKHOUSE_USER`      | `default`       | ClickHouse user                                      |
+| `CLICKHOUSE_PASSWORD`  | —               | ClickHouse password                                  |
 
 ## Key Features
 
@@ -89,11 +89,11 @@ docker run -p 3100:3100 \
 
 ## Dependencies
 
-| Service | Required | Purpose |
-|---------|----------|---------|
-| PostgreSQL 15+ | **Yes** | Source of truth for tenants, configs, signals |
-| Redis 7+ | Recommended | Queue, distributed state, pub/sub |
-| ClickHouse 23+ | Optional | Historical analytics and long-term signal storage |
+| Service        | Required    | Purpose                                           |
+| -------------- | ----------- | ------------------------------------------------- |
+| PostgreSQL 15+ | **Yes**     | Source of truth for tenants, configs, signals     |
+| Redis 7+       | Recommended | Queue, distributed state, pub/sub                 |
+| ClickHouse 23+ | Optional    | Historical analytics and long-term signal storage |
 
 ## Using with Synapse WAF
 
@@ -121,7 +121,7 @@ services:
       - "3100:3100"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/signal_horizon
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/synapse_fleet
       CLICKHOUSE_ENABLED: "true"
       CLICKHOUSE_HOST: clickhouse
       REDIS_URL: redis://redis:6379
@@ -146,7 +146,7 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: signal_horizon
+      POSTGRES_DB: synapse_fleet
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
@@ -183,11 +183,11 @@ volumes:
 docker compose up -d
 ```
 
-| Service | URL |
-|---------|-----|
+| Service           | URL                                     |
+| ----------------- | --------------------------------------- |
 | Synapse Fleet API | [localhost:3100](http://localhost:3100) |
-| Synapse Proxy | [localhost:6190](http://localhost:6190) |
-| Synapse Admin | [localhost:6191](http://localhost:6191) |
+| Synapse Proxy     | [localhost:6190](http://localhost:6190) |
+| Synapse Admin     | [localhost:6191](http://localhost:6191) |
 
 ## Also available on npm
 
@@ -210,6 +210,7 @@ See [ADR-0003](https://github.com/atlas-crew/edge-protection/blob/main/apps/sign
 
 ## Links
 
-- [Documentation](https://edge.atlascrew.dev)
-- [GitHub](https://github.com/inferno-lab/edge-protection)
+- [Homepage](https://atlascrew.dev/synapse)
+- [Documentation](https://synapse.atlascrew.dev)
+- [GitHub](https://github.com/atlas-crew/synapse)
 - [npm](https://www.npmjs.com/package/@atlascrew/synapse-fleet)

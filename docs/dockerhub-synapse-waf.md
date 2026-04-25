@@ -2,7 +2,7 @@
 
 High-performance Web Application Firewall and reverse proxy built on Cloudflare Pingora. Single Rust binary with 237 detection rules, 25 DLP patterns, and sub-10 microsecond clean request latency at 72K req/s sustained throughput.
 
-Part of the [Edge Protection](https://github.com/inferno-lab/edge-protection) platform alongside [Signal Horizon](https://hub.docker.com/r/nickcrew/horizon).
+Integrates with [Synapse Fleet](https://hub.docker.com/r/nickcrew/synapse-fleet).
 
 ## Quick Start
 
@@ -17,10 +17,10 @@ docker run -p 6190:6190 -p 6191:6191 nickcrew/synapse-waf
 
 ## Exposed Ports
 
-| Port | Purpose |
-|------|---------|
+| Port   | Purpose                         |
+| ------ | ------------------------------- |
 | `6190` | Proxy listener (client traffic) |
-| `6191` | Admin API, metrics, console |
+| `6191` | Admin API, metrics, console     |
 
 ## Configuration
 
@@ -38,7 +38,7 @@ docker run -p 6190:6190 -p 6191:6191 \
 server:
   listen: "0.0.0.0:6190"
   admin_listen: "0.0.0.0:6191"
-  workers: 0  # auto-detect CPU count
+  workers: 0 # auto-detect CPU count
 
 upstreams:
   - host: "host.docker.internal"
@@ -64,18 +64,18 @@ logging:
 
 ### Key configuration sections
 
-| Section | Purpose |
-|---------|---------|
-| `server` | Listener addresses, worker count |
-| `upstreams` | Backend servers to proxy to |
-| `detection` | WAF rules — SQLi, XSS, path traversal, command injection |
-| `dlp` | Data loss prevention — credit cards, SSN, API keys, JWT, medical records |
-| `rate_limit` | Per-IP token bucket rate limiting |
-| `access_lists` | CIDR-based allow/deny (IPv4/IPv6) |
-| `tarpit` | Progressive response delays for attackers |
-| `traps` | Honeypot endpoints |
-| `tls` | Per-domain TLS termination |
-| `telemetry` | Signal Horizon integration |
+| Section        | Purpose                                                                  |
+| -------------- | ------------------------------------------------------------------------ |
+| `server`       | Listener addresses, worker count                                         |
+| `upstreams`    | Backend servers to proxy to                                              |
+| `detection`    | WAF rules — SQLi, XSS, path traversal, command injection                 |
+| `dlp`          | Data loss prevention — credit cards, SSN, API keys, JWT, medical records |
+| `rate_limit`   | Per-IP token bucket rate limiting                                        |
+| `access_lists` | CIDR-based allow/deny (IPv4/IPv6)                                        |
+| `tarpit`       | Progressive response delays for attackers                                |
+| `traps`        | Honeypot endpoints                                                       |
+| `tls`          | Per-domain TLS termination                                               |
+| `telemetry`    | Synapse Fleet integration                                                |
 
 ### Hot reload
 
@@ -104,15 +104,15 @@ docker run --rm -v ./config.yaml:/app/config.yaml:ro \
 - **Campaign correlation**: cross-request attack grouping
 - **GeoIP & impossible travel**: geographic anomaly detection
 
-## Using with Signal Horizon
+## Using with Synapse Fleet
 
-[Signal Horizon](https://hub.docker.com/r/nickcrew/horizon) is the fleet intelligence hub that aggregates signals from distributed Synapse sensors. Connect Synapse to Horizon for centralized threat correlation and fleet management.
+[Synapse Fleet](https://hub.docker.com/r/nickcrew/horizon) is the fleet intelligence hub that aggregates signals from distributed Synapse sensors. Connect Synapse to Horizon for centralized threat correlation and fleet management.
 
 ```yaml
 # In config.yaml
 telemetry:
   enabled: true
-  endpoint: "http://horizon:3100/telemetry"
+  endpoint: "http://synapse_fleet:3100/telemetry"
   api_key: "your-api-key"
   batch_size: 100
   flush_interval: 10s
@@ -142,7 +142,7 @@ upstreams:
 
 ## Full Platform (Compose)
 
-Run Synapse WAF with Signal Horizon for fleet intelligence, backed by PostgreSQL and optional ClickHouse for historical analytics:
+Run Synapse WAF with Synapse Fleet for fleet intelligence, backed by PostgreSQL and optional ClickHouse for historical analytics:
 
 ```yaml
 services:
@@ -158,12 +158,12 @@ services:
     restart: unless-stopped
 
   horizon:
-    image: nickcrew/horizon:latest
+    image: nickcrew/synapse-fleet:latest
     ports:
       - "3100:3100"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/signal_horizon
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/synapse_fleet
       CLICKHOUSE_ENABLED: "true"
       CLICKHOUSE_HOST: clickhouse
     depends_on:
@@ -176,7 +176,7 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: signal_horizon
+      POSTGRES_DB: synapse_fleet
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
@@ -208,25 +208,25 @@ volumes:
 docker compose up -d
 ```
 
-| Service | URL |
-|---------|-----|
-| Synapse Proxy | [localhost:6190](http://localhost:6190) |
-| Synapse Admin | [localhost:6191](http://localhost:6191) |
-| Horizon API | [localhost:3100](http://localhost:3100) |
+| Service           | URL                                     |
+| ----------------- | --------------------------------------- |
+| Synapse Proxy     | [localhost:6190](http://localhost:6190) |
+| Synapse Admin     | [localhost:6191](http://localhost:6191) |
+| Synapse Fleet API | [localhost:3100](http://localhost:3100) |
 
 ## Performance
 
-| Benchmark | Latency |
-|-----------|---------|
-| Clean GET detection | ~10 microseconds |
-| Full pipeline | ~72 microseconds |
+| Benchmark             | Latency           |
+| --------------------- | ----------------- |
+| Clean GET detection   | ~10 microseconds  |
+| Full pipeline         | ~72 microseconds  |
 | WAF + DLP (4 KB body) | ~247 microseconds |
-| Sustained throughput | 72K req/s |
-| DLP throughput | 188 MiB/s |
-| Hot reload | ~240 microseconds |
+| Sustained throughput  | 72K req/s         |
+| DLP throughput        | 188 MiB/s         |
+| Hot reload            | ~240 microseconds |
 
 ## Links
 
-- [Documentation](https://edge.atlascrew.dev)
-- [GitHub](https://github.com/inferno-lab/edge-protection)
+- [Documentation](https://synapse.atlascrew.dev)
+- [GitHub](https://github.com/atlas-crew/synapse)
 - [CLI](https://www.npmjs.com/package/@atlascrew/synapse-client)
