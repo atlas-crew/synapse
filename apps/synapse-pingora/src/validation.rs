@@ -47,6 +47,7 @@ use openssl::rsa::Rsa;
 use regex::Regex;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// RFC 1035 compliant domain name regex pattern.
 /// Allows labels with alphanumeric and hyphens, supports wildcards, max 253 chars.
@@ -497,6 +498,25 @@ pub fn validate_hostname(hostname: &str) -> ValidationResult<()> {
     validate_domain_name(hostname)
 }
 
+/// Dev-only override: when true, `validate_upstream` accepts private / internal
+/// IP targets that would otherwise be rejected by the SSRF guard.
+///
+/// # Security
+/// This MUST NOT be enabled in production. It is flipped by `main.rs` only
+/// when `--dev` / explicit non-production dev-mode activation succeeds, so
+/// the guard remains active for every real deployment path.
+static ALLOW_PRIVATE_UPSTREAMS: AtomicBool = AtomicBool::new(false);
+
+/// Enable or disable the dev-only bypass of SSRF protection on
+/// `validate_upstream`. Production callers MUST NOT invoke this with `true`.
+pub fn set_allow_private_upstreams(enabled: bool) {
+    ALLOW_PRIVATE_UPSTREAMS.store(enabled, Ordering::SeqCst);
+}
+
+fn allow_private_upstreams() -> bool {
+    ALLOW_PRIVATE_UPSTREAMS.load(Ordering::SeqCst)
+}
+
 /// SSRF protection error.
 #[derive(Debug, Clone)]
 pub struct SsrfError(pub String);
@@ -625,8 +645,9 @@ pub fn validate_upstream(upstream: &str) -> ValidationResult<()> {
 
     // Validate host part (can be IP or domain)
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        // SECURITY: Block private/internal IPs to prevent SSRF
-        if is_private_or_internal_ip(&ip) {
+        // SECURITY: Block private/internal IPs to prevent SSRF unless the
+        // dev-only bypass has been enabled by main.rs.
+        if is_private_or_internal_ip(&ip) && !allow_private_upstreams() {
             return Err(ValidationError::InvalidDomain(format!(
                 "SSRF protection: upstream IP {} is private/internal and not allowed",
                 ip
@@ -726,9 +747,26 @@ pub fn validate_rate_limit(requests: u64, window: u64) -> ValidationResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs::File;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    /// RAII guard that flips the dev-only SSRF bypass on and always restores
+    /// it to off on drop. Combined with `#[serial]` this keeps the global
+    /// atomic from leaking between tests.
+    struct PrivateUpstreamsGuard;
+    impl PrivateUpstreamsGuard {
+        fn allow() -> Self {
+            set_allow_private_upstreams(true);
+            Self
+        }
+    }
+    impl Drop for PrivateUpstreamsGuard {
+        fn drop(&mut self) {
+            set_allow_private_upstreams(false);
+        }
+    }
 
     #[test]
     fn test_domain_validation_valid() {
@@ -987,6 +1025,7 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST: Verify loopback addresses are blocked.
     #[test]
+    #[serial]
     fn test_ssrf_loopback_blocked() {
         assert!(validate_upstream("127.0.0.1:8080").is_err());
         assert!(validate_upstream("127.0.0.53:53").is_err());
@@ -995,6 +1034,7 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST: Verify private IPv4 ranges are blocked.
     #[test]
+    #[serial]
     fn test_ssrf_private_ipv4_blocked() {
         // 10.0.0.0/8
         assert!(validate_upstream("10.0.0.1:80").is_err());
@@ -1009,6 +1049,7 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST: Verify link-local/metadata addresses are blocked.
     #[test]
+    #[serial]
     fn test_ssrf_link_local_blocked() {
         // AWS/GCP/Azure metadata endpoint
         assert!(validate_upstream("169.254.169.254:80").is_err());
@@ -1018,6 +1059,7 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST (SP-003): Verify RFC 6598 shared address space is blocked.
     #[test]
+    #[serial]
     fn test_ssrf_rfc6598_shared_address_blocked() {
         // 100.64.0.0/10 — carrier-grade NAT shared address space
         assert!(validate_upstream("100.64.0.1:80").is_err());
@@ -1031,6 +1073,7 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST: Verify public IPs are allowed.
     #[test]
+    #[serial]
     fn test_ssrf_public_ip_allowed() {
         assert!(validate_upstream("8.8.8.8:53").is_ok());
         assert!(validate_upstream("1.1.1.1:443").is_ok());
@@ -1039,6 +1082,7 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST: Verify valid domain names are allowed.
     #[test]
+    #[serial]
     fn test_ssrf_domain_allowed() {
         assert!(validate_upstream("example.com:443").is_ok());
         assert!(validate_upstream("api.backend.local:8080").is_ok());
@@ -1046,13 +1090,60 @@ MAwGCCqGSIb3DQIJBQAwFAYIKoZIhvcNAwcECBd7qQlMKDdJBIIEyInvalidData
 
     /// SECURITY TEST: Verify IPv6 loopback is blocked.
     #[test]
+    #[serial]
     fn test_ssrf_ipv6_loopback_blocked() {
         assert!(validate_upstream("[::1]:80").is_err());
     }
 
     /// SECURITY TEST: Verify unspecified addresses are blocked.
     #[test]
+    #[serial]
     fn test_ssrf_unspecified_blocked() {
         assert!(validate_upstream("0.0.0.0:80").is_err());
+    }
+
+    /// DEV BYPASS TEST: When the dev-only flag is on, loopback + RFC1918 +
+    /// link-local + CGNAT IPv4 upstreams are accepted by `validate_upstream`.
+    ///
+    /// Note: IPv6 bracket syntax (e.g. `[::1]:80`) is still rejected because
+    /// `validate_upstream` uses a naive `:` split that fails the format check
+    /// before the SSRF guard runs. That's a pre-existing limitation — see
+    /// `test_ssrf_ipv6_loopback_blocked`.
+    #[test]
+    #[serial]
+    fn test_ssrf_dev_bypass_allows_private_upstreams() {
+        let _guard = PrivateUpstreamsGuard::allow();
+        assert!(validate_upstream("127.0.0.1:8080").is_ok());
+        assert!(validate_upstream("10.0.0.1:80").is_ok());
+        assert!(validate_upstream("192.168.1.1:443").is_ok());
+        assert!(validate_upstream("169.254.169.254:80").is_ok());
+        assert!(validate_upstream("100.64.0.1:80").is_ok());
+        assert!(validate_upstream("0.0.0.0:80").is_ok());
+    }
+
+    /// DEV BYPASS TEST: The flag defaults to off and restores to off after
+    /// the guard drops — subsequent `validate_upstream` calls go through the
+    /// normal SSRF guard.
+    #[test]
+    #[serial]
+    fn test_ssrf_dev_bypass_restores_after_drop() {
+        {
+            let _guard = PrivateUpstreamsGuard::allow();
+            assert!(validate_upstream("127.0.0.1:8080").is_ok());
+        }
+        assert!(validate_upstream("127.0.0.1:8080").is_err());
+        assert!(validate_upstream("10.0.0.1:80").is_err());
+    }
+
+    /// DEV BYPASS TEST: Malformed upstream strings are still rejected
+    /// regardless of the flag state (bypass doesn't weaken format validation).
+    #[test]
+    #[serial]
+    fn test_ssrf_dev_bypass_still_rejects_malformed() {
+        let _guard = PrivateUpstreamsGuard::allow();
+        assert!(validate_upstream("").is_err());
+        assert!(validate_upstream("127.0.0.1").is_err()); // missing port
+        assert!(validate_upstream("127.0.0.1:0").is_err()); // port 0
+        assert!(validate_upstream("127.0.0.1:notaport").is_err());
     }
 }
