@@ -52,6 +52,7 @@ describe('OverviewTab', () => {
             memory: 61.2,
             disk: 82,
             rps: 1420,
+            latencyAvg: 11,
             latencyP99: 47,
           },
         }}
@@ -67,10 +68,54 @@ describe('OverviewTab', () => {
     });
 
     expect(screen.getByText('CPU')).toBeInTheDocument();
+    expect(screen.getByText('Latency')).toBeInTheDocument();
+    expect(screen.getByText('Latency P99')).toBeInTheDocument();
     expect(screen.getByText('37.4%')).toBeInTheDocument();
     expect(screen.getByText('61.2%')).toBeInTheDocument();
     expect(screen.getByText('82%')).toBeInTheDocument();
     expect(screen.getByText('1,420')).toBeInTheDocument();
+    expect(screen.getByText('11ms')).toBeInTheDocument();
     expect(screen.getByText('47ms')).toBeInTheDocument();
+  });
+
+  it('renders zero-value metrics without collapsing them into blank cards', async () => {
+    render(
+      <OverviewTab
+        sensor={{
+          id: 'sensor-1',
+          name: 'Sensor 1',
+          metadata: {},
+          version: '1.0.0',
+          region: 'us-east-1',
+          connectionState: 'CONNECTED',
+          lastHeartbeat: null,
+          uptime: 3600,
+        }}
+        systemInfo={{ uptime: 3600 }}
+        performance={{
+          current: {
+            cpu: 0,
+            memory: 0,
+            disk: 0,
+            rps: 0,
+            latencyAvg: 0,
+          },
+        }}
+        diagnostics={null}
+        onRestartSensor={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith('/fleet/sensors/sensor-1/signals?limit=25', {
+        method: 'GET',
+      });
+    });
+
+    expect(screen.getAllByText('0.0%')).toHaveLength(2);
+    expect(screen.getByText('0%')).toBeInTheDocument();
+    expect(screen.getByText('0ms')).toBeInTheDocument();
+    expect(screen.getByText('0')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
   });
 });

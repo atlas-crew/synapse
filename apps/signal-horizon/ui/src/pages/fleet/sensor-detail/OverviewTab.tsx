@@ -20,11 +20,12 @@ interface OverviewTabProps {
   systemInfo: any;
   performance?: {
     current?: {
-      cpu?: number;
-      memory?: number;
-      disk?: number;
-      rps?: number;
-      latencyP99?: number;
+      cpu?: number | null;
+      memory?: number | null;
+      disk?: number | null;
+      rps?: number | null;
+      latencyAvg?: number | null;
+      latencyP99?: number | null;
     };
   };
   diagnostics: any;
@@ -32,7 +33,12 @@ interface OverviewTabProps {
 }
 
 function asNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function formatPercent(value: unknown, digits = 1): string {
@@ -43,6 +49,7 @@ function formatPercent(value: unknown, digits = 1): string {
 function formatCount(value: unknown): string {
   const numeric = asNumber(value);
   if (numeric === null) return '—';
+  if (Number.isInteger(numeric)) return numeric.toLocaleString();
   return numeric < 10 ? numeric.toFixed(1) : Math.round(numeric).toLocaleString();
 }
 
@@ -53,6 +60,12 @@ function formatMilliseconds(value: unknown): string {
 
 export function OverviewTab({ sensor, systemInfo, performance, diagnostics, onRestartSensor }: OverviewTabProps) {
   const currentPerf = performance?.current || {};
+  const cpuValue = asNumber(currentPerf.cpu);
+  const memoryValue = asNumber(currentPerf.memory);
+  const diskValue = asNumber(currentPerf.disk);
+  const rpsValue = asNumber(currentPerf.rps);
+  const latencyAvgValue = asNumber(currentPerf.latencyAvg);
+  const latencyP99Value = asNumber(currentPerf.latencyP99);
   const { toast } = useToast();
 
   const [recentSignals, setRecentSignals] = useState<any[]>([]);
@@ -140,12 +153,13 @@ export function OverviewTab({ sensor, systemInfo, performance, diagnostics, onRe
       />
 
       {/* Resource Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <MetricCard label="CPU" value={formatPercent(currentPerf.cpu)} description="Current CPU utilization for this sensor" className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
-        <MetricCard label="Memory" value={formatPercent(currentPerf.memory)} description="Current memory usage as a percentage of total available" className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
-        <MetricCard label="Disk" value={formatPercent(currentPerf.disk, 0)} description="Disk space used on the primary partition" className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
-        <MetricCard label="REQ/SEC" value={formatCount(currentPerf.rps)} description="Requests per second currently being processed by this sensor" className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
-        <MetricCard label="Latency P99" value={formatMilliseconds(currentPerf.latencyP99)} description="99th percentile response latency — 99% of requests are faster than this" className="border-l-2 border-l-ac-red" labelClassName="text-ac-red dark:text-ac-red" valueClassName="text-ac-red dark:text-ac-red" />
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        <MetricCard label="CPU" value={formatPercent(cpuValue)} description="Current CPU utilization for this sensor" className="border-l-2 border-l-ac-navy" labelClassName="text-ac-navy dark:text-ac-sky-light" valueClassName="text-ac-navy dark:text-ac-sky-light" />
+        <MetricCard label="Memory" value={formatPercent(memoryValue)} description="Current memory usage as a percentage of total available" className="border-l-2 border-l-ac-blue" labelClassName="text-ac-blue dark:text-ac-sky-light" valueClassName="text-ac-blue dark:text-ac-sky-light" />
+        <MetricCard label="Disk" value={formatPercent(diskValue, 0)} description="Disk space used on the primary partition" className="border-l-2 border-l-ac-orange" labelClassName="text-ac-orange dark:text-ac-orange" valueClassName="text-ac-orange dark:text-ac-orange" />
+        <MetricCard label="Latency" value={formatMilliseconds(latencyAvgValue)} description="Average response latency reported by the sensor heartbeat" className="border-l-2 border-l-ac-magenta" labelClassName="text-ac-magenta dark:text-ac-magenta" valueClassName="text-ac-magenta dark:text-ac-magenta" />
+        <MetricCard label="Latency P99" value={formatMilliseconds(latencyP99Value)} description="99th percentile response latency — 99% of requests are faster than this" className="border-l-2 border-l-ac-red" labelClassName="text-ac-red dark:text-ac-red" valueClassName="text-ac-red dark:text-ac-red" />
+        <MetricCard label="REQ/SEC" value={formatCount(rpsValue)} description="Requests per second currently being processed by this sensor" className="border-l-2 border-l-ac-green" labelClassName="text-ac-green dark:text-ac-green" valueClassName="text-ac-green dark:text-ac-green" />
         <MetricCard label="Uptime" value={formatUptime(sensor.uptime || systemInfo?.uptime || 0)} description="Time since the sensor process was last restarted" className="border-l-2 border-l-ac-purple" labelClassName="text-ac-purple dark:text-ac-purple" valueClassName="text-ac-purple dark:text-ac-purple" />
       </div>
 

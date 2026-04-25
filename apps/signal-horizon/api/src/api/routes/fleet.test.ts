@@ -410,6 +410,47 @@ describe('Fleet Routes', () => {
       expect(res.body).toHaveProperty('history');
     });
 
+    it('should derive live metrics from sensor metadata before falling back to mock values', async () => {
+      const sensor = createMockSensor({
+        metadata: {
+          cpu: '12.5',
+          memory: 48,
+          disk: '73',
+          requestsLastMinute: 1800,
+          avgLatencyMs: '31',
+        },
+      });
+      vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(sensor);
+
+      const res = await request(app)
+        .get('/fleet/sensors/sensor-1/performance')
+        .expect(200);
+
+      expect(res.body.current.cpu).toBe(12.5);
+      expect(res.body.current.memory).toBe(48);
+      expect(res.body.current.disk).toBe(73);
+      expect(res.body.current.rps).toBe(30);
+      expect(res.body.current.latencyP99).toBeNull();
+      expect(res.body.current.latencyAvg).toBe(31);
+    });
+
+    it('should return empty performance collections instead of fabricated random telemetry', async () => {
+      const sensor = createMockSensor({ metadata: {} });
+      vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(sensor);
+
+      const res = await request(app)
+        .get('/fleet/sensors/sensor-1/performance')
+        .expect(200);
+
+      expect(res.body.current.cpu).toBeNull();
+      expect(res.body.current.memory).toBeNull();
+      expect(res.body.current.disk).toBeNull();
+      expect(res.body.current.rps).toBeNull();
+      expect(res.body.current.latencyP99).toBeNull();
+      expect(res.body.history).toEqual([]);
+      expect(res.body.benchmarks).toEqual([]);
+    });
+
     it('should return 403 if sensor not found', async () => {
       vi.mocked(mockPrisma.sensor!.findUnique).mockResolvedValue(null);
 

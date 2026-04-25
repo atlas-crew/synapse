@@ -141,6 +141,11 @@ function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function asNullableNumber(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
  * Creates a safe string schema with the specified max length.
  */
@@ -1180,42 +1185,40 @@ export function createFleetRoutes(
           return;
         }
 
-        // Extract performance metrics from metadata or generate mock data
-        // Safe extraction with null coalescing for untyped JSON metadata
+        // Extract real performance metrics from metadata only. When the sensor
+        // has not reported a metric yet, return null and let the UI render a
+        // no-data state instead of fabricated telemetry.
         const meta: Record<string, unknown> =
           sensor.metadata && typeof sensor.metadata === 'object' && !Array.isArray(sensor.metadata)
             ? (sensor.metadata as Record<string, unknown>)
             : {};
+        const requestsLastMinute = asNullableNumber(meta.requestsLastMinute);
+        const diskIo = asRecord(meta.diskIO);
 
         res.json({
           current: {
-            cpu: meta.cpu ?? Math.random() * 40 + 10,
-            memory: meta.memory ?? Math.random() * 30 + 20,
-            disk: meta.disk ?? Math.random() * 20 + 30,
-            loadAverage: [meta.load1 ?? 0.5, meta.load5 ?? 0.4, meta.load15 ?? 0.3],
-            rps: meta.rps ?? Math.floor(Math.random() * 1000),
-            latencyP50: meta.latencyP50 ?? Math.random() * 10 + 5,
-            latencyP99: meta.latencyP99 ?? Math.random() * 50 + 20,
+            cpu: asNullableNumber(meta.cpu),
+            memory: asNullableNumber(meta.memory) ?? asNullableNumber(meta.mem),
+            disk: asNullableNumber(meta.disk),
+            loadAverage: [
+              asNullableNumber(meta.load1),
+              asNullableNumber(meta.load5),
+              asNullableNumber(meta.load15),
+            ],
+            rps: asNullableNumber(meta.rps)
+              ?? (requestsLastMinute === null ? null : requestsLastMinute / 60),
+            latencyP50: asNullableNumber(meta.latencyP50),
+            latencyP99: asNullableNumber(meta.latencyP99),
+            latencyAvg: asNullableNumber(meta.avgLatencyMs),
           },
-          history: Array.from({ length: 60 }, (_, i) => ({
-            timestamp: new Date(Date.now() - (59 - i) * 60000).toISOString(),
-            cpu: Math.random() * 40 + 10,
-            memory: Math.random() * 30 + 20,
-            rps: Math.floor(Math.random() * 1000),
-            latencyMs: Math.random() * 30 + 10,
-          })),
+          history: [],
           diskIO: {
-            readBytesPerSec: Math.floor(Math.random() * 10000000),
-            writeBytesPerSec: Math.floor(Math.random() * 5000000),
-            iops: Math.floor(Math.random() * 500),
-            ioWait: Math.random() * 5,
+            readBytesPerSec: asNullableNumber(diskIo?.readBytesPerSec),
+            writeBytesPerSec: asNullableNumber(diskIo?.writeBytesPerSec),
+            iops: asNullableNumber(diskIo?.iops),
+            ioWait: asNullableNumber(diskIo?.ioWait),
           },
-          benchmarks: [
-            { name: 'Request Processing', value: 2.1, unit: 'ms', status: 'good' },
-            { name: 'Rule Evaluation', value: 0.8, unit: 'ms', status: 'good' },
-            { name: 'SSL Handshake', value: 12.5, unit: 'ms', status: 'warning' },
-            { name: 'Backend Response', value: 45.2, unit: 'ms', status: 'good' },
-          ],
+          benchmarks: [],
         });
       } catch (error) {
         logger.error({ error }, 'Failed to get sensor performance');

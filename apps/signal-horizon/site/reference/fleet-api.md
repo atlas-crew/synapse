@@ -125,7 +125,7 @@ Returns system information for a sensor (OS, kernel, IP addresses, architecture,
 
 ### GET /api/v1/fleet/sensors/:sensorId/performance
 
-Returns current and historical performance metrics (CPU, memory, RPS, latency, disk I/O).
+Returns live performance metrics reported by the sensor. Metric fields may be `null` until the sensor emits them, and historical collections stay empty until a time-series telemetry source is wired into the fleet API.
 
 **Scope:** `fleet:read`
 
