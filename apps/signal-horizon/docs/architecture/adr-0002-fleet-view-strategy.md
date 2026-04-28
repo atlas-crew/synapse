@@ -1,6 +1,6 @@
 # ADR 0002 — Fleet-view strategy for SOC surfaces
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-04-17
 - **Related:** TASK-77 (Fleet-wide payload snapshot reads), TASK-78 (this ADR), ADR-0001 (catalog overlay), memory `project_dashboard_federation.md`
 
