@@ -116,11 +116,6 @@ const envSchema = z.object({
   FLEET_COMMAND_TOGGLE_CHAOS_ENABLED: booleanString('false'),
   FLEET_COMMAND_TOGGLE_MTD_ENABLED: booleanString('false'),
 
-  // Apparatus integration (optional)
-  APPARATUS_URL: z.string().url().optional(),
-  APPARATUS_TIMEOUT_MS: positiveIntString(1000, 120000).catch(30000), // 1s - 2min
-  APPARATUS_HEALTH_INTERVAL_MS: positiveIntString(5000, 300000).catch(30000), // 5s - 5min
-
   // ClickHouse (optional - for historical data)
   CLICKHOUSE_ENABLED: booleanString('false'),
   CLICKHOUSE_HOST: z.string().default('localhost'),
@@ -275,14 +270,6 @@ function loadConfig() {
       enableToggleMtd: env.FLEET_COMMAND_TOGGLE_MTD_ENABLED,
     },
 
-    // Apparatus integration (optional)
-    apparatus: {
-      url: env.APPARATUS_URL,
-      enabled: !!env.APPARATUS_URL,
-      timeoutMs: env.APPARATUS_TIMEOUT_MS,
-      healthIntervalMs: env.APPARATUS_HEALTH_INTERVAL_MS,
-    },
-
     // ClickHouse for historical data (optional)
     clickhouse: {
       enabled: env.CLICKHOUSE_ENABLED,
@@ -313,7 +300,6 @@ function loadConfig() {
     console.log(`   Risk Server: ${config.riskServer.url}`);
     console.log(`   Synapse Direct: ${config.synapseDirect.enabled ? config.synapseDirect.url : 'disabled'}`);
     console.log(`   Sensor Bridge: ${config.sensorBridge.enabled ? `${config.sensorBridge.sensorId} (${config.sensorBridge.sensorName})` : 'disabled'}`);
-    console.log(`   Apparatus: ${config.apparatus.enabled ? config.apparatus.url : 'disabled'}`);
     console.log(`   ClickHouse: ${config.clickhouse.enabled ? `${config.clickhouse.host}:${config.clickhouse.port}` : 'disabled'}`);
   }
 

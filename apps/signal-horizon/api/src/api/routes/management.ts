@@ -2062,7 +2062,6 @@ const rotateKeySchema = z.object({
  */
 export interface ManagementRouteOptions {
   fleetCommander?: FleetCommander;
-  apparatusService?: import('../../services/apparatus.js').ApparatusService;
 }
 
 export function createManagementRoutes(
@@ -2071,7 +2070,7 @@ export function createManagementRoutes(
   options: ManagementRouteOptions = {}
 ): Router {
   const router = Router();
-  const { fleetCommander, apparatusService } = options;
+  const { fleetCommander } = options;
 
   // =============================================================================
   // API Keys Management
@@ -2872,11 +2871,7 @@ export function createManagementRoutes(
    * GET /integrations - External integration connection status
    */
   router.get('/integrations', requireScope('fleet:read'), (_req: Request, res: Response) => {
-    res.json({
-      apparatus: apparatusService
-        ? apparatusService.getStatus()
-        : { state: 'disabled', url: undefined, version: undefined, lastHealthCheck: undefined, lastError: undefined },
-    });
+    res.json({});
   });
 
   return router;
