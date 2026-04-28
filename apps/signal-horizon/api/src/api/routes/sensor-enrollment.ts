@@ -22,7 +22,7 @@ import type { Logger } from 'pino';
 import { rateLimiters } from '../../middleware/rate-limiter.js';
 
 const announceSchema = z.object({
-  fingerprint: z.string().min(8).max(128).regex(/^[A-Za-z0-9_:\-]+$/),
+  fingerprint: z.string().min(8).max(128).regex(/^[A-Za-z0-9_:-]+$/),
   hostname: z.string().min(1).max(253).optional(),
   os: z.string().max(64).optional(),
   kernel: z.string().max(128).optional(),
