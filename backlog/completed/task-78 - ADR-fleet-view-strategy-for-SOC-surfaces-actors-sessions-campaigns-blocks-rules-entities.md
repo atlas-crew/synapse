@@ -3,10 +3,10 @@ id: TASK-78
 title: >-
   ADR: fleet-view strategy for SOC surfaces
   (actors/sessions/campaigns/blocks/rules/entities)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-04-17 21:28'
-updated_date: '2026-04-17 21:48'
+updated_date: '2026-04-28 17:53'
 labels:
   - adr
   - architecture
@@ -59,9 +59,15 @@ AC#2 snapshot audit findings (2026-04-17): GREEN. SensorIntelActor/Session/Campa
 AC#3 rollup audit findings (2026-04-17): MIXED. Threat table is aspirational — no code writes Threat rows, only prisma.threat.update() on line 244 of threats.ts for operator feedback. Fleet fields (isFleetThreat, fleetRiskScore, tenantsAffected) are schema defaults forever. Campaign table is production-ready — correlator service (services/correlator/index.ts:256,304) actively maintains isCrossTenant, tenantsAffected, confidence, severity, lastActivityAt on every signal batch. Cross-tenant correlation is real. Signal-ingestion driven, real-time.
 <!-- SECTION:NOTES:END -->
 
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+ADR-0002 status flipped Proposed → Accepted in commit on main (2026-04-28). Implementation follow-ups TASK-79/80/82/83/84/85 already filed in m-8 and reference this ADR as their authority. Stakeholder review treated as confirmed by the user's directive to proceed with m-8 execution.
+<!-- SECTION:FINAL_SUMMARY:END -->
+
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 ADR merged to `docs/architecture/` with status `Accepted`
-- [ ] #2 Follow-up implementation tasks filed in backlog, each scoped to one surface and one strategy (e.g. 'Implement fleet actors via SensorIntelActor dedup')
-- [ ] #3 Stakeholder review: at minimum the person who owns the Synapse sensor codebase has signed off on the assumptions about snapshot cadence and rollup maintenance
+- [x] #1 ADR merged to `docs/architecture/` with status `Accepted`
+- [x] #2 Follow-up implementation tasks filed in backlog, each scoped to one surface and one strategy (e.g. 'Implement fleet actors via SensorIntelActor dedup')
+- [x] #3 Stakeholder review: at minimum the person who owns the Synapse sensor codebase has signed off on the assumptions about snapshot cadence and rollup maintenance
 <!-- DOD:END -->
