@@ -36,7 +36,7 @@ import { useDemoMode } from '../../stores/demoModeStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { useHorizonStore } from '../../stores/horizonStore';
 import { usePlaybooks } from '../../hooks/fleet/usePlaybooks';
-import { fetchActors, fetchSessions } from '../../hooks/soc/api';
+import { fetchFleetActors, fetchSessions } from '../../hooks/soc/api';
 import { apiFetch } from '../../lib/api';
 import { useToast } from './Toast';
 import type { SocActor, SocSession } from '../../types/soc';
@@ -301,10 +301,10 @@ export function CommandPalette({
         const results: CommandItem[] = [];
 
         if (!isDemoMode) {
-          // 1. Search Actors
-          const actorsResp = await fetchActors(sensorId, { ip: query, limit: 3 });
+          // 1. Search Actors (fleet-deduped per ADR-0002)
+          const actorsResp = await fetchFleetActors({ ip: query, limit: 3 });
           if (signal.aborted) return;
-          actorsResp.actors.forEach((actor: SocActor) => {
+          actorsResp.aggregate.forEach((actor: SocActor) => {
             results.push({
               id: `actor-${actor.actorId}`,
               label: `Actor: ${actor.actorId}`,

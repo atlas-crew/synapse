@@ -4,7 +4,11 @@ import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { fetchActorDetail, fetchActors, fetchSessionDetail } from '../../hooks/soc/api';
+import {
+  fetchFleetActorDetail,
+  fetchFleetActors,
+  fetchSessionDetail,
+} from '../../hooks/soc/api';
 import { useSocSensor } from '../../hooks/soc/useSocSensor';
 import type { SocActor, SocSession } from '../../types/soc';
 import { 
@@ -89,7 +93,7 @@ export default function SocSearchPage() {
   }, [submitted]);
 
   const { data, isLoading, error } = useQuery<SearchResult | null>({
-    queryKey: ['soc', 'search', sensorId, submitted?.term, resolvedType, isDemoMode],
+    queryKey: ['soc', 'search', submitted?.term, resolvedType, sensorId, isDemoMode],
     queryFn: async () => {
       if (!submitted) return null;
       const term = submitted.term.trim();
@@ -102,22 +106,23 @@ export default function SocSearchPage() {
       }
 
       if (resolvedType === 'ip') {
-        const result = await fetchActors(sensorId, { ip: term, limit: 25 });
-        return { kind: 'actors', actors: result.actors };
+        const result = await fetchFleetActors({ ip: term, limit: 25 });
+        return { kind: 'actors', actors: result.aggregate };
       }
 
       if (resolvedType === 'fingerprint') {
-        const result = await fetchActors(sensorId, { fingerprint: term, limit: 25 });
-        return { kind: 'actors', actors: result.actors };
+        const result = await fetchFleetActors({ fingerprint: term, limit: 25 });
+        return { kind: 'actors', actors: result.aggregate };
       }
 
       if (resolvedType === 'session') {
+        // Sessions remain per-sensor until TASK-80 lands fleet sessions.
         const result = await fetchSessionDetail(sensorId, term);
         return { kind: 'session', session: result.session };
       }
 
-      const result = await fetchActorDetail(sensorId, term);
-      return { kind: 'actor', actor: result.actor };
+      const result = await fetchFleetActorDetail(term);
+      return { kind: 'actor', actor: result.aggregate };
     },
     enabled: !!submitted?.term,
   });
