@@ -16,8 +16,16 @@ import { getErrorMessage } from '../../utils/errors.js';
 import { PayloadAggregatorService } from '../../services/fleet/payload-aggregator.js';
 import {
   type FleetPartialAggregateResult,
+  type FleetPartialResultEntry,
+  createFleetPartialResult,
   withFleetPartialError,
 } from '../../types/fleet-partial-result.js';
+import {
+  aggregateActorRows,
+  buildSensorFreshnessEntries,
+  FLEET_VIEW_DEFAULT_STALE_AFTER_MS,
+  type SensorIntelActorRow,
+} from '../../services/fleet-view/snapshot-aggregator.js';
 import {
   SynapseProxyService,
   SynapseProxyError,
@@ -161,6 +169,10 @@ const GlobalConfigUpdateSchema = ConfigUpdateSchema.extend({
 export interface SynapseRoutesOptions {
   fleetIntelService?: import('../../services/fleet/fleet-intel.js').FleetIntelService;
   prisma?: PrismaClient;
+  /** Override for fleet-view stale threshold (defaults to FLEET_VIEW_DEFAULT_STALE_AFTER_MS). */
+  fleetViewStaleAfterMs?: number;
+  /** Injected clock for fleet-view freshness tests. */
+  fleetViewNow?: () => Date;
 }
 
 export function createSynapseRoutes(
@@ -170,6 +182,8 @@ export function createSynapseRoutes(
 ): Router {
   const router = Router();
   const { fleetIntelService, prisma } = options;
+  const fleetViewStaleAfterMs = options.fleetViewStaleAfterMs ?? FLEET_VIEW_DEFAULT_STALE_AFTER_MS;
+  const fleetViewNow = options.fleetViewNow ?? (() => new Date());
   const payloadAggregator = prisma ? new PayloadAggregatorService(prisma) : null;
 
   function requirePayloadAggregator(res: Response): PayloadAggregatorService | null {
@@ -1501,6 +1515,241 @@ export function createSynapseRoutes(
   // ==========================================================================
   // Actors Endpoints
   // ==========================================================================
+
+  // Adapter from Prisma's SensorIntelActor (Json columns are unknown to TS) to
+  // the aggregator's row shape. The aggregator coerces the unknown set fields
+  // back to string[] internally.
+  function toAggregatorRow(row: {
+    sensorId: string;
+    actorId: string;
+    riskScore: number;
+    isBlocked: boolean;
+    firstSeenAt: Date;
+    lastSeenAt: Date;
+    ips: unknown;
+    fingerprints: unknown;
+    sessionIds: unknown;
+    raw: unknown;
+    updatedAt: Date;
+  }): SensorIntelActorRow {
+    return {
+      sensorId: row.sensorId,
+      actorId: row.actorId,
+      riskScore: row.riskScore,
+      isBlocked: row.isBlocked,
+      firstSeenAt: row.firstSeenAt,
+      lastSeenAt: row.lastSeenAt,
+      ips: row.ips,
+      fingerprints: row.fingerprints,
+      sessionIds: row.sessionIds,
+      raw: row.raw,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  // Fleet routes (ADR-0002 §Decision: Actors via SensorIntelActor snapshot
+  // dedup) MUST be registered before the `/:sensorId/actors` block so Express
+  // matches the literal path first. Otherwise `/synapse/actors` matches
+  // `/:sensorId/actors` with sensorId="actors".
+
+  /**
+   * GET /synapse/actors
+   * List actors deduped across the fleet, with per-sensor freshness envelope.
+   */
+  router.get(
+    '/actors',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+
+      if (!prisma) {
+        res.status(503).json({ error: 'Fleet actor view is unavailable' });
+        return;
+      }
+
+      const parsed = ActorFilterSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      const minRisk = parsed.data.minRisk ?? parsed.data.min_risk ?? parsed.data.minScore;
+
+      try {
+        const [rows, sensors] = await Promise.all([
+          prisma.sensorIntelActor.findMany({
+            where: {
+              tenantId,
+              ...(minRisk !== undefined ? { riskScore: { gte: minRisk } } : {}),
+            },
+            orderBy: { lastSeenAt: 'desc' },
+          }),
+          prisma.sensor.findMany({
+            where: { tenantId },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
+
+        const { actors, perSensor } = aggregateActorRows(rows.map(toAggregatorRow));
+        const offset = parsed.data.offset ?? 0;
+        const limit = parsed.data.limit ?? 25;
+        const paged = actors.slice(offset, offset + limit);
+
+        const results = buildSensorFreshnessEntries(
+          sensors.map((s) => s.id),
+          perSensor,
+          { staleAfterMs: fleetViewStaleAfterMs, now: fleetViewNow },
+        );
+
+        res.json({
+          ...createFleetPartialResult(results),
+          aggregate: paged,
+          total: actors.length,
+        });
+      } catch (error) {
+        await handleError(req, res, error, 'listFleetActors');
+      }
+    },
+  );
+
+  /**
+   * GET /synapse/actors/:actorId
+   * Fetch a single actor merged across the fleet.
+   */
+  router.get(
+    '/actors/:actorId',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+      const { actorId } = req.params;
+
+      if (!prisma) {
+        res.status(503).json({ error: 'Fleet actor view is unavailable' });
+        return;
+      }
+
+      try {
+        const [rows, sensors] = await Promise.all([
+          prisma.sensorIntelActor.findMany({
+            where: { tenantId, actorId },
+          }),
+          prisma.sensor.findMany({
+            where: { tenantId },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
+
+        if (rows.length === 0) {
+          res.status(404).json({ error: 'Actor not found in fleet snapshot' });
+          return;
+        }
+
+        const { actors, perSensor } = aggregateActorRows(rows.map(toAggregatorRow));
+        const results = buildSensorFreshnessEntries(
+          sensors.map((s) => s.id),
+          perSensor,
+          { staleAfterMs: fleetViewStaleAfterMs, now: fleetViewNow },
+        );
+
+        res.json({
+          ...createFleetPartialResult(results),
+          aggregate: actors[0],
+        });
+      } catch (error) {
+        await handleError(req, res, error, 'getFleetActor');
+      }
+    },
+  );
+
+  /**
+   * GET /synapse/actors/:actorId/timeline
+   * Cross-sensor timeline. Tunnel fan-out (events are not snapshotted), merged
+   * by timestamp desc. Each contributing sensor reports its own ok/error
+   * status; sensors with stale snapshots are still queried.
+   */
+  router.get(
+    '/actors/:actorId/timeline',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+      const { actorId } = req.params;
+
+      if (!prisma) {
+        res.status(503).json({ error: 'Fleet actor view is unavailable' });
+        return;
+      }
+
+      const parsed = TimelineQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      try {
+        const seenRows = await prisma.sensorIntelActor.findMany({
+          where: { tenantId, actorId },
+          select: { sensorId: true },
+        });
+        if (seenRows.length === 0) {
+          res.status(404).json({ error: 'Actor not found in fleet snapshot' });
+          return;
+        }
+
+        const sensorIds = [...new Set(seenRows.map((r) => r.sensorId))].sort();
+        const settled = await Promise.allSettled(
+          sensorIds.map((sensorId) =>
+            synapseProxy.getActorTimeline(sensorId, tenantId, actorId, parsed.data),
+          ),
+        );
+
+        const events: Array<{ sensorId: string; event: unknown }> = [];
+        const entries: FleetPartialResultEntry<{ count: number }>[] = settled.map(
+          (result, index) => {
+            const sensorId = sensorIds[index];
+            if (result.status === 'fulfilled') {
+              const sensorEvents = result.value.events ?? [];
+              for (const ev of sensorEvents) {
+                events.push({ sensorId, event: ev });
+              }
+              return { sensorId, status: 'ok', data: { count: sensorEvents.length } };
+            }
+            return {
+              sensorId,
+              status: 'error',
+              error: getErrorMessage(result.reason),
+            };
+          },
+        );
+
+        events.sort((a, b) => {
+          const ta = (a.event as { timestamp?: number }).timestamp ?? 0;
+          const tb = (b.event as { timestamp?: number }).timestamp ?? 0;
+          return tb - ta;
+        });
+
+        const limit = parsed.data.limit;
+        const truncated = limit !== undefined ? events.slice(0, limit) : events;
+
+        res.json({
+          ...createFleetPartialResult(entries),
+          aggregate: {
+            actorId,
+            events: truncated.map(({ sensorId, event }) => ({ sensorId, ...(event as object) })),
+          },
+        });
+      } catch (error) {
+        await handleError(req, res, error, 'getFleetActorTimeline');
+      }
+    },
+  );
 
   /**
    * GET /synapse/:sensorId/actors
