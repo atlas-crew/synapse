@@ -6,6 +6,9 @@ import type {
   SocCampaignActorsResponse,
   SocCampaignDetailResponse,
   SocCampaignListResponse,
+  SocFleetActorDetailResponse,
+  SocFleetActorListResponse,
+  SocFleetActorTimelineResponse,
   SocSessionDetailResponse,
   SocSessionListResponse,
 } from '../../types/soc';
@@ -59,6 +62,32 @@ export async function fetchActorDetail(sensorId: string, actorId: string) {
 export async function fetchActorTimeline(sensorId: string, actorId: string, limit: number = 100) {
   const query = buildQuery({ limit });
   return apiFetch<SocActorTimelineResponse>(`/synapse/${sensorId}/actors/${actorId}/timeline${query}`);
+}
+
+// ============================================================================
+// Fleet-view fetchers (ADR-0002). Use these for SOC dashboards that span the
+// fleet; the sensor-prefixed fetchers above remain for the sensor-detail
+// drawer.
+// ============================================================================
+
+export async function fetchFleetActors(params: ActorQueryParams = {}) {
+  const query = buildQuery({
+    ip: params.ip,
+    fingerprint: params.fingerprint,
+    min_risk: params.minRisk,
+    limit: params.limit,
+    offset: params.offset,
+  });
+  return apiFetch<SocFleetActorListResponse>(`/synapse/actors${query}`);
+}
+
+export async function fetchFleetActorDetail(actorId: string) {
+  return apiFetch<SocFleetActorDetailResponse>(`/synapse/actors/${actorId}`);
+}
+
+export async function fetchFleetActorTimeline(actorId: string, limit: number = 100) {
+  const query = buildQuery({ limit });
+  return apiFetch<SocFleetActorTimelineResponse>(`/synapse/actors/${actorId}/timeline${query}`);
 }
 
 export async function fetchSessions(sensorId: string, params: SessionQueryParams = {}) {

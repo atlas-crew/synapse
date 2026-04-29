@@ -38,6 +38,59 @@ export interface SocActorDetailResponse {
   actor: SocActor;
 }
 
+// =============================================================================
+// Fleet-view types (ADR-0002 §Decision: Actors via SensorIntelActor dedup)
+// Mirrors the API's FleetPartialResult envelope. Per-sensor entries report
+// freshness as 'ok' | 'stale' | 'error' so dashboards can flag stale data
+// without dropping it.
+// =============================================================================
+
+export type SocFleetEntryStatus = 'ok' | 'stale' | 'error';
+
+export interface SocFleetResultEntry<T = unknown> {
+  sensorId: string;
+  status: SocFleetEntryStatus;
+  data?: T;
+  error?: string;
+  lastUpdatedAt?: string;
+}
+
+export interface SocFleetSummary {
+  succeeded: number;
+  stale: number;
+  failed: number;
+}
+
+export interface SocFleetActor extends SocActor {
+  seenOnSensors: string[];
+}
+
+export interface SocFleetActorListResponse {
+  results: SocFleetResultEntry<{ rowCount: number }>[];
+  summary: SocFleetSummary;
+  aggregate: SocFleetActor[];
+  total: number;
+}
+
+export interface SocFleetActorDetailResponse {
+  results: SocFleetResultEntry<{ rowCount: number }>[];
+  summary: SocFleetSummary;
+  aggregate: SocFleetActor;
+}
+
+export interface SocFleetTimelineEvent extends SocActorTimelineEvent {
+  sensorId: string;
+}
+
+export interface SocFleetActorTimelineResponse {
+  results: SocFleetResultEntry<{ count: number }>[];
+  summary: SocFleetSummary;
+  aggregate: {
+    actorId: string;
+    events: SocFleetTimelineEvent[];
+  };
+}
+
 export interface SocActorTimelineEvent {
   timestamp: number;
   eventType: string;
