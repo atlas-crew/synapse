@@ -55,7 +55,7 @@ describe('PayloadAggregatorService', () => {
 
     const result = await service.getDlpStats('tenant-1');
 
-    expect(result.summary).toEqual({ succeeded: 1, failed: 1 });
+    expect(result.summary).toEqual({ succeeded: 1, stale: 0, failed: 1 });
     expect(result.aggregate).toEqual({
       totalScans: 12,
       totalMatches: 2,
@@ -96,7 +96,7 @@ describe('PayloadAggregatorService', () => {
 
     const result = await service.getPayloadEndpoints('tenant-1');
 
-    expect(result.summary).toEqual({ succeeded: 0, failed: 1 });
+    expect(result.summary).toEqual({ succeeded: 0, stale: 0, failed: 1 });
     expect(result.aggregate).toEqual([]);
     expect(result.results).toEqual([
       expect.objectContaining({
@@ -142,7 +142,7 @@ describe('PayloadAggregatorService', () => {
 
     const result = await service.getPayloadEndpoints('tenant-1');
 
-    expect(result.summary).toEqual({ succeeded: 3, failed: 0 });
+    expect(result.summary).toEqual({ succeeded: 3, stale: 0, failed: 0 });
     expect(result.aggregate).toEqual([
       expect.objectContaining({
         template: '/checkout',

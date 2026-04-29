@@ -272,7 +272,7 @@ describe('Synapse RBAC', () => {
       totalMatches: 3,
       patternCount: 25,
     });
-    expect(statsRes.body.summary).toEqual({ succeeded: 2, failed: 1 });
+    expect(statsRes.body.summary).toEqual({ succeeded: 2, stale: 0, failed: 1 });
     expect(statsRes.body.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -286,7 +286,7 @@ describe('Synapse RBAC', () => {
     const violationsRes = await request(seededApp)
       .get('/synapse/dlp/violations?limit=5')
       .expect(200);
-    expect(violationsRes.body.summary).toEqual({ succeeded: 2, failed: 1 });
+    expect(violationsRes.body.summary).toEqual({ succeeded: 2, stale: 0, failed: 1 });
     expect(violationsRes.body.aggregate).toEqual([
       expect.objectContaining({
         sensorId: 'sensor-2',
@@ -318,7 +318,7 @@ describe('Synapse RBAC', () => {
 
     const res = await request(seededApp).get('/synapse/dlp/stats').expect(200);
 
-    expect(res.body.summary).toEqual({ succeeded: 0, failed: 2 });
+    expect(res.body.summary).toEqual({ succeeded: 0, stale: 0, failed: 2 });
     expect(res.body.error).toMatchObject({
       code: 'FLEET_DLP_STATS_UNAVAILABLE',
       message: 'No sensors reported a usable DLP snapshot',
@@ -450,7 +450,7 @@ describe('Synapse RBAC', () => {
       total_response_bytes: 700,
       active_anomalies: 3,
     });
-    expect(statsRes.body.summary).toEqual({ succeeded: 2, failed: 1 });
+    expect(statsRes.body.summary).toEqual({ succeeded: 2, stale: 0, failed: 1 });
 
     const endpointsRes = await request(seededApp)
       .get('/synapse/payload/endpoints?limit=3')

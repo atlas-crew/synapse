@@ -1,14 +1,17 @@
-export type FleetPartialStatus = 'ok' | 'error';
+export type FleetPartialStatus = 'ok' | 'stale' | 'error';
 
 export interface FleetPartialResultEntry<T> {
   sensorId: string;
   status: FleetPartialStatus;
   data?: T;
   error?: string;
+  // Set when status is 'stale'. ISO-8601 timestamp of the row that triggered staleness.
+  lastUpdatedAt?: string;
 }
 
 export interface FleetPartialSummary {
   succeeded: number;
+  stale: number;
   failed: number;
 }
 
@@ -35,6 +38,7 @@ export function createFleetPartialResult<T>(
     results,
     summary: {
       succeeded: results.filter((result) => result.status === 'ok').length,
+      stale: results.filter((result) => result.status === 'stale').length,
       failed: results.filter((result) => result.status === 'error').length,
     },
   };

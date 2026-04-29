@@ -520,7 +520,7 @@ describe('POST /api/v1/onboarding/pending/:sensorId', () => {
       .send({ sensorIds: [BATCH_SENSOR_1, BATCH_SENSOR_2] })
       .expect(200);
 
-    expect(res.body.summary).toEqual({ succeeded: 2, failed: 0 });
+    expect(res.body.summary).toEqual({ succeeded: 2, stale: 0, failed: 0 });
     expect(res.body.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -560,7 +560,7 @@ describe('POST /api/v1/onboarding/pending/:sensorId', () => {
       .send({ sensorIds: [BATCH_SENSOR_1, BATCH_SENSOR_2] })
       .expect(200);
 
-    expect(res.body.summary).toEqual({ succeeded: 1, failed: 1 });
+    expect(res.body.summary).toEqual({ succeeded: 1, stale: 0, failed: 1 });
     expect(res.body.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -590,7 +590,7 @@ describe('POST /api/v1/onboarding/pending/:sensorId', () => {
       .send({ sensorIds: [BATCH_SENSOR_1, BATCH_SENSOR_2], reason: 'duplicate registration' })
       .expect(200);
 
-    expect(res.body.summary).toEqual({ succeeded: 2, failed: 0 });
+    expect(res.body.summary).toEqual({ succeeded: 2, stale: 0, failed: 0 });
     expect(res.body.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
