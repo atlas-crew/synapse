@@ -1,10 +1,10 @@
 ---
 id: TASK-79
 title: 'Fleet SOC views: actors via SensorIntelActor dedup'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-04-17 21:48'
-updated_date: '2026-04-29 10:17'
+updated_date: '2026-04-29 10:19'
 labels:
   - api
   - signal-horizon
@@ -49,3 +49,24 @@ Found existing infrastructure to build on:
 - `Actor` interface (synapse-proxy.ts:99-112) is the canonical shape — `raw: Json` on each `SensorIntelActor` row stores this. Merged shape: `Actor & { seenOnSensors: string[] }`.
 - Sister fleet-intel.ts route file (`/api/v1/fleet/intel/actors`) is pre-ADR, non-envelope; out of scope for TASK-79.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Shipped fleet-deduped actor SOC views per ADR-0002 §Decision in 4 commits.
+
+**Envelope** — `FleetPartialResult<T>` extended with `'stale'` status and matching `summary.stale` counter so snapshot-backed reads can flag age-of-data without dropping rows. Three pre-existing test fixtures (sensor-enrollment, synapse, payload-aggregator) updated to match the wider summary shape; full API suite remains green at 1795/1795.
+
+**Aggregator** — `services/fleet-view/snapshot-aggregator.ts` encodes the dedup semantics (max risk, OR isBlocked, min/max times, union sets, sum counters) and the per-sensor freshness classifier (ok | stale | error). 13 unit tests cover each reconciliation rule and the freshness state machine. Stale threshold is configurable via `FLEET_VIEW_STALE_AFTER_MS` (default 5 min, 1 min – 1 h range).
+
+**Routes** — `GET /synapse/actors`, `GET /synapse/actors/:actorId`, `GET /synapse/actors/:actorId/timeline` registered in synapse.ts BEFORE the `/:sensorId/...` block (Express literal routes must register first to win matching). List + detail use snapshot dedup; timeline uses tunnel fan-out across `seenOnSensors` and reports per-sensor proxy errors. 11 integration tests cover dedup correctness across mock sensors, stale-row handling, offline-sensor reporting, minRisk filter, pagination, route-order preservation for the per-sensor surface, and timeline error fan-out.
+
+**UI** — `fetchFleetActors`, `fetchFleetActorDetail`, `fetchFleetActorTimeline` added to `hooks/soc/api.ts` with matching `SocFleet*` types in `types/soc.ts` (envelope mirror + `seenOnSensors`-augmented actor + sensor-tagged timeline events). Per-sensor fetchers preserved unchanged for the sensor-detail drawer. UI typecheck clean.
+
+**Follow-ups filed:**
+- TASK-98 — FleetIntelService 200-row pagination cap could silently truncate fleet-view dedup results at realistic cardinalities. Medium priority.
+- TASK-99 — SOC dashboard pages (ActorsPage, ActorDetailPage, SocSearchPage, CommandPalette) still pass a sensorId; switch them to the new fleet hooks and surface the stale-badge UI. Medium priority, depends on TASK-79.
+
+**Out of scope (intentionally):**
+- Existing `/api/v1/fleet/intel/actors` route in `fleet-intel.ts` is pre-ADR (no envelope). Kept as-is — separate route module, not the canonical SOC surface.
+<!-- SECTION:FINAL_SUMMARY:END -->
