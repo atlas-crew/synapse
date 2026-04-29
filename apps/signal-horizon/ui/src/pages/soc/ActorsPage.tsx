@@ -1,29 +1,31 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Shield, Users } from 'lucide-react';
+import { AlertTriangle, Clock, Shield, Users } from 'lucide-react';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { fetchActors } from '../../hooks/soc/api';
-import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import { fetchFleetActors } from '../../hooks/soc/api';
 import { downloadCsv } from '../../lib/csv';
-import type { SocActor, SocActorListResponse } from '../../types/soc';
-import { 
+import type { SocFleetActor, SocFleetActorListResponse } from '../../types/soc';
+import {
   Box,
   Button,
   Input,
   SectionHeader,
   Stack,
+  StatusBadge,
   Text,
   alpha,
   colors,
   PAGE_TITLE_STYLE,
-  } from '@/ui';
-function buildDemoActors(scenario: string): SocActorListResponse {
+} from '@/ui';
+
+function buildDemoActors(scenario: string): SocFleetActorListResponse {
   const baseRisk = scenario === 'high-threat' ? 82 : scenario === 'normal' ? 55 : 28;
-  const actors: SocActor[] = Array.from({ length: 10 }).map((_, index) => {
+  const aggregate: SocFleetActor[] = Array.from({ length: 10 }).map((_, index) => {
     const risk = Math.min(100, baseRisk + index * 3);
     const now = Date.now();
+    const sensorCount = (index % 3) + 1;
     return {
       actorId: `actor-${scenario}-${index + 1}`,
       riskScore: risk,
@@ -39,25 +41,31 @@ function buildDemoActors(scenario: string): SocActorListResponse {
       isBlocked: risk > 75,
       blockReason: risk > 75 ? 'Auto-block threshold' : null,
       blockedSince: risk > 75 ? now - 3600 * 1000 : null,
+      seenOnSensors: Array.from({ length: sensorCount }, (_, i) => `sensor-${i + 1}`),
     };
   });
 
   return {
-    actors,
-    stats: {
-      totalActors: actors.length,
-      blockedActors: actors.filter((a) => a.isBlocked).length,
-      correlationsMade: 12,
-      evictions: 3,
-      totalCreated: 128,
-      totalRuleMatches: 256,
-    },
+    aggregate,
+    results: [
+      { sensorId: 'sensor-1', status: 'ok' },
+      { sensorId: 'sensor-2', status: 'ok' },
+      { sensorId: 'sensor-3', status: 'ok' },
+    ],
+    summary: { succeeded: 3, stale: 0, failed: 0 },
+    total: aggregate.length,
   };
+}
+
+function formatRelativeMinutes(iso: string, nowMs: number): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 'unknown';
+  const ageMin = Math.max(1, Math.round((nowMs - then) / 60_000));
+  return `${ageMin} min ago`;
 }
 
 export default function ActorsPage() {
   useDocumentTitle('SOC - Actors');
-  const { sensorId, setSensorId } = useSocSensor();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const [ipFilter, setIpFilter] = useState('');
   const [fingerprintFilter, setFingerprintFilter] = useState('');
@@ -74,31 +82,45 @@ export default function ActorsPage() {
   );
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['soc', 'actors', sensorId, queryParams, isDemoMode, scenario],
+    queryKey: ['soc', 'fleet-actors', queryParams, isDemoMode, scenario],
     queryFn: async () => {
       if (isDemoMode) {
         return buildDemoActors(scenario);
       }
-      return fetchActors(sensorId, queryParams);
+      return fetchFleetActors(queryParams);
     },
     staleTime: isDemoMode ? Infinity : 15000,
   });
 
-  const actors = data?.actors ?? [];
-  const stats = data?.stats;
+  const actors = data?.aggregate ?? [];
+  const results = data?.results ?? [];
+  const summary = data?.summary ?? { succeeded: 0, stale: 0, failed: 0 };
+
+  const staleSensors = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of results) {
+      if (r.status === 'stale' && r.lastUpdatedAt) {
+        m.set(r.sensorId, r.lastUpdatedAt);
+      }
+    }
+    return m;
+  }, [results]);
+
   const canExport = actors.length > 0;
+  const nowMs = Date.now();
 
   const handleExport = () => {
     if (!canExport) return;
     downloadCsv(
-      `soc-actors-${sensorId}-${new Date().toISOString().split('T')[0]}.csv`,
-      ['Actor ID', 'Risk Score', 'Last Seen', 'IPs', 'Fingerprints', 'Status'],
+      `soc-actors-fleet-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Actor ID', 'Risk Score', 'Last Seen', 'IPs', 'Fingerprints', 'Sensors', 'Status'],
       actors.map((actor) => [
         actor.actorId,
         Math.round(actor.riskScore),
         new Date(actor.lastSeen).toISOString(),
         actor.ips.join('; '),
         actor.fingerprints.join('; '),
+        actor.seenOnSensors.join('; '),
         actor.isBlocked ? 'BLOCKED' : 'ACTIVE',
       ]),
     );
@@ -112,20 +134,9 @@ export default function ActorsPage() {
           description="Track correlated actors and behavioral risk across the fleet."
           titleStyle={PAGE_TITLE_STYLE}
           actions={
-            <Stack direction="row" align="center" gap="sm">
-              <Text variant="label" color="secondary" noMargin>Sensor</Text>
-              <Box style={{ width: 180 }}>
-                <Input
-                  value={sensorId}
-                  onChange={(event) => setSensorId(event.target.value)}
-                  placeholder="synapse-waf-1"
-                  size="sm"
-                />
-              </Box>
-              <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
-                Export CSV
-              </Button>
-            </Stack>
+            <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
+              Export CSV
+            </Button>
           }
         />
 
@@ -133,20 +144,20 @@ export default function ActorsPage() {
           <StatCard
             icon={Users}
             label="Tracked Actors"
-            value={stats?.totalActors ?? actors.length}
+            value={actors.length}
             accentColorVar="--ac-blue"
           />
           <StatCard
             icon={AlertTriangle}
             label="Blocked"
-            value={stats?.blockedActors ?? actors.filter((a) => a.isBlocked).length}
+            value={actors.filter((a) => a.isBlocked).length}
             accentColorVar="--ac-red"
           />
           <StatCard
             icon={Shield}
-            label="Correlations"
-            value={stats?.correlationsMade ?? 0}
-            accentColorVar="--ac-green"
+            label="Sensors Reporting"
+            value={summary.succeeded + summary.stale}
+            accentColorVar={summary.stale > 0 ? '--ac-orange' : '--ac-green'}
           />
         </div>
 
@@ -206,7 +217,7 @@ export default function ActorsPage() {
               <Box style={{ overflowX: 'auto' }}>
                 <table className="data-table">
                   <caption className="sr-only">
-                    Tracked actors with risk scores and activity status
+                    Tracked actors with risk scores and activity status across the fleet
                   </caption>
                   <thead>
                     <tr>
@@ -226,55 +237,80 @@ export default function ActorsPage() {
                         <Text variant="label" color="secondary" noMargin>Fingerprints</Text>
                       </th>
                       <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Coverage</Text>
+                      </th>
+                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Status</Text>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {actors.map((actor) => (
-                      <tr key={actor.actorId} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Link
-                            to={`/actors/${actor.actorId}`}
-                            className="text-link hover:opacity-80 transition-opacity"
-                            style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
-                          >
-                            {actor.actorId}
-                          </Link>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" weight="medium" noMargin>
-                            {Math.round(actor.riskScore)}
-                          </Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" color="secondary" noMargin>
-                            {new Date(actor.lastSeen).toLocaleString()}
-                          </Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" color="secondary" noMargin>{actor.ips.length}</Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" color="secondary" noMargin>{actor.fingerprints.length}</Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Box
-                            px="sm"
-                            py="xs"
-                            style={{
-                              width: 'fit-content',
-                              border: '1px solid',
-                              background: actor.isBlocked ? 'var(--ac-red-dim)' : 'var(--ac-green-dim)',
-                              color: actor.isBlocked ? 'var(--ac-red)' : 'var(--ac-green)',
-                              borderColor: actor.isBlocked ? alpha(colors.red, 0.3) : alpha(colors.green, 0.3),
-                            }}
-                          >
-                            <Text variant="tag" noMargin>{actor.isBlocked ? 'Blocked' : 'Active'}</Text>
-                          </Box>
-                        </td>
-                      </tr>
-                    ))}
+                    {actors.map((actor) => {
+                      const sensorCount = actor.seenOnSensors.length;
+                      const sensorLabel = `${sensorCount} ${sensorCount === 1 ? 'sensor' : 'sensors'}`;
+                      const staleContributor = actor.seenOnSensors
+                        .map((id) => ({ id, lastUpdatedAt: staleSensors.get(id) }))
+                        .find((entry) => entry.lastUpdatedAt !== undefined);
+                      return (
+                        <tr key={actor.actorId} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Link
+                              to={`/actors/${actor.actorId}`}
+                              className="text-link hover:opacity-80 transition-opacity"
+                              style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                            >
+                              {actor.actorId}
+                            </Link>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" weight="medium" noMargin>
+                              {Math.round(actor.riskScore)}
+                            </Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>
+                              {new Date(actor.lastSeen).toLocaleString()}
+                            </Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>{actor.ips.length}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>{actor.fingerprints.length}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Stack direction="row" align="center" gap="sm" wrap>
+                              <StatusBadge status="info" variant="subtle" size="sm">
+                                {sensorLabel}
+                              </StatusBadge>
+                              {staleContributor?.lastUpdatedAt && (
+                                <StatusBadge status="warning" variant="subtle" size="sm">
+                                  <Stack direction="row" align="center" gap="xs">
+                                    <Clock size={10} aria-hidden="true" />
+                                    <span>{formatRelativeMinutes(staleContributor.lastUpdatedAt, nowMs)}</span>
+                                  </Stack>
+                                </StatusBadge>
+                              )}
+                            </Stack>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Box
+                              px="sm"
+                              py="xs"
+                              style={{
+                                width: 'fit-content',
+                                border: '1px solid',
+                                background: actor.isBlocked ? 'var(--ac-red-dim)' : 'var(--ac-green-dim)',
+                                color: actor.isBlocked ? 'var(--ac-red)' : 'var(--ac-green)',
+                                borderColor: actor.isBlocked ? alpha(colors.red, 0.3) : alpha(colors.green, 0.3),
+                              }}
+                            >
+                              <Text variant="tag" noMargin>{actor.isBlocked ? 'Blocked' : 'Active'}</Text>
+                            </Box>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </Box>
@@ -292,7 +328,7 @@ function StatCard({
   value,
   accentColorVar,
 }: {
-  icon: any;
+  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties; 'aria-hidden'?: boolean }>;
   label: string;
   value: number;
   accentColorVar: string;
@@ -310,7 +346,7 @@ function StatCard({
             background: 'var(--bg-surface-subtle)',
           }}
         >
-          <Icon aria-hidden="true" size={20} style={{ color: `var(${accentColorVar})` }} />
+          <Icon aria-hidden size={20} style={{ color: `var(${accentColorVar})` }} />
         </Box>
         <Box>
           <Text variant="label" color="secondary" noMargin>{label}</Text>

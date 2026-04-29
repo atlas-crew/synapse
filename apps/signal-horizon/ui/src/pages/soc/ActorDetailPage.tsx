@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Activity, Shield, Star } from 'lucide-react';
+import { AlertTriangle, Activity, Clock, Shield, Star } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import {
   Breadcrumb,
@@ -18,12 +18,19 @@ import {
 } from '@/ui';
 import { CopyButton } from '../../components/ui/CopyButton';
 import { useDemoMode } from '../../stores/demoModeStore';
-import { fetchActorDetail, fetchActorTimeline } from '../../hooks/soc/api';
-import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import {
+  fetchFleetActorDetail,
+  fetchFleetActorTimeline,
+} from '../../hooks/soc/api';
 import { useSocWatchlist } from '../../hooks/soc/useSocWatchlist';
-import type { SocActor, SocActorTimelineEvent } from '../../types/soc';
+import type {
+  SocFleetActor,
+  SocFleetActorDetailResponse,
+  SocFleetActorTimelineResponse,
+  SocFleetTimelineEvent,
+} from '../../types/soc';
 
-const demoActor: SocActor = {
+const demoActor: SocFleetActor = {
   actorId: 'actor-demo-1',
   riskScore: 86,
   ruleMatches: [],
@@ -36,10 +43,12 @@ const demoActor: SocActor = {
   isBlocked: true,
   blockReason: 'Auto-block threshold',
   blockedSince: Date.now() - 2 * 3600 * 1000,
+  seenOnSensors: ['sensor-1', 'sensor-2'],
 };
 
-const demoTimeline: SocActorTimelineEvent[] = [
+const demoTimeline: SocFleetTimelineEvent[] = [
   {
+    sensorId: 'sensor-1',
     timestamp: Date.now() - 4 * 3600 * 1000,
     eventType: 'rule_match',
     ruleId: 'sqli-001',
@@ -47,6 +56,7 @@ const demoTimeline: SocActorTimelineEvent[] = [
     riskDelta: 25,
   },
   {
+    sensorId: 'sensor-2',
     timestamp: Date.now() - 3 * 3600 * 1000,
     eventType: 'block',
     clientIp: '203.0.113.10',
@@ -56,6 +66,7 @@ const demoTimeline: SocActorTimelineEvent[] = [
     blockReason: 'High risk',
   },
   {
+    sensorId: 'sensor-1',
     timestamp: Date.now() - 2 * 3600 * 1000,
     eventType: 'actor_blocked',
     reason: 'Auto-block',
@@ -91,36 +102,73 @@ const eventStyles: Record<string, { bg: string; color: string; border: string }>
   },
 };
 
+function formatRelativeMinutes(iso: string, nowMs: number): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 'unknown';
+  const ageMin = Math.max(1, Math.round((nowMs - then) / 60_000));
+  return `${ageMin} min ago`;
+}
+
+function buildDemoDetail(): SocFleetActorDetailResponse {
+  return {
+    aggregate: demoActor,
+    results: [
+      { sensorId: 'sensor-1', status: 'ok' },
+      { sensorId: 'sensor-2', status: 'ok' },
+    ],
+    summary: { succeeded: 2, stale: 0, failed: 0 },
+  };
+}
+
+function buildDemoTimeline(): SocFleetActorTimelineResponse {
+  return {
+    aggregate: { actorId: demoActor.actorId, events: demoTimeline },
+    results: [
+      { sensorId: 'sensor-1', status: 'ok' },
+      { sensorId: 'sensor-2', status: 'ok' },
+    ],
+    summary: { succeeded: 2, stale: 0, failed: 0 },
+  };
+}
+
 export default function ActorDetailPage() {
   useDocumentTitle('SOC - Actor Detail');
   const { id } = useParams();
-  const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
   const { isWatched, toggleWatch } = useSocWatchlist();
 
   const { data: actorResponse, isLoading: actorLoading } = useQuery({
-    queryKey: ['soc', 'actor', sensorId, id, isDemoMode],
+    queryKey: ['soc', 'fleet-actor', id, isDemoMode],
     queryFn: async () => {
-      if (isDemoMode) return { actor: demoActor };
+      if (isDemoMode) return buildDemoDetail();
       if (!id) throw new Error('Missing actor ID');
-      return fetchActorDetail(sensorId, id);
+      return fetchFleetActorDetail(id);
     },
     enabled: !!id,
   });
 
   const { data: timelineResponse } = useQuery({
-    queryKey: ['soc', 'actor-timeline', sensorId, id, isDemoMode],
+    queryKey: ['soc', 'fleet-actor-timeline', id, isDemoMode],
     queryFn: async () => {
-      if (isDemoMode) return { actorId: demoActor.actorId, events: demoTimeline };
+      if (isDemoMode) return buildDemoTimeline();
       if (!id) throw new Error('Missing actor ID');
-      return fetchActorTimeline(sensorId, id, 120);
+      return fetchFleetActorTimeline(id, 120);
     },
     enabled: !!id,
   });
 
-  const actor = actorResponse?.actor;
-  const timeline = timelineResponse?.events ?? [];
+  const actor = actorResponse?.aggregate;
+  const detailSummary = actorResponse?.summary;
+  const detailResults = actorResponse?.results ?? [];
+  const timeline = timelineResponse?.aggregate.events ?? [];
   const watched = actor ? isWatched(actor.actorId) : false;
+  const nowMs = Date.now();
+
+  const oldestStaleEntry = useMemo(() => {
+    return detailResults
+      .filter((r) => r.status === 'stale' && r.lastUpdatedAt)
+      .sort((a, b) => Date.parse(a.lastUpdatedAt!) - Date.parse(b.lastUpdatedAt!))[0];
+  }, [detailResults]);
 
   const summaryStats = useMemo(() => {
     if (!actor) return [];
@@ -150,11 +198,14 @@ export default function ActorDetailPage() {
     );
   }
 
+  const sensorCount = actor.seenOnSensors.length;
+  const sensorLabel = `${sensorCount} ${sensorCount === 1 ? 'sensor' : 'sensors'}`;
+
   return (
     <Box p="xl">
       <Stack gap="xl">
         <Breadcrumb items={[{ label: 'Actors', to: '/actors' }, { label: actor.actorId }]} />
-        
+
         {/* Header */}
         <Box bg="card" border="top" borderColor="var(--ac-blue)" p="lg">
           <Stack gap="md">
@@ -173,7 +224,7 @@ export default function ActorDetailPage() {
               size="h2"
               titleStyle={PAGE_TITLE_STYLE}
               actions={
-                <Stack direction="row" align="center" gap="md">
+                <Stack direction="row" align="center" gap="md" wrap>
                   <Button
                     variant="outlined"
                     size="sm"
@@ -188,6 +239,17 @@ export default function ActorDetailPage() {
                   >
                     {watched ? 'Remove Watch' : 'Add to Watchlist'}
                   </Button>
+                  <StatusBadge status="info" variant="subtle" size="sm">
+                    {sensorLabel}
+                  </StatusBadge>
+                  {detailSummary && detailSummary.stale > 0 && oldestStaleEntry?.lastUpdatedAt && (
+                    <StatusBadge status="warning" variant="subtle" size="sm">
+                      <Stack direction="row" align="center" gap="xs">
+                        <Clock size={10} aria-hidden="true" />
+                        <span>Stale data — {formatRelativeMinutes(oldestStaleEntry.lastUpdatedAt, nowMs)}</span>
+                      </Stack>
+                    </StatusBadge>
+                  )}
                   <StatusBadge
                     status={actor.isBlocked ? 'error' : 'success'}
                     variant="subtle"
@@ -283,10 +345,10 @@ export default function ActorDetailPage() {
                 <Text variant="body" color="secondary" align="center">No timeline events yet.</Text>
               )}
               {timeline.map((event, index) => {
-                const style = eventStyles[event.eventType] || { 
-                  bg: 'var(--bg-surface-inset)', 
-                  color: 'var(--text-muted)', 
-                  border: 'var(--border-subtle)' 
+                const style = eventStyles[event.eventType] || {
+                  bg: 'var(--bg-surface-inset)',
+                  color: 'var(--text-muted)',
+                  border: 'var(--border-subtle)'
                 };
                 return (
                   <Stack key={`${event.eventType}-${index}`} direction="row" gap="lg" align="start">
@@ -314,6 +376,8 @@ export default function ActorDetailPage() {
                         {new Date(event.timestamp).toLocaleString()}
                         {event.riskDelta ? ` · +${event.riskDelta}` : ''}
                         {event.riskScore ? ` · Risk ${event.riskScore}` : ''}
+                        {' · '}
+                        <span style={{ fontFamily: 'var(--font-mono)' }}>{event.sensorId}</span>
                       </Text>
                       {event.blockReason && (
                         <Text variant="small" color="secondary" style={{ marginTop: '4px' }}>
