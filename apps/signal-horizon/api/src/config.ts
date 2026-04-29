@@ -116,6 +116,11 @@ const envSchema = z.object({
   FLEET_COMMAND_TOGGLE_CHAOS_ENABLED: booleanString('false'),
   FLEET_COMMAND_TOGGLE_MTD_ENABLED: booleanString('false'),
 
+  // Fleet-view (ADR-0002) snapshot freshness threshold. A SensorIntel* row whose
+  // updatedAt is older than this is reported as 'stale' in the partial-failure
+  // envelope. Default 5 min — must stay aligned with FleetIntelService poll cadence.
+  FLEET_VIEW_STALE_AFTER_MS: positiveIntString(60_000, 3_600_000).catch(300_000),
+
   // ClickHouse (optional - for historical data)
   CLICKHOUSE_ENABLED: booleanString('false'),
   CLICKHOUSE_HOST: z.string().default('localhost'),
@@ -268,6 +273,10 @@ function loadConfig() {
     fleetCommands: {
       enableToggleChaos: env.FLEET_COMMAND_TOGGLE_CHAOS_ENABLED,
       enableToggleMtd: env.FLEET_COMMAND_TOGGLE_MTD_ENABLED,
+    },
+
+    fleetView: {
+      staleAfterMs: env.FLEET_VIEW_STALE_AFTER_MS,
     },
 
     // ClickHouse for historical data (optional)
