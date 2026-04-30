@@ -4,11 +4,13 @@ title: 'Snapshot cadence observability (metrics, SLO, synthetic probe)'
 status: To Do
 assignee: []
 created_date: '2026-04-17 22:49'
+updated_date: '2026-04-30 09:14'
 labels:
   - observability
   - signal-horizon
   - fleet-aggregation
   - slo
+milestone: m-8
 dependencies:
   - TASK-78
   - TASK-84

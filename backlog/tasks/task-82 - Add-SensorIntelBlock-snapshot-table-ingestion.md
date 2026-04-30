@@ -4,11 +4,13 @@ title: Add SensorIntelBlock snapshot table + ingestion
 status: To Do
 assignee: []
 created_date: '2026-04-17 21:49'
+updated_date: '2026-04-30 09:14'
 labels:
   - api
   - signal-horizon
   - schema
   - fleet-aggregation
+milestone: m-8
 dependencies:
   - TASK-78
 references:
