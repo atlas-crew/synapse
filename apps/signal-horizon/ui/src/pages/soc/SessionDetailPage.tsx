@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Shield, Activity, Fingerprint } from 'lucide-react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { 
+import {
   Breadcrumb, 
   Button, 
   EmptyState, 
@@ -16,11 +16,10 @@ import {
   PAGE_TITLE_STYLE,
 } from '@/ui';
 import { useDemoMode } from '../../stores/demoModeStore';
-import { fetchSessionDetail } from '../../hooks/soc/api';
-import { useSocSensor } from '../../hooks/soc/useSocSensor';
-import type { SocSession } from '../../types/soc';
+import { fetchFleetSessionDetail } from '../../hooks/soc/api';
+import type { SocFleetSession } from '../../types/soc';
 
-const demoSession: SocSession = {
+const demoSession: SocFleetSession = {
   sessionId: 'sess-demo-42',
   tokenHash: 'tok_demo_42',
   actorId: 'actor-demo-7',
@@ -48,33 +47,42 @@ const demoSession: SocSession = {
       confidence: 0.73,
     },
   ],
+  seenOnSensors: ['sensor-1', 'sensor-2'],
 };
 
 export default function SessionDetailPage() {
   useDocumentTitle('SOC - Session Detail');
   const { id } = useParams();
-  const { sensorId } = useSocSensor();
   const { isEnabled: isDemoMode } = useDemoMode();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['soc', 'session', sensorId, id, isDemoMode],
+    queryKey: ['soc', 'fleet-session', id, isDemoMode],
     queryFn: async () => {
-      if (isDemoMode) return { session: demoSession };
+      if (isDemoMode) {
+        return {
+          aggregate: demoSession,
+          results: [
+            { sensorId: 'sensor-1', status: 'ok' as const },
+            { sensorId: 'sensor-2', status: 'ok' as const },
+          ],
+          summary: { succeeded: 2, stale: 0, failed: 0 },
+        };
+      }
       if (!id) throw new Error('Missing session ID');
-      return fetchSessionDetail(sensorId, id);
+      return fetchFleetSessionDetail(id);
     },
     enabled: !!id,
   });
 
-  const session = data?.session;
+  const session = data?.aggregate;
 
   const summaryStats = useMemo(() => {
     if (!session) return [];
     return [
       { label: 'Requests', value: session.requestCount },
       { label: 'Hijack Alerts', value: session.hijackAlerts?.length ?? 0 },
+      { label: 'Sensors', value: session.seenOnSensors?.length ?? 0 },
       { label: 'Last Activity', value: new Date(session.lastActivity).toLocaleTimeString() },
-      { label: 'Status', value: session.isSuspicious ? 'Suspicious' : 'Active' },
     ];
   }, [session]);
 

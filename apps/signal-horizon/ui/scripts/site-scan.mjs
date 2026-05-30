@@ -71,8 +71,8 @@ async function resolveIds() {
   } catch {}
 
   try {
-    const sessions = await apiJson(`/api/v1/synapse/${SOC_SENSOR_ID}/sessions?limit=50`);
-    ids.sessionId = sessions?.sessions?.[0]?.sessionId || null;
+    const sessions = await apiJson(`/api/v1/synapse/sessions?limit=50`);
+    ids.sessionId = sessions?.aggregate?.[0]?.sessionId || null;
   } catch {}
 
   try {

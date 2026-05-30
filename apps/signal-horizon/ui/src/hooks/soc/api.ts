@@ -9,6 +9,8 @@ import type {
   SocFleetActorDetailResponse,
   SocFleetActorListResponse,
   SocFleetActorTimelineResponse,
+  SocFleetSessionDetailResponse,
+  SocFleetSessionListResponse,
   SocSessionDetailResponse,
   SocSessionListResponse,
 } from '../../types/soc';
@@ -100,8 +102,22 @@ export async function fetchSessions(sensorId: string, params: SessionQueryParams
   return apiFetch<SocSessionListResponse>(`/synapse/${sensorId}/sessions${query}`);
 }
 
+export async function fetchFleetSessions(params: SessionQueryParams = {}) {
+  const query = buildQuery({
+    actor_id: params.actorId,
+    suspicious: params.suspicious,
+    limit: params.limit,
+    offset: params.offset,
+  });
+  return apiFetch<SocFleetSessionListResponse>(`/synapse/sessions${query}`);
+}
+
 export async function fetchSessionDetail(sensorId: string, sessionId: string) {
   return apiFetch<SocSessionDetailResponse>(`/synapse/${sensorId}/sessions/${sessionId}`);
+}
+
+export async function fetchFleetSessionDetail(sessionId: string) {
+  return apiFetch<SocFleetSessionDetailResponse>(`/synapse/sessions/${sessionId}`);
 }
 
 export async function fetchCampaigns(params: CampaignQueryParams = {}) {

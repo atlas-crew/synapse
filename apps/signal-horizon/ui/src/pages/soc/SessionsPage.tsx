@@ -1,19 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Activity, Shield, Clock } from 'lucide-react';
 import { useDemoMode } from '../../stores/demoModeStore';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { fetchSessions } from '../../hooks/soc/api';
-import { useSocSensor } from '../../hooks/soc/useSocSensor';
+import { fetchFleetSessions } from '../../hooks/soc/api';
 import { downloadCsv } from '../../lib/csv';
-import type { SocSession, SocSessionListResponse } from '../../types/soc';
+import type { SocFleetSession, SocFleetSessionListResponse } from '../../types/soc';
 import { 
   Box, 
   Button, 
   Input, 
   SectionHeader, 
   Stack, 
+  StatusBadge,
   Text, 
   alpha, 
   colors, 
@@ -21,10 +21,10 @@ import {
   PAGE_TITLE_STYLE,
 } from '@/ui';
 
-function buildDemoSessions(scenario: string): SocSessionListResponse {
+function buildDemoSessions(scenario: string): SocFleetSessionListResponse {
   const now = Date.now();
   const baseSuspicious = scenario === 'high-threat' ? 0.45 : scenario === 'normal' ? 0.25 : 0.1;
-  const sessions: SocSession[] = Array.from({ length: 14 }).map((_, index) => {
+  const sessions: SocFleetSession[] = Array.from({ length: 14 }).map((_, index) => {
     const suspicious = index % Math.max(2, Math.floor(1 / baseSuspicious)) === 0;
     const created = now - (index + 2) * 45 * 60 * 1000;
     const last = now - index * 12 * 60 * 1000;
@@ -39,6 +39,7 @@ function buildDemoSessions(scenario: string): SocSessionListResponse {
       boundJa4: index % 3 === 0 ? `ja4-${index}-${scenario}` : null,
       boundIp: `203.0.113.${20 + index}`,
       isSuspicious: suspicious,
+      seenOnSensors: Array.from({ length: (index % 3) + 1 }, (_, sensorIndex) => `sensor-${sensorIndex + 1}`),
       hijackAlerts: Array.from({ length: alertCount }).map((_, alertIndex) => ({
         sessionId: `sess-${scenario}-${index + 1}`,
         alertType: alertIndex % 2 === 0 ? 'fingerprint_change' : 'ip_drift',
@@ -60,7 +61,14 @@ function buildDemoSessions(scenario: string): SocSessionListResponse {
   );
 
   return {
-    sessions,
+    aggregate: sessions,
+    results: [
+      { sensorId: 'sensor-1', status: 'ok' },
+      { sensorId: 'sensor-2', status: 'ok' },
+      { sensorId: 'sensor-3', status: 'ok' },
+    ],
+    summary: { succeeded: 3, stale: 0, failed: 0 },
+    total: sessions.length,
     stats: {
       totalSessions: sessions.length,
       activeSessions,
@@ -74,41 +82,61 @@ function buildDemoSessions(scenario: string): SocSessionListResponse {
   };
 }
 
+function formatRelativeMinutes(iso: string, nowMs: number): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return 'unknown';
+  const ageMin = Math.max(1, Math.round((nowMs - then) / 60_000));
+  return `${ageMin} min ago`;
+}
+
 export default function SessionsPage() {
   useDocumentTitle('SOC - Sessions');
-  const { sensorId, setSensorId } = useSocSensor();
   const { isEnabled: isDemoMode, scenario } = useDemoMode();
   const [actorFilter, setActorFilter] = useState('');
+  const deferredActorFilter = useDeferredValue(actorFilter);
   const [suspiciousOnly, setSuspiciousOnly] = useState(false);
 
   const queryParams = useMemo(
     () => ({
-      actorId: actorFilter.trim() || undefined,
+      actorId: deferredActorFilter.trim() || undefined,
       suspicious: suspiciousOnly || undefined,
       limit: 50,
     }),
-    [actorFilter, suspiciousOnly],
+    [deferredActorFilter, suspiciousOnly],
   );
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['soc', 'sessions', sensorId, queryParams, isDemoMode, scenario],
+    queryKey: ['soc', 'fleet-sessions', queryParams, isDemoMode, scenario],
     queryFn: async () => {
       if (isDemoMode) {
         return buildDemoSessions(scenario);
       }
-      return fetchSessions(sensorId, queryParams);
+      return fetchFleetSessions(queryParams);
     },
     staleTime: isDemoMode ? Infinity : 15000,
   });
 
-  const sessions = data?.sessions ?? [];
+  const sessions = data?.aggregate ?? [];
   const stats = data?.stats;
+  const results = data?.results ?? [];
+  const summary = data?.summary ?? { succeeded: 0, stale: 0, failed: 0 };
   const canExport = sessions.length > 0;
+  const nowMs = Date.now();
+
+  const staleSensors = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of results) {
+      if (r.status === 'stale' && r.lastUpdatedAt) {
+        m.set(r.sensorId, r.lastUpdatedAt);
+      }
+    }
+    return m;
+  }, [results]);
 
   const handleExport = () => {
     if (!canExport) return;
     downloadCsv(
-      `soc-sessions-${sensorId}-${new Date().toISOString().split('T')[0]}.csv`,
+      `soc-sessions-fleet-${new Date().toISOString().split('T')[0]}.csv`,
       [
         'Session ID',
         'Actor ID',
@@ -116,6 +144,7 @@ export default function SessionsPage() {
         'Requests',
         'Suspicious',
         'Hijack Alerts',
+        'Sensors',
         'Bound IP',
         'JA4',
       ],
@@ -126,6 +155,7 @@ export default function SessionsPage() {
         session.requestCount,
         session.isSuspicious ? 'YES' : 'NO',
         session.hijackAlerts?.length ?? 0,
+        session.seenOnSensors?.join('; ') ?? '',
         session.boundIp ?? '',
         session.boundJa4 ?? '',
       ]),
@@ -140,20 +170,9 @@ export default function SessionsPage() {
           description="Inspect session behavior, hijack alerts, and enforcement actions."
           titleStyle={PAGE_TITLE_STYLE}
           actions={
-            <Stack direction="row" align="center" gap="sm">
-              <Text variant="label" color="secondary" noMargin>Sensor</Text>
-              <Box style={{ width: 180 }}>
-                <Input
-                  value={sensorId}
-                  onChange={(event) => setSensorId(event.target.value)}
-                  placeholder="synapse-waf-1"
-                  size="sm"
-                />
-              </Box>
-              <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
-                Export CSV
-              </Button>
-            </Stack>
+            <Button variant="outlined" size="sm" onClick={handleExport} disabled={!canExport}>
+              Export CSV
+            </Button>
           }
         />
 
@@ -163,7 +182,7 @@ export default function SessionsPage() {
             label="Active Sessions"
             value={
               stats?.activeSessions ??
-              sessions.filter((session) => session.lastActivity > Date.now() - 30 * 60 * 1000).length
+              sessions.filter((session) => session.lastActivity > nowMs - 30 * 60 * 1000).length
             }
             accentColorVar="--ac-blue"
           />
@@ -177,12 +196,9 @@ export default function SessionsPage() {
           />
           <StatCard
             icon={Shield}
-            label="Hijack Alerts"
-            value={
-              stats?.hijackAlerts ??
-              sessions.reduce((count, session) => count + (session.hijackAlerts?.length ?? 0), 0)
-            }
-            accentColorVar="--ac-red"
+            label="Sensors Reporting"
+            value={summary.succeeded + summary.stale}
+            accentColorVar={summary.stale > 0 ? '--ac-orange' : '--ac-green'}
           />
         </div>
 
@@ -238,79 +254,105 @@ export default function SessionsPage() {
                   </caption>
                   <thead>
                     <tr>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Session</Text>
                       </th>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Actor</Text>
                       </th>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Last Activity</Text>
                       </th>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Requests</Text>
                       </th>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Alerts</Text>
                       </th>
-                      <th style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
+                        <Text variant="label" color="secondary" noMargin>Coverage</Text>
+                      </th>
+                      <th scope="col" style={{ textAlign: 'left', padding: '12px 16px', background: 'var(--surface-inset)', borderBottom: '1px solid var(--border-accent)' }}>
                         <Text variant="label" color="secondary" noMargin>Status</Text>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sessions.map((session) => (
-                      <tr key={session.sessionId} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Link
-                            to={`/sessions/${session.sessionId}`}
-                            className="text-link hover:opacity-80 transition-opacity"
-                            style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
-                          >
-                            {session.sessionId}
-                          </Link>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          {session.actorId ? (
+                    {sessions.map((session) => {
+                      const seenOnSensors = session.seenOnSensors ?? [];
+                      const sensorCount = seenOnSensors.length;
+                      const sensorLabel = `${sensorCount} ${sensorCount === 1 ? 'sensor' : 'sensors'}`;
+                      const staleContributor = seenOnSensors
+                        .map((id) => ({ id, lastUpdatedAt: staleSensors.get(id) }))
+                        .find((entry) => entry.lastUpdatedAt !== undefined);
+                      return (
+                        <tr key={session.sessionId} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '12px 16px' }}>
                             <Link
-                              to={`/actors/${session.actorId}`}
+                              to={`/sessions/${session.sessionId}`}
                               className="text-link hover:opacity-80 transition-opacity"
-                              style={{ fontSize: '13px' }}
+                              style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}
                             >
-                              {session.actorId}
+                              {session.sessionId}
                             </Link>
-                          ) : (
-                            <Text variant="body" color="secondary" noMargin>Unbound</Text>
-                          )}
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" color="secondary" noMargin>
-                            {new Date(session.lastActivity).toLocaleString()}
-                          </Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" color="secondary" noMargin>{session.requestCount}</Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Text variant="body" color="secondary" noMargin>{session.hijackAlerts?.length ?? 0}</Text>
-                        </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <Box
-                            px="sm"
-                            py="xs"
-                            style={{
-                              width: 'fit-content',
-                              border: '1px solid',
-                              background: session.isSuspicious ? 'var(--ac-orange-dim)' : 'var(--ac-green-dim)',
-                              color: session.isSuspicious ? 'var(--ac-orange)' : 'var(--ac-green)',
-                              borderColor: session.isSuspicious ? alpha(colors.orange, 0.3) : alpha(colors.green, 0.3),
-                            }}
-                          >
-                            <Text variant="tag" noMargin>{session.isSuspicious ? 'Suspicious' : 'Active'}</Text>
-                          </Box>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            {session.actorId ? (
+                              <Link
+                                to={`/actors/${session.actorId}`}
+                                className="text-link hover:opacity-80 transition-opacity"
+                                style={{ fontSize: '13px' }}
+                              >
+                                {session.actorId}
+                              </Link>
+                            ) : (
+                              <Text variant="body" color="secondary" noMargin>Unbound</Text>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>
+                              {new Date(session.lastActivity).toLocaleString()}
+                            </Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>{session.requestCount}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Text variant="body" color="secondary" noMargin>{session.hijackAlerts?.length ?? 0}</Text>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Stack direction="row" align="center" gap="sm" wrap>
+                              <StatusBadge status="info" variant="subtle" size="sm">
+                                {sensorLabel}
+                              </StatusBadge>
+                              {staleContributor?.lastUpdatedAt && (
+                                <StatusBadge status="warning" variant="subtle" size="sm">
+                                  <Stack direction="row" align="center" gap="xs">
+                                    <Clock size={10} aria-hidden="true" />
+                                    <span>{formatRelativeMinutes(staleContributor.lastUpdatedAt, nowMs)}</span>
+                                  </Stack>
+                                </StatusBadge>
+                              )}
+                            </Stack>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <Box
+                              px="sm"
+                              py="xs"
+                              style={{
+                                width: 'fit-content',
+                                border: '1px solid',
+                                background: session.isSuspicious ? 'var(--ac-orange-dim)' : 'var(--ac-green-dim)',
+                                color: session.isSuspicious ? 'var(--ac-orange)' : 'var(--ac-green)',
+                                borderColor: session.isSuspicious ? alpha(colors.orange, 0.3) : alpha(colors.green, 0.3),
+                              }}
+                            >
+                              <Text variant="tag" noMargin>{session.isSuspicious ? 'Suspicious' : 'Active'}</Text>
+                            </Box>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </Box>

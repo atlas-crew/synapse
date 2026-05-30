@@ -1,10 +1,11 @@
 ---
 id: TASK-80
 title: 'Fleet SOC views: sessions via SensorIntelSession dedup'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@codex'
 created_date: '2026-04-17 21:48'
-updated_date: '2026-04-18 05:43'
+updated_date: '2026-05-30 21:48'
 labels:
   - api
   - signal-horizon
@@ -28,8 +29,22 @@ Implement fleet-wide session routes per ADR-0002. Reads from `SensorIntelSession
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 New fleet routes: `GET /synapse/sessions`, `GET /synapse/sessions/:sessionId`
-- [ ] #2 Filter parameters work at the aggregated layer: `actorId`, `suspicious`, `limit`, `offset`
-- [ ] #3 Partial-failure envelope with stale-row handling consistent with ADR-0002
-- [ ] #4 UI rewired for fleet SOC dashboard session list; sensor-detail retains `/synapse/:sensorId/sessions`
+- [x] #1 New fleet routes: `GET /synapse/sessions`, `GET /synapse/sessions/:sessionId`
+- [x] #2 Filter parameters work at the aggregated layer: `actorId`, `suspicious`, `limit`, `offset`
+- [x] #3 Partial-failure envelope with stale-row handling consistent with ADR-0002
+- [x] #4 UI rewired for fleet SOC dashboard session list; sensor-detail retains `/synapse/:sensorId/sessions`
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implementation pass started: scope is fleet-wide SOC session aggregation via SensorIntelSession, matching the completed fleet actor/campaign patterns where possible. First step is to map existing route/service/UI hooks and add focused tests before implementation.
+
+Implemented fleet SOC sessions via SensorIntelSession snapshots: added literal GET /synapse/sessions and GET /synapse/sessions/:sessionId routes before per-sensor session routes; dedupes by sessionId, preserves seenOnSensors attribution, supports actorId/actor_id, suspicious, limit, and offset at the aggregated layer, emits ADR-0002 partial-result freshness envelopes, and keeps /synapse/:sensorId/sessions plus per-sensor helper/detail fetchers available for diagnostic surfaces. Rewired SessionsPage and SessionDetailPage to fleet aggregate responses and updated site-scan session ID resolution. Validation: API/UI typechecks passed; focused API/UI route, aggregator, page, and API helper tests passed; source review CLEAN; test audit CLEAN.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Closed TASK-80. Fleet SOC session list/detail now read SensorIntelSession snapshots, merge cross-sensor contributors, expose fleet freshness envelopes, and drive the SOC sessions list/detail UI from the new fleet API while preserving per-sensor diagnostic session routes/helpers.
+<!-- SECTION:FINAL_SUMMARY:END -->

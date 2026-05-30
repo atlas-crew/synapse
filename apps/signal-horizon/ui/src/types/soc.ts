@@ -91,6 +91,24 @@ export interface SocFleetActorTimelineResponse {
   };
 }
 
+export interface SocFleetSession extends SocSession {
+  seenOnSensors: string[];
+}
+
+export interface SocFleetSessionListResponse {
+  results: SocFleetResultEntry<{ rowCount: number }>[];
+  summary: SocFleetSummary;
+  aggregate: SocFleetSession[];
+  total: number;
+  stats?: SocSessionStats | null;
+}
+
+export interface SocFleetSessionDetailResponse {
+  results: SocFleetResultEntry<{ rowCount: number }>[];
+  summary: SocFleetSummary;
+  aggregate: SocFleetSession;
+}
+
 export interface SocActorTimelineEvent {
   timestamp: number;
   eventType: string;

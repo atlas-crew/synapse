@@ -19,7 +19,7 @@
  */
 
 import type { FleetPartialResultEntry } from '../../types/fleet-partial-result.js';
-import type { Actor } from '../synapse-proxy.js';
+import type { Actor, HijackAlert, Session, SessionStats } from '../synapse-proxy.js';
 
 export const FLEET_VIEW_DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
 
@@ -37,7 +37,26 @@ export interface SensorIntelActorRow {
   updatedAt: Date;
 }
 
+export interface SensorIntelSessionRow {
+  sensorId: string;
+  sessionId: string;
+  actorId: string | null;
+  requestCount: number;
+  isSuspicious: boolean;
+  lastActivityAt: Date;
+  boundIp: string | null;
+  boundJa4: string | null;
+  hijackAlerts: unknown;
+  raw: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MergedActor extends Actor {
+  seenOnSensors: string[];
+}
+
+export interface MergedSession extends Session {
   seenOnSensors: string[];
 }
 
@@ -49,6 +68,12 @@ export interface PerSensorFreshness {
 export interface AggregateActorsOutput {
   actors: MergedActor[];
   perSensor: Map<string, PerSensorFreshness>;
+}
+
+export interface AggregateSessionsOutput {
+  sessions: MergedSession[];
+  perSensor: Map<string, PerSensorFreshness>;
+  stats: SessionStats;
 }
 
 export function aggregateActorRows(rows: SensorIntelActorRow[]): AggregateActorsOutput {
@@ -68,20 +93,52 @@ export function aggregateActorRows(rows: SensorIntelActorRow[]): AggregateActors
   }
   actors.sort((a, b) => b.lastSeen - a.lastSeen);
 
-  const perSensor = new Map<string, PerSensorFreshness>();
+  const perSensor = buildPerSensorFreshness(rows);
+
+  return { actors, perSensor };
+}
+
+export function aggregateSessionRows(rows: SensorIntelSessionRow[], nowMs = Date.now()): AggregateSessionsOutput {
+  const groups = new Map<string, SensorIntelSessionRow[]>();
   for (const row of rows) {
-    const existing = perSensor.get(row.sensorId);
-    if (!existing) {
-      perSensor.set(row.sensorId, { rowCount: 1, freshestUpdatedAt: row.updatedAt });
+    const bucket = groups.get(row.sessionId);
+    if (bucket) {
+      bucket.push(row);
     } else {
-      existing.rowCount += 1;
-      if (row.updatedAt > existing.freshestUpdatedAt) {
-        existing.freshestUpdatedAt = row.updatedAt;
-      }
+      groups.set(row.sessionId, [row]);
     }
   }
 
-  return { actors, perSensor };
+  const sessions: MergedSession[] = [];
+  for (const [sessionId, group] of groups) {
+    sessions.push(mergeSession(sessionId, group));
+  }
+  sessions.sort((a, b) => b.lastActivity - a.lastActivity);
+
+  const perSensor = buildPerSensorFreshness(rows);
+
+  return {
+    sessions,
+    perSensor,
+    stats: buildSessionStats(sessions, nowMs),
+  };
+}
+
+export function buildSessionStats(sessions: Session[], nowMs = Date.now()): SessionStats {
+  const hijackAlerts = sessions.reduce((sum, session) => sum + session.hijackAlerts.length, 0);
+  const activeSessions = sessions.filter((session) => session.lastActivity > nowMs - 30 * 60 * 1000).length;
+  const suspiciousSessions = sessions.filter((session) => session.isSuspicious).length;
+
+  return {
+    totalSessions: sessions.length,
+    activeSessions,
+    suspiciousSessions,
+    expiredSessions: Math.max(0, sessions.length - activeSessions),
+    hijackAlerts,
+    evictions: 0,
+    totalCreated: sessions.length,
+    totalInvalidated: 0,
+  };
 }
 
 function mergeActor(actorId: string, rows: SensorIntelActorRow[]): MergedActor {
@@ -130,6 +187,57 @@ function mergeActor(actorId: string, rows: SensorIntelActorRow[]): MergedActor {
   };
 }
 
+function mergeSession(sessionId: string, rows: SensorIntelSessionRow[]): MergedSession {
+  const sortedRows = [...rows].sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+  const latest = sortedRows[0];
+  const raws = rows.map((r) => (r.raw ?? {}) as Partial<Session>);
+
+  const creationTime = raws.reduce<number>((min, raw, index) => {
+    const v = toEpochMs(raw.creationTime, rows[index].createdAt.getTime());
+    if (min === 0) return v;
+    return v < min ? v : min;
+  }, 0);
+
+  const lastActivity = raws.reduce<number>((max, raw, index) => {
+    const v = toEpochMs(raw.lastActivity, rows[index].lastActivityAt.getTime());
+    return v > max ? v : max;
+  }, 0);
+
+  const hijackAlerts = rows.flatMap((row, index) =>
+    toHijackAlerts(row.hijackAlerts ?? raws[index].hijackAlerts, row.sessionId),
+  );
+
+  return {
+    sessionId,
+    tokenHash: firstString(raws.map((raw) => raw.tokenHash)) ?? `tok_${sessionId}`,
+    actorId: latest.actorId ?? firstString(raws.map((raw) => raw.actorId)) ?? null,
+    creationTime,
+    lastActivity,
+    requestCount: rows.reduce((sum, row) => sum + row.requestCount, 0),
+    boundJa4: latest.boundJa4 ?? firstString(raws.map((raw) => raw.boundJa4)) ?? null,
+    boundIp: latest.boundIp ?? firstString(raws.map((raw) => raw.boundIp)) ?? null,
+    isSuspicious: rows.some((row) => row.isSuspicious),
+    hijackAlerts,
+    seenOnSensors: [...new Set(rows.map((row) => row.sensorId))].sort(),
+  };
+}
+
+function buildPerSensorFreshness(rows: Array<{ sensorId: string; updatedAt: Date }>): Map<string, PerSensorFreshness> {
+  const perSensor = new Map<string, PerSensorFreshness>();
+  for (const row of rows) {
+    const existing = perSensor.get(row.sensorId);
+    if (!existing) {
+      perSensor.set(row.sensorId, { rowCount: 1, freshestUpdatedAt: row.updatedAt });
+    } else {
+      existing.rowCount += 1;
+      if (row.updatedAt > existing.freshestUpdatedAt) {
+        existing.freshestUpdatedAt = row.updatedAt;
+      }
+    }
+  }
+  return perSensor;
+}
+
 export interface BuildFreshnessConfig {
   staleAfterMs?: number;
   now?: () => Date;
@@ -170,6 +278,35 @@ export function buildSensorFreshnessEntries(
 function toStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((x): x is string => typeof x === 'string');
+}
+
+function toHijackAlerts(value: unknown, sessionId: string): HijackAlert[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+    .map((item) => ({
+      sessionId: typeof item.sessionId === 'string' ? item.sessionId : sessionId,
+      alertType: typeof item.alertType === 'string' ? item.alertType : 'unknown',
+      originalValue: typeof item.originalValue === 'string' ? item.originalValue : '',
+      newValue: typeof item.newValue === 'string' ? item.newValue : '',
+      timestamp: Number(item.timestamp ?? 0),
+      confidence: Number(item.confidence ?? 0),
+    }));
+}
+
+function toEpochMs(value: unknown, fallbackMs: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallbackMs;
+  // Sensor session timestamps have existed in both seconds-like and
+  // milliseconds-like shapes; normalize fleet UI responses to milliseconds.
+  return n < 10_000_000_000 ? n * 1000 : n;
+}
+
+function firstString(values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return null;
 }
 
 function unionStringArrays(arrays: string[][]): string[] {

@@ -22,9 +22,12 @@ import {
 } from '../../types/fleet-partial-result.js';
 import {
   aggregateActorRows,
+  aggregateSessionRows,
+  buildSessionStats,
   buildSensorFreshnessEntries,
   FLEET_VIEW_DEFAULT_STALE_AFTER_MS,
   type SensorIntelActorRow,
+  type SensorIntelSessionRow,
 } from '../../services/fleet-view/snapshot-aggregator.js';
 import {
   SynapseProxyService,
@@ -1547,6 +1550,36 @@ export function createSynapseRoutes(
     };
   }
 
+  function toSessionAggregatorRow(row: {
+    sensorId: string;
+    sessionId: string;
+    actorId: string | null;
+    requestCount: number;
+    isSuspicious: boolean;
+    lastActivityAt: Date;
+    boundIp: string | null;
+    boundJa4: string | null;
+    hijackAlerts: unknown;
+    raw: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+  }): SensorIntelSessionRow {
+    return {
+      sensorId: row.sensorId,
+      sessionId: row.sessionId,
+      actorId: row.actorId,
+      requestCount: row.requestCount,
+      isSuspicious: row.isSuspicious,
+      lastActivityAt: row.lastActivityAt,
+      boundIp: row.boundIp,
+      boundJa4: row.boundJa4,
+      hijackAlerts: row.hijackAlerts,
+      raw: row.raw,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
   // Fleet routes (ADR-0002 §Decision: Actors via SensorIntelActor snapshot
   // dedup) MUST be registered before the `/:sensorId/actors` block so Express
   // matches the literal path first. Otherwise `/synapse/actors` matches
@@ -1845,6 +1878,183 @@ export function createSynapseRoutes(
   // ==========================================================================
   // Sessions Endpoints
   // ==========================================================================
+
+  /**
+   * GET /synapse/sessions
+   * List sessions deduped across the fleet, with per-sensor freshness envelope.
+   */
+  router.get(
+    '/sessions',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+
+      if (!prisma) {
+        res.status(503).json({ error: 'Fleet session view is unavailable' });
+        return;
+      }
+
+      const parsed = SessionFilterSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: 'Invalid query parameters',
+          details: parsed.error.issues,
+        });
+        return;
+      }
+
+      const actorId = parsed.data.actorId ?? parsed.data.actor_id;
+
+      try {
+        const hasFleetFilter = Boolean(actorId) || parsed.data.suspicious !== undefined;
+        let actorMatchedSessionIds: Set<string> | null = null;
+        const rowQuery = async () => {
+          if (!hasFleetFilter) {
+            return prisma.sensorIntelSession.findMany({
+              where: { tenantId },
+              orderBy: { lastActivityAt: 'desc' },
+            });
+          }
+
+          const candidateSets: Set<string>[] = [];
+          if (actorId) {
+            const actorRows = await prisma.sensorIntelSession.findMany({
+              where: { tenantId, actorId },
+              orderBy: { lastActivityAt: 'desc' },
+            });
+            actorMatchedSessionIds = new Set(actorRows.map((row) => row.sessionId));
+            candidateSets.push(actorMatchedSessionIds);
+          }
+          if (parsed.data.suspicious !== undefined) {
+            const suspiciousRows = await prisma.sensorIntelSession.findMany({
+              where: { tenantId, isSuspicious: parsed.data.suspicious },
+              orderBy: { lastActivityAt: 'desc' },
+            });
+            candidateSets.push(new Set(suspiciousRows.map((row) => row.sessionId)));
+          }
+
+          const [firstSet, ...remainingSets] = candidateSets;
+          const candidateSessionIds = [...firstSet].filter((sessionId) =>
+            remainingSets.every((set) => set.has(sessionId)),
+          );
+          if (candidateSessionIds.length === 0) return [];
+
+          return prisma.sensorIntelSession.findMany({
+            where: {
+              tenantId,
+              sessionId: { in: candidateSessionIds },
+            },
+            orderBy: { lastActivityAt: 'desc' },
+          });
+        };
+
+        const [rows, sensors] = await Promise.all([
+          rowQuery(),
+          prisma.sensor.findMany({
+            where: { tenantId },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
+
+        const { sessions, perSensor, stats } = aggregateSessionRows(
+          rows.map(toSessionAggregatorRow),
+          fleetViewNow().getTime(),
+        );
+        const filteredSessions = sessions.filter((session) => {
+          if (actorId && !actorMatchedSessionIds?.has(session.sessionId)) return false;
+          if (parsed.data.suspicious !== undefined && session.isSuspicious !== parsed.data.suspicious) {
+            return false;
+          }
+          return true;
+        });
+        const filteredSessionIds = new Set(filteredSessions.map((session) => session.sessionId));
+        const filteredRows = rows.filter((row) => filteredSessionIds.has(row.sessionId));
+        const filteredAggregate = filteredSessions.length === sessions.length
+          ? { perSensor, stats }
+          : aggregateSessionRows(filteredRows.map(toSessionAggregatorRow), fleetViewNow().getTime());
+        const offset = parsed.data.offset ?? 0;
+        const limit = parsed.data.limit ?? 25;
+        const paged = filteredSessions.slice(offset, offset + limit);
+
+        const results = buildSensorFreshnessEntries(
+          sensors.map((s) => s.id),
+          filteredAggregate.perSensor,
+          { staleAfterMs: fleetViewStaleAfterMs, now: fleetViewNow },
+        );
+
+        res.json({
+          ...createFleetPartialResult(results),
+          aggregate: paged,
+          total: filteredSessions.length,
+          stats: filteredSessions.length === sessions.length
+            ? filteredAggregate.stats
+            : buildSessionStats(filteredSessions, fleetViewNow().getTime()),
+        });
+      } catch (error) {
+        await handleError(req, res, error, 'listFleetSessions');
+      }
+    },
+  );
+
+  /**
+   * GET /synapse/sessions/:sessionId
+   * Fetch a single session merged across the fleet.
+   */
+  router.get(
+    '/sessions/:sessionId',
+    requireScope('fleet:read'),
+    async (req: Request, res: Response): Promise<void> => {
+      const tenantId = req.auth!.tenantId;
+      const { sessionId } = req.params;
+
+      if (!prisma) {
+        res.status(503).json({ error: 'Fleet session view is unavailable' });
+        return;
+      }
+
+      try {
+        const [rows, sensors] = await Promise.all([
+          prisma.sensorIntelSession.findMany({
+            where: { tenantId, sessionId },
+          }),
+          prisma.sensor.findMany({
+            where: { tenantId },
+            select: { id: true },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
+
+        if (rows.length === 0) {
+          res.status(404).json({ error: 'Session not found in fleet snapshot' });
+          return;
+        }
+
+        const { sessions, perSensor } = aggregateSessionRows(
+          rows.map(toSessionAggregatorRow),
+          fleetViewNow().getTime(),
+        );
+        const results = buildSensorFreshnessEntries(
+          sensors.map((s) => s.id),
+          perSensor,
+          { staleAfterMs: fleetViewStaleAfterMs, now: fleetViewNow },
+        );
+
+        const session = sessions.find((candidate) => candidate.sessionId === sessionId);
+        if (!session) {
+          res.status(404).json({ error: 'Session not found in fleet snapshot' });
+          return;
+        }
+
+        res.json({
+          ...createFleetPartialResult(results),
+          aggregate: session,
+        });
+      } catch (error) {
+        await handleError(req, res, error, 'getFleetSession');
+      }
+    },
+  );
 
   /**
    * GET /synapse/:sensorId/sessions

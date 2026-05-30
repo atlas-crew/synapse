@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   aggregateActorRows,
+  aggregateSessionRows,
   buildSensorFreshnessEntries,
   FLEET_VIEW_DEFAULT_STALE_AFTER_MS,
   type SensorIntelActorRow,
+  type SensorIntelSessionRow,
 } from './snapshot-aggregator.js';
 
 const NOW = new Date('2026-04-29T12:00:00Z');
@@ -33,6 +35,40 @@ function makeRow(overrides: Partial<SensorIntelActorRow> & { sensorId: string; a
       blockReason: null,
       blockedSince: null,
     },
+    updatedAt: FRESH,
+    ...overrides,
+  };
+}
+
+function makeSessionRow(
+  overrides: Partial<SensorIntelSessionRow> & {
+    sensorId: string;
+    sessionId: string;
+  },
+): SensorIntelSessionRow {
+  const lastActivityAt = overrides.lastActivityAt ?? new Date('2026-04-29T11:55:00Z');
+  const createdAt = overrides.createdAt ?? new Date('2026-04-29T11:00:00Z');
+  return {
+    actorId: 'actor-a',
+    requestCount: 1,
+    isSuspicious: false,
+    lastActivityAt,
+    boundIp: null,
+    boundJa4: null,
+    hijackAlerts: [],
+    raw: {
+      sessionId: overrides.sessionId,
+      tokenHash: `tok-${overrides.sessionId}`,
+      actorId: overrides.actorId ?? 'actor-a',
+      creationTime: createdAt.getTime(),
+      lastActivity: lastActivityAt.getTime(),
+      requestCount: overrides.requestCount ?? 1,
+      boundIp: overrides.boundIp ?? null,
+      boundJa4: overrides.boundJa4 ?? null,
+      isSuspicious: overrides.isSuspicious ?? false,
+      hijackAlerts: overrides.hijackAlerts ?? [],
+    },
+    createdAt,
     updatedAt: FRESH,
     ...overrides,
   };
@@ -262,6 +298,128 @@ describe('aggregateActorRows', () => {
     expect(result.perSensor.get('sensor-2')).toEqual({
       rowCount: 1,
       freshestUpdatedAt: fresher,
+    });
+  });
+});
+
+describe('aggregateSessionRows', () => {
+  it('computes stats from merged sessions using the supplied now timestamp', () => {
+    const result = aggregateSessionRows(
+      [
+        makeSessionRow({
+          sensorId: 'sensor-1',
+          sessionId: 'active-shared',
+          requestCount: 2,
+          isSuspicious: false,
+          hijackAlerts: [{ alertType: 'ip_drift' }],
+          lastActivityAt: new Date(NOW.getTime() - 5 * 60_000),
+          raw: {
+            sessionId: 'active-shared',
+            tokenHash: 'tok-active',
+            creationTime: NOW.getTime() - 2 * 60 * 60_000,
+            lastActivity: NOW.getTime() - 5 * 60_000,
+            requestCount: 2,
+            isSuspicious: false,
+            hijackAlerts: [{ alertType: 'ip_drift' }],
+          },
+        }),
+        makeSessionRow({
+          sensorId: 'sensor-2',
+          sessionId: 'active-shared',
+          requestCount: 3,
+          isSuspicious: true,
+          hijackAlerts: [{ alertType: 'fingerprint_change' }],
+          lastActivityAt: new Date(NOW.getTime() - 4 * 60_000),
+          raw: {
+            sessionId: 'active-shared',
+            tokenHash: 'tok-active',
+            creationTime: NOW.getTime() - 2 * 60 * 60_000,
+            lastActivity: NOW.getTime() - 4 * 60_000,
+            requestCount: 3,
+            isSuspicious: true,
+            hijackAlerts: [{ alertType: 'fingerprint_change' }],
+          },
+        }),
+        makeSessionRow({
+          sensorId: 'sensor-1',
+          sessionId: 'expired-clean',
+          requestCount: 5,
+          isSuspicious: false,
+          lastActivityAt: new Date(NOW.getTime() - 45 * 60_000),
+          raw: {
+            sessionId: 'expired-clean',
+            tokenHash: 'tok-expired',
+            creationTime: NOW.getTime() - 3 * 60 * 60_000,
+            lastActivity: NOW.getTime() - 45 * 60_000,
+            requestCount: 5,
+            isSuspicious: false,
+            hijackAlerts: [],
+          },
+        }),
+      ],
+      NOW.getTime(),
+    );
+
+    expect(result.sessions).toHaveLength(2);
+    expect(result.sessions.find((session) => session.sessionId === 'active-shared')).toMatchObject({
+      requestCount: 5,
+      isSuspicious: true,
+      seenOnSensors: ['sensor-1', 'sensor-2'],
+    });
+    expect(result.stats).toEqual({
+      totalSessions: 2,
+      activeSessions: 1,
+      suspiciousSessions: 1,
+      expiredSessions: 1,
+      hijackAlerts: 2,
+      evictions: 0,
+      totalCreated: 2,
+      totalInvalidated: 0,
+    });
+  });
+
+  it('normalizes second-like timestamps and falls back to row dates for invalid raw timestamps', () => {
+    const secondsCreation = 1_714_388_300;
+    const secondsLastActivity = 1_714_391_900;
+    const fallbackCreatedAt = new Date('2026-04-29T10:15:00Z');
+    const fallbackLastActivityAt = new Date('2026-04-29T11:15:00Z');
+
+    const result = aggregateSessionRows([
+      makeSessionRow({
+        sensorId: 'sensor-1',
+        sessionId: 'seconds-session',
+        createdAt: new Date(secondsCreation * 1000),
+        lastActivityAt: new Date(secondsLastActivity * 1000),
+        raw: {
+          sessionId: 'seconds-session',
+          creationTime: secondsCreation,
+          lastActivity: secondsLastActivity,
+        },
+      }),
+      makeSessionRow({
+        sensorId: 'sensor-2',
+        sessionId: 'fallback-session',
+        createdAt: fallbackCreatedAt,
+        lastActivityAt: fallbackLastActivityAt,
+        raw: {
+          sessionId: 'fallback-session',
+          creationTime: 'not-a-time',
+          lastActivity: 0,
+        },
+      }),
+    ]);
+
+    expect(result.sessions.map((session) => session.sessionId)).toEqual([
+      'fallback-session',
+      'seconds-session',
+    ]);
+    expect(result.sessions.find((session) => session.sessionId === 'seconds-session')).toMatchObject({
+      creationTime: secondsCreation * 1000,
+      lastActivity: secondsLastActivity * 1000,
+    });
+    expect(result.sessions.find((session) => session.sessionId === 'fallback-session')).toMatchObject({
+      creationTime: fallbackCreatedAt.getTime(),
+      lastActivity: fallbackLastActivityAt.getTime(),
     });
   });
 });
