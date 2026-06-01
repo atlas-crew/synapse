@@ -4,6 +4,7 @@ title: Implement synapse-fleet Helm chart
 status: To Do
 assignee: []
 created_date: '2026-06-01 18:54'
+updated_date: '2026-06-01 19:06'
 labels:
   - feature
   - helm
@@ -18,8 +19,8 @@ references:
   - render.yaml
 documentation:
   - >-
-    backlog/docs/deployment/kubernetes-helm-packaging-plan/doc-1 -
-    Kubernetes-and-Helm-packaging-plan.md
+    backlog/docs/deployment/synapse-deployment-packaging-plan/doc-1 -
+    Synapse-deployment-packaging-plan.md
 parent_task_id: TASK-103
 priority: high
 ---
