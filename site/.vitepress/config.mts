@@ -84,6 +84,7 @@ export default withMermaid(
             text: 'Deployment',
             items: [
               { text: 'Overview', link: '/deployment/' },
+              { text: 'Hosting Options', link: '/deployment/hosting-options' },
               { text: 'Deploy Synapse Fleet', link: '/deployment/synapse-fleet' },
               {
                 text: 'Deploy Synapse Standalone',

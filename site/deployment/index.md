@@ -4,15 +4,18 @@ title: Deployment Overview
 
 # Deployment
 
-Choose a deployment model based on your needs.
+Choose a deployment model based on your needs. Start with
+[Hosting Options](./hosting-options) if you are deciding between Docker, managed
+hosting, static dashboard hosting, and Kubernetes.
 
-| If you need… | Deploy… | Guide |
+| If you need | Deploy | Guide |
 | --- | --- | --- |
 | A fast WAF, nothing else | Synapse standalone | [Synapse Standalone](./synapse-standalone) |
-| Fleet management + analytics | Full Horizon platform | [Deploy Horizon](./horizon) |
+| Fleet management + analytics | Synapse Fleet | [Deploy Synapse Fleet](./synapse-fleet) |
 | Container orchestration | Kubernetes | [Kubernetes](./kubernetes) |
 | Simple containerized setup | Docker Compose | [Docker](./docker) |
-| Maximum control | Bare metal / VM | [Deploy Horizon](./horizon) or [Synapse Standalone](./synapse-standalone) |
+| Managed hosting or static UI hosting | Render, Fly.io, Vercel, Railway, Cloud Run | [Hosting Options](./hosting-options) |
+| Maximum control | Bare metal / VM | [Docker](./docker) or [Synapse Standalone](./synapse-standalone) |
 
 ## Architecture at a Glance
 
@@ -24,9 +27,9 @@ graph TD
         S3["Synapse<br/>Site C"]
     end
 
-    subgraph Hub ["Horizon Hub"]
-        API["Horizon API<br/>:3100"]
-        UI["Horizon UI<br/>:5180"]
+    subgraph Hub ["Synapse Fleet"]
+        API["Fleet API<br/>:3100"]
+        UI["Fleet UI<br/>static"]
     end
 
     subgraph Data ["Storage"]
@@ -42,7 +45,7 @@ graph TD
 ```
 
 ::: info Synapse standalone
-When running Synapse without Horizon, the sensor operates independently with a local YAML configuration. No hub connection required.
+When running Synapse without Synapse Fleet, the sensor operates independently with a local YAML configuration. No hub connection required.
 :::
 
 ## Before You Deploy
