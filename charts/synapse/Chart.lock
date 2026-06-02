@@ -1,0 +1,9 @@
+dependencies:
+- name: synapse-fleet
+  repository: file://../synapse-fleet
+  version: 0.1.0
+- name: synapse-waf
+  repository: file://../synapse-waf
+  version: 0.1.0
+digest: sha256:14c7b05a638dc8fe5f9db4576efba8d19ede9e4ef203245060742211ca47f704
+generated: "2026-06-02T15:05:48.374774-04:00"

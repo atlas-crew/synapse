@@ -1,0 +1,17 @@
+apiVersion: v2
+name: synapse
+description: Synapse umbrella Helm chart scaffold
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: synapse-fleet
+    version: 0.1.0
+    repository: file://../synapse-fleet
+    alias: fleet
+    condition: fleet.enabled
+  - name: synapse-waf
+    version: 0.1.0
+    repository: file://../synapse-waf
+    alias: waf
+    condition: waf.enabled

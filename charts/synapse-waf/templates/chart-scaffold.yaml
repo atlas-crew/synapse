@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "synapse-waf.fullname" . }}-scaffold
+  labels:
+    {{- include "synapse-waf.labels" . | nindent 4 }}
+data:
+  chart: {{ include "synapse-waf.chart" . | quote }}
+  note: Replace this scaffold with the WAF workload in the next Helm task.

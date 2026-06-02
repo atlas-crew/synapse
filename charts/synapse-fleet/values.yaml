@@ -1,0 +1,160 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  commonLabels: {}
+  commonAnnotations: {}
+  storageClass: ""
+
+enabled: true
+replicaCount: 1
+containerPort: 3100
+
+image:
+  repository: nickcrew/synapse-fleet
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+writableTmp:
+  enabled: true
+  mountPath: /tmp
+  sizeLimit: ""
+
+service:
+  type: ClusterIP
+  port: 3100
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+  websocket:
+    enabled: true
+    controller: ""
+    proxyReadTimeoutSeconds: 300
+    proxySendTimeoutSeconds: 300
+
+env:
+  NODE_ENV: production
+  HOST: "0.0.0.0"
+  LOG_LEVEL: info
+  ENABLE_JOB_QUEUE: "true"
+
+secrets:
+  create: false
+  existingSecret: ""
+  keys:
+    databaseUrl: DATABASE_URL
+    redisUrl: REDIS_URL
+    jwtSecret: JWT_SECRET
+    telemetryJwtSecret: TELEMETRY_JWT_SECRET
+    configEncryptionKey: CONFIG_ENCRYPTION_KEY
+    metricsAuthToken: METRICS_AUTH_TOKEN
+    clickhousePassword: CLICKHOUSE_PASSWORD
+
+database:
+  external: true
+  url: ""
+  existingSecret: ""
+  existingSecretKey: DATABASE_URL
+
+redis:
+  enabled: false
+  external: true
+  url: ""
+  existingSecret: ""
+  existingSecretKey: REDIS_URL
+
+clickhouse:
+  enabled: false
+  external: true
+  host: ""
+  httpPort: 8123
+  database: signal_horizon
+  user: default
+  password: ""
+  existingSecret: ""
+  existingSecretKey: CLICKHOUSE_PASSWORD
+  compression: true
+  maxConnections: 25
+
+cors:
+  origins: []
+
+websocket:
+  sensorPath: /ws/sensors
+  dashboardPath: /ws/dashboard
+  heartbeatIntervalMs: 30000
+  maxSensorConnections: 1000
+  maxDashboardConnections: 100
+
+ui:
+  enabled: false
+  publicApiUrl: ""
+  publicWebSocketUrl: ""
+  apiKey:
+    value: ""
+    existingSecret: ""
+    existingSecretKey: VITE_HORIZON_API_KEY
+
+migrations:
+  enabled: false
+  command:
+    - npx
+    - prisma
+    - migrate
+    - deploy
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 300
+  hook:
+    enabled: false
+    deletePolicy: before-hook-creation,hook-succeeded
+
+probes:
+  liveness:
+    enabled: true
+    path: /health/live
+  readiness:
+    enabled: true
+    path: /health/ready
+  startup:
+    enabled: false
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+networkPolicy:
+  enabled: false
+metrics:
+  enabled: false
+  path: /metrics
+  serviceMonitor:
+    enabled: false

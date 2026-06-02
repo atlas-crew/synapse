@@ -1,0 +1,3 @@
+Synapse WAF chart scaffold installed.
+
+Run `just helm-validate` from the repository root to lint and template the chart workspace.

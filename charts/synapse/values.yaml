@@ -1,0 +1,12 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  commonLabels: {}
+  commonAnnotations: {}
+  storageClass: ""
+
+fleet:
+  enabled: true
+
+waf:
+  enabled: true

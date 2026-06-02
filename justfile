@@ -483,6 +483,50 @@ test-synapse-client:
 lint:
     cd "{{root}}" && pnpm exec nx run-many --target=lint --all
 
+# Build the umbrella chart dependencies without rewriting Chart.lock
+helm-deps:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{root}}"
+    helm dependency build charts/synapse >/dev/null
+
+# Helm chart lint for the Synapse workspace
+helm-lint: helm-deps
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{root}}"
+    helm lint charts/synapse-fleet
+    helm lint charts/synapse-waf
+    helm lint charts/synapse
+
+# Helm chart template renders for the scaffolded workspace
+helm-template: helm-deps
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{root}}"
+    fleet_render=$(helm template synapse-fleet charts/synapse-fleet)
+    printf "%s\n" "$fleet_render" | grep -q "synapse-fleet-scaffold"
+    waf_render=$(helm template synapse-waf charts/synapse-waf)
+    printf "%s\n" "$waf_render" | grep -q "synapse-waf-scaffold"
+    umbrella_render=$(helm template synapse charts/synapse)
+    printf "%s\n" "$umbrella_render" | grep -q "synapse-fleet-scaffold"
+    printf "%s\n" "$umbrella_render" | grep -q "synapse-waf-scaffold"
+    fleet_disabled_render=$(helm template synapse charts/synapse --set fleet.enabled=false)
+    if printf "%s\n" "$fleet_disabled_render" | grep -q "synapse-fleet-scaffold"; then
+        echo "fleet.enabled=false still renders fleet resources"
+        exit 1
+    fi
+    waf_disabled_render=$(helm template synapse charts/synapse --set waf.enabled=false)
+    if printf "%s\n" "$waf_disabled_render" | grep -q "synapse-waf-scaffold"; then
+        echo "waf.enabled=false still renders waf resources"
+        exit 1
+    fi
+    helm template synapse charts/synapse --values charts/synapse/values.demo.yaml >/dev/null
+    helm template synapse charts/synapse --values charts/synapse/values.production.yaml >/dev/null
+
+# Full Helm chart validation loop
+helm-validate: helm-lint helm-template
+
 # Type-check all TypeScript projects
 type-check:
     cd "{{root}}" && pnpm exec nx run-many --target=type-check --all
@@ -503,8 +547,9 @@ fmt-synapse:
 # CI — full validation pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Run the full CI pipeline: lint, type-check, build, test
-ci: lint type-check build test
+# Helm is required for the full pipeline because helm-validate is included.
+# Run the full CI pipeline: lint, Helm, type-check, build, test
+ci: lint helm-validate type-check build test
 
 # CI for TypeScript projects only
 ci-ts: lint type-check

@@ -1,0 +1,120 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  commonLabels: {}
+  commonAnnotations: {}
+  storageClass: ""
+
+enabled: true
+replicaCount: 1
+
+workload:
+  kind: Deployment
+
+image:
+  repository: nickcrew/synapse-waf
+  tag: ""
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+writableTmp:
+  enabled: true
+  mountPath: /tmp
+  sizeLimit: ""
+
+config:
+  mountPath: /app/config.yaml
+  existingConfigMap: ""
+  existingSecret: ""
+  raw: ""
+  server:
+    listen: "0.0.0.0:6190"
+    adminListen: "0.0.0.0:6191"
+    workers: 0
+  upstreams: []
+  sites: []
+
+telemetry:
+  enabled: false
+  endpoint: ""
+  apiKey:
+    value: ""
+    existingSecret: ""
+    existingSecretKey: apiKey
+  instanceId: ""
+
+horizon:
+  enabled: false
+  hubUrl: ""
+  sensorId: ""
+  sensorName: ""
+  apiKey:
+    value: ""
+    existingSecret: ""
+    existingSecretKey: apiKey
+
+service:
+  proxy:
+    type: ClusterIP
+    port: 6190
+    annotations: {}
+  admin:
+    type: ClusterIP
+    port: 6191
+    annotations: {}
+
+ingress:
+  proxy:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+  admin:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+
+probes:
+  readiness:
+    enabled: true
+    path: /status
+    port: admin
+  liveness:
+    enabled: true
+    path: /status
+    port: admin
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+autoscaling:
+  enabled: false
+podDisruptionBudget:
+  enabled: false
+networkPolicy:
+  enabled: false
+metrics:
+  enabled: false
+  path: /metrics
+  serviceMonitor:
+    enabled: false

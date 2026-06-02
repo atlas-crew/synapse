@@ -1,0 +1,28 @@
+fleet:
+  enabled: true
+  database:
+    external: true
+    existingSecret: synapse-fleet-database
+    existingSecretKey: DATABASE_URL
+  redis:
+    external: true
+    existingSecret: synapse-fleet-redis
+    existingSecretKey: REDIS_URL
+  clickhouse:
+    enabled: false
+  secrets:
+    create: false
+    existingSecret: synapse-fleet-secrets
+
+waf:
+  enabled: true
+  service:
+    proxy:
+      type: ClusterIP
+    admin:
+      type: ClusterIP
+  ingress:
+    proxy:
+      enabled: false
+    admin:
+      enabled: false

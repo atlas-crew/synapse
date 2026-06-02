@@ -80,6 +80,15 @@ just check-synapse # Clippy + rustfmt check
 just fmt-synapse   # Auto-format Rust code
 ```
 
+## Helm Charts
+
+```sh
+just helm-deps      # Refresh umbrella chart dependencies without rewriting Chart.lock
+just helm-lint       # Lint charts/synapse, charts/synapse-fleet, charts/synapse-waf
+just helm-template   # Render the scaffold with default, demo, and production values
+just helm-validate   # Lint + render in one local check
+```
+
 ## CI Pipeline
 
 ```sh

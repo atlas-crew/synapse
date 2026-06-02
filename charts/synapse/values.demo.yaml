@@ -1,0 +1,23 @@
+fleet:
+  enabled: true
+  database:
+    external: true
+  redis:
+    enabled: false
+    external: true
+  clickhouse:
+    enabled: false
+  secrets:
+    create: true
+  migrations:
+    enabled: true
+
+waf:
+  enabled: true
+  telemetry:
+    enabled: false
+  service:
+    proxy:
+      type: ClusterIP
+    admin:
+      type: ClusterIP
