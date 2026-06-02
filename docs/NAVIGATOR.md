@@ -57,6 +57,13 @@ notes that are not part of the product documentation.
   settings, module configs, and runtime ops. Proposes a reorganised
   IA and prioritised implementation order. Read this before expanding
   the admin console.
+- [docs/development/plans/synapse-helm-chart-contract.md](./development/plans/synapse-helm-chart-contract.md) —
+  Design contract for the planned Helm charts. Defines chart boundaries
+  for `synapse-fleet`, `synapse-waf`, and the umbrella `synapse` chart,
+  plus the first `values.yaml` key surface, production defaults,
+  migration Job behavior, ingress/WebSocket assumptions, and demo/dev
+  dependency posture. Read before scaffolding or changing charts under
+  `charts/`.
 - [docs/development/plans/commercial-viability-and-pricing.md](./development/plans/commercial-viability-and-pricing.md) —
   Strategy memo (2026-04-20) on OSS commercialisation direction:
   technical-maturity scorecard, enterprise procurement gaps, community
