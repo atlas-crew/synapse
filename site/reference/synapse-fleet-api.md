@@ -21,7 +21,7 @@ All API requests require an API key passed via the `X-API-Key` header (configura
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health` | Basic health check |
-| `GET` | `/health/ready` | Readiness probe — verifies database connections |
+| `GET` | `/ready` | Readiness probe — verifies database connections |
 | `GET` | `/health/live` | Liveness probe |
 
 No authentication required.

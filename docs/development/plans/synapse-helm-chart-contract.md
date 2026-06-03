@@ -161,7 +161,7 @@ fleet:
     NODE_ENV: production
     HOST: 0.0.0.0
     LOG_LEVEL: info
-    ENABLE_JOB_QUEUE: "true"
+    ENABLE_JOB_QUEUE: "false"
 
   secrets:
     create: false
@@ -239,9 +239,10 @@ fleet:
       path: /health/live
     readiness:
       enabled: true
-      path: /health/ready
+      path: /ready
     startup:
       enabled: false
+      path: /health
 
   resources: {}
   nodeSelector: {}
@@ -262,6 +263,8 @@ fleet:
     path: /metrics
     serviceMonitor:
       enabled: false
+      bearerTokenSecret: ""
+      bearerTokenKey: METRICS_AUTH_TOKEN
 
 waf:
   enabled: true
@@ -377,6 +380,8 @@ waf:
     path: /metrics
     serviceMonitor:
       enabled: false
+      bearerTokenSecret: ""
+      bearerTokenKey: METRICS_AUTH_TOKEN
 
 postgresql:
   enabled: false

@@ -85,7 +85,7 @@ just fmt-synapse   # Auto-format Rust code
 ```sh
 just helm-deps      # Refresh umbrella chart dependencies without rewriting Chart.lock
 just helm-lint       # Lint charts/synapse, charts/synapse-fleet, charts/synapse-waf
-just helm-template   # Render the scaffold with default, demo, and production values
+just helm-template   # Render the Fleet workload, UI config hooks, and umbrella chart values
 just helm-validate   # Lint + render in one local check
 ```
 

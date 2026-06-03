@@ -29,6 +29,18 @@ graph TD
 
 Create a `.env` file for the Synapse Fleet API. All variables are set via environment. (Env var names still use the `HORIZON_*` prefix — renaming those is deferred per ADR-0003.)
 
+## Helm
+
+The Fleet chart now lives at [`charts/synapse-fleet`](../../charts/synapse-fleet). Use it when you want Kubernetes-native deployment, probes, ingress, and optional migration hooks:
+
+```sh
+helm upgrade --install synapse-fleet charts/synapse-fleet \
+  --namespace synapse \
+  --create-namespace
+```
+
+For a production-shaped install, start from `charts/synapse-fleet/values.yaml` and point `database.existingSecret`, `redis.existingSecret`, and `secrets.existingSecret` at operator-managed secrets.
+
 ### Server
 
 | Variable | Default | Description |
@@ -148,7 +160,7 @@ telemetry:
 | Endpoint | Description |
 | --- | --- |
 | `GET /health` | Basic health check |
-| `GET /health/ready` | Readiness probe (DB connections verified) |
+| `GET /ready` | Readiness probe (DB connections verified) |
 | `GET /health/live` | Liveness probe |
 
 ## Monitoring

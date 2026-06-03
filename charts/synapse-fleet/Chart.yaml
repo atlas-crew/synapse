@@ -1,6 +1,6 @@
 apiVersion: v2
 name: synapse-fleet
-description: Synapse Fleet API Helm chart scaffold
+description: Synapse Fleet API Helm chart
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

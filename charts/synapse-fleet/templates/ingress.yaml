@@ -1,0 +1,57 @@
+{{- if and .Values.enabled .Values.ingress.enabled (gt (len .Values.ingress.hosts) 0) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "synapse-fleet.fullname" . }}
+  labels:
+    {{- include "synapse-fleet.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $annotations := .Values.ingress.annotations }}
+  {{- if or .Values.global.commonAnnotations (gt (len $annotations) 0) (and .Values.ingress.websocket.enabled (eq .Values.ingress.websocket.controller "nginx")) }}
+  annotations:
+    {{- with .Values.global.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with $annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- if and .Values.ingress.websocket.enabled (eq .Values.ingress.websocket.controller "nginx") }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.websocket.proxyReadTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.websocket.proxySendTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/websocket-services: {{ include "synapse-fleet.fullname" . | quote }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - secretName: {{ .secretName | quote }}
+      hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- $root := . }}
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- $paths := default (list (dict "path" "/" "pathType" "Prefix")) .paths }}
+          {{- range $paths }}
+          - path: {{ default "/" .path | quote }}
+            pathType: {{ default "Prefix" .pathType }}
+            backend:
+              service:
+                name: {{ include "synapse-fleet.fullname" $root }}
+                port:
+                  number: {{ $root.Values.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

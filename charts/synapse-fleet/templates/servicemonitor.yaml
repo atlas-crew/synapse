@@ -1,0 +1,37 @@
+{{- if and .Values.enabled .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+{{- $metricsSecretName := "" -}}
+{{- $metricsSecretKey := .Values.secrets.keys.metricsAuthToken -}}
+{{- if .Values.metrics.serviceMonitor.bearerTokenSecret -}}
+{{- $metricsSecretName = .Values.metrics.serviceMonitor.bearerTokenSecret -}}
+{{- $metricsSecretKey = default .Values.secrets.keys.metricsAuthToken .Values.metrics.serviceMonitor.bearerTokenKey -}}
+{{- else if .Values.secrets.existingSecret -}}
+{{- $metricsSecretName = .Values.secrets.existingSecret -}}
+{{- else if .Values.secrets.create -}}
+{{- $metricsSecretName = include "synapse-fleet.managedSecretName" . -}}
+{{- else -}}
+{{- fail "synapse-fleet metrics.serviceMonitor.enabled requires metrics.serviceMonitor.bearerTokenSecret, secrets.existingSecret, or secrets.create=true" }}
+{{- end -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "synapse-fleet.fullname" . }}
+  labels:
+    {{- include "synapse-fleet.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if .Values.global.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.global.commonAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "synapse-fleet.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.metrics.path | quote }}
+      bearerTokenSecret:
+        name: {{ $metricsSecretName | quote }}
+        key: {{ $metricsSecretKey | quote }}
+{{- end }}

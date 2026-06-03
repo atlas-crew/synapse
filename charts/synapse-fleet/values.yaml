@@ -1,11 +1,15 @@
 global:
   imageRegistry: ""
   imagePullSecrets: []
+  nameOverride: ""
+  fullnameOverride: ""
   commonLabels: {}
   commonAnnotations: {}
   storageClass: ""
 
 enabled: true
+nameOverride: ""
+fullnameOverride: ""
 replicaCount: 1
 containerPort: 3100
 
@@ -18,9 +22,13 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
+  automountServiceAccountToken: false
 
 podSecurityContext:
   runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
   seccompProfile:
     type: RuntimeDefault
 
@@ -57,7 +65,9 @@ env:
   NODE_ENV: production
   HOST: "0.0.0.0"
   LOG_LEVEL: info
-  ENABLE_JOB_QUEUE: "true"
+  ENABLE_JOB_QUEUE: "false"
+  RISK_SERVER_URL: ""
+  SYNAPSE_DIRECT_URL: ""
 
 secrets:
   create: false
@@ -70,6 +80,7 @@ secrets:
     configEncryptionKey: CONFIG_ENCRYPTION_KEY
     metricsAuthToken: METRICS_AUTH_TOKEN
     clickhousePassword: CLICKHOUSE_PASSWORD
+    uiApiKey: VITE_HORIZON_API_KEY
 
 database:
   external: true
@@ -126,35 +137,42 @@ migrations:
   backoffLimit: 1
   ttlSecondsAfterFinished: 300
   hook:
-    enabled: false
+    enabled: true
     deletePolicy: before-hook-creation,hook-succeeded
 
 probes:
   liveness:
     enabled: true
-    path: /health/live
+    path: /health
   readiness:
     enabled: true
-    path: /health/ready
+    path: /ready
   startup:
     enabled: false
+    path: /health
 
 resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
+
 networkPolicy:
   enabled: false
+
 metrics:
   enabled: false
   path: /metrics
   serviceMonitor:
     enabled: false
+    bearerTokenSecret: ""
+    bearerTokenKey: METRICS_AUTH_TOKEN

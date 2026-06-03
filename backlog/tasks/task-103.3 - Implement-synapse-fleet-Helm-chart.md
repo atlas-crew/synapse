@@ -1,10 +1,11 @@
 ---
 id: TASK-103.3
 title: Implement synapse-fleet Helm chart
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@myself'
 created_date: '2026-06-01 18:54'
-updated_date: '2026-06-01 19:06'
+updated_date: '2026-06-02 23:53'
 labels:
   - feature
   - helm
@@ -35,8 +36,14 @@ Keep ClickHouse optional and Redis recommended/configurable. Admin and metrics s
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Chart deploys the Fleet API with configurable image, env, secrets, service, resources, probes, and pod security settings
-- [ ] #2 Chart supports required PostgreSQL configuration through existing secret refs or provided values, without enabling bundled production database defaults
-- [ ] #3 Chart includes migration Job or hook behavior for Prisma deploy migrations with documented failure/rollback expectations
-- [ ] #4 Chart supports dashboard/UI runtime config or static-service integration for REST and WebSocket URLs
+- [x] #1 Chart deploys the Fleet API with configurable image, env, secrets, service, resources, probes, and pod security settings
+- [x] #2 Chart supports required PostgreSQL configuration through existing secret refs or provided values, without enabling bundled production database defaults
+- [x] #3 Chart includes migration Job or hook behavior for Prisma deploy migrations with documented failure/rollback expectations
+- [x] #4 Chart supports dashboard/UI runtime config or static-service integration for REST and WebSocket URLs
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Map the Fleet API runtime contract to Helm values and secrets, including Postgres, Redis, ClickHouse, probes, and pod security settings. 2. Replace the scaffold with real Deployment, Service, ingress, migration Job/hook, and optional UI/static-config support that matches the bundled Fleet app model. 3. Validate renders with helm lint/template, update the deployment docs if needed, then close the task and commit atomically.
+<!-- SECTION:PLAN:END -->

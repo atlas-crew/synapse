@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ include "synapse-fleet.fullname" . }}-scaffold
-  labels:
-    {{- include "synapse-fleet.labels" . | nindent 4 }}
-data:
-  chart: {{ include "synapse-fleet.chart" . | quote }}
-  note: Replace this scaffold with the Fleet API workload in the next Helm task.

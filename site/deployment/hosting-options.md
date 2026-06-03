@@ -114,7 +114,7 @@ must broadcast the same dashboard state.
 Use Helm when you already operate Kubernetes and want cluster-native deployment,
 ingress, secrets, service accounts, network policy, and observability.
 
-The planned chart structure is:
+The chart structure is:
 
 - `charts/synapse-fleet`: Fleet API, UI option, migrations, secrets, service,
   ingress, and optional Redis/ClickHouse integration points

@@ -1,0 +1,19 @@
+{{- if and .Values.enabled (or .Values.ui.enabled .Values.ui.publicApiUrl .Values.ui.publicWebSocketUrl .Values.ui.apiKey.value) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "synapse-fleet.fullname" . }}-ui
+  labels:
+    {{- include "synapse-fleet.labels" . | nindent 4 }}
+    {{- with .Values.global.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app.kubernetes.io/component: ui
+  {{- if .Values.global.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.global.commonAnnotations | nindent 4 }}
+  {{- end }}
+data:
+  VITE_API_URL: {{ default "" .Values.ui.publicApiUrl | quote }}
+  VITE_WS_URL: {{ default "" .Values.ui.publicWebSocketUrl | quote }}
+{{- end }}

@@ -66,9 +66,9 @@ spec:
               value: "true"
             - name: CLICKHOUSE_HOST
               value: clickhouse
-          readinessProbe:
+            readinessProbe:
             httpGet:
-              path: /health/ready
+              path: /ready
               port: 3100
             initialDelaySeconds: 10
             periodSeconds: 5
