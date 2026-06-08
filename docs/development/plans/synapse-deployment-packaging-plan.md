@@ -1,20 +1,3 @@
----
-id: doc-1
-title: Synapse deployment packaging plan
-type: specification
-created_date: '2026-06-01 18:53'
-updated_date: '2026-06-01 19:06'
-tags:
-  - helm
-  - kubernetes
-  - deployment
-  - synapse
-  - render
-  - fly
-  - vercel
-  - railway
-  - cloud-run
----
 # Synapse Deployment Packaging Plan
 
 ## Goal
