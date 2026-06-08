@@ -113,9 +113,13 @@ Rules: kebab-case filenames for anything under `docs/`. Do not drop new markdown
 - Never `git reset --hard` or `git checkout` to discard work without explicit permission. Resolve merge conflicts rather than nuking.
 - Only commit files you modified. If a dirty file's existing changes are unrelated to yours, use `cortex git patch` to stage only your hunks; if the edits overlap, escalate instead of overwriting.
 
-## Backlog tasks
+## Task tracking
 
-Backlog.md is the task tracker (`backlog/` directory; `backlog/config.yml`; project `EdgeProtection`). Use the `mcp__backlog__*` MCP tools when filing deferred issues, working assigned tasks, or managing project work. Start a session by reading `backlog://workflow/overview` if backlog work is involved.
+Tasks live in **GitHub Issues**, aggregated on the org **Atlas Crew Security** board
+(<https://github.com/orgs/atlas-crew/projects/8>). Use `gh issue` and `gh project`
+to create and update work. Cross-repo grouping is the board's **Initiative** field;
+execution order (from `blocked-by` dependencies) comes from `gh seq`. Completed
+tasks remain under `backlog/` as a frozen archive.
 
 ## UI agent rules
 
@@ -139,7 +143,7 @@ Vitest is the standard test runner for the API, UI, CLI, and `packages/synapse-a
 
 ## Commit & Pull Request Guidelines
 
-Recent history follows Conventional Commits like `feat(console): ...`, `fix(synapse-waf): ...`, and `docs(horizon): ...`. Keep commits atomic and bisect-friendly. Per repo policy, commit with `cortex git commit` or `cortex git patch`, not broad staging commands. PRs should include a concise summary, linked issue or backlog task, verification commands run, and screenshots for UI changes.
+Recent history follows Conventional Commits like `feat(console): ...`, `fix(synapse-waf): ...`, and `docs(horizon): ...`. Keep commits atomic and bisect-friendly. Per repo policy, commit with `cortex git commit` or `cortex git patch`, not broad staging commands. PRs should include a concise summary, the linked GitHub issue, verification commands run, and screenshots for UI changes.
 
 #
 
