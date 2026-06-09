@@ -225,3 +225,14 @@ Synapse WAF also has its own `justfile` at `apps/synapse-waf/justfile` with demo
 | Synapse WAF | [AGPL-3.0-only](LICENSE) |
 | @atlascrew/synapse-api | [MIT](packages/synapse-api/package.json) |
 | @atlascrew/synapse-client | [MIT](apps/synapse-client/package.json) |
+
+## Project tracking
+
+Development is tracked on the [Atlas Crew Security project board](https://github.com/orgs/atlas-crew/projects/8), shared across Synapse, Crucible, Chimera, Bridge, and Apparatus. Issues carry a **Type** (Feature / Bug / Task / Chore / Spike) and move through Backlog → Todo → In Progress → Blocked → Done. Execution order comes from issue dependencies (`blocked-by`), reconstructed into waves by [`gh-seq`](https://github.com/NickCrew/gh-seq):
+
+```bash
+gh extension install NickCrew/gh-seq
+gh seq --project 8 --owner atlas-crew --order-by Priority
+```
+
+To contribute, pick an unblocked issue, comment to claim it, and open a PR.
